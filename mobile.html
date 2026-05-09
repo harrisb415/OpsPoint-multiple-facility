@@ -1,0 +1,723 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<script>
+if (location.protocol === 'file:') {
+  document.addEventListener('DOMContentLoaded', function() {
+    document.body.innerHTML = '<div style="font-family:sans-serif;padding:40px;text-align:center;background:#1C0A10;min-height:100vh;display:flex;align-items:center;justify-content:center;"><div style="background:#fff;border-radius:16px;padding:36px;max-width:400px;"><div style="font-size:3rem;margin-bottom:16px;">📡</div><h2 style="color:#1C0A10;margin-bottom:12px;">Wrong URL</h2><p style="color:#7A5462;line-height:1.6;margin-bottom:20px;">The mobile app must be opened through the server, not as a file.</p><div style="background:#FBF5F7;border-radius:8px;padding:16px;font-family:monospace;font-size:.9rem;color:#7B1535;margin-bottom:20px;">1. Run <strong>run.bat</strong> on the PC<br><br>2. Note the IP shown, e.g.:<br><strong>http://192.168.1.50:3000</strong><br><br>3. Open that URL on this device</div><p style="color:#C8A0AA;font-size:.8rem;">Both devices must be on the same WiFi network.</p></div></div>';
+  });
+}
+</script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1C0A10">
+<title>ShiftPoint — Mobile</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link rel="manifest" href="/manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+:root{
+  --dark:#1C0A10;
+  --crimson:#7B1535;
+  --mid:#9C2040;
+  --orange:#E06020;
+  --gold:#D4A017;
+  --bg:#F4F6F8;
+  --white:#fff;
+  --line:#E2E8F0;
+  --steel:#4B5563;
+  --green:#1E8449;
+  --red:#C0392B;
+  --sans:'Outfit',sans-serif;
+  --mono:'IBM Plex Mono',monospace;
+}
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:#1C0A10;overscroll-behavior:none;overflow-x:hidden;}
+
+/* ── Header ──────────────────────────────────────────────── */
+.hdr{background:var(--dark);color:#fff;position:sticky;top:0;z-index:100;box-shadow:0 2px 10px rgba(0,0,0,.4);border-bottom:3px solid var(--orange);}
+.hdr-top{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;}
+.hdr-title{font-size:1.08rem;font-weight:800;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hdr-sub{font-size:.66rem;color:#C8A0AA;letter-spacing:.08em;text-transform:uppercase;margin-top:1px;white-space:nowrap;}
+.live-dot{width:9px;height:9px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;flex-shrink:0;}
+.live-dot.off{background:#ef4444;box-shadow:0 0 6px #ef4444;animation:none;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.live-dot{animation:pulse 2s infinite;}
+
+/* ── Tab bar ─────────────────────────────────────────────── */
+.tabs{display:flex;background:var(--dark);}
+.tab{flex:1;padding:10px 0;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5A3042;border:none;background:transparent;cursor:pointer;border-bottom:3px solid transparent;}
+.tab.active{color:#fff;border-bottom-color:var(--orange);}
+
+/* ── Panels ──────────────────────────────────────────────── */
+.panel{display:none;}.panel.active{display:block;}
+
+/* ── Report label ────────────────────────────────────────── */
+.rsel{padding:10px 14px;background:#fff;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;}
+.rsel label{font-size:.72rem;font-weight:700;color:var(--steel);white-space:nowrap;text-transform:uppercase;letter-spacing:.06em;}
+#active-rpt-label{font-size:.84rem;font-weight:700;color:var(--crimson);}
+
+/* ── Client cards ────────────────────────────────────────── */
+.client-list{padding:8px 12px 140px;}
+.client-card{background:#fff;border-radius:10px;padding:12px 14px;margin-bottom:7px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;align-items:center;gap:10px;border:1px solid #E2E8F0;}
+.client-card:active{transform:scale(.98);transition:transform .1s;}
+.c-rm{font-size:.76rem;font-weight:700;color:var(--steel);font-family:var(--mono);min-width:32px;}
+.c-name{flex:1;font-size:.97rem;font-weight:700;color:#0F172A;}
+.c-status{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+.s-building{background:#d8f3dc;color:#14532d;}.s-work{background:#dbeafe;color:#1d4ed8;}
+.s-pass{background:#fef9c3;color:#854d0e;}.s-bhc{background:#ede9fe;color:#6d28d9;}
+.s-efc{background:#fce7f3;color:#be185d;}.s-hospital{background:#fee2e2;color:#991b1b;}
+.s-out{background:#fff7ed;color:#9a3412;}.s-vacant{background:#f1f5f9;color:#94a3b8;}
+.chk-btn{width:44px;height:44px;border-radius:50%;border:2.5px solid var(--line);background:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
+.chk-btn.present{background:var(--mid);border-color:var(--mid);color:#fff;}
+.chk-btn.missing{background:var(--red);border-color:var(--red);color:#fff;}
+.ua-req-btn{width:38px;height:38px;border-radius:50%;border:2px solid #C8500A;background:#fff3eb;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
+.ua-req-btn:active{background:#C8500A;}
+
+/* ── Submit bar (wellness & walk) ────────────────────────── */
+.submit-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid var(--line);padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:7px;box-shadow:0 -4px 16px rgba(28,10,16,.12);}
+.submit-bar-row{display:flex;gap:8px;align-items:center;}
+.submit-bar input[type=text]{flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.92rem;font-family:var(--sans);}
+.submit-bar input[type=time]{padding:10px 8px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:var(--mono);width:105px;flex-shrink:0;}
+.submit-bar textarea{width:100%;padding:8px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:var(--sans);resize:none;height:56px;line-height:1.4;}
+.submit-bar input:focus,.submit-bar textarea:focus{border-color:var(--crimson);outline:none;}
+.submit-bar button{padding:10px 16px;border-radius:8px;border:none;font-size:.86rem;font-weight:800;font-family:var(--sans);cursor:pointer;white-space:nowrap;}
+.btn-crimson{background:var(--crimson);color:#fff;}.btn-crimson:active{background:var(--mid);}
+.btn-navy{background:var(--dark);color:#fff;}.btn-navy:active{background:#2A0E16;}
+
+/* ── Walk locations ──────────────────────────────────────── */
+.walk-list{padding:8px 12px 180px;}
+.loc-row{background:#fff;border-radius:10px;padding:13px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,.07);border:1.5px solid var(--line);}
+.loc-row.ok{background:#f0fdf4;border-color:#86efac;}
+.loc-row.flagged{background:#fee2e2;border-color:#fca5a5;}
+.loc-name{font-size:.97rem;font-weight:700;color:#0F172A;}
+.loc-btns{display:flex;gap:8px;}
+.loc-btn{width:44px;height:44px;border-radius:10px;border:1.5px solid var(--line);background:#f8fafc;font-size:1.3rem;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.loc-btn.ok{background:#d8f3dc;border-color:#86efac;}
+.loc-btn.flag{background:#fee2e2;border-color:#fca5a5;}
+
+/* ── Log tab ─────────────────────────────────────────────── */
+.log-list{padding:8px 12px 160px;}
+.log-entry{background:#fff;border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;gap:10px;align-items:flex-start;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid var(--line);}
+.log-ts{font-size:.74rem;font-weight:700;color:var(--crimson);min-width:62px;font-family:var(--mono);padding-top:1px;}
+.log-txt{font-size:.87rem;color:#0F172A;flex:1;line-height:1.4;}
+.add-log{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:2px solid var(--line);padding:9px 12px;padding-bottom:max(16px,env(safe-area-inset-bottom));padding-right:max(12px,env(safe-area-inset-right));display:flex;gap:7px;align-items:center;box-shadow:0 -4px 16px rgba(28,10,16,.1);}
+.add-log input[type=time]{padding:10px 8px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:var(--mono);width:100px;}
+.add-log input[type=text]{flex:1;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:var(--sans);}
+.add-log input:focus{border-color:var(--crimson);outline:none;}
+.add-log button{padding:10px 14px;min-width:64px;flex-shrink:0;background:var(--crimson);color:#fff;border:none;border-radius:8px;font-weight:800;font-size:.86rem;cursor:pointer;font-family:var(--sans);}
+.add-log button:active{background:var(--mid);}
+
+/* ── Census ──────────────────────────────────────────────── */
+.census-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;}
+.ccard{background:#fff;border-radius:12px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.08);border:1px solid var(--line);}
+.cnum{font-size:2.3rem;font-weight:800;color:#0F172A;font-family:var(--mono);}
+.clbl{font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-top:4px;}
+.ccard.total{background:var(--dark);grid-column:span 2;border-color:var(--dark);}
+.ccard.total .cnum,.ccard.total .clbl{color:#fff;}
+.ccard.total .cnum{color:#fff;}
+
+/* ── Toast ───────────────────────────────────────────────── */
+.toast{position:fixed;top:max(16px,env(safe-area-inset-top));left:50%;transform:translateX(-50%) translateY(-80px);background:var(--dark);color:#fff;padding:10px 20px;border-radius:8px;font-size:.88rem;font-weight:700;z-index:9999;transition:transform .3s;pointer-events:none;border-left:3px solid var(--orange);}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+/* ── Green theme — full overrides ────────────────────────────── */
+body.theme-green{--dark:#1A3327;--crimson:#2D6A4F;--mid:#1A5C42;--orange:#D4A017;--line:#D4E6DA;--bg:#F4FAF6;}
+
+/* Header */
+body.theme-green .hdr{border-bottom-color:#D4A017;}
+body.theme-green .hdr-sub{color:#A8D5B5;}
+
+/* Tab bar — inactive tabs were rose, now sage */
+body.theme-green .tab{color:#5C7A65;}
+body.theme-green .tab.active{color:#fff;border-bottom-color:#D4A017;}
+
+/* Active report label */
+body.theme-green #active-rpt-label{color:#2D6A4F;}
+
+/* Log timestamps */
+body.theme-green .log-ts{color:#2D6A4F;}
+
+/* Census */
+body.theme-green .cnum{color:#1A3327;}
+body.theme-green .ccard.total .cnum{color:#fff;}
+body.theme-green .ccard.total{background:#1A3327;}
+
+/* Submit bar & buttons */
+body.theme-green .btn-crimson{background:#2D6A4F;}
+body.theme-green .btn-crimson:active{background:#1A5C42;}
+body.theme-green .btn-navy{background:#163825;}
+
+/* Submit bar borders on focus */
+body.theme-green .submit-bar input:focus,
+body.theme-green .submit-bar textarea:focus{border-color:#2D6A4F;}
+body.theme-green .add-log input:focus{border-color:#2D6A4F;}
+
+/* Toast */
+body.theme-green .toast{background:#1A3327;border-left-color:#D4A017;}
+
+/* Location rows OK state */
+body.theme-green .loc-btn.ok{background:#D8F3DC;border-color:#86efac;}
+
+/* ── Reminder banner ─────────────────────────────────────────── */
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast"></div>
+
+<div class="hdr">
+  <div class="hdr-top">
+    <div style="min-width:0;flex:1;overflow:hidden;margin-right:10px;display:flex;align-items:center;gap:8px;">
+      <img src="/static/icons/icon-192.png" alt="ShiftPoint" style="height:34px;width:34px;border-radius:8px;flex-shrink:0;box-shadow:0 2px 8px rgba(0,0,0,.4);">
+      <div style="min-width:0;flex:1;overflow:hidden;">
+        <div class="hdr-title" id="mob-facility-name">ShiftPoint</div>
+        <div class="hdr-sub">Mobile Shift App</div>
+        <div id="mob-user-line" style="font-size:.62rem;color:#C8A0AA;letter-spacing:.04em;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <a href="/?desktop=1" style="font-size:.64rem;color:#C8A0AA;text-decoration:none;border:1px solid rgba(255,255,255,.2);border-radius:5px;padding:3px 8px;white-space:nowrap;">Desktop</a>
+        <button onclick="loadAll()" style="background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:5px 10px;font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--sans);">&#8635;</button>
+        <button onclick="mobToggleTheme()" id="mob-theme-btn" style="background:rgba(255,255,255,.08);color:#C8A0AA;border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:5px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--sans);" title="Toggle theme">🎨</button>
+        <form method="POST" action="/logout" style="margin:0;"><button type="submit" style="background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:5px 10px;font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--sans);">Out</button></form>
+      </div>
+      <div class="live-dot" id="live-dot" style="background:#94a3b8;box-shadow:none;animation:none;" title="Connecting..."></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('wellness',this)">&#10003; Wellness</button>
+    <button class="tab"        onclick="showTab('walk',this)">&#128336; Walk</button>
+    <button class="tab"        onclick="showTab('log',this)">&#128203; Log</button>
+    <button class="tab"        onclick="showTab('census',this)">&#128202; Census</button>
+  </div>
+</div>
+
+<!-- ── WELLNESS ──────────────────────────────────────────── -->
+<div class="panel active" id="panel-wellness">
+  <div class="rsel">
+    <span style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);">Active Report:</span>
+    <span id="active-rpt-label">Loading&hellip;</span>
+  </div>
+  <div class="client-list" id="client-list">
+    <div style="text-align:center;padding:40px;color:var(--steel);">Connecting&hellip;</div>
+  </div>
+  <div class="submit-bar">
+    <div class="submit-bar-row">
+      <input type="time" id="wc-time">
+      <input type="text" id="wc-name" placeholder="Your name / initials" style="flex:1;">
+    </div>
+    <textarea id="wc-notes" placeholder="Notes (optional) — anything unusual to report&hellip;"></textarea>
+    <div class="submit-bar-row">
+      <button class="btn-crimson" style="flex:1;" onclick="logWellness()">&#10003; Log Wellness Check</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── WALKTHROUGH ───────────────────────────────────────── -->
+<div class="panel" id="panel-walk">
+  <div id="walk-location-list" class="walk-list"></div>
+  <div class="submit-bar">
+    <div class="submit-bar-row">
+      <input type="time" id="walk-time">
+      <input type="text" id="walk-by" placeholder="Your name / initials" style="flex:1;">
+    </div>
+    <textarea id="walk-notes" placeholder="Issues / notes (optional) — leave blank if all clear&hellip;"></textarea>
+    <div class="submit-bar-row">
+      <button class="btn-navy" style="flex:1;" onclick="logWalk()">&#128336; Log Walkthrough</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LOG ───────────────────────────────────────────────── -->
+<div class="panel" id="panel-log">
+  <div class="log-list" id="log-list">
+    <div style="text-align:center;padding:40px;color:var(--steel);">Select a report on the Wellness tab</div>
+  </div>
+  <div class="submit-bar">
+    <div class="submit-bar-row">
+      <input type="time" id="log-time">
+      <input type="text" id="log-text" placeholder="Add log entry&hellip;" style="flex:1;" onkeydown="if(event.key==='Enter')addEntry()">
+    </div>
+    <div class="submit-bar-row">
+      <button class="btn-crimson" style="flex:1;" onclick="addEntry()">+ Add Log Entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CENSUS ────────────────────────────────────────────── -->
+<div class="panel" id="panel-census">
+  <div class="census-grid" id="census-grid">
+    <div class="ccard" style="grid-column:span 2;"><div class="clbl" style="font-size:.85rem;padding:20px 0;">Select a report on the Wellness tab</div></div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────
+let CLIENTS = [], REPORTS = [], CURRENT_RPT = null;
+let _ownPatch = null;
+let CHECKED = new Set(), MISSING = new Set(), WALK_DONE = {};
+
+const ST_LABELS = {building:'In Building',work:'At Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out/Other',vacant:'Vacant'};
+const ST_CLS    = {building:'s-building',work:'s-work',pass:'s-pass',bhc:'s-bhc',efc:'s-efc',hospital:'s-hospital',out:'s-out',vacant:'s-vacant'};
+function mesc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
+var AREAS = ['Supply Room','Basement / Offices','Kitchen','Meeting Room','Dining Room',
+  'Laundry Area','Clothing Closet','Stairs to Roof','Floors 2, 3 & 4','Stairs Down to Main','Perimeter Check'];
+var WELLNESS_INTERVAL_MINS = 120;
+var WALK_INTERVAL_MINS     = 240;
+
+// ── WebSocket ──────────────────────────────────────────────────
+let ws, wsTimer;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  try { ws = new WebSocket(proto + '//' + location.host); }
+  catch(e) { startPolling(); return; }
+  ws.onopen    = () => { setDot(true); clearTimeout(wsTimer); };
+  ws.onerror   = () => { startPolling(); };
+  ws.onclose   = () => { wsTimer = setTimeout(connectWS, 8000); };
+  ws.onmessage = ev => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'settings_updated' && msg.settings) {
+        const d = msg.settings;
+        if (d.wellness_interval_mins) WELLNESS_INTERVAL_MINS = d.wellness_interval_mins;
+        if (d.walk_interval_mins)     WALK_INTERVAL_MINS     = d.walk_interval_mins;
+        if (Array.isArray(d.walk_areas) && d.walk_areas.length) { AREAS = d.walk_areas; renderWalk(); }
+      } else if (msg.type === 'data_saved') {
+        if (msg.active_report_id !== undefined) window._activeReportId = msg.active_report_id;
+        loadAll();
+        if (window._initRetryTimer) { clearInterval(window._initRetryTimer); window._initRetryTimer = null; }
+      } else if (msg.type === 'patched' && msg.patch) {
+        if (msg.active_report_id !== undefined) window._activeReportId = msg.active_report_id;
+        if (CURRENT_RPT && msg.patch.reportId == CURRENT_RPT.id) {
+          if (_ownPatch && msg.patch.log_entry && _ownPatch === msg.patch.log_entry.text) { _ownPatch = null; return; }
+          _ownPatch = null;
+          const p = msg.patch;
+          if (p.statuses) Object.assign(CURRENT_RPT.statuses||(CURRENT_RPT.statuses={}), p.statuses);
+          if (p.log_entry) {
+            if (!CURRENT_RPT.log_entries) CURRENT_RPT.log_entries = [];
+            CURRENT_RPT.log_entries.push(p.log_entry);
+            sortLog(); renderLog();
+          }
+          renderClients(); renderCensus();
+          toast('Updated from desktop');
+        }
+      }
+    } catch(e) {}
+  };
+}
+function setDot(on) {
+  const d = document.getElementById('live-dot');
+  if (on) { d.className='live-dot'; d.style.cssText=''; d.title='Live — connected'; }
+  else     { d.className='live-dot off'; d.style.cssText=''; d.title='Disconnected'; }
+}
+
+let _pollTimer=null, _lastPollHash='';
+function startPolling() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(async function() {
+    try {
+      const res = await fetch('/api/data', {credentials:'include'});
+      if (res.status===401) { window.location.href='/login'; return; }
+      const data = await res.json();
+      const hash = JSON.stringify((data.reports||[]).map(r=>r.updated_at));
+      if (hash !== _lastPollHash) {
+        _lastPollHash = hash;
+        CLIENTS = data.clients||[]; REPORTS = data.reports||[];
+        populateReportSel();
+        if (CURRENT_RPT) {
+          const updated = REPORTS.find(r=>r.id===CURRENT_RPT.id);
+          if (updated) { CURRENT_RPT=updated; renderClients(); renderLog(); renderCensus(); }
+        }
+      }
+    } catch(e) {}
+  }, 8000);
+}
+
+// ── Load ───────────────────────────────────────────────────────
+async function loadAll() {
+  // Load settings first
+  try {
+    const sr = await fetch('/api/facility/settings', {credentials:'include'});
+    if (sr.ok) {
+      const cfg = await sr.json();
+      if (cfg.walk_areas && cfg.walk_areas.length) { AREAS = cfg.walk_areas; renderWalk(); }
+      if (cfg.wellness_interval_mins) WELLNESS_INTERVAL_MINS = cfg.wellness_interval_mins;
+      if (cfg.walk_interval_mins)     WALK_INTERVAL_MINS     = cfg.walk_interval_mins;
+      if (cfg.facility_name) {
+        const el = document.getElementById('mob-facility-name');
+        if (el) el.textContent = cfg.facility_name;
+      }
+    }
+  } catch(e) {}
+  try {
+    const res = await fetch('/api/data', {credentials:'include'});
+    if (res.status===401) { window.location.href='/login'; return; }
+    if (!res.ok) { toast('Server error: '+res.status); return; }
+    const data = await res.json();
+    CLIENTS = data.clients||[]; REPORTS = data.reports||[];
+    if (data.active_report_id !== undefined) window._activeReportId = data.active_report_id;
+    setDot(true);
+    const cCount = CLIENTS.filter(c=>c.is_active&&!c.is_special).length;
+    const rCount = REPORTS.length;
+    if (rCount===0&&cCount===0) toast('No data — is desktop app open?');
+    else if (rCount===0) toast(cCount+' clients. No reports yet.');
+    else toast(cCount+' clients, '+rCount+' report(s) ✓');
+    populateReportSel(); renderWalk();
+    const newActive = window._activeReportId
+      ? REPORTS.find(r=>r.id==window._activeReportId)
+      : (REPORTS.length>0 ? REPORTS.slice().sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''))[0] : null);
+    if (newActive) setActiveReport(newActive);
+  } catch(e) { toast('Network error — check WiFi'); }
+}
+
+function populateReportSel() {
+  const activeId = window._activeReportId;
+  let rpt = activeId ? REPORTS.find(r=>r.id==activeId) : null;
+  if (!rpt && REPORTS.length>0)
+    rpt = REPORTS.slice().sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||''))[0];
+  if (rpt) setActiveReport(rpt);
+  else document.getElementById('active-rpt-label').textContent = 'No active report — open desktop app';
+}
+
+function setActiveReport(rpt) {
+  if (!rpt) return;
+  CURRENT_RPT = rpt;
+  CHECKED.clear(); MISSING.clear();
+  const dstr = rpt.report_date
+    ? new Date(rpt.report_date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})
+    : 'No date';
+  document.getElementById('active-rpt-label').textContent = `${dstr} — ${rpt.shift||'?'} (MOD: ${rpt.mod_name||'?'})`;
+  renderClients(); renderLog(); renderCensus(); renderWalk();
+}
+
+// ── Wellness tab ───────────────────────────────────────────────
+function activeClients() {
+  return CLIENTS.filter(c=>c.is_active&&!c.is_special&&c.name!=='VACANT');
+}
+
+function renderClients() {
+  const el = document.getElementById('client-list');
+  const statuses = CURRENT_RPT ? (CURRENT_RPT.statuses||{}) : {};
+  if (!CURRENT_RPT && CLIENTS.length===0) {
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--steel);">No data — open desktop app first</div>'; return;
+  }
+  el.innerHTML='';
+  activeClients().forEach(c=>{
+    const st = statuses[c.id]||'building';
+    const chk=CHECKED.has(c.id), mis=MISSING.has(c.id);
+    const div=document.createElement('div'); div.className='client-card';
+    const isSup = typeof hasPerm==='function' ? hasPerm('ua.request') : (window.SESSION&&(window.SESSION.role==='supervisor'||window.SESSION.role==='admin'));
+    const uaBtn = isSup
+      ? `<button class="ua-req-btn" onclick="requestUAMobile(${parseInt(c.id)},'${mesc(c.name.replace(/'/g,"\\'"))}','${String(c.room).replace(/[^a-zA-Z0-9]/g,'')}')" title="Request UA">🧪</button>`
+      : '';
+    div.innerHTML=
+      `<span class="c-rm">${c.room}</span>`+
+      `<span class="c-name">${c.name}</span>`+
+      `<span class="c-status ${ST_CLS[st]||'s-building'}">${ST_LABELS[st]||st}</span>`+
+      uaBtn+
+      `<button class="chk-btn${chk?' present':mis?' missing':''}" onclick="toggleCheck(${c.id},this)">${chk?'✓':mis?'✗':'○'}</button>`;
+    el.appendChild(div);
+  });
+}
+
+function toggleCheck(id, btn) {
+  if (CHECKED.has(id)) { CHECKED.delete(id); MISSING.add(id); btn.textContent='✗'; btn.className='chk-btn missing'; }
+  else if (MISSING.has(id)) { MISSING.delete(id); btn.textContent='○'; btn.className='chk-btn'; }
+  else { CHECKED.add(id); btn.textContent='✓'; btn.className='chk-btn present'; }
+}
+
+async function requestUAMobile(clientId, clientName, room) {
+  try {
+    await fetch('/api/ua-requests', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({client_id: clientId, client_name: clientName, room: room})
+    });
+    toast('UA request sent for Rm ' + room + ' — ' + clientName);
+  } catch(e) {
+    toast('Failed to send UA request');
+  }
+}
+
+async function logWellness() {
+  if (!CURRENT_RPT) { toast('No active report'); return; }
+  const name = document.getElementById('wc-name').value.trim()||'monitor';
+  const notes = document.getElementById('wc-notes').value.trim();
+  const tEl = document.getElementById('wc-time');
+  const ts = tEl.value ? fmtTime(tEl.value) : nowTS();
+  const all = activeClients();
+  const missing = [...MISSING].map(id=>{const c=CLIENTS.find(x=>x.id===id);return c?`Rm ${c.room} ${c.name}`:''}).filter(Boolean);
+  let msg = `Wellness check conducted by ${name}. `;
+  msg += missing.length
+    ? `${all.length-missing.length} of ${all.length} accounted for. Not located: ${missing.join(', ')}.`
+    : `All ${all.length} clients accounted for.`;
+  if (notes) msg += ` Notes: ${notes}`;
+  await patchReport({log_entry:{time:ts,text:msg}});
+  CHECKED.clear(); MISSING.clear();
+  document.getElementById('wc-notes').value='';
+  refreshTimes();
+  renderClients();
+  toast('Wellness check logged ✓');
+}
+
+// ── Walkthrough tab ────────────────────────────────────────────
+function renderWalk() {
+  const el = document.getElementById('walk-location-list');
+  if (!el) return;
+  el.innerHTML='';
+  AREAS.forEach(area=>{
+    const state=WALK_DONE[area]||'';
+    const row=document.createElement('div');
+    row.className='loc-row'+(state==='ok'?' ok':state==='flag'?' flagged':'');
+    const safeArea=area.replace(/'/g,"\\'");
+    row.innerHTML='<div class="loc-name">'+mesc(area)+'</div>'
+      +'<div class="loc-btns">'
+      +'<button class="loc-btn'+(state==='ok'?' ok':'')+'" onclick="tapWalkLoc(\''+safeArea+'\',\'ok\')" title="All clear">✓</button>'
+      +'<button class="loc-btn'+(state==='flag'?' flag':'')+'" onclick="tapWalkLoc(\''+safeArea+'\',\'flag\')" title="Issue noted">⚠</button>'
+      +'</div>';
+    el.appendChild(row);
+  });
+}
+
+function tapWalkLoc(area, state) {
+  WALK_DONE[area] = WALK_DONE[area]===state ? '' : state;
+  renderWalk();
+}
+
+async function logWalk() {
+  if (!CURRENT_RPT) { toast('No active report'); return; }
+  const by = (document.getElementById('walk-by').value||'').trim()||'monitor on duty';
+  const notes = document.getElementById('walk-notes').value.trim();
+  const tEl = document.getElementById('walk-time');
+  const ts = tEl.value ? fmtTime(tEl.value) : nowTS();
+  const okAreas  = AREAS.filter(a=>WALK_DONE[a]==='ok');
+  const flagAreas = AREAS.filter(a=>WALK_DONE[a]==='flag');
+  if (!okAreas.length && !flagAreas.length) { toast('Mark at least one location first'); return; }
+  let msg = 'Building walkthrough conducted by '+by+'. ';
+  if (!flagAreas.length) {
+    msg += 'All areas clear: '+okAreas.join(', ')+'.';
+  } else {
+    if (okAreas.length) msg += 'Clear: '+okAreas.join(', ')+'. ';
+    msg += 'Issues noted: '+flagAreas.join(', ')+'.';
+  }
+  if (notes) msg += ' Notes: '+notes;
+  await patchReport({log_entry:{time:ts,text:msg}});
+  WALK_DONE={};
+  document.getElementById('walk-notes').value='';
+  refreshTimes();
+  renderWalk();
+  toast('Walkthrough logged ✓');
+}
+
+// ── Log tab ────────────────────────────────────────────────────
+function renderLog() {
+  const el=document.getElementById('log-list');
+  if (!CURRENT_RPT||!CURRENT_RPT.log_entries||!CURRENT_RPT.log_entries.length) {
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--steel);">No log entries yet</div>'; return;
+  }
+  el.innerHTML='';
+  CURRENT_RPT.log_entries.forEach(e=>{
+    const div=document.createElement('div'); div.className='log-entry';
+    // VULN-1: Use textContent to prevent XSS from server-delivered log data
+    const ts=document.createElement('span'); ts.className='log-ts'; ts.textContent=e.time||'';
+    const tx=document.createElement('span'); tx.className='log-txt'; tx.textContent=e.text||'';
+    div.appendChild(ts); div.appendChild(tx);
+    el.appendChild(div);
+  });
+  el.scrollTop=el.scrollHeight;
+}
+
+async function addEntry() {
+  if (!CURRENT_RPT) { toast('No active report'); return; }
+  const txt=document.getElementById('log-text').value.trim(); if(!txt) return;
+  const tEl=document.getElementById('log-time');
+  const ts=tEl.value ? fmtTime(tEl.value) : nowTS();
+  await patchReport({log_entry:{time:ts,text:txt}});
+  document.getElementById('log-text').value='';
+  refreshTimes();
+  toast('Entry added ✓');
+}
+
+// ── Census tab ─────────────────────────────────────────────────
+function renderCensus() {
+  const el=document.getElementById('census-grid');
+  if (!CURRENT_RPT) return;
+  const statuses=CURRENT_RPT.statuses||{};
+  const cnt={building:0,work:0,pass:0,bhc:0,efc:0,hospital:0,out:0};
+  CLIENTS.filter(c=>c.is_active&&!c.is_special&&c.name!=='VACANT').forEach(c=>{
+    const st=statuses[c.id]||'building';
+    if(cnt.hasOwnProperty(st)) cnt[st]++;
+  });
+  const tot=Object.values(cnt).reduce((a,b)=>a+b,0);
+  const labels={building:'In Building',work:'At Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out/Other'};
+  el.innerHTML=Object.entries(labels)
+    .filter(([k])=>cnt[k]>0)
+    .map(([k,lbl])=>`<div class="ccard"><div class="cnum">${cnt[k]}</div><div class="clbl">${lbl}</div></div>`)
+    .join('')+
+    `<div class="ccard total"><div class="cnum">${tot}</div><div class="clbl">Total Clients</div></div>`;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function nowTS() {
+  const n=new Date(); const h=n.getHours(); const m=String(n.getMinutes()).padStart(2,'0');
+  return `${h%12||12}:${m} ${h>=12?'PM':'AM'}`;
+}
+function fmtTime(val) {
+  const [h,m]=val.split(':'); const hr=parseInt(h);
+  return `${hr%12||12}:${m} ${hr>=12?'PM':'AM'}`;
+}
+function sortLog() {
+  if (!CURRENT_RPT||!CURRENT_RPT.log_entries) return;
+  CURRENT_RPT.log_entries.sort((a,b)=>toMins(a.time)-toMins(b.time));
+}
+function toMins(t) {
+  if (!t) return 0;
+  const m=t.match(/(\d+):(\d+)\s*(AM|PM)/i); if(!m) return 0;
+  let h=parseInt(m[1]),mn=parseInt(m[2]),ap=m[3].toUpperCase();
+  if(ap==='AM'&&h===12)h=0; if(ap==='PM'&&h!==12)h+=12; return h*60+mn;
+}
+async function patchReport(patch) {
+  if (!CURRENT_RPT) return;
+  patch.reportId=CURRENT_RPT.id;
+  if (patch.statuses) Object.assign(CURRENT_RPT.statuses||(CURRENT_RPT.statuses={}),patch.statuses);
+  if (patch.log_entry) {
+    if (!CURRENT_RPT.log_entries) CURRENT_RPT.log_entries=[];
+    CURRENT_RPT.log_entries.push(patch.log_entry);
+    sortLog(); renderLog();
+  }
+  renderCensus();
+  if (patch.log_entry) _ownPatch=patch.log_entry.text;
+  try {
+    const pr=await fetch('/api/data',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch),credentials:'include'});
+    if(pr.status===401){toast('Session expired');window.location.href='/login';}
+  } catch(e) { toast('Save error — check server'); }
+}
+let _toastT;
+function toast(msg) {
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(_toastT); _toastT=setTimeout(()=>el.classList.remove('show'),2500);
+}
+function showTab(name, btn) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+
+// ── Facility name ──────────────────────────────────────────────
+fetch('/api/facility/settings',{credentials:'include'}).then(r=>r.json()).then(d=>{
+  const el=document.getElementById('mob-facility-name');
+  if(el&&d.facility_name) el.textContent=d.facility_name;
+}).catch(()=>{});
+
+// ── Session display ───────────────────────────────────────────
+(function(){
+  function hasPerm(p){return window.SESSION&&Array.isArray(window.SESSION.permissions)&&window.SESSION.permissions.includes(p);}
+  if(!window.SESSION) return;
+  var el=document.getElementById('mob-user-line');
+  if(el) el.textContent=SESSION.displayName||SESSION.username;
+})();
+
+
+// ── Settings load ──────────────────────────────────────────────
+async function loadMobSettings() {
+  try {
+    const res = await fetch('/api/facility/settings', {credentials:'include'});
+    if (!res.ok) return;
+    const d = await res.json();
+    if (d.facility_name) {
+      const el = document.getElementById('mob-facility-name');
+      if (el) el.textContent = d.facility_name;
+    }
+    if (d.wellness_interval_mins) WELLNESS_INTERVAL_MINS = d.wellness_interval_mins;
+    if (d.walk_interval_mins)     WALK_INTERVAL_MINS     = d.walk_interval_mins;
+    if (Array.isArray(d.walk_areas) && d.walk_areas.length) {
+      AREAS = d.walk_areas;
+      renderWalk();
+    }
+  } catch(e) {}
+}
+
+// ── Reminder engine ────────────────────────────────────────────
+var _mobReminderTimer = null;
+
+function mobLastTime(keyword) {
+  if (!CURRENT_RPT || !CURRENT_RPT.log_entries) return null;
+  const matches = CURRENT_RPT.log_entries.filter(e => e.text && e.text.toLowerCase().includes(keyword));
+  if (!matches.length) return null;
+  function toMins(t) {
+    if (!t) return 0;
+    const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!m) return 0;
+    let h=parseInt(m[1]),mn=parseInt(m[2]),ap=m[3].toUpperCase();
+    if(ap==='AM'&&h===12)h=0; if(ap==='PM'&&h!==12)h+=12; return h*60+mn;
+  }
+  return matches.slice().sort((a,b)=>toMins(b.time)-toMins(a.time))[0].time;
+}
+
+function mobMinutesSince(t) {
+  if (!t) return Infinity;
+  const now = new Date();
+  const nowMins = now.getHours()*60 + now.getMinutes();
+  const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!m) return Infinity;
+  let h=parseInt(m[1]),mn=parseInt(m[2]),ap=m[3].toUpperCase();
+  if(ap==='AM'&&h===12)h=0; if(ap==='PM'&&h!==12)h+=12;
+  let diff = nowMins - (h*60+mn);
+  if (diff < 0) diff += 1440;
+  return diff;
+}
+
+
+
+// ── Time helpers ──────────────────────────────────────────────
+function refreshTimes() {
+  const n = new Date();
+  const t = String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+  ['log-time','wc-time','walk-time'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = t;
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────
+(async function init() {
+  refreshTimes();
+  setInterval(refreshTimes, 60000);
+  ['log-text','wc-notes','walk-notes'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.addEventListener('focus', refreshTimes);
+  });
+  await loadMobSettings();
+  await loadAll();
+  connectWS();
+  if (REPORTS.length===0) {
+    window._initRetryTimer=setInterval(async function(){
+      await loadAll();
+      if(REPORTS.length>0){clearInterval(window._initRetryTimer);window._initRetryTimer=null;}
+    },3000);
+    setTimeout(()=>{clearInterval(window._initRetryTimer);},30000);
+  }
+})();
+
+// ── Theme toggle ───────────────────────────────────────────────
+function mobToggleTheme() {
+  const isGreen = document.body.classList.toggle('theme-green');
+  localStorage.setItem('sp-theme', isGreen ? 'green' : 'crimson');
+}
+(function(){
+  const t = localStorage.getItem('sp-theme') || 'green';
+  if (t !== 'crimson') document.body.classList.add('theme-green');
+})();
+
+</script>
+
+</body>
+</html>

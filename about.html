@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>About ShiftPoint</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--dark:#1A3327;--mid:#2D6A4F;--gold:#D4A017;--line:#D4E6DA;--bg:#F4F6F8;--steel:#4B5563;}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:#0F172A;min-height:100vh;display:flex;flex-direction:column;}
+
+.topbar{background:var(--dark);border-bottom:3px solid var(--gold);padding:0 28px;display:flex;align-items:center;justify-content:space-between;height:56px;}
+.topbar-title{font-size:.95rem;font-weight:800;color:#fff;}
+.topbar-sub{font-size:.63rem;color:#A8D5B5;letter-spacing:.08em;text-transform:uppercase;}
+a.tl{color:#fff;font-size:.78rem;font-weight:700;text-decoration:none;background:rgba(255,255,255,.12);padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.2);}
+a.tl:hover{background:rgba(255,255,255,.22);}
+
+.hero{background:var(--dark);padding:56px 28px 48px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08);}
+.hero-logo{font-size:3rem;font-weight:800;color:#fff;letter-spacing:-.02em;margin-bottom:6px;}
+.hero-logo span{color:var(--gold);}
+.hero-version{display:inline-block;background:rgba(212,160,23,.2);color:var(--gold);font-size:.75rem;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid rgba(212,160,23,.35);letter-spacing:.06em;margin-bottom:16px;}
+.hero-tagline{color:#A8D5B5;font-size:1rem;font-weight:400;max-width:560px;margin:0 auto;}
+
+.content{flex:1;max-width:780px;margin:0 auto;padding:48px 24px 80px;width:100%;}
+
+.section{margin-bottom:40px;}
+.section h2{font-size:.72rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mid);margin-bottom:14px;padding-bottom:6px;border-bottom:2px solid var(--line);}
+.section p{font-size:.9rem;color:var(--steel);line-height:1.7;margin-bottom:10px;}
+
+.card{background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:12px;border:1px solid var(--line);}
+.card-label{font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#94A3B8;margin-bottom:6px;}
+.card-value{font-size:.92rem;font-weight:700;color:#0F172A;}
+.card-sub{font-size:.8rem;color:var(--steel);margin-top:2px;}
+
+.stack{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+.pill{background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:5px 13px;font-size:.78rem;font-weight:600;color:#0F172A;}
+
+.version-row{display:flex;gap:14px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line);}
+.version-row:last-child{border-bottom:none;}
+.vnum{font-size:.82rem;font-weight:800;color:var(--mid);font-family:'Courier New',monospace;min-width:60px;flex-shrink:0;}
+.vdate{font-size:.75rem;color:#94A3B8;min-width:90px;flex-shrink:0;padding-top:2px;}
+.vdesc{font-size:.85rem;color:var(--steel);line-height:1.6;}
+.vdesc ul{margin-top:6px;padding-left:16px;}
+.vdesc ul li{margin-bottom:3px;}
+
+.badge{display:inline-block;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:10px;vertical-align:middle;margin-left:4px;text-transform:uppercase;letter-spacing:.05em;}
+.badge-critical{background:#fee2e2;color:#991b1b;}
+.badge-high{background:#fef3c7;color:#92400e;}
+.badge-medium{background:#dbeafe;color:#1e40af;}
+.badge-low{background:#f0fdf4;color:#166534;}
+.badge-new{background:#ede9fe;color:#5b21b6;}
+
+.sec-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px;}
+.sec-item{background:#F8FAFC;border:1px solid var(--line);border-radius:8px;padding:10px 14px;}
+.sec-item-label{font-size:.68rem;font-weight:700;color:#94A3B8;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;}
+.sec-item-val{font-size:.82rem;font-weight:700;color:#0F172A;}
+
+.copyright-box{background:var(--dark);border-radius:12px;padding:24px 28px;text-align:center;margin-top:40px;}
+.copyright-box p{color:#A8D5B5;font-size:.82rem;line-height:1.8;}
+.copyright-box strong{color:#fff;}
+.copyright-box .reserved{font-size:.72rem;color:#64748B;margin-top:8px;}
+
+.footer{background:var(--dark);border-top:1px solid rgba(255,255,255,.08);padding:16px 28px;text-align:center;}
+.footer p{font-size:.72rem;color:#4B5563;}
+.footer a{color:#A8D5B5;text-decoration:none;}
+.footer a:hover{color:var(--gold);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">ShiftPoint &mdash; v1.14.0</div>
+    <div class="topbar-sub">About this software</div>
+  </div>
+
+</div>
+
+<div class="hero">
+  <div class="hero-logo">Shift<span>Point</span></div>
+  <div class="hero-version">v1.14.0 &nbsp;&mdash;&nbsp; May 2026</div>
+  <p class="hero-tagline">A secure, local-network shift management platform for transitional housing facilities.</p>
+</div>
+
+<div class="content">
+
+  <div class="section">
+    <h2>About</h2>
+    <p>ShiftPoint is a real-time digital shift logging system designed to replace paper-based shift records in transitional housing and residential care facilities. It runs entirely on your local network &mdash; no cloud, no subscription, no data leaving the building.</p>
+    <p>Built to handle the realities of 24/7 staffing: multiple monitors per shift, mobile wellness checks, urinalysis tracking with photo documentation, resident roster management, and archivable shift reports for compliance and supervisory review.</p>
+  </div>
+
+  <div class="section">
+    <h2>Deployed For</h2>
+    <div class="card">
+      <div class="card-label">Organization</div>
+      <div class="card-value">Westside Community Services</div>
+      <div class="card-sub">Positive Directions Equals Change &nbsp;&bull;&nbsp; ShiftPoint &nbsp;&bull;&nbsp; San Francisco, CA</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Technology</h2>
+    <div class="card">
+      <div class="card-label">Built with</div>
+      <div class="stack">
+        <span class="pill">Node.js</span>
+        <span class="pill">Express</span>
+        <span class="pill">SQLite (sql.js)</span>
+        <span class="pill">WebSocket</span>
+        <span class="pill">PBKDF2-SHA512</span>
+        <span class="pill">Vanilla JS</span>
+        <span class="pill">HTML / CSS</span>
+      </div>
+      <div class="card-sub" style="margin-top:10px;">Runs on Windows 10/11. No cloud dependencies. All data stored locally in <code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;font-size:.8rem;">data\shift.db</code></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Security</div>
+      <div class="sec-grid">
+        <div class="sec-item"><div class="sec-item-label">Password Hashing</div><div class="sec-item-val">PBKDF2-SHA512 &mdash; 600k iterations</div></div>
+        <div class="sec-item"><div class="sec-item-label">Session</div><div class="sec-item-val">HttpOnly, SameSite=Lax, 12hr expiry</div></div>
+        <div class="sec-item"><div class="sec-item-label">Auth</div><div class="sec-item-val">Role-based: Monitor / Supervisor / Admin</div></div>
+        <div class="sec-item"><div class="sec-item-label">Transport</div><div class="sec-item-val">LAN only &mdash; optional HTTPS/TLS</div></div>
+        <div class="sec-item"><div class="sec-item-label">CORS</div><div class="sec-item-val">Dynamic allowlist &mdash; localhost + LAN IP</div></div>
+        <div class="sec-item"><div class="sec-item-label">Rate Limiting</div><div class="sec-item-val">Login: 10/15min &bull; API: 300/min (persisted)</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Version History &amp; Changelog</h2>
+    <div class="card" style="padding:14px 20px;">
+
+      <div class="version-row">
+        <span class="vnum">v1.14.0</span>
+        <span class="vdate">May 2026</span>
+        <div class="vdesc">
+          <strong>Security, audit logging, and UX improvements.</strong>
+          <span class="badge badge-new">Security</span><span class="badge badge-new">Admin</span>
+          <ul>
+            <li>Full audit log — every write operation recorded with actor, IP, action, and detail; searchable, filterable, and CSV-exportable from Admin panel</li>
+            <li>Granular per-user permission system with customizable permission profiles and role presets</li>
+            <li>HTTPS/TLS support — optional self-signed certificate via <code>generate_cert.bat</code></li>
+            <li>Server restart button in Admin → System tab with live reconnect indicator</li>
+            <li>Deleted accounts immediately kicked from active sessions via WebSocket broadcast</li>
+            <li>Date, shift, and MOD fields locked to supervisor-level permission; monitors cannot change shift header</li>
+            <li>UA photos now replaceable via modal (same as client photos)</li>
+            <li>Floating toast notifications for action results (UA requests, photos, client changes)</li>
+            <li>Mail log, mail approval, and pass management with permission gating</li>
+            <li>Wellness &amp; walkthrough reminder visibility configurable per user</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.13.3</span>
+        <span class="vdate">May 2026</span>
+        <div class="vdesc">
+          <strong>Polish &amp; bug fixes.</strong>
+          <span class="badge badge-new">UI</span>
+          <ul>
+            <li>New custom ShiftPoint app icon — dark green, circular shift arrow, gold diamond; shown in browser tab, login page, desktop header, and mobile header</li>
+            <li>Favicon auth redirect fixed — <code>/static/icons/</code> now served without auth; previously the favicon request hijacked the post-login redirect</li>
+            <li>PWA manifest scoped to <code>mobile.html</code> only — having it on desktop pages caused Chrome to launch the app as a mobile standalone PWA</li>
+            <li><code>GET /index.html</code> now redirects 301 to <code>/</code></li>
+            <li>Deployment guide monitor role description corrected</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.13.2</span>
+        <span class="vdate">May 2026</span>
+        <div class="vdesc">
+          <strong>Security hardening batch 2.</strong>
+          <span class="badge badge-critical">Critical</span>
+          <span class="badge badge-high">High</span>
+          <ul>
+            <li>CSRF protection on all 30 state-changing API routes (Origin header validation)</li>
+            <li>Session fixation prevented — <code>session.regenerate()</code> called on every login</li>
+            <li>Stored XSS fixed in archive renderer and UA request banner (<code>sync.js</code>)</li>
+            <li>Walk area names and room numbers escaped in mobile <code>renderWalk()</code></li>
+            <li>Session secret file permissions set to <code>0o600</code></li>
+            <li>Rate limiting expanded to <code>POST /api/data</code> and password-change endpoint</li>
+            <li>Roster wipe prevention — empty <code>clients: []</code> payload ignored</li>
+            <li>Photo uploads capped at 4 MB; oversized payloads rejected with 400</li>
+            <li>Server-side input length limits enforced on all write endpoints</li>
+            <li>CSP hardened — <code>'unsafe-eval'</code> removed from <code>script-src</code></li>
+            <li>SRI integrity hash added to JSZip CDN script tag</li>
+            <li>Single quotes escaped in <code>tabEsc()</code> helper</li>
+            <li><code>credentials:'include'</code> added to all fetch calls in <code>tabs.js</code></li>
+            <li>Login rate limiter moved to in-memory only</li>
+            <li>First-run credentials now cryptographically random — hardcoded defaults removed</li>
+            <li><code>X-Powered-By</code> header suppressed</li>
+            <li>CSRF validation added to <code>/logout</code></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.13.1</span>
+        <span class="vdate">Apr 2026</span>
+        <div class="vdesc">
+          <strong>Security hardening batch 1.</strong>
+          <span class="badge badge-critical">Critical</span>
+          <ul>
+            <li>PBKDF2 upgraded to SHA-512 at 600,000 iterations; legacy hashes re-hashed on next password change</li>
+            <li>Password policy enforced — 8+ chars, uppercase, lowercase, digit, symbol</li>
+            <li>Login CSRF — Origin header validated on <code>POST /login</code></li>
+            <li>Rate limiting — 10 login attempts / 15 min per IP; 300 API requests / min per IP</li>
+            <li>Safe redirect — <code>returnTo</code> validated as relative path before redirect</li>
+            <li>Session hardening — HttpOnly, SameSite=Lax, 12-hour expiry, Secure when TLS active</li>
+            <li>Content Security Policy header added</li>
+            <li>IDOR on UA photos fixed — upload verifies log entry belongs to open report</li>
+            <li>Magic-byte validation on client photos and logos</li>
+            <li>XSS prevention — <code>esc()</code> helper added; substance codes, walk areas, log text escaped</li>
+            <li>Constant-time response for invalid usernames</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.13</span>
+        <span class="vdate">Apr 2026</span>
+        <div class="vdesc">
+          <strong>Major feature release.</strong>
+          <span class="badge badge-new">New features</span>
+          <span class="badge badge-critical">Critical</span>
+          <span class="badge badge-high">High</span>
+          <span class="badge badge-new">New features</span>
+          <ul>
+            <li><strong>C-1 Fixed:</strong> WebSocket relay blocked &mdash; clients can no longer broadcast arbitrary JSON to all sessions</li>
+            <li><strong>H-1 Fixed:</strong> Log entry <code>time</code> field escaped before innerHTML (XSS)</li>
+            <li><strong>H-2 Fixed:</strong> <code>/api/force-change-password</code> gated to must-change-pw sessions only</li>
+            <li><strong>H-3 Fixed:</strong> Username timing oracle eliminated with constant-time dummy PBKDF2 for invalid users</li>
+            <li><strong>H-4 Fixed:</strong> PATCH broadcast sanitized to whitelist of known fields only</li>
+            <li><strong>M-1 Fixed:</strong> Stored XSS in scheduled time display (admin panel) now escaped</li>
+            <li><strong>M-2 Fixed:</strong> Facility name HTML-escaped before injection into UA report print window</li>
+            <li><strong>M-3 Fixed:</strong> UA record deletion restricted to admin role only</li>
+            <li><strong>M-4 Fixed:</strong> CORS allowlist computed dynamically per request &mdash; handles DHCP IP changes</li>
+            <li><strong>M-6 Fixed:</strong> <code>/css</code> and <code>/static</code> routes now require authentication</li>
+            <li><strong>M-7 Fixed:</strong> UA photo upload validated against magic bytes (JPEG/PNG/GIF/WebP)</li>
+            <li><strong>L-2 Fixed:</strong> Login rate limiting persisted to DB across server restarts</li>
+            <li><strong>L-3 Fixed:</strong> API rate limiting added (300 req/min/IP, in-memory)</li>
+            <li><strong>L-4 Fixed:</strong> UA photos no longer resolved from disk on every <code>getAllData</code> call</li>
+            <li>Archived report viewer now opens in a separate browser tab (read-only)</li>
+            <li>Roster snapshot captured at shift close &mdash; archived reports show the roster as it was at that moment</li>
+            <li>Monitor role fully read-locked on archived reports (no status changes, no log edits)</li>
+            <li>Status dropdowns replaced with static badges in archive mode</li>
+            <li>Report delete restricted to admin role</li>
+            <li>Monitor role can now attach UA photos (was incorrectly supervisor-only)</li>
+            <li>Scheduled reminder engine overhauled &mdash; fires reliably at set times, ding sound added</li>
+            <li>Reminder interval dropdowns removed &mdash; scheduled times only</li>
+            <li>Mobile app: reminders stripped (desktop only), load-on-open fixed</li>
+            <li>PBKDF2 iteration count unified at 600k across all hash paths</li>
+            <li>Stale logo paths from old installations auto-cleared on startup</li>
+            <li>Login page logo references removed (caused 404 navigation after auth hardening)</li>
+            <li>Most-recent open report always loaded on login</li>
+            <li>DELETE <code>/api/reports/:id</code> endpoint added (was client-side only, caused flicker)</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.1</span>
+        <span class="vdate">Apr 2026</span>
+        <div class="vdesc">
+          SQLite database backend, rebuilt admin panel, UA reporting with photo documentation, force password change on first login, scheduled reminders, inline UA report tab, WebSocket real-time sync, PBKDF2-SHA512 password hashing.
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.01</span>
+        <span class="vdate">Apr 2026</span>
+        <div class="vdesc">
+          UA modal redesign, reminder engine, walk area management, HTTPS/TLS support, installer security improvements, CORS hardening.
+        </div>
+      </div>
+
+      <div class="version-row">
+        <span class="vnum">v1.0</span>
+        <span class="vdate">Mar 2026</span>
+        <div class="vdesc">
+          Initial release &mdash; shift logging, wellness checks, walkthroughs, client roster, DOCX report generation, email filing.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="copyright-box">
+    <p><strong>&copy; 2026 Westside Community Services. All rights reserved.</strong></p>
+    <p>ShiftPoint is proprietary software. Unauthorized copying, distribution,<br>modification, or reverse engineering of this software is strictly prohibited.</p>
+    <p class="reserved">This software is licensed, not sold. Use is restricted to the licensed facility only.</p>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>ShiftPoint v1.14.0 &nbsp;&bull;&nbsp; &copy; 2026 Westside Community Services</p>
+</div>
+
+</body>
+</html>

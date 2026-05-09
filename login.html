@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShiftPoint — Login</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Outfit',sans-serif;background:#1C0A10;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden;}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(224,96,32,.12) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(123,21,53,.3) 0%,transparent 55%);pointer-events:none;}
+.card{background:#fff;border-radius:16px;padding:0;width:100%;max-width:420px;box-shadow:0 32px 80px rgba(0,0,0,.6);overflow:hidden;position:relative;}
+.card-top{background:#1C0A10;padding:28px 36px 22px;border-bottom:3px solid #E06020;}
+.logos{display:flex;gap:14px;justify-content:center;align-items:center;margin-bottom:18px;}
+.logos img{height:50px;object-fit:contain;}
+.org{font-size:.62rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#7A5462;text-align:center;margin-bottom:6px;}
+h1{font-size:1.5rem;font-weight:700;color:#fff;text-align:center;margin-bottom:2px;font-family:'Libre Baskerville',serif;}
+.sub{font-size:.8rem;color:#C8A0AA;text-align:center;}
+.card-body{padding:28px 36px 32px;}
+.field{margin-bottom:18px;}
+.field label{display:block;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#475569;margin-bottom:6px;}
+.field input{width:100%;padding:12px 14px;border:1.5px solid #EBD0D8;border-radius:8px;font-size:1rem;font-family:'Outfit',sans-serif;color:#1C0A10;outline:none;transition:border-color .15s;background:#F8FAFC;}
+.field input:focus{border-color:#7B1535;background:#fff;}
+.btn{width:100%;padding:14px;background:#7B1535;color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:800;font-family:'Outfit',sans-serif;cursor:pointer;margin-top:4px;transition:background .15s;letter-spacing:.04em;}
+.btn:hover{background:#9C2040;}
+.err{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:.84rem;color:#991b1b;margin-bottom:16px;}
+.orange-bar{height:4px;background:linear-gradient(90deg,#E06020,#D4A017);margin-bottom:0;}
+</style>
+<script>
+(function(){
+  const t = localStorage.getItem('sp-theme') || 'green';
+  // Apply theme color to login card-top and button
+  if (t !== 'crimson') {
+    document.addEventListener('DOMContentLoaded', function(){
+      var tops = document.querySelectorAll('.card-top');
+      tops.forEach(function(el){ el.style.background='#1A3327'; });
+      var btn = document.querySelector('.btn');
+      if(btn){ btn.style.background='#2D6A4F'; }
+      var bar = document.querySelector('.orange-bar');
+      if(bar){ bar.style.background='linear-gradient(90deg,#D4A017,#2D6A4F)'; }
+    });
+  }
+})();
+</script>
+</head>
+<body>
+<div class="card">
+  <div class="card-top">
+    <div class="logos">
+
+    </div>
+    <div class="org">Positive Directions Equals Change &middot; Westside Community Services</div>
+    <img src="/static/icons/icon-192.png" alt="ShiftPoint" style="width:80px;height:80px;border-radius:18px;display:block;margin:4px auto 10px;box-shadow:0 4px 20px rgba(0,0,0,.4);">
+    <div class="sub">Staff Login</div>
+  </div>
+  <div class="orange-bar"></div>
+  <div class="card-body">
+    {{ERROR}}
+    <form method="POST" action="/login">
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="username" name="username" autofocus autocomplete="username" placeholder="Enter your username">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" placeholder="Enter your password">
+      </div>
+      <button type="submit" class="btn">Sign In &rarr;</button>
+    </form>
+  </div>
+</div>
+<div style="position:fixed;bottom:0;left:0;right:0;text-align:center;padding:10px;font-size:.7rem;color:#94A3B8;font-family:'Outfit',sans-serif;">&copy; 2026 Westside Community Services &nbsp;&bull;&nbsp; ShiftPoint v1.14.0 &nbsp;&bull;&nbsp; All rights reserved &nbsp;&bull;&nbsp; <a href="/about" style="color:#94A3B8;text-decoration:underline;">About</a></div>
+</body>
+</html>

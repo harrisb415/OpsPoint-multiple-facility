@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Admin Panel — ShiftPoint</title>
+<link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--dark:#1A3327;--mid:#2D6A4F;--gold:#D4A017;--crimson:#7B1535;--steel:#4B5563;--line:#D4E6DA;--bg:#F4F6F8;--white:#fff;}
+body{font-family:'Outfit',sans-serif;background:var(--bg);color:#0F172A;}
+.topbar{background:var(--dark);color:#fff;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;border-bottom:3px solid var(--gold);}
+.topbar-left{display:flex;flex-direction:column;justify-content:center;}
+.topbar-title{font-size:.95rem;font-weight:800;}
+.topbar-sub{font-size:.63rem;color:#A8D5B5;letter-spacing:.08em;text-transform:uppercase;}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.topbar-user{font-size:.78rem;color:#A8D5B5;margin-right:4px;}
+a.tl,button.tl{color:#fff;font-size:.75rem;font-weight:700;text-decoration:none;background:rgba(255,255,255,.12);padding:6px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.2);cursor:pointer;font-family:'Outfit',sans-serif;white-space:nowrap;}
+a.tl:hover,button.tl:hover{background:rgba(255,255,255,.22);}
+
+/* ── Main nav ── */
+.nav-tabs{background:var(--dark);border-bottom:1px solid rgba(255,255,255,.1);padding:0 24px;display:flex;gap:2px;}
+.nav-tab{padding:10px 20px;font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#A8D5B5;cursor:pointer;border:none;background:transparent;border-bottom:3px solid transparent;margin-bottom:-1px;}
+.nav-tab:hover{color:#fff;}
+.nav-tab.active{color:#fff;border-bottom-color:var(--gold);}
+
+/* ── Sub tabs ── */
+.sub-tabs{background:#fff;border-bottom:2px solid var(--line);padding:0;display:flex;gap:0;flex-wrap:wrap;}
+.sub-tab{padding:10px 18px;font-size:.78rem;font-weight:700;color:var(--steel);cursor:pointer;border:none;background:transparent;border-bottom:3px solid transparent;margin-bottom:-2px;white-space:nowrap;}
+.sub-tab.active{color:var(--dark);border-bottom-color:var(--mid);}
+.sub-tab:hover{color:var(--dark);}
+
+/* ── Layout ── */
+.container{max-width:1000px;margin:0 auto;padding:24px 20px;}
+.panel-section{display:none;} .panel-section.active{display:block;}
+.sub-panel{display:none;} .sub-panel.active{display:block;}
+
+/* ── Cards ── */
+.card{background:#fff;border-radius:12px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,.07);overflow:hidden;}
+.card-head{background:var(--dark);padding:11px 18px;font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#A8D5B5;display:flex;align-items:center;justify-content:space-between;}
+.card-head .hl{color:#fff;}
+.card-body{padding:18px;}
+
+/* ── Table ── */
+table{width:100%;border-collapse:collapse;font-size:.85rem;}
+th{text-align:left;font-size:.67rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);padding:8px 12px;border-bottom:2px solid var(--line);}
+td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:#F4FAF6;}
+
+/* ── Badges ── */
+.badge{font-size:.67rem;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block;}
+.badge-admin{background:#FEF3C7;color:#92400E;}
+.badge-supervisor{background:#D8F3DC;color:#1A5C42;}
+.badge-monitor{background:#DBEAFE;color:#1E40AF;}
+.badge-case_manager{background:#F3E8FF;color:#6B21A8;}
+.badge-active{background:#D8F3DC;color:#1A5C42;}
+.badge-vacant{background:#F1F5F9;color:#64748B;}
+.badge-special{background:#EDE9FE;color:#6D28D9;}
+.badge-discharged{background:#FEE2E2;color:#991B1B;}
+
+/* ── Buttons ── */
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;}
+.btn-green{background:var(--mid);color:#fff;} .btn-green:hover{background:#1A5C42;}
+.btn-red{background:#DC2626;color:#fff;} .btn-red:hover{background:#B91C1C;}
+.btn-outline{background:#fff;color:var(--mid);border:1.5px solid var(--line);} .btn-outline:hover{border-color:var(--mid);}
+.btn-danger{background:#FEE2E2;color:#DC2626;border:1px solid #FCA5A5;}  .btn-danger:hover{background:#FEE2E2;}
+.btn-sm{padding:5px 11px;font-size:.76rem;}
+.btn-xs{padding:3px 8px;font-size:.72rem;border-radius:6px;}
+
+/* ── Forms ── */
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);margin-bottom:5px;}
+.field input,.field select,.field textarea{width:100%;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.9rem;font-family:'Outfit',sans-serif;outline:none;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--mid);}
+.inline-input{padding:6px 9px;border:1.5px solid var(--line);border-radius:6px;font-size:.84rem;font-family:'Outfit',sans-serif;width:100%;}
+.inline-input:focus{border-color:var(--mid);outline:none;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+
+/* ── Messages ── */
+.msg-ok{background:#D8F3DC;color:#1A5C42;border:1px solid #A7F3D0;padding:9px 14px;border-radius:8px;font-size:.82rem;font-weight:600;margin-top:10px;}
+.msg-err{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;padding:9px 14px;border-radius:8px;font-size:.82rem;font-weight:600;margin-top:10px;}
+
+/* ── Counters ── */
+.counters{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+.counter{background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:12px 18px;text-align:center;min-width:100px;}
+.counter .num{font-size:1.6rem;font-weight:800;color:var(--dark);}
+.counter .lbl{font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--steel);margin-top:2px;}
+
+/* ── Room table ── */
+.drag-handle{cursor:grab;color:#CBD5E1;font-size:1.1rem;user-select:none;padding:0 4px;}
+tr.dragging{opacity:.4;}
+tr.drag-over td{border-top:2px solid var(--gold);}
+.room-num{width:80px;}
+.room-name{width:160px;}
+.special-row td{background:#F5F3FF;}
+.vacant-row td{background:#F8FAFC;}
+.discharged-row td{background:#FEF2F2;}
+
+/* ── Areas drag ── */
+.area-row{display:flex;align-items:center;gap:10px;padding:9px 14px;background:#fff;border:1.5px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:grab;}
+.area-row.drag-over{border-color:var(--gold);background:#FFFBEB;}
+.area-row.dragging{opacity:.4;}
+.area-drag{color:#94A3B8;font-size:1.1rem;}
+.area-label{flex:1;font-size:.9rem;font-weight:600;}
+.area-del-btn{background:#FEE2E2;border:none;color:#DC2626;border-radius:5px;padding:3px 9px;font-size:.8rem;font-weight:700;cursor:pointer;}
+
+/* ── UA rows ── */
+.ua-row{border-bottom:1px solid var(--line);padding:10px 14px;font-size:.84rem;display:grid;grid-template-columns:96px 80px 1fr auto;gap:10px;align-items:center;}
+.ua-row:last-child{border-bottom:none;}
+.ua-row:hover{background:#F4FAF6;}
+.ua-pos{color:#DC2626;font-weight:700;}
+.ua-neg{color:#1A5C42;}
+
+/* ── Danger zone ── */
+.danger-box{background:#FEF2F2;border:1.5px solid #FCA5A5;border-radius:10px;padding:18px;margin-top:14px;}
+.danger-box p{font-size:.84rem;color:#7F1D1D;margin-bottom:12px;}
+
+/* ── Audit Log ── */
+.audit-chip{padding:5px 13px;border:1.5px solid var(--line);border-radius:20px;font-size:.74rem;font-weight:700;cursor:pointer;background:#fff;font-family:'Outfit',sans-serif;transition:all .15s;white-space:nowrap;border:none;}
+.audit-chip.active{background:var(--dark);color:#fff;}
+.audit-chip:hover:not(.active){background:var(--line);}
+.audit-action{font-size:.72rem;font-weight:700;padding:2px 7px;border-radius:5px;display:inline-block;white-space:nowrap;}
+.act-auth{background:#DBEAFE;color:#1E40AF;} .act-report{background:#D8F3DC;color:#1A5C42;}
+.act-log{background:#BBF7D0;color:#166534;} .act-status{background:#FEF3C7;color:#92400E;}
+.act-client{background:#EDE9FE;color:#6D28D9;} .act-issues{background:#FEE2E2;color:#991B1B;}
+.act-mednote{background:#FEE2E2;color:#991B1B;} .act-passes{background:#E0F2FE;color:#0369A1;}
+.act-mail{background:#FFF7ED;color:#9A3412;} .act-staff{background:#F0FDF4;color:#166534;}
+.act-chore{background:#FEF9C3;color:#854D0E;} .act-ua{background:#FFE4E6;color:#9F1239;}
+.act-facility{background:#F1F5F9;color:#475569;} .act-user{background:#FEF3C7;color:#92400E;}
+.act-profile{background:#E0E7FF;color:#3730A3;} .act-server{background:#1e293b;color:#94a3b8;}
+.act-default{background:#F1F5F9;color:#475569;}
+.audit-detail{font-size:.78rem;color:var(--steel);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}
+.audit-detail.expanded{white-space:pre-wrap;overflow:visible;max-width:none;}
+.audit-ip{font-size:.73rem;font-family:monospace;color:#94A3B8;}
+.audit-ts{font-size:.77rem;white-space:nowrap;color:var(--steel);}
+.audit-pg{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:.82rem;color:var(--steel);flex-wrap:wrap;}
+
+/* ── Permission editor modal ── */
+.perm-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;}
+.perm-modal-overlay.open{display:flex;}
+.perm-modal{background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+.perm-modal-head{background:var(--dark);color:#fff;padding:14px 20px;border-radius:14px 14px 0 0;display:flex;align-items:center;justify-content:space-between;}
+.perm-modal-head h3{font-size:.95rem;font-weight:800;}
+.perm-modal-head .close-x{background:none;border:none;color:#A8D5B5;font-size:1.3rem;cursor:pointer;line-height:1;}
+.perm-modal-head .close-x:hover{color:#fff;}
+.perm-modal-body{padding:18px 20px;}
+.perm-presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);}
+.perm-presets label{font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);display:block;margin-bottom:6px;width:100%;}
+.perm-preset-btn{padding:5px 14px;border:1.5px solid var(--line);border-radius:20px;font-size:.76rem;font-weight:700;cursor:pointer;background:#fff;font-family:'Outfit',sans-serif;transition:all .15s;}
+.perm-preset-btn:hover{border-color:var(--mid);color:var(--mid);}
+.perm-preset-btn.active{background:var(--mid);color:#fff;border-color:var(--mid);}
+.perm-group{margin-bottom:14px;}
+.perm-group-title{font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:7px;padding-bottom:4px;border-bottom:1px solid var(--line);}
+.perm-item{display:flex;align-items:flex-start;gap:9px;padding:5px 0;cursor:pointer;}
+.perm-item input[type=checkbox]{margin-top:2px;cursor:pointer;accent-color:var(--mid);width:15px;height:15px;flex-shrink:0;}
+.perm-item-label{font-size:.84rem;font-weight:600;color:#0F172A;}
+.perm-item-desc{font-size:.73rem;color:var(--steel);margin-top:1px;}
+.perm-modal-footer{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:14px;">
+    <img src="/static/icons/icon-192.png" alt="ShiftPoint" style="height:36px;width:36px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.5);flex-shrink:0;">
+    <div class="topbar-left">
+      <div class="topbar-title" id="adm-facility-name">ShiftPoint — Admin</div>
+      <div class="topbar-sub" id="adm-facility-sub">Admin Panel</div>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span class="topbar-user" id="user-label"></span>
+    <a href="/" class="tl">&#8592; App</a>
+    <form method="POST" action="/logout" style="display:inline;">
+      <button type="submit" class="tl">Sign Out</button>
+    </form>
+  </div>
+</div>
+
+<div class="nav-tabs">
+  <button class="nav-tab active" onclick="showSection('users',this)">&#128101; User Management</button>
+  <button class="nav-tab" onclick="showSection('facility',this)">&#9881; Facility Setup</button>
+  <button class="nav-tab" onclick="showSection('audit',this)">&#128221; Audit Log</button>
+  <button class="nav-tab" onclick="showSection('system',this)">&#128347; System</button>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     USER MANAGEMENT
+═══════════════════════════════════════════ -->
+<div id="sec-users" class="panel-section active">
+  <div class="sub-tabs">
+    <button class="sub-tab active" onclick="showSub('users','current',this)">&#128101; Current Staff</button>
+    <button class="sub-tab" onclick="showSub('users','add',this)">&#10133; Add Staff</button>
+    <button class="sub-tab" onclick="showSub('users','password',this)">&#128273; Reset Password</button>
+    <button class="sub-tab" onclick="showSub('users','profiles',this)">&#128274; Permission Profiles</button>
+  </div>
+  <div class="container">
+
+    <div id="usub-current" class="sub-panel active">
+      <div class="card">
+        <div class="card-head"><span class="hl">Staff Accounts</span><span id="user-count" style="font-size:.72rem;"></span></div>
+        <div class="card-body" style="padding:0;">
+          <table><thead><tr>
+            <th>Username</th><th>Display Name</th><th>Role</th><th>Created</th><th>Actions</th>
+          </tr></thead>
+          <tbody id="user-tbody"></tbody></table>
+        </div>
+      </div>
+      <div id="user-msg"></div>
+    </div>
+
+    <div id="usub-add" class="sub-panel">
+      <div class="card">
+        <div class="card-head"><span class="hl">Add New Staff Account</span></div>
+        <div class="card-body" style="max-width:500px;">
+          <div class="grid2">
+            <div class="field"><label>Username</label><input id="nu-username" placeholder="e.g. jsmith" autocomplete="off"></div>
+            <div class="field"><label>Display Name</label><input id="nu-display" placeholder="e.g. Jane Smith"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Role</label><select id="nu-role"><option value="">Loading...</option></select></div>
+            <div class="field"><label>Password</label><input type="password" id="nu-pw" placeholder="Min 8 chars" autocomplete="new-password"></div>
+          </div>
+          <div class="field"><label>Confirm Password</label><input type="password" id="nu-pw2" autocomplete="new-password"></div>
+          <button class="btn btn-green" onclick="addUser()">Create Account</button>
+          <div id="add-user-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head" style="background:#163825;"><span style="color:#A8D5B5;font-size:.68rem;">PASSWORD REQUIREMENTS</span></div>
+        <div class="card-body" style="font-size:.82rem;color:var(--steel);line-height:1.9;">
+          8+ characters &nbsp;&bull;&nbsp; Uppercase &nbsp;&bull;&nbsp; Lowercase &nbsp;&bull;&nbsp; Number &nbsp;&bull;&nbsp; Symbol (!@#$%^&amp;*)
+        </div>
+      </div>
+    </div>
+
+    <div id="usub-password" class="sub-panel">
+      <div class="card">
+        <div class="card-head"><span class="hl">Reset Staff Password</span></div>
+        <div class="card-body" style="max-width:480px;">
+          <div class="field"><label>Select Staff Member</label><select id="pw-user-sel"><option value="">— Select —</option></select></div>
+          <div class="grid2">
+            <div class="field"><label>New Password</label><input type="password" id="pw-new" autocomplete="new-password"></div>
+            <div class="field"><label>Confirm Password</label><input type="password" id="pw-new2" autocomplete="new-password"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-green" onclick="resetPw()">Set New Password</button>
+            <button class="btn btn-outline" onclick="changeSelfPw()">Change My Own Password</button>
+          </div>
+          <div id="pw-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+      <div class="card" id="self-pw-card" style="display:none;">
+        <div class="card-head"><span class="hl">Change My Password</span></div>
+        <div class="card-body" style="max-width:480px;">
+          <div class="field"><label>Current Password</label><input type="password" id="me-cur" autocomplete="current-password"></div>
+          <div class="grid2">
+            <div class="field"><label>New Password</label><input type="password" id="me-new" autocomplete="new-password"></div>
+            <div class="field"><label>Confirm</label><input type="password" id="me-new2" autocomplete="new-password"></div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-green" onclick="submitSelfPw()">Update Password</button>
+            <button class="btn btn-outline" onclick="document.getElementById('self-pw-card').style.display='none'">Cancel</button>
+          </div>
+          <div id="self-pw-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="usub-profiles" class="sub-panel">
+      <div class="card">
+        <div class="card-head">
+          <span class="hl">Permission Profiles</span>
+          <span style="font-size:.71rem;color:#A8D5B5;">Templates for new account creation &mdash; does not retroactively change existing users</span>
+        </div>
+        <div class="card-body">
+          <div id="profiles-list" style="margin-bottom:4px;"></div>
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);">
+            <p style="font-size:.78rem;color:var(--steel);margin-bottom:10px;">Add a new blank profile and configure its permissions:</p>
+            <div style="display:flex;gap:8px;align-items:flex-end;max-width:380px;">
+              <div class="field" style="flex:1;margin:0;"><label>Profile Name</label><input id="new-profile-label" placeholder="e.g. Night Staff" class="inline-input"></div>
+              <button class="btn btn-green btn-sm" onclick="addProfile()" style="white-space:nowrap;margin-bottom:0;">+ Add</button>
+            </div>
+          </div>
+          <div id="profiles-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     FACILITY SETUP
+═══════════════════════════════════════════ -->
+<div id="sec-facility" class="panel-section">
+  <div class="sub-tabs">
+    <button class="sub-tab active" onclick="showSub('facility','fname',this)">&#127962; Facility Name</button>
+    <button class="sub-tab" onclick="showSub('facility','rooms',this)">&#128682; Rooms</button>
+    <button class="sub-tab" onclick="showSub('facility','reminders',this)">&#9200; Reminders</button>
+    <button class="sub-tab" onclick="showSub('facility','walkareas',this)">&#128205; Walk Areas</button>
+    <button class="sub-tab" onclick="showSub('facility','uapanel',this)">&#129514; UA Panel</button>
+    <button class="sub-tab" onclick="showSub('facility','reset',this)" style="color:#DC2626;">&#9888; Reset</button>
+  </div>
+  <div class="container">
+
+    <!-- Facility Name -->
+    <div id="fsub-fname" class="sub-panel active">
+      <div class="card">
+        <div class="card-head"><span class="hl">Facility Name</span></div>
+        <div class="card-body" style="max-width:560px;">
+          <p style="font-size:.84rem;color:var(--steel);margin-bottom:14px;">Shown in the app header, mobile app, all filing documents, and DOCX reports.</p>
+          <div class="field"><label>Facility Name</label><input type="text" id="adm-fac-name" placeholder="e.g. James Baldwin Place"></div>
+          <button class="btn btn-green" onclick="saveFacilityName()">Save Name</button>
+          <div id="fac-name-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rooms (merged: Roster + Add Room + Bulk Import) -->
+    <div id="fsub-rooms" class="sub-panel">
+
+      <!-- Room Roster -->
+      <div class="card">
+        <div class="card-head"><span class="hl">Room Roster</span><span style="font-size:.68rem;color:#A8D5B5;">DRAG &#9783; TO REORDER &nbsp;&bull;&nbsp; CLICK FIELDS TO EDIT</span></div>
+        <div class="card-body" style="padding:14px 18px 8px;">
+          <div class="counters" id="counters"></div>
+          <div id="current-msg" style="margin-bottom:8px;"></div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead><tr><th style="width:32px;"></th><th>Room #</th><th>Name / Label</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="room-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Add Room -->
+      <div class="card" style="margin-top:18px;">
+        <div class="card-head"><span class="hl">Add Room or Space</span></div>
+        <div class="card-body" style="max-width:480px;">
+          <div class="grid2">
+            <div class="field"><label>Room Number</label><input type="text" id="add-room" placeholder="e.g. 207"></div>
+            <div class="field"><label>Type</label>
+              <select id="add-type" onchange="toggleSpecial()">
+                <option value="resident">Resident Room (starts Vacant)</option>
+                <option value="special">Special Space (Office, Storage...)</option>
+              </select>
+            </div>
+          </div>
+          <div id="add-special-label-wrap" style="display:none;">
+            <div class="field"><label>Space Label</label><input type="text" id="add-special-label" placeholder="e.g. Supply Room"></div>
+          </div>
+          <button class="btn btn-green" onclick="addRoom()">Add Room</button>
+          <div id="add-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <!-- Bulk Import -->
+      <div class="card" style="margin-top:18px;">
+        <div class="card-head"><span class="hl">Bulk Import</span></div>
+        <div class="card-body">
+          <p style="font-size:.84rem;color:var(--steel);margin-bottom:10px;">One room per line: <code style="background:#F1F5F9;padding:1px 5px;border-radius:4px;">room, Name, type</code> &mdash; type is <code>resident</code> or <code>special</code>.</p>
+          <p style="font-size:.78rem;color:#94A3B8;margin-bottom:12px;">Example: <code>101, Frank E., resident</code> &nbsp; or &nbsp; <code>104, Office, special</code></p>
+          <div class="field"><label>Paste Room List</label><textarea id="bulk-input" rows="12" placeholder="101, Frank E., resident&#10;102, Anthony D., resident&#10;104, Office, special" oninput="previewBulk()"></textarea></div>
+          <div id="bulk-count" style="font-size:.82rem;color:var(--steel);margin-bottom:10px;"></div>
+          <div id="bulk-preview" style="display:none;overflow-x:auto;margin-bottom:14px;max-height:220px;border:1px solid var(--line);border-radius:8px;font-size:.8rem;"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-green" onclick="importBulk(false)">Append to Roster</button>
+            <button class="btn btn-danger btn-outline" style="border:1.5px solid #FCA5A5;" onclick="importBulk(true)">&#9888; Replace Entire Roster</button>
+          </div>
+          <div id="bulk-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Reminders -->
+    <div id="fsub-reminders" class="sub-panel">
+      <div class="card">
+        <div class="card-head"><span class="hl">Scheduled Reminders</span></div>
+        <div class="card-body" style="max-width:560px;">
+          <p style="font-size:.84rem;color:var(--steel);margin-bottom:16px;">Add specific scheduled times for reminder banners to fire on the desktop app.</p>
+          <div class="grid2" style="margin-bottom:16px;">
+            <div>
+              <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);margin-bottom:6px;">Wellness Scheduled Times</label>
+              <p style="font-size:.76rem;color:#94A3B8;margin-bottom:8px;">Reminder fires at each time regardless of whether a check has been done.</p>
+              <div id="adm-wellness-sched" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;"></div>
+              <div style="display:flex;gap:6px;">
+                <input type="time" id="adm-new-wellness-time" style="padding:7px 10px;border:1.5px solid var(--line);border-radius:7px;font-family:'Outfit',sans-serif;font-size:.88rem;">
+                <button class="btn btn-green btn-sm" onclick="admAddSchedTime('wellness')">+ Add</button>
+              </div>
+            </div>
+            <div>
+              <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--steel);margin-bottom:6px;">Walk Scheduled Times</label>
+              <p style="font-size:.76rem;color:#94A3B8;margin-bottom:8px;">Reminder fires at each time regardless of whether a walkthrough has been done.</p>
+              <div id="adm-walk-sched" style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;"></div>
+              <div style="display:flex;gap:6px;">
+                <input type="time" id="adm-new-walk-time" style="padding:7px 10px;border:1.5px solid var(--line);border-radius:7px;font-family:'Outfit',sans-serif;font-size:.88rem;">
+                <button class="btn btn-green btn-sm" onclick="admAddSchedTime('walk')">+ Add</button>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-green" onclick="saveReminders()">Save Reminder Settings</button>
+          <div id="reminder-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Walk Areas -->
+    <div id="fsub-walkareas" class="sub-panel">
+      <div class="card">
+        <div class="card-head"><span class="hl">Walkthrough Locations</span><span style="font-size:.68rem;color:#A8D5B5;">DRAG &#9783; TO REORDER</span></div>
+        <div class="card-body">
+          <p style="font-size:.84rem;color:var(--steel);margin-bottom:14px;">These areas appear as checkboxes during a walkthrough on both desktop and mobile.</p>
+          <div id="areas-list" style="max-width:560px;margin-bottom:14px;"></div>
+          <div style="display:flex;gap:8px;max-width:560px;margin-bottom:14px;">
+            <input type="text" id="new-area-input" placeholder="New location (e.g. Rooftop Deck)" style="flex:1;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:'Outfit',sans-serif;" onkeydown="if(event.key==='Enter')addArea()">
+            <button class="btn btn-green" onclick="addArea()">+ Add</button>
+          </div>
+          <button class="btn btn-green" onclick="saveAreas()">Save Locations</button>
+          <div id="areas-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UA Panel -->
+    <div id="fsub-uapanel" class="sub-panel">
+      <div class="card">
+        <div class="card-head"><span class="hl">UA Substance Panel</span><span style="font-size:.68rem;color:#A8D5B5;">DRAG &#9783; TO REORDER</span></div>
+        <div class="card-body">
+          <p style="font-size:.84rem;color:var(--steel);margin-bottom:6px;">Substances shown in the UA modal and UA Report columns. Use short codes (ETG, THC, etc.).</p>
+          <div id="adm-ua-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;max-width:420px;"></div>
+          <div style="display:flex;gap:8px;max-width:420px;flex-wrap:wrap;margin-bottom:12px;">
+            <input type="text" id="adm-new-sub" placeholder="Code (AMP)" style="width:110px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:'Outfit',sans-serif;text-transform:uppercase;" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')admAddSub()">
+            <input type="text" id="adm-new-sub-full" placeholder="Full name (optional)" style="flex:1;min-width:140px;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;font-size:.88rem;font-family:'Outfit',sans-serif;">
+            <button class="btn btn-green" onclick="admAddSub()">+ Add</button>
+          </div>
+          <button class="btn btn-green" onclick="admSaveUAPanel()">Save Panel</button>
+          <div id="adm-ua-msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reset -->
+    <div id="fsub-reset" class="sub-panel">
+      <div class="card">
+        <div class="card-head" style="background:#7B1535;"><span class="hl">Reset Facility Roster</span></div>
+        <div class="card-body">
+          <div class="danger-box">
+            <p>This permanently wipes <strong>all residents and rooms</strong>. Shift reports are preserved. Use Bulk Import to reconfigure after reset.</p>
+            <div class="field" style="margin-bottom:12px;"><label>Type RESET to confirm</label><input type="text" id="reset-confirm" placeholder="RESET" style="max-width:200px;"></div>
+            <button class="btn btn-red" onclick="hardReset()">&#9888; Wipe Roster &amp; Reset</button>
+            <div id="reset-msg" style="margin-top:10px;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════
+     AUDIT LOG
+═══════════════════════════════════════════ -->
+<div id="sec-audit" class="panel-section">
+  <div class="container">
+    <div class="card">
+      <div class="card-head">
+        <span class="hl">&#128221; Audit Log</span>
+        <button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="auditExportCSV()">&#11015; Export CSV</button>
+      </div>
+      <div class="card-body">
+
+        <!-- Category chips -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--line);">
+          <button id="acat-all"      class="audit-chip active" onclick="setAuditCat('')">All</button>
+          <button id="acat-auth"     class="audit-chip" onclick="setAuditCat('auth')">Auth</button>
+          <button id="acat-report"   class="audit-chip" onclick="setAuditCat('report,log')">Reports &amp; Logs</button>
+          <button id="acat-client"   class="audit-chip" onclick="setAuditCat('client,status,issues,mednote,chore')">Residents</button>
+          <button id="acat-passes"   class="audit-chip" onclick="setAuditCat('passes')">Passes</button>
+          <button id="acat-mail"     class="audit-chip" onclick="setAuditCat('mail')">Mail</button>
+          <button id="acat-staff"    class="audit-chip" onclick="setAuditCat('staff')">Staff</button>
+          <button id="acat-ua"       class="audit-chip" onclick="setAuditCat('ua')">UA</button>
+          <button id="acat-facility" class="audit-chip" onclick="setAuditCat('facility')">Facility</button>
+          <button id="acat-admin"    class="audit-chip" onclick="setAuditCat('user,profile')">Admin</button>
+          <button id="acat-server"   class="audit-chip" onclick="setAuditCat('server')">Server</button>
+        </div>
+
+        <!-- Filter bar -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+          <select id="audit-actor" style="padding:7px 10px;border:1.5px solid var(--line);border-radius:7px;font-family:'Outfit',sans-serif;font-size:.84rem;" onchange="loadAuditLog(0)">
+            <option value="">All Users</option>
+          </select>
+          <input type="date" id="audit-from" style="padding:7px 10px;border:1.5px solid var(--line);border-radius:7px;font-family:'Outfit',sans-serif;font-size:.84rem;" onchange="loadAuditLog(0)">
+          <span style="font-size:.78rem;color:var(--steel);">to</span>
+          <input type="date" id="audit-to" style="padding:7px 10px;border:1.5px solid var(--line);border-radius:7px;font-family:'Outfit',sans-serif;font-size:.84rem;" onchange="loadAuditLog(0)">
+          <input type="text" id="audit-search" style="padding:7px 10px;border:1.5px solid var(--line);border-radius:7px;font-family:'Outfit',sans-serif;font-size:.84rem;flex:1;min-width:180px;" placeholder="&#128269; Search user, action, target..." oninput="auditSearchDebounce()">
+          <button class="btn btn-outline btn-sm" onclick="clearAuditFilters()">Clear</button>
+        </div>
+
+        <!-- Table -->
+        <div style="overflow-x:auto;">
+          <table id="audit-table">
+            <thead><tr>
+              <th style="width:150px;">Time</th>
+              <th style="width:120px;">User</th>
+              <th style="width:110px;">IP</th>
+              <th style="width:160px;">Action</th>
+              <th style="width:180px;">Target</th>
+              <th>Detail</th>
+            </tr></thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="6" style="text-align:center;color:#94A3B8;padding:28px;">Select a category or load all entries.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="audit-pg">
+          <button class="btn btn-outline btn-sm" id="audit-prev" onclick="loadAuditLog(_auditOffset-_auditLimit)" disabled>&#8592; Prev</button>
+          <span id="audit-pg-info" style="font-size:.82rem;"></span>
+          <button class="btn btn-outline btn-sm" id="audit-next" onclick="loadAuditLog(_auditOffset+_auditLimit)" disabled>Next &#8594;</button>
+          <span style="margin-left:auto;font-size:.74rem;color:#94A3B8;">Click a detail cell to expand it</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SYSTEM
+═══════════════════════════════════════════ -->
+<div id="sec-system" class="panel-section">
+  <div class="container">
+
+    <!-- Server Restart -->
+    <div class="card">
+      <div class="card-head"><span class="hl">&#128347; Server Control</span></div>
+      <div class="card-body">
+        <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            <p style="font-size:.88rem;color:#374151;margin-bottom:8px;">
+              Restart the ShiftPoint server process. The server will shut down, respawn automatically,
+              and all connected clients will reconnect within a few seconds.
+            </p>
+            <p style="font-size:.78rem;color:#94A3B8;margin-bottom:16px;">
+              Use this after updating configuration files or if the server has become unresponsive.
+              All shift data is saved to disk before the restart completes.
+            </p>
+            <button class="btn btn-danger" onclick="restartServer()" id="restart-btn">
+              &#128347; Restart Server
+            </button>
+            <span id="restart-msg" style="margin-left:12px;font-size:.82rem;"></span>
+          </div>
+          <div id="restart-status-box" style="display:none;flex:1;min-width:220px;background:#FFF7ED;border:1.5px solid #FED7AA;border-radius:10px;padding:16px 18px;">
+            <div style="font-weight:700;color:#92400E;margin-bottom:6px;">&#9203; Restarting…</div>
+            <div style="font-size:.82rem;color:#B45309;">Server is restarting. This page will reload automatically once it comes back online.</div>
+            <div style="margin-top:10px;">
+              <span id="restart-dots" style="font-size:1.2rem;color:#D97706;">●</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Version Info -->
+    <div class="card">
+      <div class="card-head"><span class="hl">&#8505; Version Info</span></div>
+      <div class="card-body">
+        <table style="max-width:420px;">
+          <tbody>
+            <tr><td style="width:140px;color:var(--steel);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">App</td><td style="font-size:.88rem;">ShiftPoint</td></tr>
+            <tr><td style="color:var(--steel);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Version</td><td style="font-size:.88rem;">v1.14.0</td></tr>
+            <tr><td style="color:var(--steel);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Server</td><td style="font-size:.88rem;" id="sys-host"></td></tr>
+            <tr><td style="color:var(--steel);font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;">Protocol</td><td style="font-size:.88rem;" id="sys-proto"></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+
+// ── Init ───────────────────────────────────────────────────────
+(function(){
+  // Pre-load facility settings so FAC_SETTINGS is always populated
+  fetch('/api/facility/settings',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    FAC_SETTINGS=d;
+    var ni=document.getElementById('adm-fac-name'); if(ni&&!ni.value) ni.value=d.facility_name||'';
+    var fn=document.getElementById('adm-facility-name'); if(fn) fn.textContent=(d.facility_name||'ShiftPoint')+' — Admin';
+    var fs=document.getElementById('adm-facility-sub'); if(fs) fs.textContent=d.facility_name||'ShiftPoint';
+    document.title=(d.facility_name||'ShiftPoint')+' — Admin';
+  }).catch(function(){});
+  var ul=document.getElementById('user-label');
+  if(ul&&window.SESSION) ul.textContent=window.SESSION.displayName||window.SESSION.username;
+  try{var t=localStorage.getItem('sp-theme');if(t)document.body.className='theme-'+t;}catch(e){}
+  loadProfiles();
+})();
+
+// ── Navigation ─────────────────────────────────────────────────
+function showSection(name, btn) {
+  document.querySelectorAll('.panel-section').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sec-'+name).classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(name==='users')    loadUsers();
+  if(name==='facility') { loadFacilitySettings(); loadRooms(); }
+  if(name==='audit')    { populateAuditActorDropdown(); loadAuditLog(0); startAuditAutoRefresh(); }
+  if(name==='system')   initSystemTab();
+  if(name!=='audit')    stopAuditAutoRefresh();
+}
+function showSub(section, name, btn) {
+  var prefix = section==='users'?'usub-':'fsub-';
+  document.querySelectorAll('#sec-'+section+' .sub-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('#sec-'+section+' .sub-tab').forEach(b=>b.classList.remove('active'));
+  var el=document.getElementById(prefix+name); if(el) el.classList.add('active');
+  if(btn) btn.classList.add('active');
+  if(name==='rooms')      loadRooms();
+  if(name==='reminders')  loadFacilitySettings();
+  if(name==='walkareas')  loadFacilitySettings();
+  if(name==='uapanel')    loadAdmUAPanel();
+  if(name==='password')   populatePwSel();
+  if(name==='fname')      loadFacilitySettings();
+}
+
+// ── Message helper ─────────────────────────────────────────────
+function showMsg(id, type, text) {
+  var el=document.getElementById(id); if(!el)return;
+  el.className=type==='ok'?'msg-ok':'msg-err';
+  el.textContent=text;
+  if(type==='ok') setTimeout(function(){el.textContent='';el.className='';},4000);
+}
+
+// ── Floating toast ──────────────────────────────────────────────
+function showToast(type, text) {
+  var container = document.getElementById('toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toast-container';
+    container.style.cssText = 'position:fixed;top:68px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
+    document.body.appendChild(container);
+  }
+  var toast = document.createElement('div');
+  var isOk = type === 'ok';
+  toast.style.cssText = 'background:'+(isOk?'#1A5C42':'#B91C1C')+';color:#fff;padding:11px 18px;border-radius:9px;font-size:.85rem;font-weight:600;font-family:Outfit,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2);max-width:320px;opacity:0;transition:opacity .2s;';
+  toast.textContent = text;
+  container.appendChild(toast);
+  requestAnimationFrame(function(){ toast.style.opacity = '1'; });
+  setTimeout(function() {
+    toast.style.opacity = '0';
+    setTimeout(function(){ if(toast.parentNode) toast.parentNode.removeChild(toast); }, 250);
+  }, isOk ? 3500 : 5000);
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+// ══════════════════════════════════════════════════
+// USER MANAGEMENT
+// ══════════════════════════════════════════════════
+var ALL_USERS=[];
+async function loadUsers() {
+  var res=await fetch('/api/users',{credentials:'include'});
+  ALL_USERS=await res.json();
+  var tbody=document.getElementById('user-tbody');
+  var cnt=document.getElementById('user-count');
+  if(cnt) cnt.textContent=ALL_USERS.length+' accounts';
+  tbody.innerHTML=ALL_USERS.map(function(u){
+    var badge='<span class="badge badge-'+u.role+'">'+u.role+'</span>';
+    var created=u.createdAt?new Date(u.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
+    var isMe=window.SESSION&&u.username===window.SESSION.username;
+    var del=isMe?'':'<button class="btn btn-xs btn-red" onclick="deleteUser('+u.id+',\''+u.username+'\')" style="margin-left:4px;">Remove</button>';
+    // Store perms array on window keyed by user id so onclick can pass it without JSON escaping issues
+    window['_up_'+u.id] = u.permissions||[];
+    var actions='<button class="btn btn-xs btn-outline" onclick="openEditRole('+u.id+',\''+u.role+'\')" style="margin-right:4px;">Role</button>'
+               +'<button class="btn btn-xs btn-outline" onclick="openPermEditor('+u.id+',\''+esc(u.displayName||u.username)+'\',window[\'_up_'+u.id+'\'])">Permissions</button>';
+    return '<tr><td><strong>'+esc(u.username)+'</strong>'+(isMe?' <span style="font-size:.7rem;color:var(--mid);">(you)</span>':'')+'</td><td>'+esc(u.displayName||'—')+'</td><td>'+badge+'</td><td style="font-size:.78rem;color:var(--steel);">'+created+'</td><td style="white-space:nowrap;">'+actions+del+'</td></tr>';
+  }).join('');
+  populatePwSel();
+}
+var _roleEditUserId = null;
+function openEditRole(id, curRole) {
+  _roleEditUserId = id;
+  var sel = document.getElementById('role-modal-select');
+  if (sel) sel.value = curRole;
+  var u = ALL_USERS.find(function(x){ return x.id === id; });
+  var lbl = document.getElementById('role-modal-label');
+  if (lbl) lbl.textContent = u ? (u.displayName || u.username) : 'User';
+  document.getElementById('role-modal').classList.add('open');
+}
+function closeRoleModal() {
+  document.getElementById('role-modal').classList.remove('open');
+}
+async function saveRole() {
+  var newRole = document.getElementById('role-modal-select').value;
+  var res = await fetch('/api/users/'+_roleEditUserId, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body: JSON.stringify({role: newRole})
+  });
+  var d = await res.json();
+  closeRoleModal();
+  if (d.error) showMsg('user-msg','err',d.error);
+  else { showMsg('user-msg','ok','Role updated.'); loadUsers(); }
+}
+async function deleteUser(id, username) {
+  if(!confirm('Remove account for "'+username+'"? This cannot be undone.')) return;
+  var res=await fetch('/api/users/'+id,{method:'DELETE',credentials:'include'});
+  var data=await res.json();
+  if(data.error) showMsg('user-msg','err',data.error);
+  else { showMsg('user-msg','ok','Account removed.'); loadUsers(); }
+}
+async function addUser() {
+  var username=document.getElementById('nu-username').value.trim();
+  var display=document.getElementById('nu-display').value.trim();
+  var role=document.getElementById('nu-role').value;
+  var pw=document.getElementById('nu-pw').value;
+  var pw2=document.getElementById('nu-pw2').value;
+  if(!username||!pw) return showMsg('add-user-msg','err','Username and password required.');
+  if(pw!==pw2) return showMsg('add-user-msg','err','Passwords do not match.');
+  // New users start with the profile's preset — admin can customise permissions afterwards
+  var _prof = ALL_PROFILES.find(function(p){ return p.key === role; });
+  var _profPerms = _prof ? _prof.permissions : [];
+  var res=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+    body:JSON.stringify({username,displayName:display||username,password:pw,role,permissions:_profPerms})});
+  var data=await res.json();
+  if(data.error) return showMsg('add-user-msg','err',data.error);
+  ['nu-username','nu-display','nu-pw','nu-pw2'].forEach(function(id){document.getElementById(id).value='';});
+  showMsg('add-user-msg','ok','Account created for '+username+'.');
+  loadUsers();
+}
+function populatePwSel() {
+  var sel=document.getElementById('pw-user-sel'); if(!sel) return;
+  sel.innerHTML='<option value="">— Select —</option>'+(ALL_USERS||[]).map(function(u){return '<option value="'+u.id+'">'+esc(u.displayName||u.username)+' ('+esc(u.username)+')</option>';}).join('');
+}
+async function resetPw() {
+  var id=document.getElementById('pw-user-sel').value;
+  var pw=document.getElementById('pw-new').value;
+  var pw2=document.getElementById('pw-new2').value;
+  if(!id) return showMsg('pw-msg','err','Select a staff member.');
+  if(!pw) return showMsg('pw-msg','err','Enter a new password.');
+  if(pw!==pw2) return showMsg('pw-msg','err','Passwords do not match.');
+  var res=await fetch('/api/users/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({password:pw})});
+  var data=await res.json();
+  if(data.error) return showMsg('pw-msg','err',data.error);
+  document.getElementById('pw-new').value=''; document.getElementById('pw-new2').value='';
+  showMsg('pw-msg','ok','Password reset successfully.');
+}
+function changeSelfPw(){document.getElementById('self-pw-card').style.display='block';document.getElementById('me-cur').focus();}
+async function submitSelfPw() {
+  var cur=document.getElementById('me-cur').value,nw=document.getElementById('me-new').value,nw2=document.getElementById('me-new2').value;
+  if(!cur||!nw) return showMsg('self-pw-msg','err','All fields required.');
+  if(nw!==nw2) return showMsg('self-pw-msg','err','Passwords do not match.');
+  var res=await fetch('/api/users/me/password',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({currentPassword:cur,newPassword:nw})});
+  var data=await res.json();
+  if(data.error) return showMsg('self-pw-msg','err',data.error);
+  ['me-cur','me-new','me-new2'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('self-pw-card').style.display='none';
+  showMsg('pw-msg','ok','Your password has been updated.');
+}
+
+// ══════════════════════════════════════════════════
+// FACILITY — SHARED STATE
+// ══════════════════════════════════════════════════
+var ROOMS=[], CURRENT_AREAS=[], ADM_UA_PANEL=[];
+var CURRENT_WELLNESS_INTERVAL=120, CURRENT_WALK_INTERVAL=240;
+var CURRENT_WELLNESS_SCHEDULE=[], CURRENT_WALK_SCHEDULE=[];
+var FAC_SETTINGS={};
+
+async function loadFacilitySettings() {
+  var res=await fetch('/api/facility/settings',{credentials:'include'});
+  FAC_SETTINGS=await res.json();
+  var ni=document.getElementById('adm-fac-name'); if(ni) ni.value=FAC_SETTINGS.facility_name||'';
+  CURRENT_WELLNESS_INTERVAL=FAC_SETTINGS.wellness_interval_mins||120;
+  CURRENT_WALK_INTERVAL=FAC_SETTINGS.walk_interval_mins||240;
+  CURRENT_AREAS=Array.isArray(FAC_SETTINGS.walk_areas)?FAC_SETTINGS.walk_areas.slice():[];
+  CURRENT_WELLNESS_SCHEDULE=Array.isArray(FAC_SETTINGS.wellness_schedule)?FAC_SETTINGS.wellness_schedule.slice():[];
+  CURRENT_WALK_SCHEDULE=Array.isArray(FAC_SETTINGS.walk_schedule)?FAC_SETTINGS.walk_schedule.slice():[];
+  // Set dropdowns
+  var wi=document.getElementById('adm-wellness-int'),ki=document.getElementById('adm-walk-int');
+
+  renderAreas();
+  renderAdmSchedList('wellness');
+  renderAdmSchedList('walk');
+}
+
+async function putSettings(extra) {
+  var body=Object.assign({
+    facility_name: FAC_SETTINGS.facility_name||'ShiftPoint',
+    wellness_interval_mins: CURRENT_WELLNESS_INTERVAL,
+    walk_interval_mins: CURRENT_WALK_INTERVAL,
+    walk_areas: CURRENT_AREAS,
+    ua_panel: FAC_SETTINGS.ua_panel||ADM_UA_PANEL,
+    wellness_schedule: CURRENT_WELLNESS_SCHEDULE,
+    walk_schedule: CURRENT_WALK_SCHEDULE,
+  }, extra||{});
+  var res=await fetch('/api/facility/settings',{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});
+  return res.json();
+}
+
+async function saveFacilityName() {
+  var name=(document.getElementById('adm-fac-name').value||'').trim();
+  if(!name) return showMsg('fac-name-msg','err','Name cannot be blank.');
+  // Fetch current settings first so we don't clobber other settings with defaults
+  var cur = await (await fetch('/api/facility/settings',{credentials:'include'})).json();
+  FAC_SETTINGS = Object.assign(FAC_SETTINGS, cur);
+  FAC_SETTINGS.facility_name = name;
+  var d = await putSettings({facility_name:name});
+  if(d.error) return showMsg('fac-name-msg','err',d.error);
+  document.getElementById('adm-facility-name').textContent=name+' — Admin';
+  document.getElementById('adm-facility-sub').textContent=name;
+  document.title=name+' — Admin';
+  showMsg('fac-name-msg','ok','Facility name saved.');
+}
+
+async function saveReminders() {
+  CURRENT_WELLNESS_INTERVAL=0;
+  CURRENT_WALK_INTERVAL=0;
+  var d=await putSettings();
+  if(d.error) return showMsg('reminder-msg','err',d.error);
+  showMsg('reminder-msg','ok','Reminder settings saved.');
+}
+
+async function saveAreas() {
+  var d=await putSettings({walk_areas:CURRENT_AREAS});
+  if(d.error) return showMsg('areas-msg','err',d.error);
+  showMsg('areas-msg','ok','Walkthrough locations saved.');
+}
+
+// ── Scheduled times ────────────────────────────────────────────
+function fmtTime12(val){
+  var p=val.split(':');if(p.length<2)return val;
+  var h=parseInt(p[0]),m=p[1],ap=h>=12?'PM':'AM';
+  h=h%12||12; return h+':'+m+' '+ap;
+}
+function renderAdmSchedList(type) {
+  var list=type==='wellness'?CURRENT_WELLNESS_SCHEDULE:CURRENT_WALK_SCHEDULE;
+  var elId=type==='wellness'?'adm-wellness-sched':'adm-walk-sched';
+  var el=document.getElementById(elId); if(!el)return;
+  el.innerHTML=list.length?'':'<div style="color:#94A3B8;font-size:.8rem;font-style:italic;">No times set.</div>';
+  list.forEach(function(t,i){
+    var row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:6px 10px;background:#F4FAF6;border:1px solid var(--line);border-radius:7px;';
+    row.innerHTML='<span style="flex:1;font-size:.88rem;font-weight:700;color:var(--dark);">'+esc(t)+'</span>'
+      +'<button data-type="'+type+'" data-idx="'+i+'" onclick="admRemSchedTime(this.dataset.type,parseInt(this.dataset.idx))" style="background:#fee2e2;border:none;color:#DC2626;border-radius:5px;padding:2px 8px;font-size:.75rem;font-weight:700;cursor:pointer;">Remove</button>';
+    el.appendChild(row);
+  });
+}
+function admAddSchedTime(type){
+  var inp=document.getElementById(type==='wellness'?'adm-new-wellness-time':'adm-new-walk-time');
+  if(!inp||!inp.value) return;
+  var formatted=fmtTime12(inp.value);
+  var list=type==='wellness'?CURRENT_WELLNESS_SCHEDULE:CURRENT_WALK_SCHEDULE;
+  if(list.indexOf(formatted)===-1){list.push(formatted);list.sort();}
+  inp.value='';
+  renderAdmSchedList(type);
+}
+function admRemSchedTime(type,i){
+  var list=type==='wellness'?CURRENT_WELLNESS_SCHEDULE:CURRENT_WALK_SCHEDULE;
+  list.splice(i,1);
+  renderAdmSchedList(type);
+}
+
+// ── Walk areas ─────────────────────────────────────────────────
+function renderAreas(){
+  var el=document.getElementById('areas-list'); if(!el)return;
+  el.innerHTML='';
+  CURRENT_AREAS.forEach(function(area,i){
+    var row=document.createElement('div');
+    row.className='area-row'; row.draggable=true; row.dataset.index=i;
+    row.innerHTML='<span class="area-drag">&#9783;</span><span class="area-label">'+esc(area)+'</span>'
+      +'<button class="area-del-btn" data-idx="'+i+'" onclick="removeArea(parseInt(this.dataset.idx))">&times;</button>';
+    row.addEventListener('dragstart',function(e){row.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',i);});
+    row.addEventListener('dragend',function(){el.querySelectorAll('.area-row').forEach(function(r){r.classList.remove('dragging','drag-over');});});
+    row.addEventListener('dragover',function(e){e.preventDefault();el.querySelectorAll('.area-row').forEach(function(r){r.classList.remove('drag-over');});row.classList.add('drag-over');});
+    row.addEventListener('drop',function(e){
+      e.preventDefault();
+      var from=parseInt(e.dataTransfer.getData('text/plain'));
+      if(from!==i){var item=CURRENT_AREAS.splice(from,1)[0];CURRENT_AREAS.splice(i,0,item);renderAreas();}
+    });
+    el.appendChild(row);
+  });
+}
+function addArea(){var inp=document.getElementById('new-area-input');var val=(inp.value||'').trim();if(!val)return;CURRENT_AREAS.push(val);inp.value='';renderAreas();}
+function removeArea(i){CURRENT_AREAS.splice(i,1);renderAreas();}
+
+// ── UA Panel ───────────────────────────────────────────────────
+async function loadAdmUAPanel(){
+  var d=await (await fetch('/api/facility/settings',{credentials:'include'})).json();
+  ADM_UA_PANEL=Array.isArray(d.ua_panel)&&d.ua_panel.length?d.ua_panel.slice():['ETG','THC','K2','FEN','AMP','MDMA','MET','PCP','MOR','OXY','OPI','BZO','MTD','BUP','COC'];
+  renderAdmUAPanel();
+}
+function renderAdmUAPanel(){
+  var list=document.getElementById('adm-ua-list'); if(!list)return; list.innerHTML='';
+  ADM_UA_PANEL.forEach(function(code,i){
+    var row=document.createElement('div'); row.draggable=true; row.dataset.idx=i;
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border:1.5px solid var(--line);border-radius:8px;cursor:grab;';
+    row.innerHTML='<span style="color:#94A3B8;font-size:1.1rem;">&#9783;</span><span style="flex:1;font-weight:700;font-size:.9rem;">'+esc(code)+'</span>'
+      +'<button data-idx="'+i+'" onclick="admRemSub(parseInt(this.dataset.idx))" style="background:#fee2e2;border:none;color:#DC2626;border-radius:5px;padding:3px 8px;font-size:.75rem;font-weight:700;cursor:pointer;">Remove</button>';
+    row.addEventListener('dragstart',function(e){e.dataTransfer.setData('text/plain',i);row.style.opacity='.4';});
+    row.addEventListener('dragend',function(){row.style.opacity='1';});
+    row.addEventListener('dragover',function(e){e.preventDefault();});
+    row.addEventListener('drop',function(e){e.preventDefault();var from=parseInt(e.dataTransfer.getData('text/plain'));if(from!==i){var item=ADM_UA_PANEL.splice(from,1)[0];ADM_UA_PANEL.splice(i,0,item);renderAdmUAPanel();}});
+    list.appendChild(row);
+  });
+}
+function admAddSub(){var code=(document.getElementById('adm-new-sub').value||'').trim().toUpperCase();if(!code)return;if(ADM_UA_PANEL.indexOf(code)!==-1)return showMsg('adm-ua-msg','err','Already in panel.');ADM_UA_PANEL.push(code);document.getElementById('adm-new-sub').value='';document.getElementById('adm-new-sub-full').value='';renderAdmUAPanel();}
+function admRemSub(i){ADM_UA_PANEL.splice(i,1);renderAdmUAPanel();}
+async function admSaveUAPanel(){
+  if(!ADM_UA_PANEL.length)return showMsg('adm-ua-msg','err','Panel cannot be empty.');
+  FAC_SETTINGS.ua_panel=ADM_UA_PANEL;
+  var d=await putSettings({ua_panel:ADM_UA_PANEL});
+  if(d.error)return showMsg('adm-ua-msg','err',d.error);
+  showMsg('adm-ua-msg','ok','UA panel saved — '+ADM_UA_PANEL.length+' substances.');
+}
+
+// ── Room Roster ────────────────────────────────────────────────
+async function loadRooms(){
+  var res=await fetch('/api/facility/rooms',{credentials:'include'});
+  if(!res.ok)return;
+  ROOMS=await res.json();
+  renderRooms(); renderCounters();
+}
+function renderCounters(){
+  var total=ROOMS.filter(function(r){return !r.is_special;}).length;
+  var active=ROOMS.filter(function(r){return !r.is_special&&r.is_active&&r.name!=='VACANT';}).length;
+  var vacant=ROOMS.filter(function(r){return !r.is_special&&r.name==='VACANT';}).length;
+  var special=ROOMS.filter(function(r){return r.is_special;}).length;
+  var discharged=ROOMS.filter(function(r){return !r.is_special&&!r.is_active;}).length;
+  var el=document.getElementById('counters'); if(!el)return;
+  el.innerHTML=[{n:total,l:'Total Rooms'},{n:active,l:'Active Residents'},{n:vacant,l:'Vacant'},{n:special,l:'Special Spaces'},{n:discharged,l:'Discharged'}]
+    .map(function(c){return '<div class="counter"><div class="num">'+c.n+'</div><div class="lbl">'+c.l+'</div></div>';}).join('');
+}
+function renderRooms(){
+  var tbody=document.getElementById('room-tbody'); if(!tbody)return;
+  tbody.innerHTML='';
+  ROOMS.forEach(function(c){
+    var isSp=c.is_special, isVac=!isSp&&c.name==='VACANT', isDis=!isSp&&!c.is_active;
+    var tr=document.createElement('tr');
+    tr.className=isSp?'special-row':isVac?'vacant-row':isDis?'discharged-row':'';
+    tr.dataset.id=c.id; tr.draggable=true;
+    var badge=isSp?'<span class="badge badge-special">Special</span>':isDis?'<span class="badge badge-discharged">Discharged</span>':isVac?'<span class="badge badge-vacant">Vacant</span>':'<span class="badge badge-active">Active</span>';
+    var typeLabel=isSp?(c.special_label||'Special'):'Resident';
+    var canDel=isSp||isVac||isDis;
+    tr.innerHTML='<td><span class="drag-handle">&#9783;</span></td>'
+      +'<td><input class="inline-input room-num" value="'+esc(c.room)+'" onchange="updateRoom('+c.id+',\'room\',this.value)"></td>'
+      +'<td><input class="inline-input room-name" value="'+esc(isSp?(c.special_label||c.name):c.name)+'" onchange="updateRoom('+c.id+','+(isSp?'\'special_label\'':'\'name\'')+',this.value)"'+(isDis?' disabled':'')+' ></td>'
+      +'<td>'+typeLabel+'</td><td>'+badge+'</td>'
+      +'<td style="display:flex;gap:5px;flex-wrap:wrap;">'
+      +(!isSp&&!isDis?'<button class="btn btn-outline btn-sm" onclick="toggleSpecialFlag('+c.id+',true)">&rarr; Special</button>':'')
+      +(isSp?'<button class="btn btn-outline btn-sm" onclick="toggleSpecialFlag('+c.id+',false)">&rarr; Resident</button>':'')
+      +(canDel?'<button class="btn btn-danger btn-sm" onclick="deleteRoom('+c.id+')">Remove</button>':'')
+      +'</td>';
+    tbody.appendChild(tr);
+  });
+  initDrag();
+}
+async function updateRoom(id,field,value){
+  var body={};body[field]=value;
+  var res=await fetch('/api/facility/rooms/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'include'});
+  var data=await res.json();
+  if(data.error){showMsg('current-msg','err',data.error);return;}
+  var r=ROOMS.find(function(x){return x.id===id;});if(r)r[field]=value;
+  showMsg('current-msg','ok','Saved.'); renderCounters();
+}
+async function toggleSpecialFlag(id,makeSpecial){
+  var body={is_special:makeSpecial};if(!makeSpecial)body.name='VACANT';
+  var res=await fetch('/api/facility/rooms/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'include'});
+  var data=await res.json();
+  if(data.error){showMsg('current-msg','err',data.error);return;}
+  loadRooms();
+}
+async function deleteRoom(id){
+  var r=ROOMS.find(function(x){return x.id===id;});if(!r)return;
+  var label=r.is_special?(r.special_label||r.name):'Room '+r.room;
+  if(!confirm('Remove "'+label+'" from the roster? This cannot be undone.'))return;
+  var res=await fetch('/api/facility/rooms/'+id,{method:'DELETE',credentials:'include'});
+  var data=await res.json();
+  if(data.error){showMsg('current-msg','err',data.error);return;}
+  loadRooms();
+}
+function initDrag(){
+  var tbody=document.getElementById('room-tbody'); if(!tbody)return;
+  var dragSrc=null;
+  tbody.querySelectorAll('tr').forEach(function(tr){
+    tr.addEventListener('dragstart',function(e){dragSrc=tr;tr.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+    tr.addEventListener('dragend',function(){tbody.querySelectorAll('tr').forEach(function(r){r.classList.remove('dragging','drag-over');});});
+    tr.addEventListener('dragover',function(e){e.preventDefault();tbody.querySelectorAll('tr').forEach(function(r){r.classList.remove('drag-over');});tr.classList.add('drag-over');});
+    tr.addEventListener('drop',function(e){
+      e.preventDefault();
+      if(dragSrc&&dragSrc!==tr){
+        var rows=[].slice.call(tbody.querySelectorAll('tr'));
+        var si=rows.indexOf(dragSrc),ti=rows.indexOf(tr);
+        if(si<ti)tbody.insertBefore(dragSrc,tr.nextSibling); else tbody.insertBefore(dragSrc,tr);
+        saveOrder();
+      }
+    });
+  });
+}
+async function saveOrder(){
+  var order=[].slice.call(document.getElementById('room-tbody').querySelectorAll('tr')).map(function(tr){return parseInt(tr.dataset.id);});
+  await fetch('/api/facility/reorder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order}),credentials:'include'});
+  ROOMS=order.map(function(id){return ROOMS.find(function(r){return r.id===id;});}).filter(Boolean);
+  showMsg('current-msg','ok','Order saved.');
+}
+function toggleSpecial(){
+  var isSp=document.getElementById('add-type').value==='special';
+  document.getElementById('add-special-label-wrap').style.display=isSp?'block':'none';
+}
+async function addRoom(){
+  var room=document.getElementById('add-room').value.trim();
+  var type=document.getElementById('add-type').value;
+  var label=document.getElementById('add-special-label').value.trim();
+  if(!room)return showMsg('add-msg','err','Room number is required.');
+  var body={room,is_special:type==='special'};
+  if(type==='special'){body.name=label||room;body.special_label=label||room;}else body.name='VACANT';
+  var res=await fetch('/api/facility/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'include'});
+  var data=await res.json();
+  if(data.error)return showMsg('add-msg','err',data.error);
+  document.getElementById('add-room').value='';
+  document.getElementById('add-special-label').value='';
+  showMsg('add-msg','ok','Room '+room+' added.');
+  loadRooms();
+}
+var parsedRooms=[];
+function parseBulkInput(){
+  var lines=document.getElementById('bulk-input').value.split('\n');
+  parsedRooms=[];
+  lines.forEach(function(line){
+    line=line.trim();if(!line||line.startsWith('#'))return;
+    var parts=line.split(',').map(function(p){return p.trim();});
+    var room=parts[0];if(!room)return;
+    var name=parts[1]||'',type=(parts[2]||'').toLowerCase(),isSp=type==='special';
+    parsedRooms.push({room,name:isSp?(name||room):(name||'VACANT'),is_special:isSp,special_label:isSp?(name||room):null});
+  });
+  return parsedRooms;
+}
+function previewBulk(){
+  var rooms=parseBulkInput();
+  var preview=document.getElementById('bulk-preview'),count=document.getElementById('bulk-count');
+  if(!rooms.length){preview.style.display='none';count.textContent='';return;}
+  var res=rooms.filter(function(r){return !r.is_special;}).length,sp=rooms.filter(function(r){return r.is_special;}).length;
+  count.textContent=rooms.length+' rooms parsed: '+res+' resident, '+sp+' special';
+  preview.style.display='block';
+  preview.innerHTML='<table><thead><tr><th>Room</th><th>Name</th><th>Type</th></tr></thead><tbody>'+rooms.map(function(r){return '<tr><td>'+esc(r.room)+'</td><td>'+esc(r.name)+'</td><td>'+(r.is_special?'Special':'Resident')+'</td></tr>';}).join('')+'</tbody></table>';
+}
+async function importBulk(replace){
+  var rooms=parseBulkInput();
+  if(!rooms.length)return showMsg('bulk-msg','err','No valid rooms found.');
+  if(replace&&!confirm('Replace entire roster with '+rooms.length+' rooms? All current resident data will be lost.'))return;
+  if(replace){
+    var res=await fetch('/api/facility/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({rooms}),credentials:'include'});
+    var data=await res.json();
+    if(data.error)return showMsg('bulk-msg','err',data.error);
+    showMsg('bulk-msg','ok','Roster replaced. '+data.count+' rooms configured.');
+  } else {
+    var added=0,errors=[];
+    for(var i=0;i<rooms.length;i++){
+      var r=rooms[i];
+      var res2=await fetch('/api/facility/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(r),credentials:'include'});
+      var d2=await res2.json();
+      if(d2.error)errors.push(r.room+': '+d2.error); else added++;
+    }
+    if(errors.length)showMsg('bulk-msg','err','Added '+added+'. Errors: '+errors.join('; '));
+    else showMsg('bulk-msg','ok','Added '+added+' rooms.');
+  }
+  document.getElementById('bulk-input').value='';previewBulk();loadRooms();
+}
+async function hardReset(){
+  var txt=document.getElementById('reset-confirm').value.trim();
+  if(txt!=='RESET')return showMsg('reset-msg','err','Type RESET to confirm.');
+  if(!confirm('Permanently wipe all residents and rooms? Shift reports are preserved.'))return;
+  var res=await fetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clients:[],reports:[]}),credentials:'include'});
+  if(!res.ok)return showMsg('reset-msg','err','Server error.');
+  document.getElementById('reset-confirm').value='';
+  showMsg('reset-msg','ok','Roster wiped. Use Bulk Import to reconfigure.');
+  loadRooms();
+}
+
+// ══════════════════════════════════════════════════
+
+// ── Permission Editor ─────────────────────────────────────────────
+var _permEditUserId = null;
+var _permEditUserName = '';
+
+const PERM_GROUPS = [
+  { title: 'Shift Reports', perms: [
+    { id:'reports.create',  label:'Create & Save Reports',              desc:'Write status updates, comments, log entries, and save shift reports' },
+    { id:'reports.close',   label:'Close Shifts',                       desc:'Mark a shift as closed / archived' },
+    { id:'reports.delete',  label:'Delete Reports',                     desc:'Permanently remove a shift report from the archive' },
+    { id:'reminders.view',  label:'Wellness & Walkthrough Reminders',   desc:'Show the timed reminder banner when a wellness check or building walkthrough is overdue' },
+  ]},
+  { title: 'Log Entries', perms: [
+    { id:'log.add',    label:'Add Log Entries',    desc:'Post entries to the activity log' },
+    { id:'log.delete', label:'Delete Log Entries', desc:'Remove posted log entries (supervisor review)' },
+    { id:'issues.edit', label:'Add/Remove Issues & Medical Notes', desc:'Post and delete entries in Issues & Concerns and Medical Notes sections' },
+  ]},
+  { title: 'Residents', perms: [
+    { id:'status.edit',    label:'Change Resident Status', desc:'Update resident status badges (In Building, At Work, Weekend Pass, etc.)' },
+    { id:'residents.edit', label:'Edit Resident Info',     desc:'Update room, name, case manager, phone, intake/discharge dates' },
+  ]},
+  { title: 'Staff Directory', perms: [
+    { id:'staff.edit', label:'Manage Staff Directory', desc:'Add, edit, and remove staff contacts and categories' },
+  ]},
+  { title: 'Chores', perms: [
+    { id:'chores.edit', label:'Manage Chores', desc:'Assign chores to residents and log daily completions' },
+  ]},
+  { title: 'Weekend Passes', perms: [
+    { id:'passes.edit', label:'Manage Passes & Notice', desc:'Create, edit, and delete passes; update the pass notice board' },
+  ]},
+  { title: 'UA System', perms: [
+    { id:'ua.request',     label:'Request UAs',                    desc:'Flag a resident for urinalysis from the roster button' },
+    { id:'ua.acknowledge', label:'View & Acknowledge UA Banner',    desc:'See the orange UA alert banner and dismiss/acknowledge requests' },
+    { id:'ua.delete',      label:'Delete UA Entries',              desc:'Remove individual UA log entries from the UA Report tab' },
+  ]},
+  { title: 'Mail Management', perms: [
+    { id:'mail.log',    label:'Log Incoming Mail',          desc:'Record incoming resident mail and add it to the shift activity log' },
+    { id:'mail.approve',label:'Approve Mail for Delivery',  desc:'Review and approve logged mail so it can be delivered to the resident' },
+  ]},
+  { title: 'Facility Management', perms: [
+    { id:'facility.manage', label:'Room & Roster Management', desc:'Add, edit, reorder, and remove rooms; bulk import roster' },
+  ]},
+  { title: 'Administration', perms: [
+    { id:'admin.users',    label:'User Management',   desc:'Create, edit, and delete staff accounts; reset passwords' },
+    { id:'admin.settings', label:'Facility Settings', desc:'Change facility name, reminder intervals, walk areas, and UA panel' },
+  ]},
+  { title: 'Access', perms: [
+    { id:'mobile.access', label:'Mobile Access — Basic',  desc:'Allow this user to use the basic mobile interface (/mobile.html): wellness checks, walkthrough, and log only.' },
+    { id:'mobile.full',   label:'Mobile Access — Full',   desc:'Allow this user to use the full-featured mobile app (/mobile-full.html) with roster, staff, chores, passes, UA, mail, and more. Automatically redirects mobile browsers on login. Users can still switch to Basic mode from within the app.' },
+  ]},
+];
+
+// ── Permission Profiles (dynamic, loaded from server) ────────────
+var ALL_PROFILES = [];
+
+async function loadProfiles() {
+  try {
+    var r = await fetch('/api/permission-profiles', {credentials:'include'});
+    if (!r.ok) return;
+    ALL_PROFILES = await r.json();
+  } catch(e) { ALL_PROFILES = []; }
+  renderProfiles();
+  updateRoleDropdowns();
+  updatePresetButtons();
+}
+
+function renderProfiles() {
+  var container = document.getElementById('profiles-list');
+  if (!container) return;
+  if (!ALL_PROFILES.length) {
+    container.innerHTML = '<p style="color:#94a3b8;font-style:italic;font-size:.84rem;">No profiles defined.</p>';
+    return;
+  }
+  container.innerHTML = ALL_PROFILES.map(function(p, idx) {
+    var permHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0 24px;">'
+      + PERM_GROUPS.map(function(g) {
+          return '<div style="margin-bottom:10px;">'
+            + '<div style="font-size:.63rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--steel);margin-bottom:4px;">' + g.title + '</div>'
+            + g.perms.map(function(perm) {
+                var checked = p.permissions.indexOf(perm.id) !== -1 ? ' checked' : '';
+                return '<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;font-size:.82rem;">'
+                  + '<input type="checkbox" data-pidx="' + idx + '" data-perm="' + perm.id + '"' + checked + ' style="cursor:pointer;accent-color:var(--mid);">'
+                  + esc(perm.label) + '</label>';
+              }).join('')
+            + '</div>';
+        }).join('')
+      + '</div>';
+    return '<div class="card" style="margin-bottom:14px;">'
+      + '<div class="card-head" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      + '<input class="inline-input" style="flex:1;min-width:140px;max-width:220px;'
+      + 'background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.3);color:#fff;font-weight:700;" '
+      + 'id="plabel-' + idx + '" value="' + esc(p.label) + '" placeholder="Profile name">'
+      + '<code style="font-size:.68rem;color:#A8D5B5;background:rgba(0,0,0,.2);padding:2px 7px;border-radius:4px;">' + esc(p.key) + '</code>'
+      + '<div style="margin-left:auto;display:flex;gap:6px;">'
+      + '<button class="btn btn-sm" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);" onclick="saveProfile(' + idx + ')">&#10003; Save</button>'
+      + '<button class="btn btn-sm" style="background:#DC2626;color:#fff;border:none;" onclick="deleteProfile(' + idx + ')">Delete</button>'
+      + '</div></div>'
+      + '<div class="card-body" style="padding:14px 18px;">' + permHtml + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+function _getProfilePerms(idx) {
+  return Array.from(document.querySelectorAll('input[data-pidx="' + idx + '"]:checked'))
+    .map(function(cb) { return cb.dataset.perm; });
+}
+
+async function saveProfile(idx) {
+  var labelEl = document.getElementById('plabel-' + idx);
+  var label = labelEl ? labelEl.value.trim() : '';
+  if (!label) { showToast('err','Profile name required.'); return; }
+  var perms = _getProfilePerms(idx);
+  var updated = ALL_PROFILES.slice();
+  updated[idx] = { key: updated[idx].key, label: label, permissions: perms };
+  var r = await fetch('/api/permission-profiles', {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body: JSON.stringify(updated)
+  });
+  var d = await r.json();
+  if (d.error) { showToast('err',d.error); return; }
+  ALL_PROFILES = updated;
+  showToast('ok','Profile "' + label + '" saved.');
+  updateRoleDropdowns(); updatePresetButtons();
+}
+
+async function deleteProfile(idx) {
+  var p = ALL_PROFILES[idx];
+  if (!confirm('Delete the "' + p.label + '" profile?\n\nExisting users with this role keep their current permissions, but you can no longer create new accounts with this role.')) return;
+  var updated = ALL_PROFILES.filter(function(_,i){ return i !== idx; });
+  if (!updated.length) { showToast('err','Cannot delete the last profile.'); return; }
+  var r = await fetch('/api/permission-profiles', {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body: JSON.stringify(updated)
+  });
+  var d = await r.json();
+  if (d.error) { showToast('err',d.error); return; }
+  ALL_PROFILES = updated;
+  renderProfiles();
+  showToast('ok','Profile deleted.');
+  updateRoleDropdowns(); updatePresetButtons();
+}
+
+async function addProfile() {
+  var labelEl = document.getElementById('new-profile-label');
+  var label = (labelEl ? labelEl.value : '').trim();
+  if (!label) { showToast('err','Enter a profile name.'); return; }
+  var key = label.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,50);
+  if (!key) { showToast('err','Name must contain letters or numbers.'); return; }
+  var existingKeys = ALL_PROFILES.map(function(p){ return p.key; });
+  var base = key, n = 2;
+  while (existingKeys.indexOf(key) !== -1) key = base + '_' + (n++);
+  var newProfiles = ALL_PROFILES.concat([{ key:key, label:label, permissions:[] }]);
+  var r = await fetch('/api/permission-profiles', {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body: JSON.stringify(newProfiles)
+  });
+  var d = await r.json();
+  if (d.error) { showToast('err',d.error); return; }
+  ALL_PROFILES = newProfiles;
+  if (labelEl) labelEl.value = '';
+  renderProfiles();
+  showToast('ok','Profile "' + label + '" created. Configure its permissions and click Save.');
+  updateRoleDropdowns(); updatePresetButtons();
+}
+
+function updateRoleDropdowns() {
+  var opts = ALL_PROFILES.map(function(p) {
+    return '<option value="' + esc(p.key) + '">' + esc(p.label) + '</option>';
+  }).join('');
+  ['nu-role','role-modal-select'].forEach(function(id) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = opts || '<option value="">No profiles defined</option>';
+    if (Array.from(sel.options).some(function(o){ return o.value === cur; })) sel.value = cur;
+  });
+}
+
+function updatePresetButtons() {
+  var container = document.getElementById('perm-presets-container');
+  if (!container) return;
+  container.innerHTML = '<label>Apply Preset</label>'
+    + ALL_PROFILES.map(function(p) {
+        return '<button id="preset-btn-' + esc(p.key) + '" class="perm-preset-btn" onclick="applyPreset(' + JSON.stringify(p.key) + ')">' + esc(p.label) + '</button>';
+      }).join('')
+    + '<span id="perm-custom-badge" style="font-size:.72rem;color:var(--steel);align-self:center;margin-left:4px;display:none;">Custom</span>';
+}
+
+function openPermEditor(userId, userName, currentPerms) {
+  _permEditUserId = userId;
+  _permEditUserName = userName;
+  var modal = document.getElementById('perm-modal');
+  document.getElementById('perm-modal-username').textContent = 'Permissions — ' + userName;
+  var body = document.getElementById('perm-groups-body');
+  body.innerHTML = PERM_GROUPS.map(function(g) {
+    return '<div class="perm-group">'
+      + '<div class="perm-group-title">' + g.title + '</div>'
+      + g.perms.map(function(p) {
+          var checked = currentPerms && currentPerms.includes(p.id) ? ' checked' : '';
+          return '<label class="perm-item">'
+            + '<input type="checkbox" id="pck-'+p.id+'" value="'+p.id+'"' + checked + ' onchange="onPermChange()">'
+            + '<div><div class="perm-item-label">'+p.label+'</div><div class="perm-item-desc">'+p.desc+'</div></div>'
+            + '</label>';
+        }).join('')
+      + '</div>';
+  }).join('');
+  updatePresetHighlight();
+  modal.classList.add('open');
+}
+
+function closePermEditor() {
+  document.getElementById('perm-modal').classList.remove('open');
+}
+
+function applyPreset(key) {
+  var profile = ALL_PROFILES.find(function(p){ return p.key === key; });
+  var presetPerms = profile ? profile.permissions : [];
+  document.querySelectorAll('#perm-groups-body input[type=checkbox]').forEach(function(cb) {
+    cb.checked = presetPerms.indexOf(cb.value) !== -1;
+  });
+  updatePresetHighlight();
+}
+
+function onPermChange() { updatePresetHighlight(); }
+
+function updatePresetHighlight() {
+  var checked = getCheckedPerms();
+  var anyMatch = false;
+  ALL_PROFILES.forEach(function(p) {
+    var isMatch = p.permissions.length === checked.length
+      && p.permissions.every(function(x){ return checked.indexOf(x) !== -1; });
+    var btn = document.getElementById('preset-btn-' + p.key);
+    if (btn) btn.classList.toggle('active', isMatch);
+    if (isMatch) anyMatch = true;
+  });
+  var badge = document.getElementById('perm-custom-badge');
+  if (badge) badge.style.display = anyMatch ? 'none' : 'inline';
+}
+
+function getCheckedPerms() {
+  return Array.from(document.querySelectorAll('#perm-groups-body input[type=checkbox]:checked')).map(function(cb){ return cb.value; });
+}
+
+async function savePermissions() {
+  var perms = getCheckedPerms();
+  var res = await fetch('/api/users/'+_permEditUserId, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    credentials:'include',
+    body: JSON.stringify({ permissions: perms })
+  });
+  var data = await res.json();
+  if (data.error) { showMsg('user-msg','err',data.error); return; }
+  closePermEditor();
+  showMsg('user-msg','ok','Permissions saved for '+_permEditUserName+'.');
+  loadUsers();
+}
+
+// ══════════════════════════════════════════════════
+// AUDIT LOG
+// ══════════════════════════════════════════════════
+var _auditCat = '';
+var _auditLimit = 100;
+var _auditOffset = 0;
+var _auditTotal = 0;
+var _auditData = [];
+var _auditSearchTimer = null;
+var _auditAutoRefresh = null;
+
+var AUDIT_ACTION_CSS = {
+  auth:'act-auth', report:'act-report', log:'act-log', status:'act-status',
+  client:'act-client', issues:'act-issues', mednote:'act-mednote',
+  passes:'act-passes', mail:'act-mail', staff:'act-staff', chore:'act-chore',
+  ua:'act-ua', facility:'act-facility', user:'act-user', profile:'act-profile', server:'act-server'
+};
+
+function setAuditCat(cat) {
+  _auditCat = cat;
+  document.querySelectorAll('.audit-chip').forEach(function(b){ b.classList.remove('active'); });
+  var map = {'':'acat-all','auth':'acat-auth','report,log':'acat-report',
+    'client,status,issues,mednote,chore':'acat-client','passes':'acat-passes',
+    'mail':'acat-mail','staff':'acat-staff','ua':'acat-ua',
+    'facility':'acat-facility','user,profile':'acat-admin','server':'acat-server'};
+  var el = document.getElementById(map[cat]||'acat-all'); if(el) el.classList.add('active');
+  loadAuditLog(0);
+}
+
+function auditSearchDebounce() {
+  if(_auditSearchTimer) clearTimeout(_auditSearchTimer);
+  _auditSearchTimer = setTimeout(function(){ loadAuditLog(0); }, 350);
+}
+
+function clearAuditFilters() {
+  document.getElementById('audit-actor').value = '';
+  document.getElementById('audit-from').value = '';
+  document.getElementById('audit-to').value = '';
+  document.getElementById('audit-search').value = '';
+  _auditCat = '';
+  document.querySelectorAll('.audit-chip').forEach(function(b){ b.classList.remove('active'); });
+  var a=document.getElementById('acat-all'); if(a) a.classList.add('active');
+  loadAuditLog(0);
+}
+
+function auditActionCls(action) {
+  if(!action) return 'act-default';
+  return AUDIT_ACTION_CSS[action.split('.')[0]] || 'act-default';
+}
+
+function auditFmtTime(ts) {
+  if(!ts) return '—';
+  try {
+    var d = new Date(ts.replace(' ','T')+'Z');
+    return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      +'<br><span style="color:#94A3B8;font-size:.7rem;">'
+      +d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',second:'2-digit'})+'</span>';
+  } catch(e){ return esc(ts); }
+}
+
+async function loadAuditLog(offset) {
+  if(offset==null) offset=_auditOffset;
+  if(offset<0) offset=0;
+  _auditOffset=offset;
+  var params=new URLSearchParams();
+  if(_auditCat) params.set('action',_auditCat);
+  var actorId=document.getElementById('audit-actor').value;
+  var from=document.getElementById('audit-from').value;
+  var to=document.getElementById('audit-to').value;
+  var search=(document.getElementById('audit-search').value||'').trim();
+  if(actorId) params.set('actorId',actorId);
+  if(from)    params.set('from',from);
+  if(to)      params.set('to',to);
+  if(search)  params.set('search',search);
+  params.set('limit',_auditLimit);
+  params.set('offset',offset);
+  try {
+    var res=await fetch('/api/audit-log?'+params.toString(),{credentials:'include'});
+    var data=await res.json();
+    if(data.error){ console.error('Audit log:',data.error); return; }
+    _auditData=data.rows||[];
+    _auditTotal=data.total||0;
+    renderAuditLog();
+  } catch(e){ console.error('Audit log fetch error:',e); }
+}
+
+function renderAuditLog() {
+  var tbody=document.getElementById('audit-tbody'); if(!tbody) return;
+  if(!_auditData.length) {
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#94A3B8;padding:28px;">No audit log entries found.</td></tr>';
+  } else {
+    tbody.innerHTML=_auditData.map(function(row) {
+      var cls=auditActionCls(row.action);
+      var badge='<span class="audit-action '+cls+'">'+esc(row.action)+'</span>';
+      var target=row.target_label?esc(row.target_label):(row.target_id?'<span style="color:#94A3B8;">ID:'+esc(row.target_id)+'</span>':'—');
+      var detail='';
+      if(row.detail) {
+        var dt=row.detail;
+        try{ var p=JSON.parse(dt); dt=JSON.stringify(p,null,2); }catch(e){}
+        detail='<div class="audit-detail" onclick="this.classList.toggle(\'expanded\')">'+esc(dt)+'</div>';
+      }
+      return '<tr>'
+        +'<td class="audit-ts">'+auditFmtTime(row.ts)+'</td>'
+        +'<td><strong style="font-size:.84rem;">'+esc(row.actor_name||'system')+'</strong></td>'
+        +'<td class="audit-ip">'+esc(row.ip||'—')+'</td>'
+        +'<td>'+badge+'</td>'
+        +'<td style="font-size:.82rem;">'+target+'</td>'
+        +'<td>'+detail+'</td>'
+        +'</tr>';
+    }).join('');
+  }
+  // Pagination
+  var pgInfo=document.getElementById('audit-pg-info');
+  var prevBtn=document.getElementById('audit-prev');
+  var nextBtn=document.getElementById('audit-next');
+  var from=_auditTotal>0?_auditOffset+1:0;
+  var to=Math.min(_auditOffset+_auditData.length,_auditTotal);
+  if(pgInfo) pgInfo.textContent=_auditTotal>0?(from+' – '+to+' of '+_auditTotal+' entries'):'No entries';
+  if(prevBtn) prevBtn.disabled=_auditOffset<=0;
+  if(nextBtn) nextBtn.disabled=(_auditOffset+_auditLimit)>=_auditTotal;
+}
+
+function auditExportCSV() {
+  if(!_auditData.length){ alert('No data to export. Load some audit entries first.'); return; }
+  var headers=['Time','User','IP','Action','Target Type','Target','Detail'];
+  var rows=_auditData.map(function(r){
+    var ts=''; try{ ts=new Date(r.ts.replace(' ','T')+'Z').toLocaleString(); }catch(e){ ts=r.ts||''; }
+    return [ts,r.actor_name||'',r.ip||'',r.action||'',r.target_type||'',r.target_label||r.target_id||'',r.detail||'']
+      .map(function(v){ return '"'+String(v).replace(/"/g,'""')+'"'; }).join(',');
+  });
+  var csv=[headers.join(',')].concat(rows).join('\r\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='shiftpoint_audit_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+function populateAuditActorDropdown() {
+  var sel=document.getElementById('audit-actor'); if(!sel) return;
+  sel.innerHTML='<option value="">All Users</option>'
+    +(ALL_USERS||[]).map(function(u){
+      return '<option value="'+u.id+'">'+esc(u.displayName||u.username)+'</option>';
+    }).join('');
+}
+
+function startAuditAutoRefresh() {
+  if(_auditAutoRefresh) clearInterval(_auditAutoRefresh);
+  _auditAutoRefresh=setInterval(function(){ loadAuditLog(_auditOffset); },30000);
+}
+function stopAuditAutoRefresh() {
+  if(_auditAutoRefresh){ clearInterval(_auditAutoRefresh); _auditAutoRefresh=null; }
+}
+
+// ══════════════════════════════════════════════════
+// SYSTEM TAB
+// ══════════════════════════════════════════════════
+function initSystemTab() {
+  var hostEl  = document.getElementById('sys-host');
+  var protoEl = document.getElementById('sys-proto');
+  if (hostEl)  hostEl.textContent  = location.host;
+  if (protoEl) protoEl.textContent = location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP';
+}
+
+var _restartPollTimer = null;
+
+async function restartServer() {
+  if (!confirm('Restart the server now?\n\nAll clients will briefly disconnect and reconnect automatically.\nShift data is saved before the server exits.')) return;
+  var btn  = document.getElementById('restart-btn');
+  var msg  = document.getElementById('restart-msg');
+  var box  = document.getElementById('restart-status-box');
+  var dots = document.getElementById('restart-dots');
+  if (btn) btn.disabled = true;
+  if (msg) msg.innerHTML = '';
+  try {
+    var res  = await fetch('/api/admin/restart', {method:'POST',headers:{'Content-Type':'application/json'},credentials:'include'});
+    var data = await res.json();
+    if (data.error) {
+      if (msg) msg.innerHTML = '<span style="color:#DC2626;">Error: '+esc(data.error)+'</span>';
+      if (btn) btn.disabled = false;
+      return;
+    }
+  } catch(e) {
+    // Connection refused immediately = server already shutting down — that's fine
+  }
+  // Show restarting UI
+  if (box) box.style.display = 'block';
+  // Animate the dots
+  var _dotFrames = ['●', '●●', '●●●', '●●', '●'], _dotIdx = 0;
+  var _dotTimer = setInterval(function() {
+    if (dots) dots.textContent = _dotFrames[_dotIdx++ % _dotFrames.length];
+  }, 400);
+  // Poll until the server comes back
+  var _attempts = 0;
+  _restartPollTimer = setInterval(async function() {
+    _attempts++;
+    try {
+      var r = await fetch('/api/facility/settings', {credentials:'include'});
+      if (r.ok || r.status === 401) {
+        // Server is back (401 = session expired after restart, still a live server)
+        clearInterval(_restartPollTimer);
+        clearInterval(_dotTimer);
+        location.reload();
+      }
+    } catch(e) {
+      // Still down — keep polling
+      if (_attempts > 60) {
+        // Give up after ~90 seconds
+        clearInterval(_restartPollTimer);
+        clearInterval(_dotTimer);
+        if (box) box.style.display = 'none';
+        if (msg) msg.innerHTML = '<span style="color:#DC2626;">Server did not come back online. Check the server process.</span>';
+        if (btn) btn.disabled = false;
+      }
+    }
+  }, 1500);
+}
+
+// ── Session heartbeat ──────────────────────────────────────────
+// Admin panel has no WebSocket — poll every 30s so a deleted account
+// gets kicked promptly instead of browsing indefinitely.
+(function() {
+  function checkSession() {
+    fetch('/api/me', {credentials:'include'}).then(function(r) {
+      if (r.status === 401) location.replace('/login');
+    }).catch(function(){});
+  }
+  setInterval(checkSession, 30000);
+})();
+
+// ── Startup ────────────────────────────────────────────────────
+loadUsers();
+</script>
+
+<!-- ── Role Editor Modal ── -->
+<div id="role-modal" class="perm-modal-overlay" onclick="if(event.target===this)closeRoleModal()">
+  <div class="perm-modal" style="max-width:380px;">
+    <div class="perm-modal-head">
+      <h3>Change Role — <span id="role-modal-label"></span></h3>
+      <button class="close-x" onclick="closeRoleModal()">&times;</button>
+    </div>
+    <div class="perm-modal-body">
+      <p style="font-size:.82rem;color:var(--steel);margin-bottom:14px;">Changing the role updates the label but does <strong>not</strong> automatically change the user's permissions. Use the Permissions editor to adjust what they can do.</p>
+      <div class="field">
+        <label>Role</label>
+        <select id="role-modal-select"><option value="">Loading...</option></select>
+      </div>
+    </div>
+    <div class="perm-modal-footer">
+      <button class="btn btn-outline" onclick="closeRoleModal()">Cancel</button>
+      <button class="btn btn-green" onclick="saveRole()">Save Role</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Permission Editor Modal ── -->
+<div id="perm-modal" class="perm-modal-overlay" onclick="if(event.target===this)closePermEditor()">
+  <div class="perm-modal">
+    <div class="perm-modal-head">
+      <h3 id="perm-modal-username">Permissions</h3>
+      <button class="close-x" onclick="closePermEditor()">&times;</button>
+    </div>
+    <div class="perm-modal-body">
+      <div class="perm-presets" id="perm-presets-container">
+        <label>Apply Preset</label>
+        <span style="font-size:.78rem;color:#94a3b8;font-style:italic;">Loading profiles...</span>
+      </div>
+      <div id="perm-groups-body"></div>
+    </div>
+    <div class="perm-modal-footer">
+      <button class="btn btn-outline" onclick="closePermEditor()">Cancel</button>
+      <button class="btn btn-green" onclick="savePermissions()">Save Permissions</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -853,7 +853,7 @@ app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents
   if(intake_date!==undefined)   db.run('UPDATE clients SET intake_date=? WHERE id=?',[intake_date||null,id]);
   if(discharge_date!==undefined)db.run('UPDATE clients SET discharge_date=? WHERE id=?',[discharge_date||null,id]);
   db.save();
-  const _clt=db.query1('SELECT name,room FROM clients WHERE id=?',[id]);
+  const _clt=db.query1('SELECT * FROM clients WHERE id=?',[id]);
   audit(req,'client.edit','client',id,_clt?(_clt.name+' Rm.'+_clt.room):String(id),{fields:Object.keys(req.body)});
   broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
   res.json({ok:true,client:_clt});
@@ -887,9 +887,30 @@ app.post('/api/facility/rooms', requireAuth, csrfCheck, requirePermission('facil
   const so=(maxSort&&maxSort.m!=null)?maxSort.m+1:0;
   db.run(`INSERT INTO clients (room,name,is_active,is_special,special_label,sort_order)
     VALUES (?,?,1,?,?,?)`,[String(room),name||'VACANT',is_special?1:0,special_label||null,so]);
+  const newClient=db.query1('SELECT * FROM clients ORDER BY id DESC LIMIT 1');
+  // Add intake log entry to active shift report when a named (non-VACANT) client is added
+  if(name&&name!=='VACANT'&&!is_special){
+    const activeId=db.getSetting('active_report_id',null);
+    if(activeId){
+      const _n=new Date(),_h=_n.getHours(),_m=String(_n.getMinutes()).padStart(2,'0');
+      const _ap=_h>=12?'PM':'AM',_h12=_h%12||12;
+      const _ts=`${_h12}:${_m} ${_ap}`;
+      let _intakeStr='';
+      if(newClient&&newClient.intake_date){
+        try{
+          const _d=new Date(newClient.intake_date+'T12:00:00');
+          _intakeStr=' Intake: '+_d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'.';
+        }catch(e){}
+      }
+      db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
+        [activeId,_ts,`New resident admitted: ${name}, Rm. ${String(room)}.${_intakeStr}`]);
+      db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),activeId]);
+    }
+  }
   db.save();
   audit(req,'facility.room_add','room',null,'Room '+String(room),{name:name||'VACANT',is_special:!!is_special});
-  res.json({ok:true,client:db.query1('SELECT * FROM clients ORDER BY id DESC LIMIT 1')});
+  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
+  res.json({ok:true,client:newClient});
 });
 app.delete('/api/facility/rooms/:id', requireAuth, csrfCheck, requirePermission('facility.manage'),(req,res)=>{
   const id=parseInt(req.params.id);

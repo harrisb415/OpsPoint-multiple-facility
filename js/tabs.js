@@ -3,9 +3,18 @@
 // ShiftPoint v1.13
 // ═══════════════════════════════════════════════════════════════
 
-// ── Shared helper ──────────────────────────────────────────────
+// ── Shared helpers ─────────────────────────────────────────────
 function tabEsc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// Phone formatting — uses formatPhone from app.js if available, else inline fallback
+function _fmtPhone(raw){
+  if(typeof formatPhone === 'function') return formatPhone(raw);
+  if(!raw) return '';
+  var d=String(raw).replace(/\D/g,'');
+  if(d.length===11&&d[0]==='1') d=d.slice(1);
+  if(d.length===10) return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+  return raw;
 }
 function hasPerm(perm) {
   return window.SESSION && Array.isArray(window.SESSION.permissions) && window.SESSION.permissions.includes(perm);
@@ -61,8 +70,8 @@ function renderStaffTab() {
     return '<tr>' +
       '<td><span style="background:var(--sky);color:var(--crimson);padding:2px 10px;border-radius:20px;font-size:.74em;font-weight:700;">' + tabEsc(s.category||'—') + '</span></td>' +
       '<td style="font-weight:600;">' + tabEsc(s.name||'') + '</td>' +
-      '<td style="font-family:var(--mono);font-size:.83em;">' + tabEsc(s.phone||'—') + '</td>' +
-      '<td style="font-family:var(--mono);font-size:.83em;">' + tabEsc(s.phone2||'—') + '</td>' +
+      '<td style="font-family:var(--mono);font-size:.83em;">' + tabEsc(_fmtPhone(s.phone)||'—') + '</td>' +
+      '<td style="font-family:var(--mono);font-size:.83em;">' + tabEsc(_fmtPhone(s.phone2)||'—') + '</td>' +
       '<td style="font-size:.85em;color:#64748b;">' + tabEsc(s.notes||'') + '</td>' +
       '<td style="white-space:nowrap;">' + actions + '</td>' +
       '</tr>';
@@ -83,6 +92,10 @@ function openAddStaffModal() {
   document.getElementById('sm-phone').value = '';
   document.getElementById('sm-phone2').value = '';
   document.getElementById('sm-notes').value = '';
+  if(typeof attachPhoneMask==='function'){
+    attachPhoneMask(document.getElementById('sm-phone'));
+    attachPhoneMask(document.getElementById('sm-phone2'));
+  }
   openModal('staff-modal');
 }
 
@@ -94,9 +107,13 @@ function openEditStaffModal(id) {
   document.getElementById('staff-modal-title').textContent = 'Edit Staff';
   document.getElementById('staff-modal-submit').textContent = 'Save';
   document.getElementById('sm-name').value  = s.name   || '';
-  document.getElementById('sm-phone').value = s.phone  || '';
-  document.getElementById('sm-phone2').value= s.phone2 || '';
+  document.getElementById('sm-phone').value = _fmtPhone(s.phone)  || '';
+  document.getElementById('sm-phone2').value= _fmtPhone(s.phone2) || '';
   document.getElementById('sm-notes').value = s.notes  || '';
+  if(typeof attachPhoneMask==='function'){
+    attachPhoneMask(document.getElementById('sm-phone'));
+    attachPhoneMask(document.getElementById('sm-phone2'));
+  }
   openModal('staff-modal');
 }
 
@@ -403,13 +420,27 @@ function renderPassesTab() {
   if (noticeEdit) { noticeEdit.value = notice; noticeEdit.style.display = 'none'; }
   if (noticeHint) noticeHint.style.display = _canEdit ? '' : 'none';
 
-  // All passes in one table
-  var passes = window.PASSES || [];
-  var tbody   = document.getElementById('passes-table-body');
+  // Split passes into active (Out/Extended) and returned
+  var passes   = window.PASSES || [];
+  var active   = passes.filter(function(p){ return p.status !== 'Returned'; });
+  var returned = passes.filter(function(p){ return p.status === 'Returned'; });
+  var cols     = _canEdit ? '8' : '7';
+  var tbody    = document.getElementById('passes-table-body');
   if (tbody) {
-    tbody.innerHTML = passes.length
-      ? passes.map(function(p) { return _passRow(p, _canEdit); }).join('')
-      : '<tr><td colspan="' + (_canEdit ? '8' : '7') + '" style="text-align:center;color:#94a3b8;padding:26px;font-style:italic;">No approved passes.</td></tr>';
+    tbody.innerHTML = active.length
+      ? active.map(function(p){ return _passRow(p, _canEdit); }).join('')
+      : '<tr><td colspan="'+cols+'" style="text-align:center;color:#94a3b8;padding:26px;font-style:italic;">No active passes.</td></tr>';
+  }
+  // Returned passes section
+  var retSection = document.getElementById('returned-passes-section');
+  if (retSection) {
+    if (returned.length) {
+      retSection.style.display = '';
+      var retBody = document.getElementById('returned-passes-body');
+      if (retBody) retBody.innerHTML = returned.map(function(p){ return _returnedPassRow(p, _canEdit); }).join('');
+    } else {
+      retSection.style.display = 'none';
+    }
   }
 }
 
@@ -417,16 +448,15 @@ function _passRow(p, canEdit) {
   var colors = {
     'Out':      { bg:'#fef9c3', fg:'#854d0e', border:'#fde047' },
     'Extended': { bg:'#dbeafe', fg:'#1d4ed8', border:'#93c5fd' },
-    'Returned': { bg:'#dcfce7', fg:'#15803d', border:'#86efac' },
   };
   var sc = colors[p.status] || colors['Out'];
 
   var statusCell = canEdit
-    ? '<select onchange="updatePassStatus(' + p.id + ',this.value)" ' +
+    ? '<select onchange="updatePassStatus(' + p.id + ',' + p.client_id + ',this.value)" ' +
       'style="background:' + sc.bg + ';color:' + sc.fg + ';border:1.5px solid ' + sc.border + ';' +
       'border-radius:20px;font-size:.75em;font-weight:700;padding:2px 8px;outline:none;' +
       'font-family:var(--sans);cursor:pointer;">' +
-      ['Out','Extended','Returned'].map(function(s){
+      ['Out','Extended'].map(function(s){
         return '<option value="' + s + '"' + (p.status===s?' selected':'') + '>' + s + '</option>';
       }).join('') + '</select>'
     : '<span style="background:' + sc.bg + ';color:' + sc.fg + ';border:1.5px solid ' + sc.border + ';' +
@@ -444,11 +474,31 @@ function _passRow(p, canEdit) {
 
   if (canEdit) {
     row += '<td style="white-space:nowrap;">' +
-      '<button class="btn btn-outline btn-sm" onclick="openEditPassModal(' + p.id + ')" style="margin-right:5px;">Edit</button>' +
+      '<button class="btn btn-sm" onclick="returnFromPass(' + p.id + ',' + p.client_id + ')" ' +
+      'style="margin-right:4px;background:#dcfce7;color:#15803d;border:1.5px solid #86efac;border-radius:6px;padding:3px 8px;font-size:.75em;font-weight:700;cursor:pointer;">&#10003; Return</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="openEditPassModal(' + p.id + ')" style="margin-right:4px;">Edit</button>' +
       '<button class="btn-danger-sm" onclick="deletePass(' + p.id + ')">Delete</button>' +
       '</td>';
   }
 
+  return row + '</tr>';
+}
+
+function _returnedPassRow(p, canEdit) {
+  var row = '<tr style="opacity:.75;">' +
+    '<td class="rm">' + tabEsc(p.room||'') + '</td>' +
+    '<td style="font-weight:600;">' + tabEsc(p.name||'') + '</td>' +
+    '<td style="font-size:.83em;">' + tabEsc(p.departure||'—') + '</td>' +
+    '<td style="font-size:.83em;">' + tabEsc(p.return_date||'—') + '</td>' +
+    '<td style="font-size:.83em;color:#64748b;">' + tabEsc(p.ua_notes||'—') + '</td>' +
+    '<td style="font-size:.83em;color:#64748b;">' + tabEsc(p.notes||'—') + '</td>' +
+    '<td style="text-align:center;"><span style="background:#dcfce7;color:#15803d;border:1.5px solid #86efac;' +
+    'border-radius:20px;font-size:.75em;font-weight:700;padding:2px 8px;display:inline-block;">Returned</span></td>';
+  if (canEdit) {
+    row += '<td style="white-space:nowrap;">' +
+      '<button class="btn-danger-sm" onclick="deletePass(' + p.id + ')">Delete</button>' +
+      '</td>';
+  }
   return row + '</tr>';
 }
 
@@ -564,13 +614,17 @@ async function submitPassModal() {
     var res  = await fetch(url, { method:method, headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload) });
     var data = await res.json();
     if (data.error) { alert(data.error); return; }
+    // Auto-set client status to Weekend Pass when creating an Out/Extended pass
+    if (!_passEditId && clientId && ['Out','Extended'].includes(payload.status)) {
+      _setClientStatusFromPass(clientId, 'pass');
+    }
     closeModal('pass-modal');
     await _reloadPasses();
     renderPassesTab();
   } catch(e) { alert('Error saving pass.'); }
 }
 
-async function updatePassStatus(id, status) {
+async function updatePassStatus(id, clientId, status) {
   try {
     await fetch('/api/passes/' + id, {
       method: 'PUT',
@@ -582,6 +636,45 @@ async function updatePassStatus(id, status) {
     if (p) p.status = status;
     renderPassesTab();
   } catch(e) {}
+}
+
+// Mark pass as returned, archive it, and set client status to In Building
+async function returnFromPass(passId, clientId) {
+  try {
+    await fetch('/api/passes/' + passId, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({ status: 'Returned' })
+    });
+    var p = (window.PASSES||[]).find(function(x){ return x.id === passId; });
+    if (p) p.status = 'Returned';
+    // Update client status to In Building on active report
+    _setClientStatusFromPass(clientId, 'building');
+    renderPassesTab();
+  } catch(e) { alert('Error marking pass as returned.'); }
+}
+
+// Helper: update resident status on active report after pass change
+function _setClientStatusFromPass(clientId, statusKey) {
+  if (!clientId) return;
+  // Update in-memory status
+  if (typeof shiftStatuses !== 'undefined') {
+    shiftStatuses[clientId] = statusKey;
+  }
+  if (typeof buildRoster === 'function') buildRoster();
+  // Persist via PATCH /api/data if there's an active report
+  var reportId = typeof currentReportId !== 'undefined' ? currentReportId : null;
+  if (reportId) {
+    var statPatch = {};
+    statPatch[clientId] = statusKey;
+    fetch('/api/data', {
+      method: 'PATCH',
+      headers: {'Content-Type':'application/json'},
+      credentials: 'include',
+      body: JSON.stringify({ reportId: reportId, statuses: statPatch })
+    }).catch(function(){});
+  }
 }
 
 async function deletePass(id) {

@@ -1268,7 +1268,7 @@ function updatePresetButtons() {
   if (!container) return;
   container.innerHTML = '<label>Apply Preset</label>'
     + ALL_PROFILES.map(function(p) {
-        return '<button id="preset-btn-' + esc(p.key) + '" class="perm-preset-btn" onclick="applyPreset(' + JSON.stringify(p.key) + ')">' + esc(p.label) + '</button>';
+        return '<button type="button" id="preset-btn-' + esc(p.key) + '" class="perm-preset-btn" onclick="applyPreset(\'' + p.key + '\')">' + esc(p.label) + '</button>';
       }).join('')
     + '<span id="perm-custom-badge" style="font-size:.72rem;color:var(--steel);align-self:center;margin-left:4px;display:none;">Custom</span>';
 }

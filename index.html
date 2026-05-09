@@ -758,6 +758,23 @@ function hasPerm(perm) {
         </div>
       </div>
     </div>
+    <!-- Returned Passes archive section -->
+    <div class="section" id="returned-passes-section" style="display:none;margin-top:14px;opacity:.9;">
+      <div class="section-head">
+        <div class="sh-left"><div class="sh-dot" style="background:#86efac;"></div>Returned from Pass</div>
+      </div>
+      <div class="section-body">
+        <div class="roster-wrap">
+          <table id="passes-table">
+            <thead><tr>
+              <th class="tc">Rm #</th><th>Name</th><th>Departure</th><th>Return</th><th>UA Notes</th><th>Notes</th><th class="tc">Status</th>
+              <th id="returned-passes-actions-th">Actions</th>
+            </tr></thead>
+            <tbody id="returned-passes-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 </div>
 
 <!-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -904,7 +921,7 @@ function hasPerm(perm) {
         <option value="">All Shifts</option><option value="Day Shift">Day</option><option value="Swing Shift">Swing</option><option value="Graveyard Shift">Graveyard</option>
       </select>
       <select id="uar-reason" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
-        <option value="">All Reasons</option><option>Random</option><option>Return from Pass</option><option>Suspicion</option><option>CM Request</option><option>Other</option>
+        <option value="">All Reasons</option><option>Random</option><option>Return from Pass</option><option>Suspicion</option><option>CM Request</option><option>Interview</option><option>Other</option>
       </select>
       <select id="uar-result" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
         <option value="">Any Result</option><option value="pos">Has Positive</option><option value="neg">All Negative</option>
@@ -1270,8 +1287,10 @@ async function submitMailLog() {
   });
   var data = await res.json();
   if (data.error) { alert('Error: ' + data.error); return; }
+  var client = (CLIENTS||[]).find(function(c){ return String(c.id) === String(document.getElementById('ml-client').value); });
+  var clientLabel = client ? (client.name + ' (Rm ' + client.room + ')') : 'resident';
   closeModal('mail-modal');
-  if (typeof switchTab === 'function') switchTab('mail');
+  if (typeof showToast === 'function') showToast('saved', '📬 Mail logged for ' + clientLabel);
 }
 
 async function approveMail(id) {

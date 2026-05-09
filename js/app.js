@@ -1,6 +1,30 @@
 ﻿// ── HTML escape helper (VULN-5, VULN-9) ──────────────────────
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+// ── Phone formatting ──────────────────────────────────────────
+// Formats raw digits to (XXX) XXX-XXXX. Returns original if not 10 digits.
+function formatPhone(raw){
+  if(!raw) return '';
+  var d=String(raw).replace(/\D/g,'');
+  if(d.length===11&&d[0]==='1') d=d.slice(1);
+  if(d.length===10) return '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+  return raw;
+}
+// Attach phone mask to an input element
+function attachPhoneMask(el){
+  if(!el||el._phoneMasked) return;
+  el._phoneMasked=true;
+  el.addEventListener('input',function(){
+    var d=this.value.replace(/\D/g,'');
+    if(d.length===11&&d[0]==='1') d=d.slice(1);
+    if(d.length>10) d=d.slice(0,10);
+    if(d.length===0){this.value='';return;}
+    if(d.length<=3){this.value='('+d;return;}
+    if(d.length<=6){this.value='('+d.slice(0,3)+') '+d.slice(3);return;}
+    this.value='('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6);
+  });
+}
+
 // ── Core application logic ──────────────────────────────────
 function getDefaultLog(shift){ return []; }
 
@@ -729,7 +753,7 @@ function renderClientTable(){
       <td class="rm">${esc(c.room)}</td>
       <td class="name-cell">${esc(c.name)}${!c.is_active?'<span style="margin-left:8px;font-size:.62rem;font-weight:700;background:#fee2e2;color:#991b1b;padding:2px 6px;border-radius:10px;text-transform:uppercase;">Discharged</span>':''}</td>
       <td style="font-size:.82rem;">${esc(c.case_manager||'—')}</td>
-      <td style="font-family:var(--mono);font-size:.74rem;">${esc(c.phone||'—')}</td>
+      <td style="font-family:var(--mono);font-size:.74rem;">${esc(formatPhone(c.phone)||'—')}</td>
       <td class="date-cell">${fmtD(c.intake_date)}</td>
       <td class="date-cell">${fmtD(c.discharge_date)}</td>
       <td><span style="font-size:.73rem;font-weight:600;color:${c.is_active?'#15803d':'#94a3b8'};">${c.is_active?'Active':'Discharged'}</span></td>
@@ -750,7 +774,9 @@ function openEditClientModal(id){
   document.getElementById('ec-room').value=c.room||'';
   document.getElementById('ec-name').value=c.name||'';
   document.getElementById('ec-cm').value=c.case_manager||'';
-  document.getElementById('ec-phone').value=c.phone||'';
+  document.getElementById('ec-phone').value=formatPhone(c.phone)||'';
+  attachPhoneMask(document.getElementById('ec-phone'));
+  attachPhoneMask(document.getElementById('ac-phone'));
   document.getElementById('ec-intake').value=c.intake_date||'';
   document.getElementById('ec-discharge').value=c.discharge_date||'';
   document.getElementById('ec-title').textContent='Edit — '+(c.name||'Client');
@@ -1113,7 +1139,8 @@ function quickUA(){
 
   openQuickModal('\u{1F9EA} UA (Urinalysis)',
     timeField()
-    +clientDropdown('qm-client-sel')
+    +'<div id="qm-client-wrap">'+clientDropdown('qm-client-sel')+'</div>'
+    +'<div class="field" id="qm-interview-wrap" style="display:none;"><label>Interviewee Name</label><input type="text" id="qm-interview-name" placeholder="Name of person being interviewed..." style="width:100%;font-family:var(--sans);font-size:.9rem;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;"></div>'
     +'<div class="field"><label>Conducted by</label><input type="text" id="qm-staff" placeholder="Staff name"></div>'
     +'<div class="field"><label>Reason</label>'
     +'<select id="qm-reason" style="width:100%;font-family:var(--sans);font-size:.9rem;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;">'
@@ -1121,6 +1148,7 @@ function quickUA(){
     +'<option value="Return from Pass">Return from Pass</option>'
     +'<option value="Suspicion">Suspicion</option>'
     +'<option value="CM Request">CM Request</option>'
+    +'<option value="Interview">Interview (prospective client)</option>'
     +'<option value="Other">Other (specify below)</option>'
     +'</select>'
     +'<input type="text" id="qm-reason-cm" placeholder="Case manager name..." style="display:none;margin-top:6px;width:100%;font-family:var(--sans);font-size:.9rem;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;">'
@@ -1131,11 +1159,14 @@ function quickUA(){
     +substanceGrid
     +'</div></div>',
     function(){
-      const c = selectedClient('qm-client-sel');
-      const staff = document.getElementById('qm-staff').value.trim();
-      if (!c) { alert('Please select a client.'); return; }
-      if (!staff) { alert('Staff name is required.'); return; }
       const reasonSel = document.getElementById('qm-reason').value;
+      const isInterview = reasonSel === 'Interview';
+      const c = !isInterview ? selectedClient('qm-client-sel') : null;
+      const interviewName = isInterview ? (document.getElementById('qm-interview-name').value || '').trim() : '';
+      const staff = document.getElementById('qm-staff').value.trim();
+      if (!isInterview && !c) { alert('Please select a client.'); return; }
+      if (isInterview && !interviewName) { alert('Please enter the interviewee\'s name.'); return; }
+      if (!staff) { alert('Staff name is required.'); return; }
       const cmName = (document.getElementById('qm-reason-cm').value || '').trim();
       const reason = reasonSel === 'Other'
         ? (document.getElementById('qm-reason-other').value.trim() || 'Other')
@@ -1158,9 +1189,10 @@ function quickUA(){
       if (nt.length)  resultParts.push('NT: '+nt.join(', '));
       const resultStr = resultParts.join(' | ') || 'No results entered';
       const ts = nowTs(document.getElementById('qm-time').value);
-      addLogEntry(ts,'UA conducted on '+c.name+' (Rm. '+c.room+') by '+staff+'. Reason: '+reason+'. Results: '+resultStr+'.');
-      shiftLastUA[c.id] = dateStamp();
-      buildRoster();
+      const logName = isInterview ? interviewName : c.name;
+      const logLoc  = isInterview ? 'Interview' : ('Rm. ' + c.room);
+      addLogEntry(ts,'UA conducted on '+logName+' ('+logLoc+') by '+staff+'. Reason: '+reason+'. Results: '+resultStr+'.');
+      if (!isInterview && c) { shiftLastUA[c.id] = dateStamp(); buildRoster(); }
       // Reset modal width
       const modal = document.querySelector('#quick-modal .modal');
       if (modal) modal.style.maxWidth = '';
@@ -1174,8 +1206,13 @@ function quickUA(){
     if (sel) sel.addEventListener('change', function(){
       const cm  = document.getElementById('qm-reason-cm');
       const oth = document.getElementById('qm-reason-other');
+      const itv = document.getElementById('qm-interview-wrap');
+      const clientWrap = document.getElementById('qm-client-wrap');
+      const isItv = this.value === 'Interview';
       if (cm)  cm.style.display  = this.value === 'CM Request' ? 'block' : 'none';
       if (oth) oth.style.display = this.value === 'Other'      ? 'block' : 'none';
+      if (itv) itv.style.display = isItv ? 'block' : 'none';
+      if (clientWrap) clientWrap.style.display = isItv ? 'none' : '';
     });
   }, 50);
 }

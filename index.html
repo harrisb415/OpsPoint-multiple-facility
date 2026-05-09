@@ -561,13 +561,17 @@ function hasPerm(perm) {
 
 <!-- Mail log modal -->
 <div class="modal-overlay" id="mail-modal">
-  <div class="modal" style="max-width:460px;">
+  <div class="modal" style="max-width:520px;">
     <div class="modal-head"><h2>&#9993; Log Incoming Mail</h2><button class="xbtn" onclick="closeModal('mail-modal')">&#x2715;</button></div>
     <div class="modal-body">
-      <div class="field"><label>Resident</label>
-        <select id="ml-client" style="width:100%;font-family:var(--sans);font-size:.9rem;padding:8px 10px;border:1.5px solid var(--line);border-radius:6px;">
-          <option value="">-- Select resident --</option>
-        </select>
+      <div class="field" style="margin-bottom:8px;">
+        <label>Residents <span id="ml-count-badge" style="display:none;background:var(--accent);color:#fff;font-size:.7rem;padding:2px 8px;border-radius:10px;font-weight:700;vertical-align:middle;margin-left:6px;">0</span></label>
+        <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+          <input type="text" id="ml-search" placeholder="🔍 Filter residents…" oninput="renderMailChecklist()" style="flex:1;font-size:.85rem;padding:6px 10px;border:1.5px solid var(--line);border-radius:6px;font-family:var(--sans);">
+          <button type="button" onclick="mailSelectAll(true)" style="padding:5px 12px;font-size:.8rem;border:1.5px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;white-space:nowrap;">All</button>
+          <button type="button" onclick="mailSelectAll(false)" style="padding:5px 12px;font-size:.8rem;border:1.5px solid var(--line);border-radius:6px;background:var(--surface);cursor:pointer;white-space:nowrap;">Clear</button>
+        </div>
+        <div id="ml-checklist" style="max-height:210px;overflow-y:auto;border:1.5px solid var(--line);border-radius:6px;padding:4px 0;"></div>
       </div>
       <div class="field"><label>Date &amp; Time</label>
         <input type="datetime-local" id="ml-datetime" style="width:100%;font-family:var(--sans);font-size:.88rem;padding:7px 10px;border:1.5px solid var(--line);border-radius:6px;">
@@ -576,12 +580,12 @@ function hasPerm(perm) {
         <input type="text" id="ml-logged-by" placeholder="Your name" style="font-family:var(--sans);font-size:.9rem;">
       </div>
       <div class="field"><label>Notes</label>
-        <input type="text" id="ml-notes" placeholder="e.g. Package, certified letter...">
+        <input type="text" id="ml-notes" placeholder="e.g. Package, certified letter…">
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('mail-modal')">Cancel</button>
-      <button class="btn btn-green" onclick="submitMailLog()">&#9993; Log Mail</button>
+      <button class="btn btn-green" id="ml-submit-btn" onclick="submitMailLog()">&#9993; Log Mail</button>
     </div>
   </div>
 </div>
@@ -1243,16 +1247,12 @@ function _mailTableHtml(items, status, canApprove, canDelete) {
 }
 
 
+var _mailSelected = new Set();
+
 function openMailModal() {
-  var sel = document.getElementById('ml-client');
-  if (sel) {
-    sel.innerHTML = '<option value="">-- Select resident --</option>'
-      + (CLIENTS||[])
-          .filter(function(c){ return c.is_active && !c.is_special && c.name !== 'VACANT'; })
-          .slice().sort(function(a,b){ return (parseInt(a.room)||0)-(parseInt(b.room)||0); })
-          .map(function(c){ return '<option value="'+c.id+'">Rm '+esc(String(c.room))+' -- '+esc(c.name)+'</option>'; })
-          .join('');
-  }
+  _mailSelected.clear();
+  var srEl = document.getElementById('ml-search');
+  if (srEl) srEl.value = '';
   var dtEl = document.getElementById('ml-datetime');
   if (dtEl) {
     var now = new Date();
@@ -1264,22 +1264,72 @@ function openMailModal() {
   if (byEl && window.SESSION) byEl.value = window.SESSION.displayName || window.SESSION.username || '';
   var notEl = document.getElementById('ml-notes');
   if (notEl) notEl.value = '';
+  renderMailChecklist();
+  _updateMailCount();
   openModal('mail-modal');
 }
 
+function renderMailChecklist() {
+  var q = ((document.getElementById('ml-search')||{}).value||'').toLowerCase();
+  var clients = (CLIENTS||[])
+    .filter(function(c){ return c.is_active && !c.is_special && c.name !== 'VACANT'; })
+    .slice().sort(function(a,b){ return (parseInt(a.room)||0)-(parseInt(b.room)||0); });
+  if (q) clients = clients.filter(function(c){
+    return c.name.toLowerCase().indexOf(q) >= 0 || String(c.room).indexOf(q) >= 0;
+  });
+  var html = clients.map(function(c){
+    var checked = _mailSelected.has(c.id) ? ' checked' : '';
+    return '<label style="display:flex;align-items:center;gap:10px;padding:6px 12px;cursor:pointer;" '
+      + 'onmouseenter="this.style.background=\'var(--hover)\'" onmouseleave="this.style.background=\'\'">'
+      + '<input type="checkbox" value="'+c.id+'"'+checked+' onchange="mailToggle(this)"'
+      + ' style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;">'
+      + '<span style="font-size:.9rem;"><strong>Rm '+esc(String(c.room))+'</strong> &mdash; '+esc(c.name)+'</span>'
+      + '</label>';
+  }).join('');
+  var el = document.getElementById('ml-checklist');
+  if (el) el.innerHTML = html || '<div style="padding:14px;color:var(--steel);text-align:center;font-size:.85rem;">No residents found</div>';
+}
+
+function mailToggle(cb) {
+  var id = parseInt(cb.value);
+  if (cb.checked) _mailSelected.add(id); else _mailSelected.delete(id);
+  _updateMailCount();
+}
+
+function mailSelectAll(sel) {
+  var boxes = document.querySelectorAll('#ml-checklist input[type=checkbox]');
+  boxes.forEach(function(cb){
+    var id = parseInt(cb.value);
+    cb.checked = sel;
+    if (sel) _mailSelected.add(id); else _mailSelected.delete(id);
+  });
+  _updateMailCount();
+}
+
+function _updateMailCount() {
+  var n = _mailSelected.size;
+  var badge = document.getElementById('ml-count-badge');
+  var btn   = document.getElementById('ml-submit-btn');
+  if (badge) { badge.textContent = n; badge.style.display = n ? '' : 'none'; }
+  if (btn) btn.innerHTML = n > 1
+    ? '&#9993; Log Mail for ' + n + ' Residents'
+    : '&#9993; Log Mail';
+}
+
 async function submitMailLog() {
-  var clientId = document.getElementById('ml-client').value;
+  if (!_mailSelected.size) { alert('Please select at least one resident.'); return; }
   var datetime = document.getElementById('ml-datetime').value;
   var loggedBy = (document.getElementById('ml-logged-by').value||'').trim();
   var notes    = (document.getElementById('ml-notes').value||'').trim();
-  if (!clientId) { alert('Please select a resident.'); return; }
-  var client = (CLIENTS||[]).find(function(c){ return String(c.id) === String(clientId); });
+  var clients = [];
+  _mailSelected.forEach(function(id){
+    var c = (CLIENTS||[]).find(function(x){ return x.id === id; });
+    if (c) clients.push({client_id: c.id, client_name: c.name, room: String(c.room)});
+  });
   var res = await fetch('/api/mail', {
     method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
     body: JSON.stringify({
-      client_id: parseInt(clientId),
-      client_name: client ? client.name : '',
-      room: client ? client.room : '',
+      clients: clients,
       logged_at: datetime ? new Date(datetime).toISOString() : new Date().toISOString(),
       logged_by: loggedBy,
       notes: notes
@@ -1287,10 +1337,11 @@ async function submitMailLog() {
   });
   var data = await res.json();
   if (data.error) { alert('Error: ' + data.error); return; }
-  var client = (CLIENTS||[]).find(function(c){ return String(c.id) === String(document.getElementById('ml-client').value); });
-  var clientLabel = client ? (client.name + ' (Rm ' + client.room + ')') : 'resident';
+  var label = clients.length === 1
+    ? clients[0].client_name + ' (Rm ' + clients[0].room + ')'
+    : clients.length + ' residents';
   closeModal('mail-modal');
-  if (typeof showToast === 'function') showToast('saved', '📬 Mail logged for ' + clientLabel);
+  if (typeof showToast === 'function') showToast('saved', '📬 Mail logged for ' + label);
 }
 
 async function approveMail(id) {

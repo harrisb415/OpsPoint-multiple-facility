@@ -46,26 +46,26 @@ const PERMISSIONS = [
 
 const ROLE_PRESETS = {
   monitor: [
-    'reports.create', 'log.add', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit',
+    'reports.create', 'reports.close', 'log.add', 'issues.edit', 'status.edit',
+    'residents.edit', 'staff.edit', 'chores.edit',
     'reminders.view', 'ua.acknowledge', 'mail.log', 'mobile.access',
   ],
   supervisor: [
-    'reports.create', 'reports.close', 'log.add', 'issues.edit', 'status.edit',
+    'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit',
-    'reminders.view', 'ua.request', 'ua.acknowledge', 'ua.delete', 'mail.log', 'mail.approve',
+    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log',
     'mobile.access', 'mobile.full',
   ],
   admin: [
     'reports.create', 'reports.close', 'reports.delete',
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit',
-    'ua.request', 'ua.delete', 'mail.log', 'mail.approve',
+    'ua.request', 'ua.acknowledge', 'ua.delete', 'mail.log', 'mail.approve',
     'facility.manage', 'admin.users', 'admin.settings', 'mobile.access', 'mobile.full',
   ],
   case_manager: [
     'residents.edit', 'staff.edit', 'passes.edit',
-    'ua.request', 'mail.approve',
+    'ua.request', 'ua.delete', 'mail.approve', 'mobile.full',
   ],
 };
 

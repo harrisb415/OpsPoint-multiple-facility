@@ -1176,7 +1176,7 @@ function renderMailTab() {
   var delivered = MAIL_LOG.filter(function(m){ return m.status === 'delivered'; });
 
   var canApprove = typeof hasPerm === 'function' && hasPerm('mail.approve');
-  var canDelete  = typeof hasPerm === 'function' && hasPerm('log.delete');
+  var canDelete  = typeof hasPerm === 'function' && hasPerm('mail.delete');
 
   var pCnt = document.getElementById('mail-pending-count');
   var aCnt = document.getElementById('mail-approved-count');

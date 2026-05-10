@@ -1249,7 +1249,7 @@ app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, (req,res)=>{
   res.json({ok:true});
 });
 
-app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('log.delete'), (req,res)=>{
+app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('mail.delete'), (req,res)=>{
   const id=parseInt(req.params.id);
   const _mlDel=db.query1('SELECT client_name,room FROM mail_log WHERE id=?',[id]);
   if(!_mlDel) return res.status(404).json({error:'Not found'});

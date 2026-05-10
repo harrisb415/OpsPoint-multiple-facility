@@ -38,6 +38,7 @@ const PERMISSIONS = [
   'ua.delete',        // delete individual UA log entries from the report
   'mail.log',         // log incoming resident mail
   'mail.approve',     // approve logged mail for delivery to resident
+  'mail.delete',      // delete mail log records
   'facility.manage',  // room and roster management
   'admin.users',      // user management
   'admin.settings',   // facility settings write
@@ -54,14 +55,14 @@ const ROLE_PRESETS = {
   supervisor: [
     'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
-    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log',
+    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log', 'mail.delete',
     'mobile.access', 'mobile.full',
   ],
   admin: [
     'reports.create', 'reports.close', 'reports.delete',
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
-    'ua.request', 'ua.acknowledge', 'ua.delete', 'mail.log', 'mail.approve',
+    'ua.request', 'ua.acknowledge', 'ua.delete', 'mail.log', 'mail.approve', 'mail.delete',
     'facility.manage', 'admin.users', 'admin.settings', 'mobile.access', 'mobile.full',
   ],
   case_manager: [
@@ -348,6 +349,10 @@ function _migratePermissions() {
       // v1.15: passes.status gates In/Out toggle and Return button (supervisors and admins only)
       if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('passes.status')) {
         perms.push('passes.status'); changed = true;
+      }
+      // v1.15: mail.delete gates deletion of mail log records (supervisors and admins only)
+      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.delete')) {
+        perms.push('mail.delete'); changed = true;
       }
       if (changed) _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
     } catch(e) {}

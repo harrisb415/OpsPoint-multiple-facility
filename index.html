@@ -220,8 +220,7 @@ body.theme-green #reminder-bar{background:#1A5C42;}
     <!-- User info row: session, admin, sign out, save status -->
     <span id="session-user" style="font-size:.68rem;color:#a8d5b5;font-weight:600;white-space:nowrap;"></span>
     <span id="admin-link" style="display:none;"><a href="/admin" style="font-size:.7rem;color:var(--orange);font-weight:700;text-decoration:none;padding:4px 8px;border:1px solid var(--orange);border-radius:5px;">&#9881; Admin</a></span>
-    <button id="chpw-btn" onclick="openModal(‘chpw-modal’)" style="font-size:.68rem;font-weight:700;color:#C8A0AA;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:5px;padding:4px 9px;cursor:pointer;font-family:var(--sans);">&#128274; Password</button>
-    <form method="POST" action="/logout" style="display:inline;margin:0;">
+<form method="POST" action="/logout" style="display:inline;margin:0;">
       <button type="submit" class="btn btn-outline btn-sm" style="font-size:.68rem;padding:5px 8px;">Sign Out</button>
     </form>
     <div class="save-status" id="save-status" style="margin:0;"><div class="sindot"></div><span id="save-msg">No folder selected</span></div>
@@ -489,12 +488,7 @@ function hasPerm(perm) {
     var al = document.getElementById('admin-link');
     if(al) al.style.display = 'inline';
   }
-  // Show password change button only for users who can access the admin panel
-  if(!hasPerm('admin.users') && !hasPerm('admin.settings')){
-    var pb = document.getElementById('chpw-btn');
-    if(pb) pb.style.display = 'none';
-  }
-  // Lock date/shift/MOD fields for users without reports.close (monitors can't change shift header)
+// Lock date/shift/MOD fields for users without reports.close (monitors can't change shift header)
   if(!hasPerm('reports.close')){
     var _mds=['meta-date','meta-shift','meta-mod'];
     _mds.forEach(function(fid){var f=document.getElementById(fid);if(f){f.disabled=true;f.title='Requires Close Shifts permission';}});

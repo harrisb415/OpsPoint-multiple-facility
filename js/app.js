@@ -192,7 +192,7 @@ function buildRoster(){
       } else {
         const sel=document.createElement('select');sel.className='ss '+stCls(cur);
         STATUS_OPTS.forEach(o=>{const opt=document.createElement('option');opt.value=o.v;opt.textContent=o.l;if(o.v===cur)opt.selected=true;sel.appendChild(opt);});
-        sel.onchange=function(){this.className='ss '+stCls(this.value);shiftStatuses[c.id]=this.value;updateCensus();scheduleSave();};
+        sel.onchange=function(){this.className='ss '+stCls(this.value);shiftStatuses[c.id]=this.value;updateCensus();scheduleSave();syncPassFromRosterStatus(c.id,this.value);};
         stTd.appendChild(sel);
       }
     }
@@ -866,6 +866,22 @@ async function submitAddClient(){
   CLIENTS.sort((a,b)=>(parseInt(a.room)||9999)-(parseInt(b.room)||9999));
   closeModal('add-client-modal');clearTimeout(saveTimer_ref.t);await doSave();buildRoster();renderClientTable();showToast('saved','Client added');
 }
+// Sync the active pass status when roster status changes
+function syncPassFromRosterStatus(clientId, rosterStatus) {
+  var passes = window.PASSES;
+  if (!passes) return;
+  var activePass = passes.find(function(p){ return p.client_id === clientId && p.status !== 'Returned'; });
+  if (!activePass) return;
+  var passStatus = rosterStatus === 'pass' ? 'Out' : 'In';
+  if (activePass.status === passStatus) return; // already in sync
+  activePass.status = passStatus;
+  if (typeof renderPassesTab === 'function') renderPassesTab();
+  fetch('/api/passes/' + activePass.id, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'include',
+    body: JSON.stringify({status: passStatus})
+  }).catch(function(){});
+}
+
 let dcTargetId=null;
 function openDischargeModal(id,name){dcTargetId=id;document.getElementById('dc-name-label').textContent=name;document.getElementById('dc-date').value=today();openModal('discharge-modal');}
 async function submitDischarge(){

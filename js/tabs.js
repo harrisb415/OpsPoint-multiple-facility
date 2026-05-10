@@ -668,6 +668,19 @@ async function returnFromPass(passId, clientId) {
 // Helper: update resident status on active report after pass change
 function _setClientStatusFromPass(clientId, statusKey) {
   if (!clientId) return;
+  // Log departure / return to shift activity log
+  var _prevStatus = typeof shiftStatuses !== 'undefined' ? shiftStatuses[clientId] : null;
+  if (typeof addLogEntry === 'function' && typeof nowTs === 'function') {
+    var _client = (CLIENTS||[]).find(function(c){ return c.id === clientId; });
+    if (_client) {
+      var _ts = nowTs('');
+      if (statusKey === 'pass' && _prevStatus !== 'pass') {
+        addLogEntry(_ts, _client.name + ' (Rm. ' + _client.room + ') departed on weekend pass.');
+      } else if (statusKey !== 'pass' && _prevStatus === 'pass') {
+        addLogEntry(_ts, _client.name + ' (Rm. ' + _client.room + ') returned from weekend pass.');
+      }
+    }
+  }
   // Update in-memory status
   if (typeof shiftStatuses !== 'undefined') {
     shiftStatuses[clientId] = statusKey;

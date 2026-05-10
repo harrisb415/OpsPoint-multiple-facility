@@ -874,6 +874,18 @@ function syncPassFromRosterStatus(clientId, rosterStatus) {
   if (!activePass) return;
   var passStatus = rosterStatus === 'pass' ? 'Out' : 'In';
   if (activePass.status === passStatus) return; // already in sync
+  // Log departure / return (roster is the source of truth here, so log before updating pass)
+  if (currentReportId) {
+    var client = CLIENTS.find(function(c){ return c.id === clientId; });
+    if (client) {
+      var ts = nowTs('');
+      if (rosterStatus === 'pass') {
+        addLogEntry(ts, client.name + ' (Rm. ' + client.room + ') departed on weekend pass.');
+      } else if (activePass.status === 'Out') {
+        addLogEntry(ts, client.name + ' (Rm. ' + client.room + ') returned from weekend pass.');
+      }
+    }
+  }
   activePass.status = passStatus;
   if (typeof renderPassesTab === 'function') renderPassesTab();
   fetch('/api/passes/' + activePass.id, {

@@ -579,9 +579,6 @@ function hasPerm(perm) {
       <div class="field"><label>Logged By (Monitor)</label>
         <input type="text" id="ml-logged-by" placeholder="Your name" style="font-family:var(--sans);font-size:.9rem;">
       </div>
-      <div class="field"><label>Notes</label>
-        <input type="text" id="ml-notes" placeholder="e.g. Package, certified letter…">
-      </div>
     </div>
     <div class="modal-foot">
       <button class="btn-cancel" onclick="closeModal('mail-modal')">Cancel</button>
@@ -1247,9 +1244,11 @@ function _mailTableHtml(items, status, canApprove, canDelete) {
 
 
 var _mailSelected = new Set();
+var _mailNotes = {};  // clientId → per-resident note string
 
 function openMailModal() {
   _mailSelected.clear();
+  _mailNotes = {};
   var srEl = document.getElementById('ml-search');
   if (srEl) srEl.value = '';
   var dtEl = document.getElementById('ml-datetime');
@@ -1261,8 +1260,6 @@ function openMailModal() {
   }
   var byEl = document.getElementById('ml-logged-by');
   if (byEl && window.SESSION) byEl.value = window.SESSION.displayName || window.SESSION.username || '';
-  var notEl = document.getElementById('ml-notes');
-  if (notEl) notEl.value = '';
   renderMailChecklist();
   _updateMailCount();
   openModal('mail-modal');
@@ -1277,12 +1274,17 @@ function renderMailChecklist() {
     return c.name.toLowerCase().indexOf(q) >= 0 || String(c.room).indexOf(q) >= 0;
   });
   var html = clients.map(function(c){
-    var checked = _mailSelected.has(c.id) ? ' checked' : '';
-    return '<label style="display:flex;align-items:center;gap:10px;padding:6px 12px;cursor:pointer;" '
+    var checked = _mailSelected.has(c.id);
+    var savedNote = esc(_mailNotes[c.id] || '');
+    return '<label style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer;" '
       + 'onmouseenter="this.style.background=\'var(--hover)\'" onmouseleave="this.style.background=\'\'">'
-      + '<input type="checkbox" value="'+c.id+'"'+checked+' onchange="mailToggle(this)"'
+      + '<input type="checkbox" value="'+c.id+'"'+(checked?' checked':'')+' onchange="mailToggle(this)"'
       + ' style="width:16px;height:16px;accent-color:var(--accent);flex-shrink:0;cursor:pointer;">'
-      + '<span style="font-size:.9rem;"><strong>Rm '+esc(String(c.room))+'</strong> &mdash; '+esc(c.name)+'</span>'
+      + '<span style="font-size:.88rem;white-space:nowrap;flex-shrink:0;"><strong>Rm '+esc(String(c.room))+'</strong> &mdash; '+esc(c.name)+'</span>'
+      + '<input type="text" class="ml-note-input" data-cid="'+c.id+'" value="'+savedNote+'"'
+      + ' placeholder="Notes…" oninput="mailNoteInput(this)" onclick="event.stopPropagation()"'
+      + ' style="flex:1;min-width:0;font-size:.82rem;padding:3px 8px;border:1px solid var(--line);'
+      + 'border-radius:4px;font-family:var(--sans);'+(checked?'':'display:none;')+'">'
       + '</label>';
   }).join('');
   var el = document.getElementById('ml-checklist');
@@ -1291,16 +1293,37 @@ function renderMailChecklist() {
 
 function mailToggle(cb) {
   var id = parseInt(cb.value);
-  if (cb.checked) _mailSelected.add(id); else _mailSelected.delete(id);
+  var noteEl = cb.closest('label').querySelector('.ml-note-input');
+  if (cb.checked) {
+    _mailSelected.add(id);
+    if (noteEl) noteEl.style.display = '';
+  } else {
+    _mailSelected.delete(id);
+    delete _mailNotes[id];
+    if (noteEl) { noteEl.style.display = 'none'; noteEl.value = ''; }
+  }
   _updateMailCount();
+}
+
+function mailNoteInput(el) {
+  var id = parseInt(el.dataset.cid);
+  _mailNotes[id] = el.value;
 }
 
 function mailSelectAll(sel) {
   var boxes = document.querySelectorAll('#ml-checklist input[type=checkbox]');
   boxes.forEach(function(cb){
     var id = parseInt(cb.value);
+    var noteEl = cb.closest('label').querySelector('.ml-note-input');
     cb.checked = sel;
-    if (sel) _mailSelected.add(id); else _mailSelected.delete(id);
+    if (sel) {
+      _mailSelected.add(id);
+      if (noteEl) noteEl.style.display = '';
+    } else {
+      _mailSelected.delete(id);
+      delete _mailNotes[id];
+      if (noteEl) { noteEl.style.display = 'none'; noteEl.value = ''; }
+    }
   });
   _updateMailCount();
 }
@@ -1319,19 +1342,17 @@ async function submitMailLog() {
   if (!_mailSelected.size) { alert('Please select at least one resident.'); return; }
   var datetime = document.getElementById('ml-datetime').value;
   var loggedBy = (document.getElementById('ml-logged-by').value||'').trim();
-  var notes    = (document.getElementById('ml-notes').value||'').trim();
   var clients = [];
   _mailSelected.forEach(function(id){
     var c = (CLIENTS||[]).find(function(x){ return x.id === id; });
-    if (c) clients.push({client_id: c.id, client_name: c.name, room: String(c.room)});
+    if (c) clients.push({client_id: c.id, client_name: c.name, room: String(c.room), notes: _mailNotes[id]||''});
   });
   var res = await fetch('/api/mail', {
     method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
     body: JSON.stringify({
       clients: clients,
       logged_at: datetime ? new Date(datetime).toISOString() : new Date().toISOString(),
-      logged_by: loggedBy,
-      notes: notes
+      logged_by: loggedBy
     })
   });
   var data = await res.json();

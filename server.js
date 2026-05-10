@@ -1167,10 +1167,9 @@ app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (re
   // Accept bulk array OR legacy single client_id
   let list=[];
   if(Array.isArray(req.body.clients)&&req.body.clients.length) list=req.body.clients;
-  else if(req.body.client_id) list=[{client_id:req.body.client_id,client_name:req.body.client_name,room:req.body.room}];
+  else if(req.body.client_id) list=[{client_id:req.body.client_id,client_name:req.body.client_name,room:req.body.room,notes:req.body.notes}];
   if(!list.length) return res.status(400).json({error:'No clients selected'});
-  const{logged_at,logged_by,notes}=req.body;
-  if(notes&&notes.length>500) return res.status(400).json({error:'Notes too long (max 500 chars)'});
+  const{logged_at,logged_by}=req.body;
   const by=String(logged_by||req.session.displayName||req.session.username||'').slice(0,100);
   const atTime=logged_at||new Date().toISOString();
   // Validate and resolve each client
@@ -1180,20 +1179,22 @@ app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (re
     if(!cid) continue;
     const client=db.query1('SELECT id,room,name FROM clients WHERE id=?',[cid]);
     if(!client) continue;
+    const itemNotes=String(item.notes||'').slice(0,500);
     resolved.push({
       client_id:client.id,
       client_name:String(item.client_name||client.name||'').slice(0,200),
       room:String(item.room||client.room||'').slice(0,20),
+      notes:itemNotes,
     });
   }
   if(!resolved.length) return res.status(404).json({error:'No valid clients found'});
-  // Insert one mail_log record per client
+  // Insert one mail_log record per client (each with its own notes)
   for(const r of resolved){
     db.run(
       `INSERT INTO mail_log (client_id,client_name,room,logged_by,logged_at,notes,status) VALUES (?,?,?,?,?,?,'pending')`,
-      [r.client_id,r.client_name,r.room,by,atTime,notes||'']
+      [r.client_id,r.client_name,r.room,by,atTime,r.notes]
     );
-    audit(req,'mail.log','mail',null,r.client_name+' Rm.'+r.room,{notes:notes||''});
+    audit(req,'mail.log','mail',null,r.client_name+' Rm.'+r.room,{notes:r.notes});
   }
   // ONE consolidated log entry for the active shift report
   const activeId=db.getSetting('active_report_id',null);
@@ -1205,12 +1206,13 @@ app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (re
     let logText;
     if(resolved.length===1){
       const r=resolved[0];
-      logText=`Mail received for ${r.client_name} (Rm. ${r.room}) — logged by ${by}`;
+      logText=`Mail received for ${r.client_name} (Rm. ${r.room})`;
+      if(r.notes) logText+=` [${r.notes}]`;
+      logText+=` — logged by ${by}`;
     } else {
-      const names=resolved.map(r=>`${r.client_name} (Rm. ${r.room})`).join(', ');
+      const names=resolved.map(r=>r.notes?`${r.client_name} (Rm. ${r.room}) [${r.notes}]`:`${r.client_name} (Rm. ${r.room})`).join(', ');
       logText=`Mail received for ${resolved.length} residents: ${names} — logged by ${by}`;
     }
-    if(notes) logText+=` [${notes}]`;
     db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',[activeId,timeStr,logText]);
     db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),activeId]);
     broadcast({type:'data_saved',user:req.session.displayName||req.session.username});

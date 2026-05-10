@@ -424,9 +424,9 @@ body.theme-green .sheet-input:focus,.sheet-textarea:focus,.sheet-select:focus{bo
       <input class="sheet-input" id="pe-return" type="datetime-local">
       <label>Status</label>
       <select class="sheet-select" id="pe-status">
-        <option value="out">Out</option>
-        <option value="returned">Returned</option>
-        <option value="late">Late / No Show</option>
+        <option value="Out">Out</option>
+        <option value="In">In Building</option>
+        <option value="Returned">Returned</option>
       </select>
     </div>
     <div class="sheet-footer" id="pass-footer">
@@ -705,7 +705,7 @@ function renderRoster(){
   list.innerHTML=active.map(function(c){
     var sk=SHIFT_STATUSES[c.id]||'building';
     var so=STATUS_OPTS.find(function(o){return o.key===sk;})||STATUS_OPTS[0];
-    var onPass=PASSES.some(function(p){return p.client_id===c.id&&p.status==='out';});
+    var onPass=PASSES.some(function(p){return p.client_id===c.id&&p.status==='Out';});
     var choreLabel='';
     if(c.chore){var mc=MASTER_CHORES.find(function(m){return m.id===c.chore_id;});choreLabel=mc?mc.name:(c.chore||'');}
     return '<div class="res-card" onclick="'+(canEdit?'openStatusModal('+c.id+')':'')+'">'
@@ -762,15 +762,15 @@ function openClientSheet(){
   document.getElementById('ce-name').value=c.name||'';
   document.getElementById('ce-cm').value=c.case_manager||'';
   document.getElementById('ce-phone').value=c.phone||'';
-  document.getElementById('ce-admit').value=c.admit_date||'';
+  document.getElementById('ce-admit').value=c.intake_date||'';
   openOverlay('ov-client');
 }
 async function saveClient(){
   if(!_editClientId)return;
-  var body={room:document.getElementById('ce-room').value.trim(),name:document.getElementById('ce-name').value.trim(),case_manager:document.getElementById('ce-cm').value.trim(),phone:document.getElementById('ce-phone').value.trim(),admit_date:document.getElementById('ce-admit').value};
+  var body={room:document.getElementById('ce-room').value.trim(),name:document.getElementById('ce-name').value.trim(),case_manager:document.getElementById('ce-cm').value.trim(),phone:document.getElementById('ce-phone').value.trim(),intake_date:document.getElementById('ce-admit').value||null};
   if(!body.name){showToast('Name required','err');return;}
   try{
-    var r=await fetch('/api/data',{method:'PATCH',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({clientId:_editClientId,...body})});
+    var r=await fetch('/api/clients/'+_editClientId,{method:'PUT',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify(body)});
     if(r.ok){var c=CLIENTS.find(function(x){return x.id===_editClientId;});if(c)Object.assign(c,body);renderRoster();closeOverlay('ov-client');showToast('Resident updated');}
     else showToast('Save failed','err');
   }catch(e){showToast('Save failed','err');}
@@ -886,7 +886,7 @@ function renderStaff(){
           +'<div class="staff-avi">'+esc(initials)+'</div>'
           +'<div class="staff-info">'
             +'<div class="staff-name">'+esc(s.name)+'</div>'
-            +(s.phone1?'<div class="staff-phone"><a href="tel:'+esc(s.phone1)+'" onclick="event.stopPropagation()">'+esc(s.phone1)+'</a>'+(s.phone2?' · <a href="tel:'+esc(s.phone2)+'" onclick="event.stopPropagation()">'+esc(s.phone2)+'</a>':'')+'</div>':'')
+            +(s.phone?'<div class="staff-phone"><a href="tel:'+esc(s.phone)+'" onclick="event.stopPropagation()">'+esc(s.phone)+'</a>'+(s.phone2?' · <a href="tel:'+esc(s.phone2)+'" onclick="event.stopPropagation()">'+esc(s.phone2)+'</a>':'')+'</div>':'')
             +(s.notes?'<div class="staff-notes">'+esc(s.notes)+'</div>':'')
           +'</div>'
         +'</div>';
@@ -903,7 +903,7 @@ function openStaffSheet(staffId){
     document.getElementById('staff-modal-title').textContent='Edit Staff';
     document.getElementById('se-name').value=s.name||'';
     if(sel)sel.value=s.category||'';
-    document.getElementById('se-phone1').value=s.phone1||'';
+    document.getElementById('se-phone1').value=s.phone||'';
     document.getElementById('se-phone2').value=s.phone2||'';
     document.getElementById('se-notes').value=s.notes||'';
     var footer=document.getElementById('staff-footer');
@@ -917,7 +917,7 @@ function openStaffSheet(staffId){
   openOverlay('ov-staff');
 }
 async function saveStaff(){
-  var body={category:document.getElementById('se-cat').value,name:document.getElementById('se-name').value.trim(),phone1:document.getElementById('se-phone1').value.trim(),phone2:document.getElementById('se-phone2').value.trim(),notes:document.getElementById('se-notes').value.trim()};
+  var body={category:document.getElementById('se-cat').value,name:document.getElementById('se-name').value.trim(),phone:document.getElementById('se-phone1').value.trim(),phone2:document.getElementById('se-phone2').value.trim(),notes:document.getElementById('se-notes').value.trim()};
   if(!body.name){showToast('Name required','err');return;}
   try{
     var r;
@@ -980,8 +980,8 @@ function renderPasses(){
   var canEdit=hasPerm('passes.edit');
   var html='';
   if(PASS_NOTICE){html+='<div class="pass-notice"><div class="pass-notice-label">Pass Notice</div>'+esc(PASS_NOTICE)+'</div>';}
-  var active=PASSES.filter(function(p){return p.status==='out'||p.status==='late';});
-  var returned=PASSES.filter(function(p){return p.status==='returned';}).slice(0,15);
+  var active=PASSES.filter(function(p){return p.status==='Out';});
+  var returned=PASSES.filter(function(p){return p.status==='Returned';}).slice(0,15);
   if(!active.length&&!returned.length){html+='<div class="empty">No passes on record.</div>';list.innerHTML=html;return;}
   if(active.length){
     html+='<div class="section-head">Currently Out ('+active.length+')</div>';
@@ -995,8 +995,8 @@ function renderPasses(){
 }
 function renderPassCard(p,canEdit){
   var c=CLIENTS.find(function(x){return x.id===p.client_id;})||{name:'Unknown',room:'?'};
-  var statusCls=p.status==='out'?'out':p.status==='returned'?'returned':'late';
-  var statusLabel=p.status==='out'?'Out':p.status==='returned'?'Returned':'Late';
+  var statusCls=p.status==='Out'?'out':p.status==='Returned'?'returned':'late';
+  var statusLabel=p.status==='Out'?'Out':p.status==='Returned'?'Returned':'In';
   return '<div class="pass-card" onclick="'+(canEdit?'openPassSheet('+p.id+')':'')+'">'
     +'<div class="pass-card-top"><span class="pass-client">Rm '+esc(c.room)+' — '+esc(c.name)+'</span><span class="pass-status-badge '+statusCls+'">'+statusLabel+'</span></div>'
     +'<div class="pass-dates">🛫 '+(p.departure?new Date(p.departure).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—')
@@ -1018,14 +1018,14 @@ function openPassSheet(passId){
     if(sel)sel.value=p.client_id;
     document.getElementById('pe-depart').value=p.departure?p.departure.slice(0,16):'';
     document.getElementById('pe-return').value=p.return_date?p.return_date.slice(0,16):'';
-    document.getElementById('pe-status').value=p.status||'out';
+    document.getElementById('pe-status').value=p.status||'Out';
     if(footer)footer.innerHTML='<button class="btn-danger" onclick="deletePass('+passId+')">Delete</button><button class="btn-secondary" onclick="closeOverlay(\'ov-pass\')">Cancel</button><button class="btn-primary" onclick="savePass()">Save</button>';
   }else{
     document.getElementById('pass-modal-title').textContent='Add Pass';
     var now=new Date();now.setMinutes(0,0,0);
     document.getElementById('pe-depart').value=now.toISOString().slice(0,16);
     document.getElementById('pe-return').value='';
-    document.getElementById('pe-status').value='out';
+    document.getElementById('pe-status').value='Out';
     if(footer)footer.innerHTML='<button class="btn-secondary" onclick="closeOverlay(\'ov-pass\')">Cancel</button><button class="btn-primary" onclick="savePass()">Save</button>';
   }
   openOverlay('ov-pass');

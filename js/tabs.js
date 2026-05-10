@@ -544,6 +544,10 @@ function openAddPassModal() {
   document.getElementById('pm-ua').value        = '';
   document.getElementById('pm-notes').value     = '';
   document.getElementById('pm-status').value    = 'In';
+  // Hide status field for users without passes.status permission
+  var statusField = document.getElementById('pm-status') && document.getElementById('pm-status').closest('.field');
+  var canStatus = typeof hasPerm === 'function' && hasPerm('passes.status');
+  if (statusField) statusField.style.display = canStatus ? '' : 'none';
   openModal('pass-modal');
 }
 
@@ -560,7 +564,11 @@ function openEditPassModal(id) {
   document.getElementById('pm-notes').value     = p.notes    || '';
   // Normalise legacy Extended → Out; Returned passes aren't editable via this modal
   var st = p.status === 'In' ? 'In' : (p.status === 'Out' || p.status === 'Extended') ? 'Out' : 'In';
-  document.getElementById('pm-status').value    = st;
+  document.getElementById('pm-status').value = st;
+  // Hide status field for users without passes.status permission
+  var statusField = document.getElementById('pm-status') && document.getElementById('pm-status').closest('.field');
+  var canStatus = typeof hasPerm === 'function' && hasPerm('passes.status');
+  if (statusField) statusField.style.display = canStatus ? '' : 'none';
   openModal('pass-modal');
 }
 
@@ -623,12 +631,9 @@ async function submitPassModal() {
     var res  = await fetch(url, { method:method, headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload) });
     var data = await res.json();
     if (data.error) { alert(data.error); return; }
-    // Sync client roster status on create: Out → Weekend Pass, In → In Building
-    if (!_passEditId && clientId) {
-      _setClientStatusFromPass(clientId, payload.status === 'Out' ? 'pass' : 'building');
-    }
-    // On edit: sync if status changed
-    if (_passEditId && clientId) {
+    // Sync client roster status — only when user has passes.status permission
+    var _canStatusSync = typeof hasPerm === 'function' && hasPerm('passes.status');
+    if (clientId && _canStatusSync) {
       _setClientStatusFromPass(clientId, payload.status === 'Out' ? 'pass' : 'building');
     }
     closeModal('pass-modal');

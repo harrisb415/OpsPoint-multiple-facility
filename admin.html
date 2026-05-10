@@ -1113,7 +1113,8 @@ const PERM_GROUPS = [
     { id:'chores.edit', label:'Manage Chores', desc:'Assign chores to residents and log daily completions' },
   ]},
   { title: 'Weekend Passes', perms: [
-    { id:'passes.edit', label:'Manage Passes & Notice', desc:'Create, edit, and delete passes; update the pass notice board' },
+    { id:'passes.edit',   label:'Manage Passes & Notice',   desc:'Create, edit, and delete passes; update the pass notice board' },
+    { id:'passes.status', label:'Check In / Out of Facility', desc:'Change a pass status between In and Out, and mark residents as Returned. Without this, users can only add and edit pass details.' },
   ]},
   { title: 'UA System', perms: [
     { id:'ua.request',     label:'Request UAs',                    desc:'Flag a resident for urinalysis from the roster button' },

@@ -878,8 +878,12 @@ async function submitDischarge(){
       CLIENTS.push({id:nextClientId++,room:c.room,name:'VACANT',case_manager:'',phone:'',photo:null,intake_date:null,discharge_date:null,is_special:false,is_active:true,sort_order:CLIENTS.length});
       CLIENTS.sort((a,b)=>(parseInt(a.room)||9999)-(parseInt(b.room)||9999));
     }
+    if(currentReportId){
+      const dcStr=' Discharge date: '+new Date(date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'.';
+      addLogEntry(nowTs(''),'Client discharged: '+c.name+', Rm. '+c.room+'.'+dcStr);
+    }
   }
-  closeModal('discharge-modal');await writeJsonData({clients:CLIENTS,reports:REPORTS});buildRoster();renderClientTable();showToast('saved','Client discharged');
+  closeModal('discharge-modal');clearTimeout(saveTimer_ref.t);await doSave();buildRoster();renderClientTable();showToast('saved','Client discharged');
 }
 async function reactivate(id){
   if(!confirm('Reactivate this client?'))return;

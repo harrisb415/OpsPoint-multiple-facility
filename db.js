@@ -31,6 +31,7 @@ const PERMISSIONS = [
   'staff.edit',       // add / edit / delete staff members and categories
   'chores.edit',      // assign chores and log completions
   'passes.edit',      // create / edit / delete passes and pass notice
+  'passes.status',    // change pass In/Out status and mark as Returned (check in/out)
   'reminders.view',   // see wellness check and walkthrough reminder banners
   'ua.request',       // flag a resident for UA from the roster
   'ua.acknowledge',   // see the UA alert banner and acknowledge requests
@@ -52,14 +53,14 @@ const ROLE_PRESETS = {
   ],
   supervisor: [
     'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit',
+    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
     'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log',
     'mobile.access', 'mobile.full',
   ],
   admin: [
     'reports.create', 'reports.close', 'reports.delete',
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit',
+    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
     'ua.request', 'ua.acknowledge', 'ua.delete', 'mail.log', 'mail.approve',
     'facility.manage', 'admin.users', 'admin.settings', 'mobile.access', 'mobile.full',
   ],
@@ -343,6 +344,10 @@ function _migratePermissions() {
       // v1.14.x: supervisors and admins get mobile.full
       if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mobile.full')) {
         perms.push('mobile.full'); changed = true;
+      }
+      // v1.15: passes.status gates In/Out toggle and Return button (supervisors and admins only)
+      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('passes.status')) {
+        perms.push('passes.status'); changed = true;
       }
       if (changed) _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
     } catch(e) {}

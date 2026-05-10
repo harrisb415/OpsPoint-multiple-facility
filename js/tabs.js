@@ -397,7 +397,8 @@ async function _saveMasterChores(chores) {
 var _passEditId = null;
 
 function renderPassesTab() {
-  var _canEdit = typeof hasPerm === 'function' && hasPerm('passes.edit');
+  var _canEdit   = typeof hasPerm === 'function' && hasPerm('passes.edit');
+  var _canStatus = typeof hasPerm === 'function' && hasPerm('passes.status');
 
   // Add Pass button and Actions column header
   var addBtn    = document.getElementById('btn-add-pass');
@@ -428,7 +429,7 @@ function renderPassesTab() {
   var tbody    = document.getElementById('passes-table-body');
   if (tbody) {
     tbody.innerHTML = active.length
-      ? active.map(function(p){ return _passRow(p, _canEdit); }).join('')
+      ? active.map(function(p){ return _passRow(p, _canEdit, _canStatus); }).join('')
       : '<tr><td colspan="'+cols+'" style="text-align:center;color:#94a3b8;padding:26px;font-style:italic;">No active passes.</td></tr>';
   }
   // Returned passes section
@@ -444,7 +445,7 @@ function renderPassesTab() {
   }
 }
 
-function _passRow(p, canEdit) {
+function _passRow(p, canEdit, canStatus) {
   // Normalise legacy Extended → Out for display
   var displayStatus = (p.status === 'In') ? 'In' : 'Out';
   var colors = {
@@ -453,7 +454,8 @@ function _passRow(p, canEdit) {
   };
   var sc = colors[displayStatus];
 
-  var statusCell = canEdit
+  // Status cell: dropdown only for users with passes.status; others see read-only badge
+  var statusCell = canStatus
     ? '<select onchange="updatePassStatus(' + p.id + ',' + p.client_id + ',this.value)" ' +
       'style="background:' + sc.bg + ';color:' + sc.fg + ';border:1.5px solid ' + sc.border + ';' +
       'border-radius:20px;font-size:.75em;font-weight:700;padding:2px 8px;outline:none;' +
@@ -476,8 +478,11 @@ function _passRow(p, canEdit) {
 
   if (canEdit) {
     row += '<td style="white-space:nowrap;">' +
-      '<button class="btn btn-sm" onclick="returnFromPass(' + p.id + ',' + p.client_id + ')" ' +
-      'style="margin-right:4px;background:#dcfce7;color:#15803d;border:1.5px solid #86efac;border-radius:6px;padding:3px 8px;font-size:.75em;font-weight:700;cursor:pointer;">&#10003; Return</button>' +
+      // Return button: requires passes.status
+      (canStatus
+        ? '<button class="btn btn-sm" onclick="returnFromPass(' + p.id + ',' + p.client_id + ')" ' +
+          'style="margin-right:4px;background:#dcfce7;color:#15803d;border:1.5px solid #86efac;border-radius:6px;padding:3px 8px;font-size:.75em;font-weight:700;cursor:pointer;">&#10003; Return</button>'
+        : '') +
       '<button class="btn btn-outline btn-sm" onclick="openEditPassModal(' + p.id + ')" style="margin-right:4px;">Edit</button>' +
       '<button class="btn-danger-sm" onclick="deletePass(' + p.id + ')">Delete</button>' +
       '</td>';

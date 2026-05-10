@@ -420,7 +420,7 @@ function renderPassesTab() {
   if (noticeEdit) { noticeEdit.value = notice; noticeEdit.style.display = 'none'; }
   if (noticeHint) noticeHint.style.display = _canEdit ? '' : 'none';
 
-  // Split passes into active (Out/Extended) and returned
+  // Split passes into active (In/Out) and returned (archived)
   var passes   = window.PASSES || [];
   var active   = passes.filter(function(p){ return p.status !== 'Returned'; });
   var returned = passes.filter(function(p){ return p.status === 'Returned'; });
@@ -445,23 +445,25 @@ function renderPassesTab() {
 }
 
 function _passRow(p, canEdit) {
+  // Normalise legacy Extended → Out for display
+  var displayStatus = (p.status === 'In') ? 'In' : 'Out';
   var colors = {
-    'Out':      { bg:'#fef9c3', fg:'#854d0e', border:'#fde047' },
-    'Extended': { bg:'#dbeafe', fg:'#1d4ed8', border:'#93c5fd' },
+    'In':  { bg:'#dcfce7', fg:'#15803d', border:'#86efac' },
+    'Out': { bg:'#fef9c3', fg:'#854d0e', border:'#fde047' },
   };
-  var sc = colors[p.status] || colors['Out'];
+  var sc = colors[displayStatus];
 
   var statusCell = canEdit
     ? '<select onchange="updatePassStatus(' + p.id + ',' + p.client_id + ',this.value)" ' +
       'style="background:' + sc.bg + ';color:' + sc.fg + ';border:1.5px solid ' + sc.border + ';' +
       'border-radius:20px;font-size:.75em;font-weight:700;padding:2px 8px;outline:none;' +
       'font-family:var(--sans);cursor:pointer;">' +
-      ['Out','Extended'].map(function(s){
-        return '<option value="' + s + '"' + (p.status===s?' selected':'') + '>' + s + '</option>';
+      ['In','Out'].map(function(s){
+        return '<option value="' + s + '"' + (displayStatus===s?' selected':'') + '>' + s + '</option>';
       }).join('') + '</select>'
     : '<span style="background:' + sc.bg + ';color:' + sc.fg + ';border:1.5px solid ' + sc.border + ';' +
       'border-radius:20px;font-size:.75em;font-weight:700;padding:2px 8px;display:inline-block;">' +
-      tabEsc(p.status) + '</span>';
+      tabEsc(displayStatus) + '</span>';
 
   var row = '<tr>' +
     '<td class="rm">' + tabEsc(p.room||'') + '</td>' +
@@ -536,7 +538,7 @@ function openAddPassModal() {
   document.getElementById('pm-return').value    = '';
   document.getElementById('pm-ua').value        = '';
   document.getElementById('pm-notes').value     = '';
-  document.getElementById('pm-status').value    = 'Out';
+  document.getElementById('pm-status').value    = 'In';
   openModal('pass-modal');
 }
 
@@ -551,7 +553,9 @@ function openEditPassModal(id) {
   document.getElementById('pm-return').value    = _toDatetimeLocal(p.return_date);
   document.getElementById('pm-ua').value        = p.ua_notes || '';
   document.getElementById('pm-notes').value     = p.notes    || '';
-  document.getElementById('pm-status').value    = p.status   || 'Out';
+  // Normalise legacy Extended → Out; Returned passes aren't editable via this modal
+  var st = p.status === 'In' ? 'In' : (p.status === 'Out' || p.status === 'Extended') ? 'Out' : 'In';
+  document.getElementById('pm-status').value    = st;
   openModal('pass-modal');
 }
 
@@ -614,9 +618,13 @@ async function submitPassModal() {
     var res  = await fetch(url, { method:method, headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload) });
     var data = await res.json();
     if (data.error) { alert(data.error); return; }
-    // Auto-set client status to Weekend Pass when creating an Out/Extended pass
-    if (!_passEditId && clientId && ['Out','Extended'].includes(payload.status)) {
-      _setClientStatusFromPass(clientId, 'pass');
+    // Sync client roster status on create: Out → Weekend Pass, In → In Building
+    if (!_passEditId && clientId) {
+      _setClientStatusFromPass(clientId, payload.status === 'Out' ? 'pass' : 'building');
+    }
+    // On edit: sync if status changed
+    if (_passEditId && clientId) {
+      _setClientStatusFromPass(clientId, payload.status === 'Out' ? 'pass' : 'building');
     }
     closeModal('pass-modal');
     await _reloadPasses();
@@ -634,6 +642,8 @@ async function updatePassStatus(id, clientId, status) {
     });
     var p = (window.PASSES||[]).find(function(x){ return x.id === id; });
     if (p) p.status = status;
+    // Out → Weekend Pass on roster; In → In Building
+    _setClientStatusFromPass(clientId, status === 'Out' ? 'pass' : 'building');
     renderPassesTab();
   } catch(e) {}
 }

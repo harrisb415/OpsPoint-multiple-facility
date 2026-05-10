@@ -864,7 +864,7 @@ async function submitAddClient(){
     addLogEntry(ts2, 'New resident admitted: ' + name + ', Rm. ' + room + '.' + intakeStr);
   }
   CLIENTS.sort((a,b)=>(parseInt(a.room)||9999)-(parseInt(b.room)||9999));
-  closeModal('add-client-modal');await writeJsonData({clients:CLIENTS,reports:REPORTS});buildRoster();renderClientTable();showToast('saved','Client added');
+  closeModal('add-client-modal');clearTimeout(saveTimer_ref.t);await doSave();buildRoster();renderClientTable();showToast('saved','Client added');
 }
 let dcTargetId=null;
 function openDischargeModal(id,name){dcTargetId=id;document.getElementById('dc-name-label').textContent=name;document.getElementById('dc-date').value=today();openModal('discharge-modal');}

@@ -359,16 +359,38 @@ function _migratePermissions() {
   });
 }
 
-// Migrate stored permission profiles when new permissions are added to ROLE_PRESETS
+// Migrate stored permission profiles when new permissions are added to ROLE_PRESETS.
+// Only auto-adds permissions that are genuinely new to this version of the software,
+// so that admin customisations (unchecking a permission in the panel) survive restarts.
 function _migrateProfiles() {
+  // Determine which permissions are brand-new since the last startup
+  const knownRaw = _q1('SELECT value FROM settings WHERE key=?', ['known_permissions']);
+  const knownPerms = knownRaw ? JSON.parse(knownRaw.value || '[]') : null;
+
+  // On first run known_permissions doesn't exist yet; treat all current permissions
+  // as already known because the profiles were just seeded from ROLE_PRESETS.
+  const newPerms = knownPerms
+    ? PERMISSIONS.filter(p => !knownPerms.includes(p))
+    : [];
+
+  // Persist the current full permission list so the next restart knows what was "old"
+  const knownJson = JSON.stringify(PERMISSIONS);
+  if (knownRaw) {
+    _run('UPDATE settings SET value=? WHERE key=?', [knownJson, 'known_permissions']);
+  } else {
+    _run('INSERT INTO settings (key,value) VALUES (?,?)', ['known_permissions', knownJson]);
+  }
+
+  if (newPerms.length === 0) return; // nothing new — preserve all customisations
+
   const profiles = getPermissionProfiles();
   let changed = false;
   profiles.forEach(p => {
     const preset = ROLE_PRESETS[p.key];
     if (!preset) return;
-    // Add any permissions in the current preset that are missing from the stored profile
-    preset.forEach(perm => {
-      if (!p.permissions.includes(perm)) {
+    // Only add permissions that (a) are new this version and (b) belong in this role's preset
+    newPerms.forEach(perm => {
+      if (preset.includes(perm) && !p.permissions.includes(perm)) {
         p.permissions.push(perm);
         changed = true;
       }

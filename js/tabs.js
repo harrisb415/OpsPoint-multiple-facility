@@ -4,6 +4,8 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ── Shared helpers ─────────────────────────────────────────────
+var _retPassPage = 0;
+
 function tabEsc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
@@ -432,13 +434,20 @@ function renderPassesTab() {
       ? active.map(function(p){ return _passRow(p, _canEdit, _canStatus); }).join('')
       : '<tr><td colspan="'+cols+'" style="text-align:center;color:#94a3b8;padding:26px;font-style:italic;">No active passes.</td></tr>';
   }
-  // Returned passes section
+  // Returned passes section (paginated, 25 per page)
   var retSection = document.getElementById('returned-passes-section');
   if (retSection) {
     if (returned.length) {
       retSection.style.display = '';
+      var retTotal = returned.length, retSz = 25;
+      if (_retPassPage >= Math.ceil(retTotal / retSz)) _retPassPage = Math.max(0, Math.ceil(retTotal / retSz) - 1);
+      var retPaged = returned.slice(_retPassPage * retSz, (_retPassPage + 1) * retSz);
       var retBody = document.getElementById('returned-passes-body');
-      if (retBody) retBody.innerHTML = returned.map(function(p){ return _returnedPassRow(p, _canEdit); }).join('');
+      if (retBody) retBody.innerHTML = retPaged.map(function(p){ return _returnedPassRow(p, _canEdit); }).join('');
+      var retPagerEl = document.getElementById('returned-passes-pager');
+      if (retPagerEl && typeof _spPager === 'function') {
+        retPagerEl.innerHTML = _spPager(_retPassPage, retTotal, retSz, '_retPassPage=Math.max(0,_retPassPage-1);renderPassesTab();', '_retPassPage++;renderPassesTab();');
+      }
     } else {
       retSection.style.display = 'none';
     }

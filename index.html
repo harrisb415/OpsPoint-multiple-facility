@@ -391,6 +391,7 @@ body.theme-green #reminder-bar{background:#1A5C42;}
     <div class="section-head"><div class="sh-left"><div class="sh-dot"></div>Saved Shift Reports</div></div>
     <div class="section-body">
       <div class="report-list" id="report-list"><div class="empty-state">Select a save folder to view reports.</div></div>
+      <div id="archive-pager"></div>
     </div>
   </div>
 </div>
@@ -401,10 +402,10 @@ body.theme-green #reminder-bar{background:#1A5C42;}
       <div class="sh-left"><div class="sh-dot"></div>Master Client Roster</div>
       <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;">
         <input type="text" id="client-search" placeholder="&#128269; Search name or room..."
-          oninput="renderClientTable()"
+          oninput="_clientPage=0;renderClientTable();"
           style="font-size:.75rem;padding:5px 10px;border:1.5px solid var(--line);border-radius:20px;background:var(--bg);color:var(--navy);width:190px;outline:none;">
         <label style="font-size:.67rem;color:#94a3b8;display:flex;align-items:center;gap:5px;cursor:pointer;font-weight:600;letter-spacing:.05em;text-transform:uppercase;">
-          <input type="checkbox" id="show-discharged" onchange="renderClientTable()"> Show Discharged
+          <input type="checkbox" id="show-discharged" onchange="_clientPage=0;renderClientTable();"> Show Discharged
         </label>
         <button id="btn-add-client" class="btn btn-green btn-sm" onclick="openAddClientModal()">+ Add Client</button>
       </div>
@@ -413,6 +414,7 @@ body.theme-green #reminder-bar{background:#1A5C42;}
       <table><thead><tr>
         <th class="tc sortable" onclick="sortClientTable('room',this)">Rm #</th><th class="sortable" onclick="sortClientTable('name',this)">Name</th><th class="sortable" onclick="sortClientTable('cm',this)">Case Manager</th><th>Phone</th><th class="sortable" onclick="sortClientTable('intake',this)">Intake Date</th><th class="sortable" onclick="sortClientTable('discharge',this)">Discharge Date</th><th class="sortable" onclick="sortClientTable('status',this)">Status</th><th>Actions</th>
       </tr></thead><tbody id="client-list-body"></tbody></table>
+      <div id="client-pager"></div>
     </div>
   </div>
 </div>
@@ -767,6 +769,7 @@ function hasPerm(perm) {
             <tbody id="returned-passes-body"></tbody>
           </table>
         </div>
+        <div id="returned-passes-pager"></div>
       </div>
     </div>
 </div>
@@ -909,21 +912,21 @@ function hasPerm(perm) {
 <div class="tab-content" id="tab-reports">
   <!-- filter bar -->
     <div style="background:#fff;border-radius:10px;padding:12px 16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(0,0,0,.06);display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <input type="text" id="uar-client" placeholder="Filter by client..." oninput="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);width:180px;">
-      <select id="uar-shift" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
+      <input type="text" id="uar-client" placeholder="Filter by client..." oninput="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);width:180px;">
+      <select id="uar-shift" onchange="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
         <option value="">All Shifts</option><option value="Day Shift">Day</option><option value="Swing Shift">Swing</option><option value="Graveyard Shift">Graveyard</option>
       </select>
-      <select id="uar-reason" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
+      <select id="uar-reason" onchange="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
         <option value="">All Reasons</option><option>Random</option><option>Return from Pass</option><option>Suspicion</option><option>CM Request</option><option>Interview</option><option>Other</option>
       </select>
-      <select id="uar-result" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
+      <select id="uar-result" onchange="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
         <option value="">Any Result</option><option value="pos">Has Positive</option><option value="neg">All Negative</option>
       </select>
-      <select id="uar-type" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
+      <select id="uar-type" onchange="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
         <option value="">All Types</option><option value="resident">Residents Only</option><option value="interview">Interviews Only</option>
       </select>
-      <input type="date" id="uar-from" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);" title="From date">
-      <input type="date" id="uar-to" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);" title="To date">
+      <input type="date" id="uar-from" onchange="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);" title="From date">
+      <input type="date" id="uar-to" onchange="_uarPage=0;renderUAReport();" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);" title="To date">
       <button class="btn btn-outline btn-sm" onclick="clearUARFilters()">Clear</button>
       <span id="uar-count" style="font-size:.8rem;color:var(--steel);margin-left:auto;"></span>
       <button class="btn btn-primary btn-sm" onclick="printUAReport()" style="background:#1A3327;color:#fff;">&#128424; Print / PDF</button>
@@ -934,6 +937,7 @@ function hasPerm(perm) {
     <div id="uar-table-wrap" style="overflow-x:auto;background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.06);">
       <div style="padding:30px;text-align:center;color:#94A3B8;font-style:italic;">Loading...</div>
     </div>
+    <div id="uar-pager"></div>
 </div>
 <!-- Change Password Modal -->
 <div class="modal-overlay" id="chpw-modal">
@@ -1160,6 +1164,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // â"€â"€ Mail Tab â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 var MAIL_LOG = [];
+var _mailDeliveredPage = 0;
 
 async function loadMailLog() {
   try {
@@ -1198,8 +1203,13 @@ function renderMailTab() {
       : '<div style="padding:20px;text-align:center;color:#94A3B8;font-style:italic;">No approved mail awaiting delivery.</div>';
   }
   if (historyEl) {
-    historyEl.innerHTML = delivered.length
-      ? _mailTableHtml(delivered, 'delivered', canApprove, canDelete)
+    var dTotal = delivered.length;
+    var dSz = 25;
+    var dFrom = _mailDeliveredPage * dSz;
+    var dPaged = delivered.slice(dFrom, dFrom + dSz);
+    var dPager = _spPager(_mailDeliveredPage, dTotal, dSz, '_mailDeliveredPage=Math.max(0,_mailDeliveredPage-1);renderMailTab();', '_mailDeliveredPage++;renderMailTab();');
+    historyEl.innerHTML = dTotal
+      ? _mailTableHtml(dPaged, 'delivered', canApprove, canDelete) + dPager
       : '<div style="padding:20px;text-align:center;color:#94A3B8;font-style:italic;">No delivery history yet.</div>';
   }
 }

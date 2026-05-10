@@ -49,20 +49,20 @@ const PERMISSIONS = [
 const ROLE_PRESETS = {
   monitor: [
     'reports.create', 'reports.close', 'log.add', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit',
+    'residents.edit', 'staff.edit', 'chores.edit', 'passes.status',
     'reminders.view', 'ua.acknowledge', 'mail.log', 'mobile.access',
   ],
   supervisor: [
     'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
-    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log', 'mail.delete',
+    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log',
     'mobile.access', 'mobile.full',
   ],
   admin: [
     'reports.create', 'reports.close', 'reports.delete',
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
-    'ua.request', 'ua.acknowledge', 'ua.delete', 'mail.log', 'mail.approve', 'mail.delete',
+    'ua.request', 'ua.delete', 'mail.log', 'mail.approve', 'mail.delete',
     'facility.manage', 'admin.users', 'admin.settings', 'mobile.access', 'mobile.full',
   ],
   case_manager: [

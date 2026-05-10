@@ -489,8 +489,8 @@ function hasPerm(perm) {
     var al = document.getElementById('admin-link');
     if(al) al.style.display = 'inline';
   }
-  // Hide password change button for monitors and case managers (read-only roles)
-  if(SESSION.role === 'monitor' || SESSION.role === 'case_manager'){
+  // Show password change button only for users who can access the admin panel
+  if(!hasPerm('admin.users') && !hasPerm('admin.settings')){
     var pb = document.getElementById('chpw-btn');
     if(pb) pb.style.display = 'none';
   }

@@ -203,16 +203,14 @@ function audit(req, action, targetType, targetId, targetLabel, detail, override)
   } catch(e) {}
 }
 
-// CSRF defence — reject cross-origin state-changing requests.
-// Origin header must be present and match the server host. Requests that
-// omit Origin entirely are also rejected — modern browsers always send it
-// on same-origin state-changing requests (POST/PUT/PATCH/DELETE via fetch).
+// VULN-1: CSRF defence — reject cross-origin state-changing requests
 function csrfCheck(req, res, next) {
   var origin = req.headers.origin;
-  if (!origin) return res.status(403).json({error:'Forbidden'});
-  var proto = req.secure ? 'https' : 'http';
-  var expected = proto + '://' + req.headers.host;
-  if (origin !== expected) return res.status(403).json({error:'Forbidden'});
+  if (origin) {
+    var proto = req.secure ? 'https' : 'http';
+    var expected = proto + '://' + req.headers.host;
+    if (origin !== expected) return res.status(403).json({error:'Forbidden'});
+  }
   next();
 }
 
@@ -523,6 +521,7 @@ app.put('/api/permission-profiles', requireAuth, csrfCheck, requirePermission('a
   res.json({ok:true});
 });
 app.post('/api/users/me/password', requireAuth, csrfCheck,(req,res)=>{
+  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
   const{currentPassword,newPassword}=req.body;
   if(!currentPassword||!newPassword) return res.status(400).json({error:'Missing fields'});
   const err=validatePw(newPassword); if(err) return res.status(400).json({error:err});
@@ -559,30 +558,17 @@ function apiRateCheck(req) {
   _apiHits[ip].count++;
   return _apiHits[ip].count > 300; // 300 requests/min per IP
 }
-// Apply rate limit globally to all /api/* routes so every endpoint is covered
-app.use('/api/', (req,res,next)=>{
-  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
-  next();
-});
 
 // ── Data API ──────────────────────────────────────────────────────
 app.get('/api/data', requireAuth,(req,res)=>{
+  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
   res.json(db.getAllData());
 });
 
 app.post('/api/data', requireAuth, csrfCheck,(req,res)=>{
   const d=req.body;
-  // Per-section permission checks — mirrors the inline checks on PATCH /api/data
-  const _pu6=db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-  const _pp6=(_pu6&&_pu6.permissions)?JSON.parse(_pu6.permissions):(db.ROLE_PRESETS[_pu6?_pu6.role:'monitor']||[]);
-  const _canClients = _pp6.includes('residents.edit');
-  const _canReports = _pp6.includes('reports.create')||_pp6.includes('reports.close');
-  const _canLogos   = _pp6.includes('admin.settings');
-  // Reject entirely if the payload contains sections the user has no permission for at all
-  if (Array.isArray(d.clients)&&d.clients.length>0&&!_canClients) return res.status(403).json({error:'Permission denied: residents.edit required'});
-  if (Array.isArray(d.reports)&&d.reports.length>0&&!_canReports)  return res.status(403).json({error:'Permission denied: reports.create required'});
-  if (d.logos&&!_canLogos)                                          return res.status(403).json({error:'Permission denied: admin.settings required'});
-  if (Array.isArray(d.clients) && d.clients.length > 0) {
+  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
+  if(Array.isArray(d.clients) && d.clients.length > 0) {
     // First: delete any VACANT rows for rooms that now have an active named resident
     const activeRooms = d.clients
       .filter(c=>c.is_active&&!c.is_special&&c.name!=='VACANT')
@@ -620,8 +606,8 @@ app.post('/api/data', requireAuth, csrfCheck,(req,res)=>{
       }
     });
   }
-  if(_canReports&&Array.isArray(d.reports)) d.reports.forEach(r=>db.upsertReport(r));
-  if(_canLogos&&d.logos){
+  if(Array.isArray(d.reports)) d.reports.forEach(r=>db.upsertReport(r));
+  if(d.logos){
     ['pdec','wcs'].forEach(k=>{
       if(d.logos[k]){
         let v=d.logos[k];
@@ -634,7 +620,7 @@ app.post('/api/data', requireAuth, csrfCheck,(req,res)=>{
       }
     });
   }
-  if(_canReports&&d.active_report_id!==undefined) db.setSetting('active_report_id',d.active_report_id);
+  if(d.active_report_id!==undefined) db.setSetting('active_report_id',d.active_report_id);
   db.save();
   if(Array.isArray(d.reports)) d.reports.forEach(function(r){
     const _act=r.is_closed?'report.close':'report.save';
@@ -1102,12 +1088,6 @@ app.put('/api/passes/:id', requireAuth, csrfCheck, requirePermission('passes.edi
   const id=parseInt(req.params.id);
   if(!db.query1('SELECT id FROM passes WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
   const{departure,return_date,ua_notes,notes,status}=req.body;
-  // passes.status permission required to change the status field (In/Out/Returned)
-  if(status!==undefined){
-    const _psPu=db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-    const _psPp=(_psPu&&_psPu.permissions)?JSON.parse(_psPu.permissions):(db.ROLE_PRESETS[_psPu?_psPu.role:'monitor']||[]);
-    if(!_psPp.includes('passes.status')) return res.status(403).json({error:'Permission denied: passes.status required'});
-  }
   if(departure!==undefined)   db.run('UPDATE passes SET departure=? WHERE id=?',[departure,id]);
   if(return_date!==undefined) db.run('UPDATE passes SET return_date=? WHERE id=?',[return_date,id]);
   if(ua_notes!==undefined)    db.run('UPDATE passes SET ua_notes=? WHERE id=?',[ua_notes,id]);
@@ -1258,7 +1238,7 @@ app.put('/api/mail/:id/approve', requireAuth, csrfCheck, requirePermission('mail
   res.json({ok:true});
 });
 
-app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, requirePermission('mail.approve'), (req,res)=>{
+app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, (req,res)=>{
   const id=parseInt(req.params.id);
   const _mlD=db.query1('SELECT client_name,room FROM mail_log WHERE id=?',[id]);
   if(!_mlD) return res.status(404).json({error:'Not found'});

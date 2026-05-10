@@ -1132,14 +1132,18 @@ app.get('/api/ua-requests', requireAuth, (req,res)=>{
 });
 
 app.post('/api/ua-requests', requireAuth, csrfCheck, requirePermission('ua.request'), (req,res)=>{
-  const {client_id, client_name, room} = req.body;
-  if (!client_id) return res.status(400).json({error:'client_id required'});
+  const {client_id, client_name, room, is_interview, interview_name} = req.body;
+  const isIntv = is_interview ? 1 : 0;
+  const intvName = String(interview_name||'').slice(0,200);
+  if (!isIntv && !client_id) return res.status(400).json({error:'client_id required'});
+  if (isIntv && !intvName) return res.status(400).json({error:'interview_name required'});
+  const by = req.session.displayName||req.session.username;
   db.run(
-    `INSERT INTO ua_requests (client_id,client_name,room,requested_by) VALUES (?,?,?,?)`,
-    [client_id, client_name||'', room||'', req.session.displayName||req.session.username]
+    `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name) VALUES (?,?,?,?,?,?)`,
+    [client_id||0, client_name||'', room||'', by, isIntv, intvName]
   );
   db.save();
-  audit(req,'ua.request','client',client_id,client_name||String(client_id),{room:room||''});
+  audit(req,'ua.request','client',client_id||null,isIntv?intvName:(client_name||String(client_id)),{room:room||'',interview:isIntv});
   const pending = db.query('SELECT * FROM ua_requests WHERE acknowledged=0 ORDER BY requested_at DESC');
   broadcast({type:'ua_request', requests: pending});
   res.json({ok:true});

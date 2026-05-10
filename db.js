@@ -88,6 +88,8 @@ async function init(dbPath) {
   try { _run("ALTER TABLE clients ADD COLUMN chore TEXT DEFAULT ''"); } catch(e) {}
   try { _run("ALTER TABLE clients ADD COLUMN chore_time TEXT DEFAULT ''"); } catch(e) {}
   try { _run("ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT NULL"); } catch(e) {}
+  try { _run("ALTER TABLE ua_requests ADD COLUMN is_interview INTEGER DEFAULT 0"); } catch(e) {}
+  try { _run("ALTER TABLE ua_requests ADD COLUMN interview_name TEXT DEFAULT ''"); } catch(e) {}
   _seedDefaults();
   _seedExistingUserPermissions();
   _migratePermissions();

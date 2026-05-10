@@ -1225,6 +1225,15 @@ function quickUA(){
       const logLoc  = isInterview ? 'Interview' : ('Rm. ' + c.room);
       addLogEntry(ts,'UA conducted on '+logName+' ('+logLoc+') by '+staff+'. Reason: '+reason+'. Results: '+resultStr+'.');
       if (!isInterview && c) { shiftLastUA[c.id] = dateStamp(); buildRoster(); }
+      // Post to ua_requests so the UA appears in the banner (both interviews and residents)
+      if (typeof window.requestUA === 'function' && !isInterview && c) {
+        window.requestUA(c.id, c.name, c.room);
+      } else if (isInterview && typeof hasPerm === 'function' && hasPerm('ua.request')) {
+        fetch('/api/ua-requests', {
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+          body: JSON.stringify({is_interview:1, interview_name: interviewName})
+        }).catch(function(){});
+      }
       // Reset modal width
       const modal = document.querySelector('#quick-modal .modal');
       if (modal) modal.style.maxWidth = '';
@@ -1492,9 +1501,12 @@ function getAllUAEntries() {
   var all = [];
   function parse(e, date, shift) {
     if (!e.text || e.text.toLowerCase().indexOf('ua conducted on') !== 0) return;
-    var m = e.text.match(/UA conducted on (.+?) \(Rm\. (.+?)\) by (.+?)\. Reason: (.+?)\. Results: (.+?)\.?$/i);
+    // Match both "Rm. X" (resident) and "Interview" (prospective client)
+    var m = e.text.match(/UA conducted on (.+?) \((Rm\. .+?|Interview)\) by (.+?)\. Reason: (.+?)\. Results: (.+?)\.?$/i);
     if (!m) return;
-    all.push({id:e.id,date:date,shift:shift,time:e.time||'',name:m[1],room:m[2],staff:m[3],reason:m[4],results:m[5],ua_photo:e.ua_photo||null});
+    var isInterview = m[2].toLowerCase() === 'interview';
+    var room = isInterview ? 'Interview' : m[2].replace(/^Rm\. /i, '');
+    all.push({id:e.id,date:date,shift:shift,time:e.time||'',name:m[1],room:room,is_interview:isInterview,staff:m[3],reason:m[4],results:m[5],ua_photo:e.ua_photo||null});
   }
   (REPORTS||[]).forEach(function(r){ (r.log_entries||[]).forEach(function(e){ parse(e,r.report_date,r.shift); }); });
   all.sort(function(a,b){ return (b.date||'').localeCompare(a.date||'')||(b.time||'').localeCompare(a.time||''); });
@@ -1511,6 +1523,7 @@ function renderUAReport() {
     var ff=(document.getElementById('uar-result')||{value:''}).value||'';
     var fd=(document.getElementById('uar-from')||{value:''}).value||'';
     var ft=(document.getElementById('uar-to')||{value:''}).value||'';
+    var ftype=(document.getElementById('uar-type')||{value:''}).value||'';
     var filtered = all.filter(function(ua){
       if(fc&&ua.name.toLowerCase().indexOf(fc.toLowerCase())===-1&&ua.room.toLowerCase().indexOf(fc.toLowerCase())===-1) return false;
       if(fs&&ua.shift!==fs) return false;
@@ -1519,6 +1532,8 @@ function renderUAReport() {
       if(ff==='neg'&&/POS:/.test(ua.results)) return false;
       if(fd&&ua.date<fd) return false;
       if(ft&&ua.date>ft) return false;
+      if(ftype==='resident'&&ua.is_interview) return false;
+      if(ftype==='interview'&&!ua.is_interview) return false;
       return true;
     });
     filtered.sort(function(a,b){
@@ -1542,7 +1557,8 @@ function renderUAReport() {
       var photoCell=ua.ua_photo?'<td style="padding:4px 6px;"><button onclick="viewUAPhotoInReport('+ua.id+')" style="background:#fee2e2;border:1px solid #fca5a5;color:#991b1b;border-radius:6px;padding:3px 10px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap;">Show Photo</button></td>':'<td style="padding:4px 6px;text-align:center;color:#D1D5DB;font-size:.8rem;">--</td>';
       var subCells=subs.map(function(sub){var v=getSubResultRpt(ua.results,sub.code);var bg=v==='POS'?'#FEE2E2':v==='NEG'?'#D8F3DC':v==='NT'?'#F1F5F9':'';var col=v==='POS'?'#991B1B':v==='NEG'?'#15803D':v==='NT'?'#94A3B8':'#D1D5DB';return '<td style="text-align:center;padding:4px 5px;font-size:.75rem;font-weight:700;color:'+col+';background:'+bg+';">'+(v||'--')+'</td>';}).join('');
       var delCell=_canDelUA&&ua.id?'<td style="padding:4px 6px;text-align:center;"><button onclick="deleteUAEntry('+ua.id+')" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:1.15rem;line-height:1;padding:2px 6px;border-radius:4px;" title="Delete entry">&times;</button></td>':'';
-      return '<tr style="border-bottom:1px solid #E2E8F0;background:'+rowBg+';'+border+'">'+photoCell+'<td style="padding:6px 8px;font-size:.78rem;white-space:nowrap;">'+fd2+'</td><td style="padding:6px 8px;font-size:.76rem;color:#4B5563;white-space:nowrap;">'+(ua.shift||'').replace(' Shift','')+'</td><td style="padding:6px 8px;font-family:monospace;font-size:.78rem;color:#2D6A4F;white-space:nowrap;">'+esc(ua.time)+'</td><td style="padding:6px 8px;font-weight:700;">'+esc(ua.name)+'</td><td style="padding:6px 8px;font-family:monospace;font-size:.78rem;text-align:center;">'+esc(ua.room)+'</td><td style="padding:6px 8px;font-size:.8rem;color:#4B5563;">'+esc(ua.staff)+'</td><td style="padding:6px 8px;font-size:.8rem;color:#4B5563;">'+esc(ua.reason)+'</td>'+subCells+delCell+'</tr>';
+      var nameCell = esc(ua.name) + (ua.is_interview ? ' <span style="background:#dbeafe;color:#1d4ed8;font-size:.65rem;font-weight:700;padding:1px 6px;border-radius:10px;vertical-align:middle;border:1px solid #93c5fd;">Interview</span>' : '');
+      return '<tr style="border-bottom:1px solid #E2E8F0;background:'+rowBg+';'+border+'">'+photoCell+'<td style="padding:6px 8px;font-size:.78rem;white-space:nowrap;">'+fd2+'</td><td style="padding:6px 8px;font-size:.76rem;color:#4B5563;white-space:nowrap;">'+(ua.shift||'').replace(' Shift','')+'</td><td style="padding:6px 8px;font-family:monospace;font-size:.78rem;color:#2D6A4F;white-space:nowrap;">'+esc(ua.time)+'</td><td style="padding:6px 8px;font-weight:700;">'+nameCell+'</td><td style="padding:6px 8px;font-family:monospace;font-size:.78rem;text-align:center;">'+esc(ua.room)+'</td><td style="padding:6px 8px;font-size:.8rem;color:#4B5563;">'+esc(ua.staff)+'</td><td style="padding:6px 8px;font-size:.8rem;color:#4B5563;">'+esc(ua.reason)+'</td>'+subCells+delCell+'</tr>';
     }).join(''):'<tr><td colspan="'+(8+subs.length+(_canDelUA?1:0))+'" style="text-align:center;padding:28px;color:#94A3B8;font-style:italic;">'+(all.length===0?'No UA records found in any shift report.':'No records match the current filters.')+'</td></tr>';
     wrap.innerHTML='<table style="width:100%;border-collapse:collapse;">'+thead+'<tbody>'+rows+'</tbody></table>';
     wrap.querySelectorAll('.uar-sort').forEach(function(th){th.addEventListener('click',function(){var col=this.dataset.col;if(_uar_sortCol===col)_uar_sortDir*=-1;else{_uar_sortCol=col;_uar_sortDir=1;}renderUAReport();});});
@@ -1576,7 +1592,7 @@ function viewUAPhotoInReport(id) {
 }
 
 function clearUARFilters() {
-  ['uar-client','uar-shift','uar-reason','uar-result','uar-from','uar-to'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['uar-client','uar-shift','uar-reason','uar-result','uar-from','uar-to','uar-type'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   _uar_sortCol='date'; _uar_sortDir=-1; renderUAReport();
 }
 

@@ -919,6 +919,9 @@ function hasPerm(perm) {
       <select id="uar-result" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
         <option value="">Any Result</option><option value="pos">Has Positive</option><option value="neg">All Negative</option>
       </select>
+      <select id="uar-type" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);">
+        <option value="">All Types</option><option value="resident">Residents Only</option><option value="interview">Interviews Only</option>
+      </select>
       <input type="date" id="uar-from" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);" title="From date">
       <input type="date" id="uar-to" onchange="renderUAReport()" style="padding:7px 11px;border:1.5px solid var(--line);border-radius:7px;font-size:.84rem;font-family:var(--sans);" title="To date">
       <button class="btn btn-outline btn-sm" onclick="clearUARFilters()">Clear</button>

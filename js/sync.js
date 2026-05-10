@@ -390,22 +390,50 @@
 
     var myName = (window.SESSION && (window.SESSION.displayName || window.SESSION.username)) || '';
 
+    var _showInterviews = localStorage.getItem('sp_ua_show_interviews') !== '0';
+
     var pending = (requests || []).filter(function(r) {
       return !r.acknowledged
           && !_dismissedUAIds.has(r.id)
           && r.requested_by !== myName;
     });
 
-    if (!pending.length) { banner.classList.remove('active'); return; }
+    // Separate interviews from residents
+    var residents  = pending.filter(function(r){ return !r.is_interview; });
+    var interviews = pending.filter(function(r){ return  r.is_interview; });
+    var visible = _showInterviews ? pending : residents;
 
-    items.innerHTML = pending.map(function(r) {
+    if (!visible.length && !interviews.length) { banner.classList.remove('active'); return; }
+    if (!visible.length && !_showInterviews)   { banner.classList.remove('active'); return; }
+
+    var toggleBtn = '<button onclick="toggleUAInterviews()" style="'
+      + 'background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);color:#fff;'
+      + 'border-radius:5px;padding:3px 9px;font-size:.7rem;font-weight:700;cursor:pointer;'
+      + 'font-family:var(--sans);white-space:nowrap;margin-left:4px;">'
+      + (_showInterviews ? '👁 Hide Interviews' : '👁 Show Interviews ('+interviews.length+')')
+      + '</button>';
+
+    items.innerHTML = visible.map(function(r) {
+      var isIntv = r.is_interview;
+      var label = isIntv
+        ? '🧪 <strong>Interview: '+esc(String(r.interview_name||r.client_name||''))+'</strong>'
+        : '🧪 <strong>Rm '+esc(String(r.room||''))+' &mdash; '+esc(String(r.client_name||''))+'</strong>';
       return '<span class="ua-banner-item" onclick="acknowledgeUA('+parseInt(r.id)+')" style="cursor:pointer;">'
-        + '🧪 <strong>Rm '+esc(String(r.room||''))+' &mdash; '+esc(String(r.client_name||''))+'</strong>'
-        + ' &nbsp;|&nbsp; Requested by '+esc(String(r.requested_by||''))
+        + label + ' &nbsp;|&nbsp; Requested by '+esc(String(r.requested_by||''))
         + ' &nbsp;[click to clear]</span>';
-    }).join('');
+    }).join('') + (interviews.length ? toggleBtn : '');
     banner.classList.add('active');
   }
+
+  // Toggle interview UAs in the banner
+  window.toggleUAInterviews = function() {
+    var cur = localStorage.getItem('sp_ua_show_interviews') !== '0';
+    localStorage.setItem('sp_ua_show_interviews', cur ? '0' : '1');
+    fetch('/api/ua-requests', {credentials:'include'})
+      .then(function(r){ return r.json(); })
+      .then(function(list){ showUABanner(list||[]); })
+      .catch(function(){});
+  };
 
   // Dismiss for this user — persisted to localStorage, never affects other users
   window.acknowledgeUA = function(id) {

@@ -17,7 +17,7 @@ export default function StaffTab() {
   const canEdit = hasPerm('staff.edit')
 
   const staff = data?.staff || []
-  const categories = data?.staff_categories || ['Director', 'Case Manager', 'Monitor', 'Other']
+  const categories = data?.staff_categories || ['Director', 'Case Manager', 'Program Assistant', 'Other']
 
   const [filterCat, setFilterCat] = useState('All')
   const [modal, setModal] = useState(null) // null | 'add' | staffObject

@@ -24,7 +24,7 @@ function esc(s) {
 
 export function openPrintWindow({
   title = 'Report',
-  facility = 'ShiftPoint',
+  facility = 'OpsPoint',
   subtitle = '',
   summary = [],   // [[label, value], ...]
   columns = [],   // [{ key, label, width?, mono?, align? }]
@@ -165,7 +165,7 @@ export function classifyLogEntry(text) {
   if (t.includes(' — ua:') || t.match(/\bua:/i)) return 'UA'
   if (t.includes('room search'))            return 'Room Search'
   if (t.includes('mail logged') || t.includes('mail delivered')) return 'Mail'
-  if (t.includes('infraction'))             return 'Infraction'
+  if (t.includes('violation') || t.includes('infraction')) return 'Violation'
   if (t.includes('intake'))                 return 'Intake'
   if (t.includes('discharge'))              return 'Discharge'
   return 'Note'

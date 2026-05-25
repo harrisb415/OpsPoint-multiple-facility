@@ -32,8 +32,8 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, onAckUA, 
   const hasAny =
     (notif.uaRequests.length > 0 && perm.includes('ua.acknowledge'))
     || (draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')))
-    || (notif.violReview > 0 && perm.includes('infractions.notify_review'))
-    || (notif.violConsequence > 0 && perm.includes('infractions.notify_consequence'))
+    || (notif.violReview > 0 && perm.includes('violations.notify_review'))
+    || (notif.violConsequence > 0 && perm.includes('violations.notify_consequence'))
     || (notif.broadcasts.length > 0 && perm.includes('broadcast.receive'))
 
   return (
@@ -102,16 +102,16 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, onAckUA, 
           )}
 
           {/* Violations — pending review */}
-          {notif.violReview > 0 && notif.violReview > (dismissedViolReview || 0) && perm.includes('infractions.notify_review') && (
+          {notif.violReview > 0 && notif.violReview > (dismissedViolReview || 0) && perm.includes('violations.notify_review') && (
             <div className="notif-section">
               <div className="notif-section-head">
-                🔴 Infractions: Pending Review
+                🔴 Violations: Pending Review
                 <span className="notif-badge-sm">{notif.violReview}</span>
               </div>
               <div className="notif-item">
                 <span className="notif-item-icon">⚠️</span>
                 <div className="notif-item-body">
-                  <div className="notif-item-name">{notif.violReview} infraction{notif.violReview !== 1 ? 's' : ''} awaiting review</div>
+                  <div className="notif-item-name">{notif.violReview} violation{notif.violReview !== 1 ? 's' : ''} awaiting review</div>
                   <div className="notif-item-meta">Case conference needed</div>
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -123,7 +123,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, onAckUA, 
           )}
 
           {/* Violations — consequence assigned */}
-          {notif.violConsequence > 0 && notif.violConsequence > (dismissedViolConsequence || 0) && perm.includes('infractions.notify_consequence') && (
+          {notif.violConsequence > 0 && notif.violConsequence > (dismissedViolConsequence || 0) && perm.includes('violations.notify_consequence') && (
             <div className="notif-section">
               <div className="notif-section-head">
                 🟠 Consequence Assigned
@@ -275,7 +275,7 @@ function Header({ onGoTab }) {
     try { localStorage.setItem('spDismissedViolConsequence', String(count)) } catch {}
   }
 
-  const facilityName = data?.facility_name || 'ShiftPoint'
+  const facilityName = data?.facility_name || 'OpsPoint'
 
   // UI visibility — controls which header buttons are shown
   const uiVis = useMemo(() => {
@@ -330,7 +330,7 @@ function Header({ onGoTab }) {
   async function generateDocx() {
     const report    = activeReport
     const clients   = data?.clients || []
-    const fn        = data?.facility_name || 'ShiftPoint'
+    const fn        = data?.facility_name || 'OpsPoint'
     const sv        = report?.shift || ''
     const dv        = report?.report_date || ''
     const mv        = report?.mod_name || ''
@@ -358,7 +358,7 @@ function Header({ onGoTab }) {
     body+=_para(_run('',{sz:4}),{shade:'D4A017',sb:0,sa:200})
     // Info table
     const iCols=[2800,CW-2800]
-    const infoRows=[['Date',dateStr],['Shift',shiftFull],['Monitor on Duty (MOD)',mv||'—']].map(([l,v])=>
+    const infoRows=[['Date',dateStr],['Shift',shiftFull],['Program Assistant on Duty (PA)',mv||'—']].map(([l,v])=>
       _tr(_tc(l,iCols[0],{bold:true,sz:9,col:'5C6B5E',shade:'F4FAF6'})+_tc(v,iCols[1],{sz:10,col:'1A3327'}))
     )
     body+=_tbl(iCols,infoRows)+_ep(140)
@@ -409,7 +409,7 @@ function Header({ onGoTab }) {
   }
 
   function _docxFilename() {
-    const fn=(data?.facility_name||'ShiftPoint').replace(/[^a-zA-Z0-9 _-]/g,'').trim()
+    const fn=(data?.facility_name||'OpsPoint').replace(/[^a-zA-Z0-9 _-]/g,'').trim()
     const sv=activeReport?.shift||'Shift'
     const dv=activeReport?.report_date||''
     let dp=''; if(dv){const[y,m,d]=dv.split('-');dp=' '+parseInt(m)+'.'+parseInt(d)+'.'+y.slice(2)}
@@ -421,7 +421,7 @@ function Header({ onGoTab }) {
     const shift   = activeReport?.shift || ''
     const dateVal = activeReport?.report_date || ''
     const mod     = activeReport?.mod_name || ''
-    const fn      = data?.facility_name || 'ShiftPoint'
+    const fn      = data?.facility_name || 'OpsPoint'
     const dateStr = dateVal
       ? new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
       : new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -454,10 +454,10 @@ function Header({ onGoTab }) {
         .replace(/Not checked:[^.]+\.\s*/g, '')
         .trim()
       const hasIssue = !e.text.toLowerCase().includes('all is well') && !e.text.toLowerCase().includes('nothing to report')
-      const rowBg = hasIssue ? 'background:#fef9c3;' : (i % 2 === 1 ? 'background:#f4faf6;' : '')
-      return `<tr style="${rowBg}border-bottom:1px solid #cde0d4;">
-        <td style="padding:6px 8px;font-weight:700;font-family:monospace;color:#1a3327;white-space:nowrap;">${esc(e.time)}</td>
-        <td style="padding:6px 8px;font-weight:600;color:#2d6a4f;">${esc(monitor)}</td>
+      const rowBg = hasIssue ? 'background:#fef9c3;' : (i % 2 === 1 ? 'background:#F4F6F8;' : '')
+      return `<tr style="${rowBg}border-bottom:1px solid #D0DAEF;">
+        <td style="padding:6px 8px;font-weight:700;font-family:monospace;color:#1B2F6E;white-space:nowrap;">${esc(e.time)}</td>
+        <td style="padding:6px 8px;font-weight:600;color:#3A5499;">${esc(monitor)}</td>
         <td style="padding:6px 8px;color:#555;">${esc(area)}</td>
         <td style="padding:6px 8px;">${esc(notes)}</td>
       </tr>`
@@ -465,18 +465,18 @@ function Header({ onGoTab }) {
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Building Walkthrough Filing</title>
 <style>* { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:Arial,sans-serif; font-size:11px; color:#111; background:#fff; }
-.page-hdr { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2.5px solid #1a3327; padding:16px 20px 10px; }
-.org { font-size:7px; font-weight:700; letter-spacing:.8px; color:#2d6a4f; text-transform:uppercase; margin-bottom:3px; }
-.title { font-size:16px; font-weight:700; color:#1a3327; }
+.page-hdr { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2.5px solid #1B2F6E; padding:16px 20px 10px; }
+.org { font-size:7px; font-weight:700; letter-spacing:.8px; color:#3A5499; text-transform:uppercase; margin-bottom:3px; }
+.title { font-size:16px; font-weight:700; color:#1B2F6E; }
 .sub-title { font-size:9.5px; color:#444; margin-top:3px; }
 .hdr-right { text-align:right; font-size:9.5px; color:#444; line-height:2; }
-.hdr-right b { color:#1a3327; }
+.hdr-right b { color:#1B2F6E; }
 .badge { display:inline-block; background:#dbeafe; color:#1e40af; font-weight:700; font-size:9px; padding:2px 8px; border-radius:10px; border:1px solid #93c5fd; }
 .wrap { padding:12px 20px; }
 table { width:100%; border-collapse:collapse; }
-thead th { background:#1a3327; color:#fff; padding:7px 8px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; text-align:left; }
-td { border-bottom:1px solid #cde0d4; vertical-align:middle; font-size:11px; padding:0; }
-.summary { margin:14px 20px 0; padding:10px 14px; background:#f4faf6; border:1px solid #cde0d4; border-radius:6px; font-size:10px; color:#333; }
+thead th { background:#1B2F6E; color:#fff; padding:7px 8px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; text-align:left; }
+td { border-bottom:1px solid #D0DAEF; vertical-align:middle; font-size:11px; padding:0; }
+.summary { margin:14px 20px 0; padding:10px 14px; background:#F4F6F8; border:1px solid #D0DAEF; border-radius:6px; font-size:10px; color:#333; }
 .sig { display:flex; gap:24px; padding:16px 20px 18px; border-top:1.5px solid #999; margin-top:10px; }
 .sig-b { flex:1; font-size:9.5px; font-weight:700; color:#333; }
 .sig-l { display:inline-block; border-bottom:1px solid #333; width:55%; margin-left:4px; }
@@ -489,7 +489,7 @@ td { border-bottom:1px solid #cde0d4; vertical-align:middle; font-size:11px; pad
     <div class="sub-title">${esc(shiftLabels[shift] || shift)} &nbsp;|&nbsp; ${dateStr}</div>
   </div>
   <div class="hdr-right">
-    <b>Monitor on Duty:</b> ${esc(mod) || '_______________'}<br>
+    <b>Program Assistant on Duty:</b> ${esc(mod) || '_______________'}<br>
     <b>Total Walkthroughs:</b> ${walks.length}<br>
     <span class="badge">FILING COPY</span>
   </div>
@@ -523,7 +523,7 @@ td { border-bottom:1px solid #cde0d4; vertical-align:middle; font-size:11px; pad
     const shift   = activeReport?.shift || ''
     const dateVal = activeReport?.report_date || ''
     const mod     = activeReport?.mod_name || ''
-    const fn      = data?.facility_name || 'ShiftPoint'
+    const fn      = data?.facility_name || 'OpsPoint'
     const dateStr = dateVal
       ? new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
       : new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -560,7 +560,7 @@ td { border-bottom:1px solid #cde0d4; vertical-align:middle; font-size:11px; pad
     const statusBg    = { bhc: '#ede9fe', efc: '#fce7f3', hospital: '#fee2e2', work: '#dbeafe', pass: '#fef9c3', out: '#fff7ed', building: '', vacant: '' }
     const colWidth = Math.max(55, Math.min(80, Math.floor(400 / checkCols.length)))
     const thCols = checkCols.map(col =>
-      `<th class="chk-th">${esc(col.time)}<div style="font-size:8px;font-weight:400;color:#a8d5b5;margin-top:2px;">${esc(col.monitor)}</div></th>`
+      `<th class="chk-th">${esc(col.time)}<div style="font-size:8px;font-weight:400;color:#A8C0E8;margin-top:2px;">${esc(col.monitor)}</div></th>`
     ).join('')
     const clientRows = activeClients.map((c, i) => {
       const st = statuses[c.id] || 'building'
@@ -575,8 +575,8 @@ td { border-bottom:1px solid #cde0d4; vertical-align:middle; font-size:11px; pad
         if (wasNotLocated) return `<td class="chk-td" style="background:#fee2e2;color:#991b1b;font-weight:700;text-align:center;font-size:13px;">✗</td>`
         return `<td class="chk-td" style="text-align:center;font-size:13px;color:#15803d;">✓</td>`
       }).join('')
-      const rowBg = i % 2 === 1 ? '#f4faf6' : '#fff'
-      return `<tr style="background:${rowBg};border-bottom:1px solid #cde0d4;">
+      const rowBg = i % 2 === 1 ? '#F4F6F8' : '#fff'
+      return `<tr style="background:${rowBg};border-bottom:1px solid #D0DAEF;">
         <td class="rm-td">${esc(c.room)}</td>
         <td class="name-td">${esc(c.name)}</td>
         ${cells}
@@ -588,31 +588,31 @@ td { border-bottom:1px solid #cde0d4; vertical-align:middle; font-size:11px; pad
       return `<td class="chk-td" style="text-align:center;font-weight:700;font-size:10px;">${accounted} / ${activeClients.length}</td>`
     }).join('')
     const initCells = checkCols.map(col =>
-      `<td class="chk-td" style="border-bottom:2px solid #1a3327;text-align:center;height:26px;font-size:9px;font-weight:700;color:#2d6a4f;">${esc(col.monitor.split(' ')[0])}</td>`
+      `<td class="chk-td" style="border-bottom:2px solid #1B2F6E;text-align:center;height:26px;font-size:9px;font-weight:700;color:#3A5499;">${esc(col.monitor.split(' ')[0])}</td>`
     ).join('')
     const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Wellness Check Filing</title>
 <style>* { box-sizing:border-box; margin:0; padding:0; }
 body { font-family:Arial,sans-serif; font-size:11px; color:#111; background:#fff; }
-.page-hdr { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2.5px solid #1a3327; padding:16px 20px 8px; }
-.org { font-size:7px; font-weight:700; letter-spacing:.8px; color:#2d6a4f; text-transform:uppercase; margin-bottom:2px; }
-.title { font-size:15px; font-weight:700; color:#1a3327; }
+.page-hdr { display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2.5px solid #1B2F6E; padding:16px 20px 8px; }
+.org { font-size:7px; font-weight:700; letter-spacing:.8px; color:#3A5499; text-transform:uppercase; margin-bottom:2px; }
+.title { font-size:15px; font-weight:700; color:#1B2F6E; }
 .sub-title { font-size:9.5px; color:#444; margin-top:2px; }
 .hdr-right { text-align:right; font-size:9.5px; color:#444; line-height:1.85; }
-.hdr-right b { color:#1a3327; }
+.hdr-right b { color:#1B2F6E; }
 .badge { display:inline-block; background:#d1fae5; color:#065f46; font-weight:700; font-size:9px; padding:2px 8px; border-radius:10px; border:1px solid #6ee7b7; }
 .hint { font-size:8px; color:#888; font-style:italic; padding:4px 20px 2px; }
 .wrap { padding:0 20px 10px; }
 table { width:100%; border-collapse:collapse; }
 thead { display:table-header-group; } tfoot { display:table-footer-group; }
-thead tr th { background:#1a3327; color:#fff; padding:6px 7px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; border:1px solid #163825; text-align:left; }
+thead tr th { background:#1B2F6E; color:#fff; padding:6px 7px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; border:1px solid #163825; text-align:left; }
 .rm-td { font-family:monospace; font-weight:700; color:#555; text-align:center; width:42px; padding:4px 6px; }
 .name-td { width:155px; padding:4px 6px; font-weight:500; }
 .chk-th { width:${colWidth}px; text-align:center; border-left:1px solid #245c3a; padding:5px 4px; }
 .chk-td { width:${colWidth}px; border-left:1.5px solid #8dbda0; padding:4px; vertical-align:middle; }
 .notes-td { padding:4px 6px; }
-td { vertical-align:middle; border-right:1px solid #cde0d4; font-size:11px; }
+td { vertical-align:middle; border-right:1px solid #D0DAEF; font-size:11px; }
 td:last-child { border-right:none; }
-tfoot tr.sum td { background:#dff0e6; border-top:2px solid #1a3327; font-weight:700; font-size:10px; padding:5px 6px; }
+tfoot tr.sum td { background:#dff0e6; border-top:2px solid #1B2F6E; font-weight:700; font-size:10px; padding:5px 6px; }
 tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding:4px; }
 .sig { display:flex; gap:20px; padding:10px 20px 14px; border-top:1.5px solid #999; margin-top:4px; }
 .sig-b { flex:1; font-size:9px; font-weight:700; color:#333; }
@@ -626,7 +626,7 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
     <div class="sub-title">${esc(shiftLabels[shift] || shift)} | ${dateStr}</div>
   </div>
   <div class="hdr-right">
-    <b>Monitor on Duty:</b> ${esc(mod) || '_______________'}<br>
+    <b>Program Assistant on Duty:</b> ${esc(mod) || '_______________'}<br>
     <b>Checks Conducted:</b> ${checks.length}<br>
     <b>Active Clients:</b> ${activeClients.length} &nbsp; <span class="badge">FILING COPY</span>
   </div>
@@ -641,7 +641,7 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
   </tr></thead>
   <tfoot>
     <tr class="sum"><td colspan="2" style="text-align:left;padding-left:6px;">Total Accounted For:</td>${totalCells}<td></td></tr>
-    <tr class="init-row"><td colspan="2" style="text-align:right;padding-right:8px;font-size:10px;font-weight:700;">Monitor:</td>${initCells}<td></td></tr>
+    <tr class="init-row"><td colspan="2" style="text-align:right;padding-right:8px;font-size:10px;font-weight:700;">PA:</td>${initCells}<td></td></tr>
   </tfoot>
   <tbody>${clientRows}</tbody>
 </table></div>
@@ -663,7 +663,7 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
     const shift   = activeReport?.shift || ''
     const dateVal = activeReport?.report_date || ''
     const mod     = activeReport?.mod_name || ''
-    const fn      = data?.facility_name || 'ShiftPoint'
+    const fn      = data?.facility_name || 'OpsPoint'
     const dateStr = dateVal
       ? new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
       : ''
@@ -710,8 +710,8 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
   const badgeCount =
     (hasPerm('ua.acknowledge') ? notif.uaRequests.length : 0) +
     ((hasPerm('ua.draw') || hasPerm('ua.acknowledge')) ? draws24h.length : 0) +
-    (hasPerm('infractions.notify_review') && notif.violReview > (dismissedViolReview || 0) ? 1 : 0) +
-    (hasPerm('infractions.notify_consequence') && notif.violConsequence > (dismissedViolConsequence || 0) ? 1 : 0) +
+    (hasPerm('violations.notify_review') && notif.violReview > (dismissedViolReview || 0) ? 1 : 0) +
+    (hasPerm('violations.notify_consequence') && notif.violConsequence > (dismissedViolConsequence || 0) ? 1 : 0) +
     (hasPerm('broadcast.receive') ? notif.broadcasts.length : 0)
 
   return (
@@ -729,7 +729,7 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
           <img src="/static/icons/icon-192.png" alt="" className="header-logo" />
           <div>
             <h1>{facilityName}</h1>
-            <div className="sub">ShiftPoint &bull; Westside Community Services</div>
+            <div className="sub">OpsPoint &bull; Westside Community Services</div>
           </div>
         </div>
         <div className="header-actions">

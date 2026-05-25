@@ -30,10 +30,10 @@ export default function Login() {
           </div>
           <img
             src="/static/icons/icon-192.png"
-            alt="ShiftPoint"
+            alt="OpsPoint"
             className="auth-app-icon"
           />
-          <h1>ShiftPoint</h1>
+          <h1>OpsPoint</h1>
           <div className="auth-sub">Staff Login</div>
         </div>
         <div className="auth-orange-bar" />
@@ -74,7 +74,7 @@ export default function Login() {
         </div>
       </div>
       <div className="auth-footer">
-        &copy; 2026 Westside Community Services &nbsp;&bull;&nbsp; ShiftPoint v2.0.0 &nbsp;&bull;&nbsp; All rights reserved
+        &copy; 2026 Westside Community Services &nbsp;&bull;&nbsp; OpsPoint v2.0.0 &nbsp;&bull;&nbsp; All rights reserved
         &nbsp;&bull;&nbsp; <Link to="/about">About</Link>
       </div>
     </div>

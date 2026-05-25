@@ -1,6 +1,6 @@
-# ShiftPoint — Deployment Guide
+# OpsPoint — Deployment Guide
 
-This guide covers installing ShiftPoint on a Windows machine that will act as the permanent server for your facility. Staff access the app from any browser on the same Wi-Fi network.
+This guide covers installing OpsPoint on a Windows machine that will act as the permanent server for your facility. Staff access the app from any browser on the same Wi-Fi network.
 
 ---
 
@@ -14,7 +14,7 @@ This guide covers installing ShiftPoint on a Windows machine that will act as th
 6. [Windows autostart](#6-windows-autostart)
 7. [User management](#7-user-management)
 8. [Backup strategy](#8-backup-strategy)
-9. [Updating ShiftPoint](#9-updating-shiftpoint)
+9. [Updating OpsPoint](#9-updating-shiftpoint)
 10. [Troubleshooting](#10-troubleshooting)
 
 ---
@@ -41,9 +41,9 @@ Both should print version numbers. If not, reinstall Node.js.
 
 ## 2. Installation
 
-1. Copy the ShiftPoint folder to a permanent location on the server machine, e.g.:
+1. Copy the OpsPoint folder to a permanent location on the server machine, e.g.:
    ```
-   C:\ShiftPoint\
+   C:\OpsPoint\
    ```
 
 2. Open a Command Prompt in that folder and install **server** dependencies:
@@ -80,16 +80,16 @@ node server.js
 
 Or double-click **`run.bat`**.
 
-**On the very first run**, ShiftPoint detects an empty database and creates three accounts with randomly-generated passwords. These are printed to the console in a box like this:
+**On the very first run**, OpsPoint detects an empty database and creates three accounts with randomly-generated passwords. These are printed to the console in a box like this:
 
 ```
 ╔══════════════════════════════════════════╗
-║        ShiftPoint — First Run            ║
+║        OpsPoint — First Run            ║
 ║  Default credentials (save these now):   ║
 ║                                          ║
 ║  admin      :  xK9#mPqL2rVw!nZs         ║
 ║  supervisor :  Bj7@cYtN5hXe^kRm         ║
-║  monitor    :  Wq3&dFuA8sGp$oHj         ║
+║  pa         :  Wq3&dFuA8sGp$oHj         ║
 ║                                          ║
 ║  All accounts require a password change  ║
 ║  on first login.                         ║
@@ -100,7 +100,7 @@ Or double-click **`run.bat`**.
 
 Open Chrome and go to `http://localhost:3000`. Log in with the `admin` account and set your permanent password when prompted.
 
-> If you lose all admin credentials, stop the server, delete `data/shift.db`, and restart. This resets the database — all data will be lost.
+> If you lose all admin credentials, stop the server, delete `data/opspoint.db`, and restart. This resets the database — all data will be lost.
 
 ---
 
@@ -168,8 +168,8 @@ Right-click `install_startup.bat` and select **Run as administrator**.
 The script will:
 - Detect your Node.js installation path
 - Create a `run_silent.bat` launcher
-- Grant the `NetworkService` account access to the ShiftPoint folder
-- Register a Windows Scheduled Task named `ShiftPointServer` that runs at boot
+- Grant the `NetworkService` account access to the OpsPoint folder
+- Register a Windows Scheduled Task named `OpsPointServer` that runs at boot
 
 **Step 2:** The script starts the task immediately. Open `http://localhost:3000` to confirm it's running.
 
@@ -177,10 +177,10 @@ The script will:
 
 | Action | Command |
 |--------|---------|
-| Start now | `schtasks /run /tn "ShiftPointServer"` |
-| Stop | `schtasks /end /tn "ShiftPointServer"` |
-| Remove autostart | `schtasks /delete /tn "ShiftPointServer" /f` |
-| Check status | Task Scheduler → Task Scheduler Library → ShiftPointServer |
+| Start now | `schtasks /run /tn "OpsPointServer"` |
+| Stop | `schtasks /end /tn "OpsPointServer"` |
+| Remove autostart | `schtasks /delete /tn "OpsPointServer" /f` |
+| Check status | Task Scheduler → Task Scheduler Library → OpsPointServer |
 
 You can also use **`start_server.bat`** (double-click) to start the server on demand.
 
@@ -214,8 +214,8 @@ User accounts are managed from the Admin panel at `http://localhost:3000/admin`.
 
 | Role | What they can do |
 |------|-----------------|
-| `monitor` | Create and close reports; add log entries; edit statuses, residents, staff, chores, and pass notices; view reminders; acknowledge UA banners; log mail; access mobile |
-| `supervisor` | Everything a monitor can do, plus: delete log entries, submit UA requests, manage passes (add/edit/return), approve mail |
+| `pa` | Program Assistant — create and close reports; add log entries; edit statuses, residents, staff, chores, and pass notices; view reminders; acknowledge UA banners; log mail; access mobile |
+| `supervisor` | Everything a PA can do, plus: delete log entries, submit UA requests, manage passes (add/edit/return), approve mail |
 | `admin` | Full access: all supervisor permissions plus user management, facility configuration, room management, mail deletion, UA log deletion, and server administration |
 | `case_manager` | Edit residents and staff; manage passes; submit UA requests; delete UA records; approve mail; mobile access |
 
@@ -233,7 +233,7 @@ All passwords must be at least 8 characters and include uppercase, lowercase, a 
 
 | Path | Contents | Priority |
 |------|----------|----------|
-| `data/shift.db` | All reports, residents, staff, passes, chores, users | **Critical** |
+| `data/opspoint.db` | All reports, residents, staff, passes, chores, users | **Critical** |
 | `data/photos/` | Client and UA photos | High |
 
 Everything else (code, `node_modules`, `client/dist/`, config) is replaceable. Only `data/` needs to be in your backup.
@@ -249,28 +249,28 @@ Copy the `data/` folder to a USB drive or network share at the end of each week.
 Create a task that runs daily and copies `data/` to a backup location:
 
 ```batch
-xcopy /E /I /Y "C:\ShiftPoint\data" "D:\Backups\ShiftPoint\data-%date:~-4,4%%date:~-7,2%%date:~0,2%"
+xcopy /E /I /Y "C:\OpsPoint\data" "D:\Backups\OpsPoint\data-%date:~-4,4%%date:~-7,2%%date:~0,2%"
 ```
 
 **Option C — Cloud sync**
 
-Place the entire ShiftPoint folder inside a OneDrive or Dropbox folder. Cloud sync will automatically back up `data/shift.db` whenever it changes.
+Place the entire OpsPoint folder inside a OneDrive or Dropbox folder. Cloud sync will automatically back up `data/opspoint.db` whenever it changes.
 
 > Do not run the server from inside a folder that is actively being synced while the server is running — this can corrupt the database. Either sync only the `data/` subfolder, or stop the server before syncing.
 
 ### Restoring from backup
 
 1. Stop the server.
-2. Replace `data/shift.db` with your backup copy.
+2. Replace `data/opspoint.db` with your backup copy.
 3. Replace `data/photos/` with your backup photos folder.
 4. Start the server.
 
 ---
 
-## 9. Updating ShiftPoint
+## 9. Updating OpsPoint
 
-1. **Stop the server** (close the terminal window, or run `schtasks /end /tn "ShiftPointServer"`).
-2. **Back up** `data/shift.db` and `data/photos/`.
+1. **Stop the server** (close the terminal window, or run `schtasks /end /tn "OpsPointServer"`).
+2. **Back up** `data/opspoint.db` and `data/photos/`.
 3. **Replace the application files** — copy the new version over the existing folder. Do not delete the `data/` folder.
 4. Run `npm install` in the root folder to pick up any new server dependencies.
 5. **Rebuild the frontend** — required after any update that includes frontend changes:
@@ -292,9 +292,9 @@ Database schema migrations (new columns/tables) run automatically on startup via
 
 **"node is not recognized"** — Node.js is not installed or not on the PATH. Download from https://nodejs.org and reinstall.
 
-**"Cannot find module ..."** — dependencies are missing. Run `npm install` in the ShiftPoint folder (and `cd client && npm install` if React modules are missing).
+**"Cannot find module ..."** — dependencies are missing. Run `npm install` in the OpsPoint folder (and `cd client && npm install` if React modules are missing).
 
-**"EADDRINUSE: address already in use :3000"** — another process is using port 3000. Either stop the other process or change ShiftPoint's port in `server.js` (search for `3000`).
+**"EADDRINUSE: address already in use :3000"** — another process is using port 3000. Either stop the other process or change OpsPoint's port in `server.js` (search for `3000`).
 
 **Blank page / React app not loading** — the frontend may not have been built. Run `cd client && npm run build` and restart the server.
 
@@ -311,7 +311,7 @@ Expected for self-signed certificates. Click **Advanced** → **Proceed** once p
 
 ### Lost admin password
 
-Stop the server. Delete `data/shift.db`. Restart — a fresh database is created with new random credentials printed to the console. **All data will be lost.** Restore from backup if needed.
+Stop the server. Delete `data/opspoint.db`. Restart — a fresh database is created with new random credentials printed to the console. **All data will be lost.** Restore from backup if needed.
 
 ### Photos not showing
 
@@ -323,7 +323,7 @@ Stop the server. Delete `data/shift.db`. Restart — a fresh database is created
 
 Check the terminal output for an error message. Common causes:
 - Disk full (SQLite write fails)
-- `data/shift.db` was deleted or corrupted while the server was running
+- `data/opspoint.db` was deleted or corrupted while the server was running
 - Node.js process killed by Windows (rare — can happen if the machine has very low RAM)
 
 Restart the server. If crashes are frequent, check available disk space and RAM.

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 const VERSION = '2.0.0'
 
 const STACK = [
-  'React 18', 'React Router v6', 'Vite', 'Node.js', 'Express',
+  'React 19', 'React Router v7', 'Vite', 'Node.js', 'Express',
   'SQLite (better-sqlite3)', 'WebSocket (ws)', 'PBKDF2-SHA512',
 ]
 
@@ -29,14 +29,14 @@ export default function About() {
       }}>
         <img
           src="/static/icons/icon-192.png"
-          alt="ShiftPoint"
+          alt="OpsPoint"
           style={{ width: 80, height: 80, borderRadius: 18, marginBottom: 16, boxShadow: '0 4px 20px rgba(0,0,0,.4)' }}
         />
         <div style={{
           fontFamily: 'Libre Baskerville, serif', fontSize: '2.2rem', fontWeight: 700,
           color: '#fff', letterSpacing: '-.02em', marginBottom: 8,
         }}>
-          Shift<span style={{ color: 'var(--orange)' }}>Point</span>
+          <span style={{ color: 'var(--orange)' }}>O</span>psPoint
         </div>
         <div style={{
           display: 'inline-block', background: 'rgba(212,160,23,.2)', color: 'var(--orange)',

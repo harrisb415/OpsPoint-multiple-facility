@@ -1,14 +1,14 @@
-# ShiftPoint Changelog
+# OpsPoint Changelog
 
 ---
 
 ## v2.0.0 — React Edition (2026-05-23)
 
-Complete rewrite of the ShiftPoint frontend as a React SPA (React 18 + Vite + React Router v6), deployed alongside the existing Express/SQLite backend. All v1.x features are carried forward; the database schema and API are fully backward-compatible.
+Complete rewrite of the OpsPoint frontend as a React SPA (React 18 + Vite + React Router v6), deployed alongside the existing Express/SQLite backend. All v1.x features are carried forward; the database schema and API are fully backward-compatible.
 
 ### Architecture changes
 - **React 18 SPA** — frontend rebuilt with React 18, React Router v6, and Vite; served from `client/dist/` by Express
-- **better-sqlite3** — replaced in-memory `sql.js` with `better-sqlite3`; writes are synchronous and go directly to `data/shift.db` (no flush-to-disk step)
+- **better-sqlite3** — replaced in-memory `sql.js` with `better-sqlite3`; writes are synchronous and go directly to `data/opspoint.db` (no flush-to-disk step)
 - **Context providers** — `AuthContext` manages session state; `DataContext` manages all app data, WebSocket connection, and real-time sync
 - **No more `window.SESSION` injection** — auth state is fetched from `GET /api/me` and held in React context
 - **Vite build** — `cd client && npm run build` outputs to `client/dist/`; must be run after any frontend change
@@ -61,10 +61,10 @@ Complete rewrite of the ShiftPoint frontend as a React SPA (React 18 + Vite + Re
 ## v1.13.3 — Polish & Bug Fixes (2026-05-05)
 
 ### UI
-- **Custom app icon** — new ShiftPoint icon: dark green rounded square, white circular shift arrow, gold diamond centre point; replaces the generic placeholder
+- **Custom app icon** — new OpsPoint icon: dark green rounded square, white circular shift arrow, gold diamond centre point; replaces the generic placeholder
 - **Favicon** — icon shown in browser tab on all pages (login, desktop, mobile, admin, facility)
 - **Apple touch icon** — icon used when adding any page to iOS or Android home screen
-- **Login page** — icon replaces the "ShiftPoint" wordmark heading
+- **Login page** — icon replaces the "OpsPoint" wordmark heading
 - **Desktop header** — icon displayed inline to the left of the facility name
 - **Mobile header** — icon displayed to the left of the title/subtitle block
 

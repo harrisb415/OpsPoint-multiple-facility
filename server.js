@@ -1,5 +1,5 @@
 ﻿/**
- * ShiftPoint — Server v1.15.0
+ * OpsPoint — Server v2.0.0
  * SQLite + HTTPS + Session Auth + Role-based access
  */
 'use strict';
@@ -19,7 +19,19 @@ app.disable('x-powered-by');
 const PORT = 3000;
 const BASE = __dirname;
 const DATA = path.join(BASE, 'data');
-const DB_PATH = path.join(DATA, 'shift.db');
+const DB_PATH      = path.join(DATA, 'opspoint.db');
+const LEGACY_DB_PATH = path.join(DATA, 'shift.db');
+
+// One-time rename: data/shift.db → data/opspoint.db (from the ShiftPoint era)
+try {
+  if (fs.existsSync(LEGACY_DB_PATH) && !fs.existsSync(DB_PATH)) {
+    fs.renameSync(LEGACY_DB_PATH, DB_PATH);
+    const shm = LEGACY_DB_PATH + '-shm', wal = LEGACY_DB_PATH + '-wal';
+    if (fs.existsSync(shm)) fs.renameSync(shm, DB_PATH + '-shm');
+    if (fs.existsSync(wal)) fs.renameSync(wal, DB_PATH + '-wal');
+    console.log('  Migrated legacy DB: shift.db → opspoint.db');
+  }
+} catch (e) { console.warn('  DB rename failed:', e.message); }
 // React SPA — always served
 const REACT_DIST = path.join(BASE, 'client', 'dist');
 const serveSPA = (res) => res.sendFile(path.join(REACT_DIST, 'index.html'));
@@ -789,7 +801,7 @@ app.get('/api/ua-log', requireAuth, (req, res) => {
 // ── Facility settings ─────────────────────────────────────────────
 app.get('/api/facility/settings', requireAuth,(req,res)=>{
   res.json({
-    facility_name:          db.getSetting('facility_name',          'ShiftPoint'),
+    facility_name:          db.getSetting('facility_name',          'OpsPoint'),
     wellness_interval_mins: db.getSetting('wellness_interval_mins', 120),
     walk_interval_mins:     db.getSetting('walk_interval_mins',     240),
     walk_areas:             db.getSetting('walk_areas',             db.DEFAULT_WALK_AREAS),
@@ -799,7 +811,7 @@ app.get('/api/facility/settings', requireAuth,(req,res)=>{
     shift_day_start:        db.getSetting('shift_day_start',        '07:00'),
     shift_swing_start:      db.getSetting('shift_swing_start',      '15:00'),
     shift_grave_start:      db.getSetting('shift_grave_start',      '23:00'),
-    ui_visibility:          db.getSetting('ui_visibility',          {tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,infractions:true},buttons:{wellness:true,walkthrough:true}}),
+    ui_visibility:          db.getSetting('ui_visibility',          {tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,violations:true},buttons:{wellness:true,walkthrough:true}}),
   });
 });
 app.put('/api/facility/settings', requireAuth, csrfCheck, requirePermission('admin.settings'),(req,res)=>{
@@ -1133,7 +1145,7 @@ app.delete('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.ed
 });
 // Staff categories setting
 app.get('/api/staff/categories', requireAuth,(req,res)=>{
-  res.json(db.getSetting('staff_categories',['Director','Case Manager','Monitor','Other']));
+  res.json(db.getSetting('staff_categories',['Director','Case Manager','Program Assistant','Other']));
 });
 app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staff.edit'),(req,res)=>{
   const{categories}=req.body;
@@ -1449,17 +1461,17 @@ app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('mail.dele
   res.json({ok:true});
 });
 
-// ── Infractions ───────────────────────────────────────────────────
-function _infractionCounts() {
-  const r=db.query1('SELECT COUNT(*) as c FROM infractions WHERE status=?',['pending']);
-  const a=db.query1('SELECT COUNT(*) as c FROM infractions WHERE status=?',['assigned']);
+// ── Violations ───────────────────────────────────────────────────
+function _violationCounts() {
+  const r=db.query1('SELECT COUNT(*) as c FROM violations WHERE status=?',['pending']);
+  const a=db.query1('SELECT COUNT(*) as c FROM violations WHERE status=?',['assigned']);
   return {pendingReview:r?r.c:0, pendingConsequences:a?a.c:0};
 }
 
-app.get('/api/infractions', requireAuth, (req,res)=>{
+app.get('/api/violations', requireAuth, (req,res)=>{
   if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
   const{status,client_id}=req.query;
-  let sql='SELECT * FROM infractions';
+  let sql='SELECT * FROM violations';
   const params=[];
   if(status&&status!=='all'){sql+=' WHERE status=?';params.push(status);}
   if(client_id){sql+=(params.length?' AND':' WHERE')+' client_id=?';params.push(parseInt(client_id));}
@@ -1467,58 +1479,58 @@ app.get('/api/infractions', requireAuth, (req,res)=>{
   res.json(db.query(sql,params));
 });
 
-app.post('/api/infractions', requireAuth, csrfCheck, requirePermission('infractions.log'), (req,res)=>{
+app.post('/api/violations', requireAuth, csrfCheck, requirePermission('violations.log'), (req,res)=>{
   if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
-  const{client_id,client_name,room,infraction_date,description,notes}=req.body;
+  const{client_id,client_name,room,violation_date,description,notes}=req.body;
   if(!client_id||!description) return res.status(400).json({error:'client_id and description required'});
   const loggedBy=req.session.displayName||req.session.username;
-  db.run('INSERT INTO infractions (client_id,client_name,room,infraction_date,description,notes,logged_by) VALUES (?,?,?,?,?,?,?)',
-    [client_id,client_name||'',room||'',infraction_date||'',description,notes||'',loggedBy]);
-  const v=db.query1('SELECT * FROM infractions ORDER BY id DESC LIMIT 1');
-  audit(req,'infraction.log','infraction',v?v.id:null,String(client_name||client_id),{description});
-  broadcast({type:'infractions_updated',..._infractionCounts()});
+  db.run('INSERT INTO violations (client_id,client_name,room,violation_date,description,notes,logged_by) VALUES (?,?,?,?,?,?,?)',
+    [client_id,client_name||'',room||'',violation_date||'',description,notes||'',loggedBy]);
+  const v=db.query1('SELECT * FROM violations ORDER BY id DESC LIMIT 1');
+  audit(req,'violation.log','violation',v?v.id:null,String(client_name||client_id),{description});
+  broadcast({type:'violations_updated',..._violationCounts()});
   res.json({ok:true,id:v?v.id:null});
 });
 
-app.put('/api/infractions/:id/review', requireAuth, csrfCheck, requirePermission('infractions.review'), (req,res)=>{
+app.put('/api/violations/:id/review', requireAuth, csrfCheck, requirePermission('violations.review'), (req,res)=>{
   const id=parseInt(req.params.id);
-  const v=db.query1('SELECT * FROM infractions WHERE id=?',[id]);
+  const v=db.query1('SELECT * FROM violations WHERE id=?',[id]);
   if(!v) return res.status(404).json({error:'Not found'});
-  if(v.status!=='pending') return res.status(400).json({error:'Infraction is not pending review'});
+  if(v.status!=='pending') return res.status(400).json({error:'Violation is not pending review'});
   const{action,consequence}=req.body;
   const by=req.session.displayName||req.session.username;
   const now=new Date().toISOString().slice(0,19).replace('T',' ');
   if(action==='waive'){
-    db.run('UPDATE infractions SET status=?,consequence_by=?,consequence_at=? WHERE id=?',['waived',by,now,id]);
+    db.run('UPDATE violations SET status=?,consequence_by=?,consequence_at=? WHERE id=?',['waived',by,now,id]);
   } else {
     if(!consequence) return res.status(400).json({error:'consequence required'});
-    db.run('UPDATE infractions SET status=?,consequence=?,consequence_by=?,consequence_at=? WHERE id=?',['assigned',consequence,by,now,id]);
+    db.run('UPDATE violations SET status=?,consequence=?,consequence_by=?,consequence_at=? WHERE id=?',['assigned',consequence,by,now,id]);
   }
-  audit(req,'infraction.review','infraction',id,v.client_name,{action,consequence});
-  broadcast({type:'infractions_updated',..._infractionCounts()});
+  audit(req,'violation.review','violation',id,v.client_name,{action,consequence});
+  broadcast({type:'violations_updated',..._violationCounts()});
   res.json({ok:true});
 });
 
-app.put('/api/infractions/:id/complete', requireAuth, csrfCheck, requirePermission('infractions.complete'), (req,res)=>{
+app.put('/api/violations/:id/complete', requireAuth, csrfCheck, requirePermission('violations.complete'), (req,res)=>{
   const id=parseInt(req.params.id);
-  const v=db.query1('SELECT * FROM infractions WHERE id=?',[id]);
+  const v=db.query1('SELECT * FROM violations WHERE id=?',[id]);
   if(!v) return res.status(404).json({error:'Not found'});
-  if(v.status!=='assigned') return res.status(400).json({error:'Infraction must have an assigned consequence'});
+  if(v.status!=='assigned') return res.status(400).json({error:'Violation must have an assigned consequence'});
   const by=req.session.displayName||req.session.username;
   const now=new Date().toISOString().slice(0,19).replace('T',' ');
-  db.run('UPDATE infractions SET status=?,completed_by=?,completed_at=? WHERE id=?',['completed',by,now,id]);
-  audit(req,'infraction.complete','infraction',id,v.client_name);
-  broadcast({type:'infractions_updated',..._infractionCounts()});
+  db.run('UPDATE violations SET status=?,completed_by=?,completed_at=? WHERE id=?',['completed',by,now,id]);
+  audit(req,'violation.complete','violation',id,v.client_name);
+  broadcast({type:'violations_updated',..._violationCounts()});
   res.json({ok:true});
 });
 
-app.delete('/api/infractions/:id', requireAuth, csrfCheck, requirePermission('infractions.delete'), (req,res)=>{
+app.delete('/api/violations/:id', requireAuth, csrfCheck, requirePermission('violations.delete'), (req,res)=>{
   const id=parseInt(req.params.id);
-  const v=db.query1('SELECT client_name FROM infractions WHERE id=?',[id]);
+  const v=db.query1('SELECT client_name FROM violations WHERE id=?',[id]);
   if(!v) return res.status(404).json({error:'Not found'});
-  db.run('DELETE FROM infractions WHERE id=?',[id]);
-  audit(req,'infraction.delete','infraction',id,v.client_name);
-  broadcast({type:'infractions_updated',..._infractionCounts()});
+  db.run('DELETE FROM violations WHERE id=?',[id]);
+  audit(req,'violation.delete','violation',id,v.client_name);
+  broadcast({type:'violations_updated',..._violationCounts()});
   res.json({ok:true});
 });
 
@@ -1603,10 +1615,10 @@ db.init(DB_PATH);
   });
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
-  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'ShiftPoint',{version:'1.15.0',tls:useTLS});
+  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.0.0',tls:useTLS});
   server.listen(PORT,'0.0.0.0',()=>{
     console.log('\n══════════════════════════════════════════════');
-    console.log('  ShiftPoint v1.15.0');
+    console.log('  OpsPoint v2.0.0');
     console.log('══════════════════════════════════════════════');
     console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
     console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);

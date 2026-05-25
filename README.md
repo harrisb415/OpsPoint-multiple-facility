@@ -1,4 +1,4 @@
-# ShiftPoint · v2.0.0 · React Edition
+# OpsPoint · v2.0.0 · React Edition
 
 Shift report and resident management platform for Westside Community Services residential facilities. Built with React 18 + Vite on the frontend, Node.js + Express + WebSockets + SQLite on the backend.
 
@@ -69,7 +69,7 @@ The server starts on port 3000 and opens a browser tab automatically. The consol
 
 | Role | Access |
 |------|--------|
-| `monitor` | Read-only on most tabs; create reports, log entries, edit statuses |
+| `pa` | Program Assistant — read-only on most tabs; create reports, log entries, edit statuses |
 | `supervisor` | Write access to reports, staff, passes, chores, UA requests |
 | `admin` | Full access including user management and facility configuration |
 | `case_manager` | Resident and pass management; UA requests; mobile access |
@@ -94,18 +94,18 @@ If `data/cert.pem` and `data/key.pem` exist the server automatically starts in H
 
 | Path | Contents |
 |------|----------|
-| `data/shift.db` | SQLite database — the only file that needs to be backed up |
+| `data/opspoint.db` | SQLite database — the only file that needs to be backed up |
 | `data/photos/` | Uploaded client and UA photos |
 | `data/secret.key` | Session secret — regenerated if deleted |
 | `data/cert.pem` / `data/key.pem` | TLS certificate / key (optional) |
 
-Back up `data/shift.db` and `data/photos/` regularly. Everything else is regenerable.
+Back up `data/opspoint.db` and `data/photos/` regularly. Everything else is regenerable.
 
 ---
 
 ## Windows autostart
 
-To have ShiftPoint start automatically when the server boots:
+To have OpsPoint start automatically when the server boots:
 
 ```
 Right-click install_startup.bat → Run as administrator
@@ -120,7 +120,7 @@ This registers a Windows Scheduled Task that runs the server at boot under the `
 | Layer | Tech |
 |-------|------|
 | Server | Node.js + Express + `ws` |
-| Database | SQLite via `better-sqlite3` (in-process, writes directly to `data/shift.db`) |
+| Database | SQLite via `better-sqlite3` (in-process, writes directly to `data/opspoint.db`) |
 | Frontend | React 18 + Vite SPA served from `client/dist/` |
 | Real-time | WebSocket broadcast; mobile PATCHes server, desktop receives push |
 

@@ -109,7 +109,7 @@ export default function ReportTab({ onNavigate }) {
   const canClose      = hasPerm('reports.close')
   const canUA         = hasPerm('ua.request')
   const canReminders  = hasPerm('reminders.view')
-  const canInfractions = hasPerm('infractions.log')
+  const canViolations = hasPerm('violations.log')
 
   // Settings from data
   const wellnessMins = Number(data?.wellness_interval_mins ?? 120)
@@ -534,7 +534,7 @@ export default function ReportTab({ onNavigate }) {
               </select>
             </div>
             <div className="field">
-              <label>Monitor on Duty (MOD)</label>
+              <label>Program Assistant on Duty (PA)</label>
               <input type="text" value={modName} placeholder="Name(s)" disabled={isClosed}
                 onChange={e => handleMetaChange('mod', e.target.value)} />
             </div>
@@ -656,9 +656,9 @@ export default function ReportTab({ onNavigate }) {
               <button className="pill pill-slate" onClick={() => setQuickModal('mail')}>
                 ✉ Mail
               </button>
-              {canInfractions && (
-                <button className="pill pill-red" onClick={() => setQuickModal('infraction')}>
-                  ⚠ Infraction
+              {canViolations && (
+                <button className="pill pill-red" onClick={() => setQuickModal('violation')}>
+                  ⚠ Violation
                 </button>
               )}
             </div>
@@ -855,8 +855,8 @@ export default function ReportTab({ onNavigate }) {
           onSubmit={addLogEntry}
         />
       )}
-      {quickModal === 'infraction' && (
-        <InfractionModal
+      {quickModal === 'violation' && (
+        <ViolationModal
           clients={rosterClients}
           onClose={() => setQuickModal(null)}
           onLogEntry={addLogEntry}
@@ -871,7 +871,7 @@ export default function ReportTab({ onNavigate }) {
         onClose={() => setLogPrintOpen(false)}
         onConfirm={({ mode, startDate, endDate }) => {
           setLogPrintOpen(false)
-          const facility = data?.facility_name || 'ShiftPoint'
+          const facility = data?.facility_name || 'OpsPoint'
           if (mode === 'shift') {
             printActivityLogReport({
               facility,
@@ -932,7 +932,7 @@ function printActivityLogReport({ facility, report, entries, rangeLabel, include
     ['Wellness',      entries.filter(e => /wellness check/i.test(e.text || '')).length],
     ['Walkthroughs',  entries.filter(e => /walkthrough/i.test(e.text || '')).length],
     ['UA records',    entries.filter(e => /\s—\sua:/i.test(e.text || '')).length],
-    ['Infractions',   entries.filter(e => /infraction/i.test(e.text || '')).length],
+    ['Violations',   entries.filter(e => /violation/i.test(e.text || '')).length],
   ]
 
   const columns = [
@@ -1079,7 +1079,7 @@ function WellnessModal({ clients = [], statuses = {}, onClose, onSubmit }) {
           <div className="field">
             <label>Conducted by</label>
             <input ref={byRef} type="text" value={by} onChange={e => setBy(e.target.value)}
-              placeholder="Monitor name" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+              placeholder="PA name" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
           </div>
           <div className="field">
             <label>Time</label>
@@ -1188,7 +1188,7 @@ function WalkthroughModal({ areas, onClose, onSubmit }) {
         <div className="modal-body">
           <div className="field">
             <label>Conducted by</label>
-            <input type="text" value={by} onChange={e => setBy(e.target.value)} placeholder="Monitor name" autoFocus />
+            <input type="text" value={by} onChange={e => setBy(e.target.value)} placeholder="PA name" autoFocus />
           </div>
           <div className="field">
             <label>Time</label>
@@ -1301,7 +1301,7 @@ function LunchModal({ onClose, onSubmit }) {
             <input type="time" value={time} onChange={e => setTime(e.target.value)} />
           </div>
           <div className="field">
-            <label>Monitor name</label>
+            <label>PA name</label>
             <input ref={nameRef} type="text" value={name} onChange={e => setName(e.target.value)}
               placeholder="Name" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
           </div>
@@ -1662,10 +1662,10 @@ function MailQuickModal({ clients, onClose, onSubmit }) {
   )
 }
 
-// Infraction quick-log
-function InfractionModal({ clients, onClose, onLogEntry }) {
+// Violation quick-log
+function ViolationModal({ clients, onClose, onLogEntry }) {
   function todayStrLocal() { return new Date().toISOString().slice(0, 10) }
-  const [form, setForm]     = useState({ client_id: '', client_name: '', room: '', infraction_date: todayStrLocal(), description: '', notes: '' })
+  const [form, setForm]     = useState({ client_id: '', client_name: '', room: '', violation_date: todayStrLocal(), description: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
 
@@ -1679,13 +1679,13 @@ function InfractionModal({ clients, onClose, onLogEntry }) {
     if (!form.description.trim()) { setErr('Description required'); return }
     setSaving(true); setErr('')
     try {
-      const r = await fetch('/api/infractions', {
+      const r = await fetch('/api/violations', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
           client_id:       parseInt(form.client_id),
           client_name:     form.client_name,
           room:            form.room,
-          infraction_date: form.infraction_date,
+          violation_date: form.violation_date,
           description:     form.description.trim(),
           notes:           form.notes,
         }),
@@ -1693,7 +1693,7 @@ function InfractionModal({ clients, onClose, onLogEntry }) {
       if (!r.ok) { const j = await r.json(); setErr(j.error || 'Save failed'); return }
       // Log to activity log
       await onLogEntry(
-        `Infraction filed — ${form.client_name} (Rm. ${form.room}): ${form.description.trim()}`,
+        `Violation filed — ${form.client_name} (Rm. ${form.room}): ${form.description.trim()}`,
         fmtTime()
       )
       onClose()
@@ -1705,7 +1705,7 @@ function InfractionModal({ clients, onClose, onLogEntry }) {
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: 480 }}>
         <div className="modal-head">
-          <h2>⚠ Log Infraction</h2>
+          <h2>⚠ Log Violation</h2>
           <button className="xbtn" onClick={onClose}>&times;</button>
         </div>
         <div className="modal-body">
@@ -1719,13 +1719,13 @@ function InfractionModal({ clients, onClose, onLogEntry }) {
           </div>
           <div className="field">
             <label>Date</label>
-            <input type="date" value={form.infraction_date} onChange={e => setForm(f => ({ ...f, infraction_date: e.target.value }))} />
+            <input type="date" value={form.violation_date} onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} />
           </div>
           <div className="field">
             <label>Description</label>
             <textarea rows={3} value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Describe the infraction…"
+              placeholder="Describe the violation…"
               style={{ resize: 'vertical', width: '100%', fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }} />
           </div>
           <div className="field">
@@ -1737,7 +1737,7 @@ function InfractionModal({ clients, onClose, onLogEntry }) {
         <div className="modal-foot">
           <button className="btn-cancel" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Saving…' : 'Log Infraction'}
+            {saving ? 'Saving…' : 'Log Violation'}
           </button>
         </div>
       </div>

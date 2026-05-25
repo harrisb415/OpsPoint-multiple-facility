@@ -252,7 +252,7 @@ export default function MailTab() {
         onClose={() => setPrintOpen(false)}
         onConfirm={({ mode, startDate, endDate }) => {
           setPrintOpen(false)
-          const facility = data?.facility_name || 'ShiftPoint'
+          const facility = data?.facility_name || 'OpsPoint'
           let entries = filtered
           let subtitle = ''
           if (mode === 'shift') {

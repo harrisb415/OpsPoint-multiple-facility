@@ -1,9 +1,9 @@
 # CLAUDE.md
 
-This file provides guidance to AI coding assistants when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 **Organization:** Westside Community Services  
-**Product:** ShiftPoint v2.0.0 — React Edition
+**Product:** OpsPoint v2.0.0 — React Edition
 
 ---
 
@@ -26,9 +26,14 @@ node --check server.js
 
 # Dev mode (hot-reload frontend, proxy to Express on :3000)
 cd client && npm run dev
+
+# Lint the frontend
+cd client && npm run lint
 ```
 
 **Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `localhost:3000` automatically.
+
+**Windows scripts:** `run.bat` installs dependencies and starts the server in one step. `install_startup.bat` (run as administrator) registers a Windows Scheduled Task for boot-time autostart under `NetworkService`.
 
 ---
 
@@ -40,8 +45,8 @@ cd client && npm run dev
 |-------|------|
 | Server | Node.js + Express + `ws` WebSocket |
 | Database | SQLite via `better-sqlite3` (in-process, direct disk writes) |
-| Frontend | React 18 + Vite SPA served from `client/dist/` |
-| Routing | React Router v6 (client-side); Express mirrors routes server-side for direct navigation |
+| Frontend | React 19 + Vite SPA served from `client/dist/` |
+| Routing | React Router v7 (client-side); Express mirrors routes server-side for direct navigation |
 | Auth state | `GET /api/me` → `AuthContext`; no `window.SESSION` injection |
 
 ### Server (`server.js`)
@@ -65,13 +70,13 @@ GET /mobile    → requireAuth + requirePermission('mobile.access') → serveSPA
 GET /about     → requireAuth → serveSPA
 ```
 
-**Security:** PBKDF2-SHA512 (600k iterations; legacy SHA-256/100k accepted and re-hashed on next login). CSRF: `Origin` validated on all state-changing routes. Rate limits: 10 login attempts/15 min per IP, 300 API requests/min per IP. `X-Powered-By` suppressed.
+**Security:** PBKDF2-SHA512 (600k iterations; legacy SHA-256/100k accepted and re-hashed on next login). CSRF: `Origin` validated on all state-changing routes. Rate limits: 10 login attempts/15 min per IP, 300 API requests/min per IP (implemented manually — no rate-limit package). `X-Powered-By` suppressed.
 
 **First-run credentials:** Empty DB creates three accounts with cryptographically random 16-character passwords, printed once to the console. No hardcoded defaults.
 
 ### Database (`db.js`)
 
-`better-sqlite3` — synchronous in-process SQLite. All reads/writes happen in the same Node.js process; no async, no flush step. Data is written directly to `data/shift.db` on every `db.run()` or `db.save()`.
+`better-sqlite3` — synchronous in-process SQLite. All reads/writes happen in the same Node.js process; no async, no flush step. Data is written directly to `data/opspoint.db` on every `db.run()` or `db.save()`.
 
 Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSetting`, `setSettingAndSave`, `getAllData`, `upsertReport`, `savePhoto`, `getPhotoB64`, `getPermissionProfiles`, `setPermissionProfiles`, `auditLog`, `getAuditLog`, `pruneAuditLog`.
 
@@ -137,7 +142,8 @@ client/
       AuthContext.jsx    ← Session state (fetched from GET /api/me)
       DataContext.jsx    ← All app data, WebSocket, real-time sync
     components/
-      AppShell.jsx       ← Desktop layout: header, icon sidebar, Outlet
+      AppShell.jsx       ← Desktop layout: header, icon sidebar, Outlet; DOCX export via jszip
+      PrintScopeModal.jsx ← Modal for selecting print date range
       ProtectedRoute.jsx ← AuthGuard, ChangePasswordGuard
     hooks/
       usePermission.js   ← hasPerm() helper (reads from AuthContext)
@@ -148,17 +154,19 @@ client/
       Admin.jsx          ← User mgmt, permission profiles, facility config, audit log
       Mobile.jsx         ← Standalone mobile interface (own WS + data fetch)
       About.jsx          ← Version / org info page
+      ReportTab.jsx      ← Active report tab (at pages/ level, not pages/tabs/)
       tabs/
-        ReportTab.jsx
-        ClientsTab.jsx
-        StaffTab.jsx
-        ChoresTab.jsx
-        PassesTab.jsx
+        ArchiveTab.jsx
         CaseloadsTab.jsx
+        ChoresTab.jsx
+        ClientsTab.jsx
         MailTab.jsx
-        UATab.jsx
+        PassesTab.jsx
+        StaffTab.jsx
+        UARequestsTab.jsx
         ViolationsTab.jsx
-        FacilityTab.jsx
+    utils/
+      printLog.js        ← openPrintWindow() — opens a styled print-ready tab; shared by tabs
   index.css              ← Global styles (includes body { overflow: hidden })
 ```
 
@@ -183,6 +191,8 @@ client/
 4. `saveStatus` — `'idle' | 'saving' | 'saved' | 'err'` — shown in header
 
 **Permission check:** `usePermission().hasPerm('perm.key')` in components, `requirePermission('perm.key')` middleware server-side.
+
+**DOCX export:** `AppShell.jsx` uses `jszip` to generate shift report documents client-side.
 
 **Scroll architecture:** `body { overflow: hidden }` in `index.css` means body scroll is disabled globally. Content must scroll within a flex chain:
 - Container: `display: flex; flex-direction: column; height: 100%; overflow: hidden`
@@ -257,6 +267,12 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 
 ---
 
+## Planned features
+
+`docs/FEATURE-NOTIFICATIONS.md` contains a full implementation spec for a notification bell, UA random draw, and broadcast messages system. **Note:** this spec was ported from OpsPoint (a vanilla-JS predecessor) and references DOM/JS patterns (`js/app.js`, `js/sync.js`, `index.html` banner elements) that do not exist in this React codebase. Any implementation must be adapted to the React component and context architecture described above.
+
+---
+
 ## Key files
 
 | File | Purpose |
@@ -271,5 +287,7 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 | `client/src/pages/Admin.jsx` | User mgmt, permission profiles, facility config, audit log |
 | `client/src/pages/Mobile.jsx` | Standalone mobile interface |
 | `client/src/pages/About.jsx` | Version / org info (authenticated users only) |
+| `client/src/pages/ReportTab.jsx` | Active shift report tab (lives at pages/ level, not pages/tabs/) |
 | `client/src/pages/tabs/*.jsx` | Individual tab components |
-| `data/shift.db` | The only file that needs backing up |
+| `client/src/utils/printLog.js` | `openPrintWindow()` — shared print helper used by multiple tabs |
+| `data/opspoint.db` | The only file that needs backing up |

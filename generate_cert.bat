@@ -1,10 +1,10 @@
 @echo off
-title ShiftPoint — Generate HTTPS Certificate
+title OpsPoint — Generate HTTPS Certificate
 cd /d "%~dp0"
 
 echo.
 echo  ================================================
-echo   ShiftPoint — Self-Signed Certificate Setup
+echo   OpsPoint — Self-Signed Certificate Setup
 echo  ================================================
 echo.
 
@@ -108,7 +108,7 @@ echo   All done!
 echo.
 echo   NEXT STEPS:
 echo    1. Restart Chrome completely ^(close all windows^)
-echo    2. Run ShiftPoint ^(run.bat^)
+echo    2. Run OpsPoint ^(run.bat^)
 echo    3. Chrome will trust the site and offer to save
 echo       your password when you log in
 echo  ================================================

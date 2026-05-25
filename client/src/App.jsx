@@ -14,18 +14,17 @@ function LoadingScreen() {
   return (
     <div className="loading-screen">
       <div className="loading-inner">
-        <img src="/static/icons/icon-192.png" alt="ShiftPoint" className="loading-logo" />
-        <div className="loading-text">ShiftPoint</div>
+        <img src="/static/icons/icon-192.png" alt="OpsPoint" className="loading-logo" />
+        <div className="loading-text">OpsPoint</div>
       </div>
     </div>
   )
 }
 
-// Apply saved theme on startup
+// Apply saved theme on startup — OpsPoint is fixed navy/amber
 function useThemeInit() {
   useEffect(() => {
-    const t = localStorage.getItem('sp-theme') || 'green'
-    document.documentElement.dataset.theme = t === 'crimson' ? 'crimson' : 'green'
+    delete document.documentElement.dataset.theme
   }, [])
 }
 

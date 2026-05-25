@@ -1,12 +1,12 @@
 @echo off
-title ShiftPoint — Startup Setup
+title OpsPoint — Startup Setup
 cd /d "%~dp0"
 
 echo.
 echo  ================================================
-echo   ShiftPoint — Startup Installation
+echo   OpsPoint — Startup Installation
 echo  ================================================
-echo   This will register ShiftPoint to start
+echo   This will register OpsPoint to start
 echo   automatically when Windows boots.
 echo.
 echo   Run this ONCE with administrator privileges.
@@ -23,7 +23,7 @@ if %ERRORLEVEL% neq 0 (
   exit /b 1
 )
 
-set TASK_NAME=ShiftPointServer
+set TASK_NAME=OpsPointServer
 set APP_DIR=%~dp0
 
 :: ── Detect Node.js and npm paths ──────────────────────────────

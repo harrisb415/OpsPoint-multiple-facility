@@ -32,16 +32,16 @@ function StatusBadge({ status }) {
   return <span className={cls[status] || 'vbadge vbadge-pending'}>{labels[status] || status}</span>
 }
 
-const BLANK = { client_id: '', client_name: '', room: '', infraction_date: todayStr(), description: '', notes: '' }
+const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', notes: '' }
 
 export default function ViolationsTab() {
   const { data, loadData }      = useData()
   const { hasPerm }             = usePermission()
 
-  const canLog      = hasPerm('infractions.log')
-  const canReview   = hasPerm('infractions.review')
-  const canComplete = hasPerm('infractions.complete')
-  const canDelete   = hasPerm('infractions.delete')
+  const canLog      = hasPerm('violations.log')
+  const canReview   = hasPerm('violations.review')
+  const canComplete = hasPerm('violations.complete')
+  const canDelete   = hasPerm('violations.delete')
 
   const clients = useMemo(() =>
     (data?.clients || [])
@@ -51,7 +51,7 @@ export default function ViolationsTab() {
   )
 
   // State
-  const [infractions, setInfractions] = useState([])
+  const [violations, setViolations] = useState([])
   const [loadedOnce, setLoadedOnce]   = useState(false)
   const [loadErr, setLoadErr]         = useState('')
 
@@ -60,8 +60,8 @@ export default function ViolationsTab() {
   const [clientFilter, setClientFilter] = useState('')
   const [viewMode, setViewMode]       = useState('list')   // list | by_client
 
-  const [modal, setModal]             = useState(null)     // null | 'add' | {infraction}
-  const [reviewModal, setReviewModal] = useState(null)     // null | {infraction}
+  const [modal, setModal]             = useState(null)     // null | 'add' | {violation}
+  const [reviewModal, setReviewModal] = useState(null)     // null | {violation}
   const [form, setForm]               = useState(BLANK)
   const [consequence, setConsequence] = useState('')
   const [waive, setWaive]             = useState(false)
@@ -74,24 +74,24 @@ export default function ViolationsTab() {
   // Print modal
   const [printOpen, setPrintOpen]     = useState(false)
 
-  // Load infractions
-  async function loadInfractions() {
+  // Load violations
+  async function loadViolations() {
     try {
-      const r = await fetch('/api/infractions', { credentials: 'include' })
+      const r = await fetch('/api/violations', { credentials: 'include' })
       if (!r.ok) throw new Error()
       const rows = await r.json()
-      setInfractions(rows)
+      setViolations(rows)
       setLoadedOnce(true)
-    } catch { setLoadErr('Failed to load infractions') }
+    } catch { setLoadErr('Failed to load violations') }
   }
 
   // Load on mount
-  useMemo(() => { if (!loadedOnce) loadInfractions() }, [loadedOnce])
+  useMemo(() => { if (!loadedOnce) loadViolations() }, [loadedOnce])
 
   // Date range filter
   function inRange(v) {
     if (dateRange === 'all') return true
-    const d = v?.infraction_date || v?.logged_at?.slice(0, 10)
+    const d = v?.violation_date || v?.logged_at?.slice(0, 10)
     if (!d) return false
     const now   = new Date()
     const dt    = new Date(d + 'T12:00:00')
@@ -107,7 +107,7 @@ export default function ViolationsTab() {
   }
 
   const filtered = useMemo(() => {
-    let rows = infractions.filter(v => {
+    let rows = violations.filter(v => {
       if (clientFilter && String(v.client_id) !== clientFilter) return false
       return inRange(v)
     })
@@ -120,12 +120,12 @@ export default function ViolationsTab() {
       rows = [...rows].sort((a,b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
     }
     return rows
-  }, [infractions, clientFilter, dateRange, sort])
+  }, [violations, clientFilter, dateRange, sort])
 
   // By-client grouping
   const byClient = useMemo(() => {
     const map = {}
-    infractions.forEach(v => {
+    violations.forEach(v => {
       if (!map[v.client_id]) map[v.client_id] = { id: v.client_id, name: v.client_name, room: v.room, rows: [] }
       map[v.client_id].rows.push(v)
     })
@@ -133,11 +133,11 @@ export default function ViolationsTab() {
       if (sort === 'most') return b.rows.length - a.rows.length
       return (parseInt(a.room)||0) - (parseInt(b.room)||0)
     })
-  }, [infractions, sort])
+  }, [violations, sort])
 
   // Add form
   function openAdd() {
-    setForm({ ...BLANK, infraction_date: todayStr() })
+    setForm({ ...BLANK, violation_date: todayStr() })
     setErr(''); setModal('add')
   }
 
@@ -151,19 +151,19 @@ export default function ViolationsTab() {
     if (!form.description.trim()) { setErr('Description required'); return }
     setSaving(true); setErr('')
     try {
-      const r = await fetch('/api/infractions', {
+      const r = await fetch('/api/violations', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({
           client_id:       parseInt(form.client_id),
           client_name:     form.client_name,
           room:            form.room,
-          infraction_date: form.infraction_date,
+          violation_date: form.violation_date,
           description:     form.description.trim(),
           notes:           form.notes,
         }),
       })
       if (!r.ok) { const j = await r.json(); setErr(j.error||'Save failed'); return }
-      setModal(null); await loadInfractions()
+      setModal(null); await loadViolations()
     } catch { setErr('Network error') }
     finally { setSaving(false) }
   }
@@ -175,36 +175,36 @@ export default function ViolationsTab() {
     if (!waive && !consequence.trim()) { setErr('Enter a consequence or choose Waive'); return }
     setSaving(true); setErr('')
     try {
-      const r = await fetch(`/api/infractions/${reviewModal.id}/review`, {
+      const r = await fetch(`/api/violations/${reviewModal.id}/review`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ consequence: waive ? '' : consequence.trim(), waive }),
       })
       if (!r.ok) { const j = await r.json(); setErr(j.error||'Save failed'); return }
-      setReviewModal(null); await loadInfractions()
+      setReviewModal(null); await loadViolations()
     } catch { setErr('Network error') }
     finally { setSaving(false) }
   }
 
   async function markComplete(v) {
     if (!window.confirm(`Mark consequence completed for ${v.client_name}?`)) return
-    await fetch(`/api/infractions/${v.id}/complete`, {
+    await fetch(`/api/violations/${v.id}/complete`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: '{}'
     })
-    await loadInfractions()
+    await loadViolations()
   }
 
   async function del(v) {
-    if (!window.confirm(`Permanently delete this infraction record for ${v.client_name}?`)) return
-    await fetch(`/api/infractions/${v.id}`, { method: 'DELETE', credentials: 'include' })
-    await loadInfractions()
+    if (!window.confirm(`Permanently delete this violation record for ${v.client_name}?`)) return
+    await fetch(`/api/violations/${v.id}`, { method: 'DELETE', credentials: 'include' })
+    await loadViolations()
   }
 
-  // Unique clients in current infraction list (for filter dropdown)
+  // Unique clients in current violation list (for filter dropdown)
   const clientOptions = useMemo(() => {
     const seen = new Map()
-    infractions.forEach(v => { if (!seen.has(v.client_id)) seen.set(v.client_id, { id: v.client_id, name: v.client_name, room: v.room }) })
+    violations.forEach(v => { if (!seen.has(v.client_id)) seen.set(v.client_id, { id: v.client_id, name: v.client_name, room: v.room }) })
     return [...seen.values()].sort((a,b) => (parseInt(a.room)||0) - (parseInt(b.room)||0))
-  }, [infractions])
+  }, [violations])
 
   if (loadErr) return <div className="empty-state" style={{ color: '#DC2626' }}>{loadErr}</div>
 
@@ -212,20 +212,20 @@ export default function ViolationsTab() {
     <div>
       <div className="section">
         <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Infractions</span></div>
+          <div className="sh-left"><span className="sh-dot" /><span>Violations</span></div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{infractions.length} total</span>
-            <button onClick={() => setPrintOpen(true)} disabled={infractions.length === 0}
-              title="Print infractions log"
+            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{violations.length} total</span>
+            <button onClick={() => setPrintOpen(true)} disabled={violations.length === 0}
+              title="Print violations log"
               style={{
                 fontSize: '.72rem', padding: '4px 10px',
                 background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)',
-                color: '#fff', borderRadius: 5, cursor: infractions.length ? 'pointer' : 'not-allowed',
-                fontWeight: 600, opacity: infractions.length ? 1 : .5,
+                color: '#fff', borderRadius: 5, cursor: violations.length ? 'pointer' : 'not-allowed',
+                fontWeight: 600, opacity: violations.length ? 1 : .5,
               }}>
               🖨 Print
             </button>
-            {canLog && <button className="btn btn-sm btn-primary" onClick={openAdd}>+ Log Infraction</button>}
+            {canLog && <button className="btn btn-sm btn-primary" onClick={openAdd}>+ Log Violation</button>}
           </div>
         </div>
 
@@ -275,7 +275,7 @@ export default function ViolationsTab() {
           {/* LIST VIEW */}
           {viewMode === 'list' && (
             filtered.length === 0
-              ? <div className="empty-state">No infractions found.</div>
+              ? <div className="empty-state">No violations found.</div>
               : (
                 <div className="roster-wrap">
                   <table>
@@ -306,7 +306,7 @@ export default function ViolationsTab() {
           {/* BY CLIENT VIEW */}
           {viewMode === 'by_client' && (
             byClient.length === 0
-              ? <div className="empty-state">No infractions found.</div>
+              ? <div className="empty-state">No violations found.</div>
               : byClient.map(cg => {
                 const isExp = !!expanded[cg.id]
                 const pending   = cg.rows.filter(v => v.status === 'pending').length
@@ -322,7 +322,7 @@ export default function ViolationsTab() {
                     }} onClick={() => setExpanded(e => ({ ...e, [cg.id]: !e[cg.id] }))}>
                       <span style={{ fontWeight: 700, fontSize: '.82rem', minWidth: 30 }}>Rm {cg.room}</span>
                       <span style={{ fontWeight: 600, flex: 1 }}>{cg.name}</span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: '.75rem', color: '#64748b' }}>{cg.rows.length} infraction{cg.rows.length !== 1 ? 's' : ''}</span>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: '.75rem', color: '#64748b' }}>{cg.rows.length} violation{cg.rows.length !== 1 ? 's' : ''}</span>
                       <div style={{ display: 'flex', gap: 5 }}>
                         {pending > 0    && <span className="vbadge vbadge-pending">{pending} pending</span>}
                         {assigned > 0   && <span className="vbadge vbadge-assigned">{assigned} assigned</span>}
@@ -367,7 +367,7 @@ export default function ViolationsTab() {
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
           <div className="modal" style={{ maxWidth: 500 }}>
             <div className="modal-head">
-              <h2>Log Infraction</h2>
+              <h2>Log Violation</h2>
               <button className="xbtn" onClick={() => setModal(null)}>&times;</button>
             </div>
             <div className="modal-body">
@@ -379,13 +379,13 @@ export default function ViolationsTab() {
                 </select>
               </div>
               <div className="field"><label>Date</label>
-                <input type="date" value={form.infraction_date}
-                  onChange={e => setForm(f => ({ ...f, infraction_date: e.target.value }))} />
+                <input type="date" value={form.violation_date}
+                  onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} />
               </div>
               <div className="field"><label>Description / Behavior</label>
                 <textarea rows={3} value={form.description}
                   onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Describe the infraction…"
+                  placeholder="Describe the violation…"
                   style={{ resize: 'vertical', width: '100%' }} />
               </div>
               <div className="field"><label>Notes (optional)</label>
@@ -396,7 +396,7 @@ export default function ViolationsTab() {
             </div>
             <div className="modal-foot">
               <button className="btn-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitAdd} disabled={saving}>{saving ? 'Saving…' : 'Log Infraction'}</button>
+              <button className="btn btn-primary" onClick={submitAdd} disabled={saving}>{saving ? 'Saving…' : 'Log Violation'}</button>
             </div>
           </div>
         </div>
@@ -407,14 +407,14 @@ export default function ViolationsTab() {
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setReviewModal(null)}>
           <div className="modal" style={{ maxWidth: 460 }}>
             <div className="modal-head">
-              <h2>Review Infraction — {reviewModal.client_name}</h2>
+              <h2>Review Violation — {reviewModal.client_name}</h2>
               <button className="xbtn" onClick={() => setReviewModal(null)}>&times;</button>
             </div>
             <div className="modal-body">
               {err && <div className="auth-error">{err}</div>}
               <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 14 }}>
                 <div style={{ fontSize: '.78rem', color: '#64748b', marginBottom: 4 }}>
-                  {fmtDate(reviewModal.infraction_date)} · Rm. {reviewModal.room}
+                  {fmtDate(reviewModal.violation_date)} · Rm. {reviewModal.room}
                 </div>
                 <div style={{ fontSize: '.88rem', fontWeight: 600 }}>{reviewModal.description}</div>
                 {reviewModal.notes && <div style={{ fontSize: '.8rem', color: '#475569', marginTop: 4 }}>{reviewModal.notes}</div>}
@@ -451,25 +451,25 @@ export default function ViolationsTab() {
 
       <PrintScopeModal
         open={printOpen}
-        title="Print Infractions Log"
+        title="Print Violations Log"
         shiftLabel="Current filter view"
         defaultMode="range"
         onClose={() => setPrintOpen(false)}
         onConfirm={({ mode, startDate, endDate }) => {
           setPrintOpen(false)
-          const facility = data?.facility_name || 'ShiftPoint'
+          const facility = data?.facility_name || 'OpsPoint'
           let rows = filtered
           let subtitle = ''
           if (mode === 'shift') {
             subtitle = `Current filters · ${rows.length} records`
           } else {
             rows = rows.filter(v => {
-              const d = v.infraction_date || (v.logged_at || '').slice(0, 10)
+              const d = v.violation_date || (v.logged_at || '').slice(0, 10)
               return d && d >= startDate && d <= endDate
             })
             subtitle = `${fmtDateFriendly(startDate)} – ${fmtDateFriendly(endDate)}  ·  ${rows.length} records`
           }
-          printInfractionsReport({ facility, subtitle, entries: rows })
+          printViolationsReport({ facility, subtitle, entries: rows })
         }}
       />
     </div>
@@ -477,7 +477,7 @@ export default function ViolationsTab() {
 }
 
 // ── Print report ──────────────────────────────────────────────────────
-function printInfractionsReport({ facility, subtitle, entries }) {
+function printViolationsReport({ facility, subtitle, entries }) {
   const counts = { pending: 0, assigned: 0, waived: 0, completed: 0 }
   entries.forEach(v => { if (counts[v.status] !== undefined) counts[v.status]++ })
 
@@ -516,7 +516,7 @@ function printInfractionsReport({ facility, subtitle, entries }) {
   }
 
   const rows = entries.map(v => ({
-    date:        fmt(v.infraction_date),
+    date:        fmt(v.violation_date),
     room:        v.room || '—',
     resident:    v.client_name || '—',
     description: v.description || '',
@@ -527,14 +527,14 @@ function printInfractionsReport({ facility, subtitle, entries }) {
   }))
 
   openPrintWindow({
-    title: 'Infractions Log Report',
+    title: 'Violations Log Report',
     facility,
     subtitle,
     summary,
     columns,
     rows,
     rowStyle: r => r._flag ? 'background:#fffbeb;' : '',
-    emptyMessage: 'No infractions in the selected scope.',
+    emptyMessage: 'No violations in the selected scope.',
   })
 }
 
@@ -543,7 +543,7 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
     <tr>
       {!compact && <td className="rm">{v.room}</td>}
       {!compact && <td className="name-cell">{v.client_name}</td>}
-      <td className="date-cell">{fmtDate(v.infraction_date)}</td>
+      <td className="date-cell">{fmtDate(v.violation_date)}</td>
       <td style={{ fontSize: '.84rem', maxWidth: 220 }}>{v.description}</td>
       <td><StatusBadge status={v.status} /></td>
       <td style={{ fontSize: '.82rem', color: '#475569', maxWidth: 180 }}>

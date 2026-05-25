@@ -89,7 +89,7 @@ const PERM_CATEGORIES = [
   { label: 'Reminders',        perms: ['reminders.view'] },
   { label: 'UA System',        perms: ['ua.request','ua.acknowledge','ua.delete'] },
   { label: 'Mail Management',  perms: ['mail.log','mail.approve','mail.delete'] },
-  { label: 'Infractions',      perms: ['infractions.log','infractions.review','infractions.complete','infractions.delete','infractions.notify_review','infractions.notify_consequence'] },
+  { label: 'Violations',      perms: ['violations.log','violations.review','violations.complete','violations.delete','violations.notify_review','violations.notify_consequence'] },
   { label: 'Facility Manage',  perms: ['facility.manage'] },
   { label: 'Administration',   perms: ['admin.users','admin.settings','admin.audit','admin.system'] },
   { label: 'Mobile Access',    perms: ['mobile.access'] },
@@ -102,9 +102,9 @@ const PERM_LABELS = {
   'chores.edit':'Assign chores / log completions','passes.edit':'Create / edit passes & notice','passes.status':'Check pass in / out',
   'reminders.view':'Wellness & walkthrough reminders','ua.request':'Flag resident for UA','ua.acknowledge':'Acknowledge UA alert',
   'ua.delete':'Delete UA entries','mail.log':'Log incoming mail','mail.approve':'Approve mail for delivery',
-  'mail.delete':'Delete mail records','infractions.log':'Log infraction','infractions.review':'Review / assign consequence',
-  'infractions.complete':'Mark consequence completed','infractions.delete':'Delete infraction records',
-  'infractions.notify_review':'Banner — pending review','infractions.notify_consequence':'Banner — consequence assigned',
+  'mail.delete':'Delete mail records','violations.log':'Log violation','violations.review':'Review / assign consequence',
+  'violations.complete':'Mark consequence completed','violations.delete':'Delete violation records',
+  'violations.notify_review':'Banner — pending review','violations.notify_consequence':'Banner — consequence assigned',
   'facility.manage':'Room & roster management','admin.users':'User management','admin.settings':'Facility settings',
   'admin.audit':'View audit log','admin.system':'Server controls','mobile.access':'Use mobile shift app',
 }
@@ -218,7 +218,7 @@ function CurrentStaff({ users, groups, reload }) {
     else reload()
   }
 
-  const GROUP_COLORS = { admin: '#dc2626', supervisor: '#7c3aed', monitor: '#2563eb', case_manager: '#059669' }
+  const GROUP_COLORS = { admin: '#dc2626', supervisor: '#7c3aed', pa: '#2563eb', case_manager: '#059669' }
 
   return (
     <div>
@@ -342,7 +342,7 @@ function AddStaff({ groups, reload }) {
     try {
       const r = await apiFetch('/api/users', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: form.username.trim(), displayName: form.displayName.trim() || form.username.trim(), password: form.password, role: 'monitor', groupIds: form.groupIds }),
+        body: JSON.stringify({ username: form.username.trim(), displayName: form.displayName.trim() || form.username.trim(), password: form.password, role: 'pa', groupIds: form.groupIds }),
       })
       const j = await r.json()
       if (!r.ok) { setError(j.error || 'Save failed'); return }
@@ -1108,7 +1108,7 @@ function DisplaySettings({ settings, onSave, saving }) {
     { key: 'caseloads',  label: 'Caseloads' },
     { key: 'mail',       label: 'Mail' },
     { key: 'ua',         label: 'UA Log' },
-    { key: 'infractions',label: 'Violations / Infractions' },
+    { key: 'violations',label: 'Violations / Violations' },
   ]
   const BTN_OPTS = [
     { key: 'wellness', label: 'Wellness Check button' },
@@ -1401,7 +1401,7 @@ function AuditLogTab() {
     const csv = csvRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    a.download = `shiftpoint_audit_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `opspoint_audit_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
   }
 
@@ -1543,7 +1543,7 @@ function SystemTab() {
         <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Server Control</span></div></div>
         <div className="section-body">
           <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 14 }}>
-            Restart the ShiftPoint server process. The server will shut down, respawn automatically, and all connected clients will reconnect within a few seconds.
+            Restart the OpsPoint server process. The server will shut down, respawn automatically, and all connected clients will reconnect within a few seconds.
           </p>
           {msg && (
             <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: '.82rem', marginBottom: 12, background: msg.startsWith('✓') ? '#dcfce7' : '#fef9c3', color: msg.startsWith('✓') ? '#15803d' : '#854d0e' }}>
@@ -1559,7 +1559,7 @@ function SystemTab() {
         <div className="section-body">
           <table style={{ fontSize: '.84rem', borderCollapse: 'collapse' }}>
             <tbody>
-              {[['App', 'ShiftPoint'], ['Version', 'v2.0'], ['Server', window.location.host], ['Protocol', window.location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP']].map(([k, v]) => (
+              {[['App', 'OpsPoint'], ['Version', 'v2.0'], ['Server', window.location.host], ['Protocol', window.location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP']].map(([k, v]) => (
                 <tr key={k}>
                   <td style={{ padding: '4px 16px 4px 0', fontWeight: 700, color: '#475569' }}>{k}</td>
                   <td style={{ fontFamily: 'var(--mono)', fontSize: '.82rem' }}>{v}</td>

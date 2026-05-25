@@ -372,7 +372,7 @@ export default function UARequestsTab() {
         onClose={() => setPrintOpen(false)}
         onConfirm={({ mode, startDate, endDate }) => {
           setPrintOpen(false)
-          const facility = data?.facility_name || 'ShiftPoint'
+          const facility = data?.facility_name || 'OpsPoint'
           let entries = sortedUaLog
           let subtitle = `${uaLog.length} records`
           if (mode === 'shift') {

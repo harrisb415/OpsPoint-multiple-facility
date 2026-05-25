@@ -23,7 +23,7 @@ const ALL_TABS = [
   { id: 'caseloads',  label: 'Caseloads',   icon: '📂' },
   { id: 'mail',       label: 'Mail',        icon: '📬' },
   { id: 'ua',         label: 'UA Log',      icon: '🧪' },
-  { id: 'violations', label: 'Infractions', icon: '⚠️' },
+  { id: 'violations', label: 'Violations',  icon: '⚠️' },
 ]
 
 // ── UA Draw Modal ─────────────────────────────────────────────────────
@@ -221,9 +221,8 @@ export default function Dashboard() {
   const clients       = data?.clients || []
 
   function isTabVisible(id) {
-    const key = id === 'violations' ? 'infractions' : id
     if (uiVis.tabs && Object.keys(uiVis.tabs).length > 0) {
-      if (uiVis.tabs[key] === false) return false
+      if (uiVis.tabs[id] === false) return false
     }
     return true
   }

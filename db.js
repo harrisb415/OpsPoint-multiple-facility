@@ -39,12 +39,12 @@ const PERMISSIONS = [
   'mail.log',         // log incoming resident mail
   'mail.approve',     // approve logged mail for delivery to resident
   'mail.delete',      // delete mail log records
-  'infractions.log',      // log a new infraction
-  'infractions.review',   // review an infraction (assign consequence or waive)
-  'infractions.complete', // mark a consequence as completed
-  'infractions.delete',   // permanently delete infraction records
-  'infractions.notify_review',    // receive banner when an infraction is pending review
-  'infractions.notify_consequence', // receive banner when a consequence is assigned
+  'violations.log',      // log a new violation
+  'violations.review',   // review a violation (assign consequence or waive)
+  'violations.complete', // mark a consequence as completed
+  'violations.delete',   // permanently delete violation records
+  'violations.notify_review',    // receive banner when a violation is pending review
+  'violations.notify_consequence', // receive banner when a consequence is assigned
   'facility.manage',  // room and roster management
   'admin.users',      // user management
   'admin.settings',   // facility settings write
@@ -57,18 +57,18 @@ const PERMISSIONS = [
 ];
 
 const ROLE_PRESETS = {
-  monitor: [
+  pa: [
     'reports.create', 'reports.close', 'log.add', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.status',
-    'reminders.view', 'ua.acknowledge', 'mail.log', 'infractions.log',
-    'infractions.notify_consequence', 'mobile.access',
+    'reminders.view', 'ua.acknowledge', 'mail.log', 'violations.log',
+    'violations.notify_consequence', 'mobile.access',
   ],
   supervisor: [
     'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
     'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log',
-    'infractions.log', 'infractions.review', 'infractions.complete',
-    'infractions.notify_review', 'infractions.notify_consequence',
+    'violations.log', 'violations.review', 'violations.complete',
+    'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'mobile.access',
   ],
@@ -77,8 +77,8 @@ const ROLE_PRESETS = {
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
     'ua.request', 'ua.delete', 'mail.log', 'mail.approve', 'mail.delete',
-    'infractions.log', 'infractions.review', 'infractions.complete', 'infractions.delete',
-    'infractions.notify_review', 'infractions.notify_consequence',
+    'violations.log', 'violations.review', 'violations.complete', 'violations.delete',
+    'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'facility.manage', 'admin.users', 'admin.settings', 'admin.audit', 'admin.system',
     'mobile.access',
@@ -86,7 +86,7 @@ const ROLE_PRESETS = {
   case_manager: [
     'residents.edit', 'staff.edit', 'passes.edit',
     'ua.request', 'ua.delete', 'mail.approve',
-    'infractions.notify_review',
+    'violations.notify_review',
     'broadcast.send', 'broadcast.receive',
     'mobile.access',
   ],
@@ -100,6 +100,12 @@ function init(dbPath) {
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
   console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
+
+  // OpsPoint rebrand: rename legacy `infractions` table → `violations` (and column)
+  // BEFORE _createSchema() so that the IF NOT EXISTS check finds the renamed table.
+  try { _db.exec('ALTER TABLE infractions RENAME TO violations'); } catch(e) {}
+  try { _db.exec('ALTER TABLE violations RENAME COLUMN infraction_date TO violation_date'); } catch(e) {}
+
   _createSchema();
   // Migrations — add columns that may not exist in older DBs
   const migrations = [
@@ -113,6 +119,7 @@ function init(dbPath) {
     "ALTER TABLE users ADD COLUMN is_protected INTEGER DEFAULT 0",
   ];
   migrations.forEach(sql => { try { _db.exec(sql); } catch(e) {} });
+  _migrateRebrand();
   _seedDefaults();
   _seedExistingUserPermissions();
   _migratePermissions();
@@ -121,6 +128,91 @@ function init(dbPath) {
   _migrateUserGroups();
   _migrateGroups();
   pruneAuditLog(365);
+}
+
+// One-time rebrand migration: ShiftPoint → OpsPoint
+//  • role `monitor` → `pa` (display "Program Assistant")
+//  • permission keys `infractions.*` → `violations.*`
+//  • staff category "Monitor" → "Program Assistant"
+//  • facility_name 'ShiftPoint' → 'OpsPoint' (only if untouched)
+//  • ui_visibility tab `infractions` → `violations`
+// All steps are idempotent — safe to run on every boot.
+function _migrateRebrand() {
+  try { _db.exec("UPDATE users SET role='pa' WHERE role='monitor'"); } catch(e) {}
+  try { _db.exec("UPDATE users SET display_name='Program Assistant' WHERE username='monitor' AND (display_name='Monitor' OR display_name IS NULL OR display_name='')"); } catch(e) {}
+  try { _db.exec("UPDATE users SET username='pa' WHERE username='monitor'"); } catch(e) {}
+  try { _db.exec("UPDATE groups SET key='pa', label='Program Assistant' WHERE key='monitor'"); } catch(e) {}
+
+  // Rewrite permission JSON arrays on users
+  try {
+    const rows = _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL');
+    rows.forEach(r => {
+      const before = r.permissions || '[]';
+      const after  = before.replace(/"infractions\./g, '"violations.');
+      if (after !== before) _run('UPDATE users SET permissions=? WHERE id=?', [after, r.id]);
+    });
+  } catch(e) {}
+
+  // Rewrite permission JSON arrays on groups
+  try {
+    const rows = _q('SELECT id, permissions FROM groups');
+    rows.forEach(r => {
+      const before = r.permissions || '[]';
+      const after  = before.replace(/"infractions\./g, '"violations.');
+      if (after !== before) _run('UPDATE groups SET permissions=? WHERE id=?', [after, r.id]);
+    });
+  } catch(e) {}
+
+  // Rewrite stored permission_profiles setting
+  try {
+    const row = _q1("SELECT value FROM settings WHERE key='permission_profiles'");
+    if (row && row.value) {
+      let updated = row.value
+        .replace(/"infractions\./g, '"violations.')
+        .replace(/"key":"monitor"/g, '"key":"pa"')
+        .replace(/"label":"Monitor"/g, '"label":"Program Assistant"');
+      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='permission_profiles'", [updated]);
+    }
+  } catch(e) {}
+
+  // staff_categories: Monitor → Program Assistant
+  try {
+    const row = _q1("SELECT value FROM settings WHERE key='staff_categories'");
+    if (row && row.value) {
+      const updated = row.value.replace(/"Monitor"/g, '"Program Assistant"');
+      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='staff_categories'", [updated]);
+    }
+  } catch(e) {}
+
+  // ui_visibility: tabs.infractions → tabs.violations
+  try {
+    const row = _q1("SELECT value FROM settings WHERE key='ui_visibility'");
+    if (row && row.value) {
+      const updated = row.value.replace(/"infractions":/g, '"violations":');
+      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='ui_visibility'", [updated]);
+    }
+  } catch(e) {}
+
+  // facility_name: 'ShiftPoint' → 'OpsPoint' (only if user hasn't customized)
+  try {
+    const row = _q1("SELECT value FROM settings WHERE key='facility_name'");
+    if (row && (row.value === 'ShiftPoint' || row.value === '"ShiftPoint"')) {
+      _run("UPDATE settings SET value=? WHERE key='facility_name'", ['OpsPoint']);
+    }
+  } catch(e) {}
+
+  // known_permissions cache: rewrite infractions.* → violations.*
+  try {
+    const row = _q1("SELECT value FROM settings WHERE key='known_permissions'");
+    if (row && row.value) {
+      const updated = row.value.replace(/"infractions\./g, '"violations.');
+      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='known_permissions'", [updated]);
+    }
+  } catch(e) {}
+
+  // Audit log: rewrite action/target_type strings for historical entries
+  try { _db.exec("UPDATE audit_log SET action=replace(action,'infraction','violation') WHERE action LIKE 'infraction%'"); } catch(e) {}
+  try { _db.exec("UPDATE audit_log SET target_type='violation' WHERE target_type='infraction'"); } catch(e) {}
 }
 
 function _createSchema() {
@@ -169,7 +261,7 @@ function _createSchema() {
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     username     TEXT UNIQUE NOT NULL,
     display_name TEXT,
-    role         TEXT DEFAULT 'monitor',
+    role         TEXT DEFAULT 'pa',
     hash         TEXT,
     salt         TEXT,
     created_at   TEXT DEFAULT (datetime('now')),
@@ -231,12 +323,12 @@ function _createSchema() {
     delivered_at TEXT    DEFAULT '',
     created_at   TEXT    DEFAULT (datetime('now'))
   )`);
-  _db.exec(`CREATE TABLE IF NOT EXISTS infractions (
+  _db.exec(`CREATE TABLE IF NOT EXISTS violations (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id        INTEGER NOT NULL,
     client_name      TEXT    DEFAULT '',
     room             TEXT    DEFAULT '',
-    infraction_date  TEXT    DEFAULT '',
+    violation_date  TEXT    DEFAULT '',
     description      TEXT    DEFAULT '',
     logged_by        TEXT    DEFAULT '',
     logged_at        TEXT    DEFAULT (datetime('now')),
@@ -301,10 +393,10 @@ function _hashPw(pw) {
 
 function _defaultProfiles() {
   return [
-    { key: 'monitor',      label: 'Monitor',       permissions: ROLE_PRESETS.monitor.slice() },
-    { key: 'supervisor',   label: 'Supervisor',     permissions: ROLE_PRESETS.supervisor.slice() },
-    { key: 'admin',        label: 'Administrator',  permissions: ROLE_PRESETS.admin.slice() },
-    { key: 'case_manager', label: 'Case Manager',   permissions: ROLE_PRESETS.case_manager.slice() },
+    { key: 'pa',           label: 'Program Assistant', permissions: ROLE_PRESETS.pa.slice() },
+    { key: 'supervisor',   label: 'Supervisor',        permissions: ROLE_PRESETS.supervisor.slice() },
+    { key: 'admin',        label: 'Administrator',     permissions: ROLE_PRESETS.admin.slice() },
+    { key: 'case_manager', label: 'Case Manager',      permissions: ROLE_PRESETS.case_manager.slice() },
   ];
 }
 
@@ -318,7 +410,7 @@ function setPermissionProfiles(profiles) {
 
 function _seedDefaults() {
   const defs = {
-    facility_name:          'ShiftPoint',
+    facility_name:          'OpsPoint',
     wellness_interval_mins: '120',
     walk_interval_mins:     '240',
     walk_areas:             JSON.stringify(DEFAULT_WALK_AREAS),
@@ -330,11 +422,11 @@ function _seedDefaults() {
     active_report_id:       'null',
     master_chores:          '[]',
     pass_notice:            '""',
-    staff_categories:       JSON.stringify(['Director','Case Manager','Monitor','Other']),
+    staff_categories:       JSON.stringify(['Director','Case Manager','Program Assistant','Other']),
     shift_day_start:        '07:00',
     shift_swing_start:      '15:00',
     shift_grave_start:      '23:00',
-    ui_visibility:          JSON.stringify({tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,infractions:true},buttons:{wellness:true,walkthrough:true}}),
+    ui_visibility:          JSON.stringify({tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,violations:true},buttons:{wellness:true,walkthrough:true}}),
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))
@@ -354,18 +446,18 @@ function _seedDefaults() {
       for(let i=4;i<16;i++) pw+=all[bytes[i]%all.length];
       return pw.split('').sort(()=>Math.random()-.5).join('');
     }
-    const adminPw=_randPw(), supPw=_randPw(), monPw=_randPw();
-    const a=_hashPw(adminPw), s=_hashPw(supPw), m=_hashPw(monPw);
+    const adminPw=_randPw(), supPw=_randPw(), paPw=_randPw();
+    const a=_hashPw(adminPw), s=_hashPw(supPw), p=_hashPw(paPw);
     console.log('\n  ╔══════════════════════════════════════════════╗');
     console.log('  ║  FIRST-RUN CREDENTIALS (change on login)     ║');
     console.log('  ╠══════════════════════════════════════════════╣');
     console.log('  ║  admin      / ' + adminPw.padEnd(32) + '║');
     console.log('  ║  supervisor / ' + supPw.padEnd(32) + '║');
-    console.log('  ║  monitor    / ' + monPw.padEnd(32) + '║');
+    console.log('  ║  pa         / ' + paPw.padEnd(32) + '║');
     console.log('  ╚══════════════════════════════════════════════╝\n');
     _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected) VALUES ('admin','Administrator','admin',?,?,1,?,1)`,[a.hash,a.salt,JSON.stringify(ROLE_PRESETS.admin)]);
     _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('supervisor','Supervisor','supervisor',?,?,1,?)`,[s.hash,s.salt,JSON.stringify(ROLE_PRESETS.supervisor)]);
-    _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('monitor','Monitor','monitor',?,?,1,?)`,[m.hash,m.salt,JSON.stringify(ROLE_PRESETS.monitor)]);
+    _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('pa','Program Assistant','pa',?,?,1,?)`,[p.hash,p.salt,JSON.stringify(ROLE_PRESETS.pa)]);
   }
 }
 
@@ -373,7 +465,7 @@ function _seedDefaults() {
 function _seedExistingUserPermissions() {
   const users = _q('SELECT id, role FROM users WHERE permissions IS NULL');
   users.forEach(u => {
-    const perms = ROLE_PRESETS[u.role] || ROLE_PRESETS.monitor;
+    const perms = ROLE_PRESETS[u.role] || ROLE_PRESETS.pa;
     _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
   });
 }
@@ -385,28 +477,28 @@ function _migratePermissions() {
     try {
       let perms = JSON.parse(u.permissions || '[]');
       let changed = false;
-      if ((u.role === 'monitor' || u.role === 'supervisor') && !perms.includes('ua.acknowledge')) {
+      if ((u.role === 'pa' || u.role === 'supervisor') && !perms.includes('ua.acknowledge')) {
         perms.push('ua.acknowledge'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.log')) {
+      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.log')) {
         perms.push('mail.log'); changed = true;
       }
       if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.approve')) {
         perms.push('mail.approve'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('status.edit')) {
+      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('status.edit')) {
         perms.push('status.edit'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('issues.edit')) {
+      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('issues.edit')) {
         perms.push('issues.edit'); changed = true;
       }
       if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('ua.delete')) {
         perms.push('ua.delete'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor') && !perms.includes('reminders.view')) {
+      if ((u.role === 'pa' || u.role === 'supervisor') && !perms.includes('reminders.view')) {
         perms.push('reminders.view'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor' || u.role === 'admin' || u.role === 'case_manager') && !perms.includes('mobile.access')) {
+      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin' || u.role === 'case_manager') && !perms.includes('mobile.access')) {
         perms.push('mobile.access'); changed = true;
       }
       // Strip deprecated mobile.full permission from existing users
@@ -419,23 +511,23 @@ function _migratePermissions() {
       if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.delete')) {
         perms.push('mail.delete'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('infractions.log')) {
-        perms.push('infractions.log'); changed = true;
+      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.log')) {
+        perms.push('violations.log'); changed = true;
       }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('infractions.review')) {
-        perms.push('infractions.review'); changed = true;
+      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.review')) {
+        perms.push('violations.review'); changed = true;
       }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('infractions.complete')) {
-        perms.push('infractions.complete'); changed = true;
+      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.complete')) {
+        perms.push('violations.complete'); changed = true;
       }
-      if (u.role === 'admin' && !perms.includes('infractions.delete')) {
-        perms.push('infractions.delete'); changed = true;
+      if (u.role === 'admin' && !perms.includes('violations.delete')) {
+        perms.push('violations.delete'); changed = true;
       }
-      if ((u.role === 'monitor' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('infractions.notify_consequence')) {
-        perms.push('infractions.notify_consequence'); changed = true;
+      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.notify_consequence')) {
+        perms.push('violations.notify_consequence'); changed = true;
       }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('infractions.notify_review')) {
-        perms.push('infractions.notify_review'); changed = true;
+      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.notify_review')) {
+        perms.push('violations.notify_review'); changed = true;
       }
       if (changed) _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
     } catch(e) {}
@@ -480,10 +572,10 @@ function _seedGroups() {
   const existing = _q1('SELECT COUNT(*) as c FROM groups');
   if (existing && existing.c > 0) return;
   const seeds = [
-    { key: 'monitor',      label: 'Monitor',       permissions: ROLE_PRESETS.monitor,      is_protected: 0 },
-    { key: 'supervisor',   label: 'Supervisor',     permissions: ROLE_PRESETS.supervisor,    is_protected: 0 },
-    { key: 'admin',        label: 'Administrator',  permissions: ROLE_PRESETS.admin,         is_protected: 1 },
-    { key: 'case_manager', label: 'Case Manager',   permissions: ROLE_PRESETS.case_manager,  is_protected: 0 },
+    { key: 'pa',           label: 'Program Assistant', permissions: ROLE_PRESETS.pa,           is_protected: 0 },
+    { key: 'supervisor',   label: 'Supervisor',         permissions: ROLE_PRESETS.supervisor,    is_protected: 0 },
+    { key: 'admin',        label: 'Administrator',      permissions: ROLE_PRESETS.admin,         is_protected: 1 },
+    { key: 'case_manager', label: 'Case Manager',       permissions: ROLE_PRESETS.case_manager,  is_protected: 0 },
   ];
   seeds.forEach(s => {
     _run('INSERT INTO groups (key,label,permissions,is_protected) VALUES (?,?,?,?)',
@@ -688,7 +780,7 @@ function getAllData() {
   return {
     clients, reports,
     logos:                  { pdec: getPhotoB64(logoP) || null, wcs: getPhotoB64(logoW) || null },
-    facility_name:          getSetting('facility_name',          'ShiftPoint'),
+    facility_name:          getSetting('facility_name',          'OpsPoint'),
     wellness_interval_mins: getSetting('wellness_interval_mins', 120),
     walk_interval_mins:     getSetting('walk_interval_mins',     240),
     walk_areas:             getSetting('walk_areas',             DEFAULT_WALK_AREAS),
@@ -701,7 +793,7 @@ function getAllData() {
     chore_log:              choreLog,
     master_chores:          getSetting('master_chores',          []),
     pass_notice:            getSetting('pass_notice',            ''),
-    staff_categories:       getSetting('staff_categories',       ['Director','Case Manager','Monitor','Other']),
+    staff_categories:       getSetting('staff_categories',       ['Director','Case Manager','Program Assistant','Other']),
   };
 }
 

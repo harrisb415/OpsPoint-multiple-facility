@@ -8,8 +8,8 @@ const NOTIF_DEFAULT = {
   uaRequests:      [],   // pending UA requests
   uaDraws:         [],   // recent draws (last 30 days)
   broadcasts:      [],   // active broadcasts (not dismissed)
-  violReview:      0,    // # infractions pending review
-  violConsequence: 0,    // # infractions with consequence assigned
+  violReview:      0,    // # violations pending review
+  violConsequence: 0,    // # violations with consequence assigned
 }
 
 export function DataProvider({ children }) {
@@ -184,14 +184,14 @@ export function DataProvider({ children }) {
           break
         }
 
-        case 'infractions_updated': {
+        case 'violations_updated': {
           const review      = msg.pendingReview      || 0
           const consequence = msg.pendingConsequences || 0
           setNotif(prev => {
             const wasReview = prev.violReview
             const wasConsq  = prev.violConsequence
-            if (review > wasReview && wasReview >= 0      && _hasSessionPerm('infractions.notify_review'))      playSound('infraction-review')
-            if (consequence > wasConsq && wasConsq >= 0   && _hasSessionPerm('infractions.notify_consequence')) playSound('infraction-consequence')
+            if (review > wasReview && wasReview >= 0      && _hasSessionPerm('violations.notify_review'))      playSound('violation-review')
+            if (consequence > wasConsq && wasConsq >= 0   && _hasSessionPerm('violations.notify_consequence')) playSound('violation-consequence')
             return { ...prev, violReview: review, violConsequence: consequence }
           })
           break
@@ -328,10 +328,10 @@ export function playSound(type) {
       _beep(ctx, 900, 0,   .08, 'square', .25)
       _beep(ctx, 900, .12, .08, 'square', .25)
       _beep(ctx, 900, .24, .08, 'square', .25)
-    } else if (type === 'infraction-review') {
+    } else if (type === 'violation-review') {
       _beep(ctx, 660, 0,  .18, 'sine', .3)
       _beep(ctx, 440, .2, .28, 'sine', .3)
-    } else if (type === 'infraction-consequence') {
+    } else if (type === 'violation-consequence') {
       _beep(ctx, 440, 0,  .18, 'sine', .3)
       _beep(ctx, 554, .2, .28, 'sine', .3)
     } else if (type === 'broadcast') {

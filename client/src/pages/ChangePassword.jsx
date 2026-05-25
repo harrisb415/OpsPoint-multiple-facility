@@ -35,8 +35,8 @@ export default function ChangePassword() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-card-top">
-          <div className="auth-org">ShiftPoint &bull; Secure Access</div>
-          <img src="/static/icons/icon-192.png" alt="ShiftPoint" className="auth-app-icon" />
+          <div className="auth-org">OpsPoint &bull; Secure Access</div>
+          <img src="/static/icons/icon-192.png" alt="OpsPoint" className="auth-app-icon" />
           <h1>Change Password</h1>
           <div className="auth-sub">You must set a new password before continuing</div>
         </div>

@@ -2,6 +2,62 @@
 
 ---
 
+## v2.0.0 — React Edition (2026-05-23)
+
+Complete rewrite of the ShiftPoint frontend as a React SPA (React 18 + Vite + React Router v6), deployed alongside the existing Express/SQLite backend. All v1.x features are carried forward; the database schema and API are fully backward-compatible.
+
+### Architecture changes
+- **React 18 SPA** — frontend rebuilt with React 18, React Router v6, and Vite; served from `client/dist/` by Express
+- **better-sqlite3** — replaced in-memory `sql.js` with `better-sqlite3`; writes are synchronous and go directly to `data/shift.db` (no flush-to-disk step)
+- **Context providers** — `AuthContext` manages session state; `DataContext` manages all app data, WebSocket connection, and real-time sync
+- **No more `window.SESSION` injection** — auth state is fetched from `GET /api/me` and held in React context
+- **Vite build** — `cd client && npm run build` outputs to `client/dist/`; must be run after any frontend change
+
+### New features
+- **Client photo popout** — clicking a client photo thumbnail in the Clients tab opens a full lightbox, matching the existing UA photo popout
+- **Vacant and special rooms in Clients tab** — all rooms now visible: vacant rooms shown with a muted empty-room style; special rooms shown with amber badge and special label; "Assign Client" shortcut on vacant rows
+- **About page** — link added to desktop header; page gated behind `requireAuth` (authenticated users only); shows version, features, tech stack, and org info
+
+### Permission changes
+- **`mobile.full` retired** — permission removed from the system; all existing users, groups, and profiles are automatically migrated to strip it on startup; `mobile.access` remains and gates the mobile interface
+- **Mail, UA Log, and Infractions tabs** — tab visibility now controlled solely by Facility Setup display settings; no longer double-gated by group policy
+
+### Bug fixes
+- Client photo `src` fixed — `getAllData()` returns base64 data URIs; template was prepending `/` making an invalid URL
+- Mobile scroll fixed — `body { overflow: hidden }` global CSS required proper flex chain (`overflow-y: auto` on `flex: 1` child) rather than `position: fixed` scroll
+- `/about` route moved inside `AuthGuard` — previously accessible without authentication on the React router side
+
+---
+
+## v1.15.0 — Mobile-Full Overhaul, Permissions & Pagination (2026-05-09)
+
+### Permissions
+- **`mail.delete` permission** — new permission key separates mail record deletion from `log.delete`; configurable per user in Admin → Permission Profiles; `DELETE /api/mail/:id` now requires `mail.delete`
+- **Permission profiles persist across restarts** — added `known_permissions` DB setting to track which permissions existed on last boot; profiles now only receive genuinely new permission keys rather than being reset to role presets on every startup
+- **Default role presets reworked** — monitor, supervisor, admin, and case_manager presets updated to reflect actual operational needs
+
+### UX — Pagination
+- **Report archive** — paginated at 20 per page (`#archive-pager`)
+- **Delivered mail** — paginated at 25 per page
+- **Returned passes** — paginated at 25 per page (`#returned-passes-pager`)
+- **UA records** — paginated at 50 per page (`#uar-pager`)
+- **Discharged clients** — paginated at 50 per page (`#client-pager`)
+- Shared `_spPager()` helper in `app.js` generates prev/next controls with entry range display
+
+### mobile-full — Feature changes
+- **Passes tab** — converted to read-only; shows **Approved Passes** and **Returned** sections matching desktop layout; In/Out/Returned badge colours match desktop exactly; add/edit/delete removed
+- **Chores tab** — converted to read-only; client name is now the primary label with chore name, time slot badge, and today's completion status (initials) clearly shown below; interactive checkbox removed
+- **Reports tab** — "More" (⋯) renamed to "Reports" (📋); UA system and incoming mail features removed; shift report archive is now the sole content, with caseloads also removed
+
+### mobile-full — Bug fixes
+- **Staff phone not rendering** — field was referenced as `phone1` throughout; corrected to `phone` in `renderStaff()`, `openStaffSheet()`, and `saveStaff()`; live-render fixed by re-fetching `GET /api/staff` after successful save instead of relying on sparse PUT response
+- **Pass status comparisons** — filter/render used lowercase `'out'`/`'returned'` which never matched DB values (`'Out'`/`'In'`/`'Returned'`); all comparisons and select values corrected
+- **Client edits not syncing to desktop** — `saveClient()` was calling `PATCH /api/data` which doesn't handle client updates; fixed to `PUT /api/clients/:id`, which saves to DB and broadcasts `data_saved` to all connected clients
+- **Field name mismatch** — `admit_date` used in `openClientSheet()` and `saveClient()`; corrected to `intake_date` to match DB schema
+- **Chore save failing** — `toggleChore()` used `method:'POST'` on `/api/chore-log` but server only exposes `PUT`; corrected HTTP method
+
+---
+
 ## v1.13.3 — Polish & Bug Fixes (2026-05-05)
 
 ### UI

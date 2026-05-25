@@ -46,17 +46,27 @@ Both should print version numbers. If not, reinstall Node.js.
    C:\ShiftPoint\
    ```
 
-2. Open a Command Prompt in that folder and install dependencies:
+2. Open a Command Prompt in that folder and install **server** dependencies:
    ```
    npm install
    ```
-   This only needs to be done once. A `node_modules` folder will be created.
 
-3. Create the data directories (the server does this automatically on first run, but you can create them manually):
+3. Install and build the **React frontend**:
+   ```
+   cd client
+   npm install
+   npm run build
+   cd ..
+   ```
+   This creates `client/dist/` — the compiled SPA served by Express. It only needs to be re-run when the frontend code changes (e.g., after an update).
+
+4. Create the data directories (the server does this automatically on first run, but you can create them manually):
    ```
    mkdir data
    mkdir data\photos
    ```
+
+> **`run.bat`** handles steps 2–3 automatically: it runs `npm install` in both the root and `client/` directories, builds the frontend if needed, then starts the server.
 
 ---
 
@@ -68,7 +78,7 @@ Start the server:
 node server.js
 ```
 
-Or double-click **`run.bat`** — it checks for Node.js, runs `npm install` if needed, and starts the server.
+Or double-click **`run.bat`**.
 
 **On the very first run**, ShiftPoint detects an empty database and creates three accounts with randomly-generated passwords. These are printed to the console in a box like this:
 
@@ -104,9 +114,9 @@ The server prints the LAN IP address on startup, e.g.:
 ```
 
 - **Desktop staff** — open `http://localhost:3000` in Chrome on the server machine, or use the LAN IP from any computer on the same network.
-- **Mobile staff** — open `http://192.168.1.42:3000` in the phone browser (Chrome recommended). The server detects mobile user-agents and serves the simplified mobile UI automatically. Add to the home screen for a PWA-like experience.
+- **Mobile staff** — open `http://192.168.1.42:3000` in the phone browser (Chrome recommended). The server detects mobile user-agents and redirects users with the `mobile.access` permission to the mobile interface automatically. Add to the home screen for a PWA-like experience.
 - **Admin panel** — `http://localhost:3000/admin` (admin role required)
-- **Facility setup** — `http://localhost:3000/facility` (admin role required)
+- **About / version info** — `http://localhost:3000/about` (any authenticated user)
 
 > The server machine's IP address can change if your router reassigns it. For permanent deployments, assign a static LAN IP to the server in your router's DHCP settings, or use the machine's hostname (e.g., `http://DESKTOP-ABC123:3000`).
 
@@ -204,9 +214,12 @@ User accounts are managed from the Admin panel at `http://localhost:3000/admin`.
 
 | Role | What they can do |
 |------|-----------------|
-| `monitor` | Create reports; add log entries; edit staff, passes, chores, and pass notices; cannot delete log entries or edit closed reports |
-| `supervisor` | Everything a monitor can do, plus: edit open reports, delete log entries, submit UA requests |
-| `admin` | Everything a supervisor can do, plus: user management, facility configuration, room management, log entry deletion on any report |
+| `monitor` | Create and close reports; add log entries; edit statuses, residents, staff, chores, and pass notices; view reminders; acknowledge UA banners; log mail; access mobile |
+| `supervisor` | Everything a monitor can do, plus: delete log entries, submit UA requests, manage passes (add/edit/return), approve mail |
+| `admin` | Full access: all supervisor permissions plus user management, facility configuration, room management, mail deletion, UA log deletion, and server administration |
+| `case_manager` | Edit residents and staff; manage passes; submit UA requests; delete UA records; approve mail; mobile access |
+
+Actual access is determined by the **permissions** array on each user, not the role alone. Roles are templates for the initial permission set. Permissions can be customised per user or per permission profile in Admin → Permission Profiles.
 
 ### Password policy
 
@@ -223,7 +236,7 @@ All passwords must be at least 8 characters and include uppercase, lowercase, a 
 | `data/shift.db` | All reports, residents, staff, passes, chores, users | **Critical** |
 | `data/photos/` | Client and UA photos | High |
 
-Everything else (code, `node_modules`, config) is replaceable. Only `data/` needs to be in your backup.
+Everything else (code, `node_modules`, `client/dist/`, config) is replaceable. Only `data/` needs to be in your backup.
 
 ### Recommended approach
 
@@ -259,8 +272,15 @@ Place the entire ShiftPoint folder inside a OneDrive or Dropbox folder. Cloud sy
 1. **Stop the server** (close the terminal window, or run `schtasks /end /tn "ShiftPointServer"`).
 2. **Back up** `data/shift.db` and `data/photos/`.
 3. **Replace the application files** — copy the new version over the existing folder. Do not delete the `data/` folder.
-4. Run `npm install` to pick up any new dependencies.
-5. **Start the server.**
+4. Run `npm install` in the root folder to pick up any new server dependencies.
+5. **Rebuild the frontend** — required after any update that includes frontend changes:
+   ```
+   cd client
+   npm install
+   npm run build
+   cd ..
+   ```
+6. **Start the server.**
 
 Database schema migrations (new columns/tables) run automatically on startup via the `init()` function in `db.js`. No manual SQL is needed.
 
@@ -272,9 +292,11 @@ Database schema migrations (new columns/tables) run automatically on startup via
 
 **"node is not recognized"** — Node.js is not installed or not on the PATH. Download from https://nodejs.org and reinstall.
 
-**"Cannot find module ..."** — dependencies are missing. Run `npm install` in the ShiftPoint folder.
+**"Cannot find module ..."** — dependencies are missing. Run `npm install` in the ShiftPoint folder (and `cd client && npm install` if React modules are missing).
 
 **"EADDRINUSE: address already in use :3000"** — another process is using port 3000. Either stop the other process or change ShiftPoint's port in `server.js` (search for `3000`).
+
+**Blank page / React app not loading** — the frontend may not have been built. Run `cd client && npm run build` and restart the server.
 
 ### Mobile can't connect
 

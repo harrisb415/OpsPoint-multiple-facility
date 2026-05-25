@@ -3,6 +3,8 @@ node_modules/
 
 # Database & sensitive runtime data — NEVER commit these
 data/shift.db
+data/shift.db-shm
+data/shift.db-wal
 data/secret.key
 data/photos/
 data/cert.pem
@@ -10,6 +12,9 @@ data/key.pem
 
 # Keep the data directory itself (server needs it)
 !data/.gitkeep
+
+# Claude Code local settings
+.claude/settings.local.json
 
 # OS
 .DS_Store

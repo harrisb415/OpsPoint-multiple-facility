@@ -1,5 +1,5 @@
 ﻿/**
- * ShiftPoint — Server v1.14.0
+ * ShiftPoint — Server v1.15.0
  * SQLite + HTTPS + Session Auth + Role-based access
  */
 'use strict';
@@ -20,6 +20,9 @@ const PORT = 3000;
 const BASE = __dirname;
 const DATA = path.join(BASE, 'data');
 const DB_PATH = path.join(DATA, 'shift.db');
+// React SPA — always served
+const REACT_DIST = path.join(BASE, 'client', 'dist');
+const serveSPA = (res) => res.sendFile(path.join(REACT_DIST, 'index.html'));
 
 fs.mkdirSync(DATA,                    { recursive:true });
 fs.mkdirSync(path.join(DATA,'photos'),{ recursive:true });
@@ -136,9 +139,14 @@ _sessionMiddleware = buildSession(false);
 app.use((req,res,next) => _sessionMiddleware(req,res,next));
 
 const requireForceChangePw = (req,res,next) => {
-  // If user must change password, only allow /change-password and /api/force-change-password and /logout
+  // If user must change password, only allow specific routes until they do
   if (req.session && req.session.must_change_pw) {
-    if (req.path === '/change-password' || req.path === '/api/force-change-password' || req.path === '/logout') return next();
+    const allowed = ['/change-password', '/api/force-change-password', '/logout', '/api/me', '/api/login'];
+    if (allowed.includes(req.path)) return next();
+    // Always allow static assets — they don't contain sensitive data and the React
+    // SPA needs its CSS/JS to render the change-password page itself
+    if (req.path.startsWith('/assets/') || req.path.startsWith('/static/') ||
+        req.path.startsWith('/js/') || req.path.startsWith('/css/')) return next();
     if (req.path.startsWith('/api/')) return res.status(403).json({error:'Password change required'});
     return res.redirect('/change-password');
   }
@@ -193,6 +201,14 @@ function requireAnyPermission(...perms) {
   };
 }
 
+// ── Admin count helper — counts users with admin.users permission ─
+function _countAdmins(excludeUserId) {
+  return db.query('SELECT id,permissions FROM users',[]).filter(function(u){
+    if(excludeUserId!=null&&u.id===excludeUserId) return false;
+    try{return JSON.parse(u.permissions||'[]').includes('admin.users');}catch(e){return false;}
+  }).length;
+}
+
 // ── Audit helper — wraps db.auditLog with request context ────────
 function audit(req, action, targetType, targetId, targetLabel, detail, override) {
   try {
@@ -229,124 +245,20 @@ function loginRateClear(ip) {
   delete _loginAttempts[ip];
 }
 
-function serveLogin(res,err='') {
-  let h = fs.readFileSync(path.join(BASE,'login.html'),'utf8');
-  h = h.replace('{{ERROR}}', err?`<div class="err">\u26a0 ${err}</div>`:'');
-  res.setHeader('Content-Type','text/html; charset=utf-8'); res.send(h);
-}
-// Certificate download — no auth required so mobile devices can install it
-// Visit https://<LAN-IP>:3000/cert on the phone, accept the warning, download & install
-app.get('/cert',(req,res)=>{
-  const certPath = path.join(DATA,'cert.pem');
-  if(!fs.existsSync(certPath)) return res.status(404).send('No certificate on this server.');
-  res.setHeader('Content-Type','application/x-x509-ca-cert');
-  res.setHeader('Content-Disposition','attachment; filename="shiftpoint.crt"');
-  res.sendFile(certPath);
-});
-
+// Login / logout — React SPA handles the UI
 app.get('/login',(req,res)=>{
   if(req.session&&req.session.userId) return res.redirect('/');
-  serveLogin(res);
+  serveSPA(res);
 });
-app.post('/login', express.urlencoded({extended:false}),(req,res)=>{
-  // VULN-7: Reject cross-origin login POSTs (CSRF defence)
-  // Compare Origin against the Host the browser actually connected to — works for any LAN IP
-  const loginOrigin = req.headers.origin;
-  if (loginOrigin) {
-    const proto = req.secure ? 'https' : 'http';
-    const expectedOrigin = proto + '://' + req.headers.host;
-    if (loginOrigin !== expectedOrigin) return res.status(403).send('<h2>Forbidden</h2>');
-  }
-  const ip=req.ip||req.connection.remoteAddress||'unknown';
-  if (loginRateCheck(ip)) return res.status(429).send('<h2>Too many login attempts. Wait 15 minutes.</h2>');
-  const {username,password}=req.body;
-  const u = db.query1('SELECT * FROM users WHERE LOWER(username)=LOWER(?)',[username||'']);
-  if(!u) {
-    // H3: Constant-time response — run dummy PBKDF2 so invalid user takes same time as wrong password
-    const _dummy = crypto.randomBytes(16).toString('hex');
-    crypto.pbkdf2Sync('dummy',_dummy,600000,64,'sha512');
-    audit(req,'auth.login_fail','user',null,username||'?',{reason:'user_not_found'},{actorId:null,actorName:username||'?'});
-    return serveLogin(res,'Invalid username or password.');
-  }
-  try { if(!verifyPw(password||'',u.hash,u.salt)) {
-    audit(req,'auth.login_fail','user',u.id,u.username,{reason:'bad_password'},{actorId:null,actorName:u.username});
-    return serveLogin(res,'Invalid username or password.');
-  }} catch(e){ return serveLogin(res,'Login error.'); }
-  // VULN-16: Do NOT clear the rate limit on success — prevents NAT-shared IP bypass
-  // VULN-14: Regenerate session ID on login to prevent session fixation
-  const savedReturnTo = req.session.returnTo;
-  req.session.regenerate(function(err) {
-    if (err) return serveLogin(res, 'Login error.');
-    req.session.userId=u.id; req.session.username=u.username;
-    req.session.displayName=u.display_name; req.session.role=u.role;
-    // Load per-user permissions from DB; fall back to role preset for legacy users
-    const _pu=db.query1('SELECT permissions FROM users WHERE id=?',[u.id]);
-    req.session.permissions=(_pu&&_pu.permissions)?JSON.parse(_pu.permissions):(db.ROLE_PRESETS[u.role]||[]);
-    audit(req,'auth.login','user',u.id,u.display_name||u.username,null,{actorId:u.id,actorName:u.display_name||u.username});
-    if (u.must_change_pw) {
-      req.session.must_change_pw = true;
-      return req.session.save(()=>res.redirect('/change-password'));
-    }
-    const raw = savedReturnTo || '/';
-    const dest = (raw.startsWith('/') && !raw.startsWith('//') && !raw.startsWith('/\\')) ? raw : '/';
-    // Explicitly save session before redirect so the follow-up GET sees the session
-    // immediately — avoids a race condition where the store write is still pending
-    req.session.save(()=>res.redirect(dest));
-  });
-});
+
 app.post('/logout', csrfCheck, (req,res)=>{
   audit(req,'auth.logout','user',req.session.userId,req.session.displayName||req.session.username);
-  req.session.destroy(()=>res.redirect('/login'));
+  req.session.destroy(()=>res.json({ok:true}));
 });
 
 
 // ── Force password change ────────────────────────────────────
-app.get('/change-password', requireAuth, (req, res) => {
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Change Password</title>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Outfit',sans-serif;background:#F4F6F8;display:flex;align-items:center;justify-content:center;min-height:100vh;}
-.box{background:#fff;border-radius:14px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 4px 20px rgba(0,0,0,.1);}
-.logo{background:#1A3327;color:#A8D5B5;padding:10px 16px;border-radius:8px;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:24px;display:inline-block;}
-h2{font-size:1.2rem;font-weight:800;color:#1A3327;margin-bottom:6px;}
-p{font-size:.84rem;color:#4B5563;margin-bottom:22px;line-height:1.5;}
-.field{margin-bottom:14px;}
-.field label{display:block;font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#4B5563;margin-bottom:5px;}
-.field input{width:100%;padding:10px 13px;border:1.5px solid #D4E6DA;border-radius:8px;font-size:.9rem;font-family:'Outfit',sans-serif;outline:none;}
-.field input:focus{border-color:#2D6A4F;}
-.btn{width:100%;padding:11px;background:#2D6A4F;color:#fff;border:none;border-radius:8px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:'Outfit',sans-serif;margin-top:4px;}
-.btn:hover{background:#1A5C42;}
-.err{background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;padding:9px 13px;border-radius:8px;font-size:.82rem;margin-bottom:14px;}
-.req{font-size:.76rem;color:#94A3B8;margin-top:14px;line-height:1.7;}
-</style></head><body><div class="box">
-<div class="logo">ShiftPoint</div>
-<h2>Password Change Required</h2>
-<p>An administrator has reset your password. You must set a new password before continuing.</p>
-<div id="err-msg"></div>
-<div class="field"><label>New Password</label><input type="password" id="pw1" placeholder="New password" autocomplete="new-password"></div>
-<div class="field"><label>Confirm Password</label><input type="password" id="pw2" placeholder="Repeat new password" autocomplete="new-password"></div>
-<button class="btn" onclick="submit()">Set New Password</button>
-<p class="req">8+ characters &bull; Uppercase &bull; Lowercase &bull; Number &bull; Symbol</p>
-<script>
-async function submit(){
-  var pw1=document.getElementById('pw1').value,pw2=document.getElementById('pw2').value;
-  var err=document.getElementById('err-msg');
-  if(!pw1||!pw2){err.className='err';err.textContent='Both fields required.';return;}
-  if(pw1!==pw2){err.className='err';err.textContent='Passwords do not match.';return;}
-  var res=await fetch('/api/force-change-password',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({newPassword:pw1})});
-  var data=await res.json();
-  if(data.error){err.className='err';err.textContent=data.error;return;}
-  window.location='/';
-}
-document.getElementById('pw1').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('pw2').focus();});
-document.getElementById('pw2').addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
-<\/script>
-</div></body></html>`;
-  res.setHeader('Content-Type','text/html');
-  res.send(html);
-});
+app.get('/change-password', requireAuth, (req, res) => serveSPA(res));
 
 app.post('/api/force-change-password', requireAuth, csrfCheck, (req, res) => {
   // H2: Only usable when the account is actually in must_change_pw state
@@ -363,96 +275,52 @@ app.post('/api/force-change-password', requireAuth, csrfCheck, (req, res) => {
   res.json({ok:true});
 });
 
-// ── Static files ──────────────────────────────────────────────────
-function inject(html,req) {
-  // Escape < > / to prevent script tag breakout XSS
-  // Must use \\u003c etc so JSON output contains literal \u003c not the < char
-  // Always read permissions from DB so the injected SESSION is always current
-  const _iu = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-  const perms = (_iu && _iu.permissions) ? JSON.parse(_iu.permissions) : (db.ROLE_PRESETS[req.session.role]||[]);
-  const s=JSON.stringify({id:req.session.userId,username:req.session.username,displayName:req.session.displayName,role:req.session.role,permissions:perms})
-    .replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/\//g,'\\u002f');
-  return html.replace('<\/head>',`<script>window.SESSION=${s}<\/script>\n<\/head>`);
-}
-const isMobile = req=>/mobile|android|iphone|ipad|ipod|blackberry|opera mini|iemobile/i.test(req.headers['user-agent']||'');
-
-function userHasPerm(req, perm) {
-  const _u = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-  if (!_u) return false;
-  const perms = _u.permissions ? JSON.parse(_u.permissions) : (db.ROLE_PRESETS[_u.role]||[]);
-  return perms.includes(perm);
-}
-const _mobileAccessDenied = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Access Denied</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:system-ui,sans-serif;background:#1C0A10;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}div{background:#fff;border-radius:14px;padding:32px 28px;max-width:360px;width:100%;text-align:center;}h2{color:#7B1535;font-size:1.2rem;margin-bottom:10px;}p{color:#4B5563;font-size:.9rem;line-height:1.5;margin-bottom:16px;}a{color:#7B1535;font-size:.85rem;}</style></head><body><div><h2>&#128683; Mobile Access Denied</h2><p>Your account does not have permission to use the mobile interface. Contact your administrator.</p><a href="/login">Return to Login</a></div></body></html>';
-app.get('/', requireAuth,(req,res)=>{
-  if(isMobile(req)&&!req.query.desktop){
-    if(userHasPerm(req,'mobile.full'))   return res.redirect('/mobile-full.html');
-    if(userHasPerm(req,'mobile.access')) return res.redirect('/mobile.html');
-  }
-  res.setHeader('Content-Type','text/html; charset=utf-8');
-  res.send(inject(fs.readFileSync(path.join(BASE,'index.html'),'utf8'),req));
-});
-app.get('/mobile.html', requireAuth,(req,res)=>{
-  if(!userHasPerm(req,'mobile.access')&&!userHasPerm(req,'mobile.full'))
-    return res.status(403).send(_mobileAccessDenied);
-  res.setHeader('Content-Type','text/html; charset=utf-8');
-  res.send(inject(fs.readFileSync(path.join(BASE,'mobile.html'),'utf8'),req));
-});
-app.get('/mobile-full.html', requireAuth,(req,res)=>{
-  if(!userHasPerm(req,'mobile.full'))
-    return res.status(403).send(_mobileAccessDenied);
-  res.setHeader('Content-Type','text/html; charset=utf-8');
-  res.send(inject(fs.readFileSync(path.join(BASE,'mobile-full.html'),'utf8'),req));
-});
-app.get('/facility', requireAuth,(req,res)=>{ res.redirect('/admin'); });
-app.get('/admin', requireAuth, requirePermission('admin.users'),(req,res)=>{
-  res.setHeader('Content-Type','text/html; charset=utf-8');
-  res.send(inject(fs.readFileSync(path.join(BASE,'admin.html'),'utf8'),req));
-});
-
-app.get('/about', requireAuth, (req,res) => {
-  res.setHeader('Content-Type','text/html; charset=utf-8');
-  res.send(inject(fs.readFileSync(path.join(BASE,'about.html'),'utf8'), req));
-});
-
-app.use('/js', requireAuth, express.static(path.join(BASE,'js')));
-app.use('/css', requireAuth, express.static(path.join(BASE,'css')));
-app.use('/static/icons', express.static(path.join(BASE,'static','icons'))); // icons are public (favicon on login page)
+// ── Page routes (React SPA handles client-side routing) ──────────
+app.get('/', requireAuth, (req,res)=> serveSPA(res));
+app.get('/facility', requireAuth, (req,res)=> res.redirect('/admin'));
+app.get('/admin', requireAuth, requirePermission('admin.users'), (req,res)=> serveSPA(res));
+app.get('/mobile', requireAuth, requirePermission('mobile.access'), (req,res)=> serveSPA(res));
+app.get('/about', requireAuth, (req,res)=> serveSPA(res));
+app.use('/static/icons', express.static(path.join(BASE,'static','icons'))); // public (favicon on login page)
 app.use('/static', requireAuth, express.static(path.join(BASE,'static')));
-app.get('/manifest.json', requireAuth,(req,res)=>res.sendFile(path.join(BASE,'manifest.json'))); // VULN-18
 app.get('/sw.js',(req,res)=>{
+  // Unregisters any legacy service worker from the vanilla build
   res.setHeader('Content-Type','application/javascript');
   res.setHeader('Service-Worker-Allowed','/');
   res.send('self.addEventListener("install",()=>self.skipWaiting());self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(k=>Promise.all(k.map(n=>caches.delete(n)))).then(()=>self.registration.unregister()));});');
 });
-app.get('/index.html',(req,res)=>res.redirect(301,'/'));
+
+// ── React SPA static assets (served early — won't conflict with API routes) ──
+app.use(express.static(REACT_DIST));
 
 // ── Users API ─────────────────────────────────────────────────────
 app.get('/api/users', requireAuth, requirePermission('admin.users'),(req,res)=>{
-  const rows = db.query('SELECT id,username,display_name,role,created_at,permissions FROM users');
+  const rows = db.query('SELECT id,username,display_name,role,created_at,permissions,is_protected,must_change_pw FROM users ORDER BY id');
   res.json(rows.map(u=>{
     let perms = null;
     try { perms = u.permissions ? JSON.parse(u.permissions) : db.ROLE_PRESETS[u.role]||[]; } catch(e) { perms = db.ROLE_PRESETS[u.role]||[]; }
-    return {id:u.id,username:u.username,displayName:u.display_name,role:u.role,createdAt:u.created_at,permissions:perms};
+    const groups = db.getUserGroups(u.id).map(g=>({id:g.id,key:g.key,label:g.label}));
+    return {id:u.id,username:u.username,displayName:u.display_name,role:u.role,createdAt:u.created_at,permissions:perms,is_protected:!!u.is_protected,must_change_pw:!!u.must_change_pw,groups};
   }));
 });
 app.post('/api/users', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
-  const{username,displayName,password,role,permissions}=req.body;
+  const{username,displayName,password,role,groupIds}=req.body;
   if(!username||!password||!role) return res.status(400).json({error:'Missing fields'});
-  const _validRoles=db.getPermissionProfiles().map(p=>p.key);
-  if(!_validRoles.includes(role)) return res.status(400).json({error:'Invalid role'});
+  // Role can be any group key or any existing role value
   const err=validatePw(password); if(err) return res.status(400).json({error:err});
   if(db.query1('SELECT id FROM users WHERE LOWER(username)=LOWER(?)',[username]))
     return res.status(409).json({error:'Username already exists'});
   const{hash,salt}=hashPw(password);
-  // Use provided permissions or fall back to the role's profile preset
-  const _roleProfile=db.getPermissionProfiles().find(p=>p.key===role);
-  const perms = Array.isArray(permissions) ? permissions.filter(p=>db.PERMISSIONS.includes(p)) : (_roleProfile?_roleProfile.permissions:(db.ROLE_PRESETS[role]||[]));
+  // Compute permissions from selected groups, or fall back to role preset
+  const validGroupIds = Array.isArray(groupIds) ? groupIds.filter(gid=>db.query1('SELECT id FROM groups WHERE id=?',[gid])) : [];
+  const perms = validGroupIds.length>0 ? db.computeGroupsPermissions(validGroupIds) : (db.ROLE_PRESETS[role]||[]);
   // must_change_pw=1 — all new accounts must set their own password on first login
   db.run('INSERT INTO users (username,display_name,role,hash,salt,permissions,must_change_pw) VALUES (?,?,?,?,?,?,1)',
     [username,displayName||username,role,hash,salt,JSON.stringify(perms)]);
   db.save();
   const _newU=db.query1('SELECT id FROM users WHERE LOWER(username)=LOWER(?)',[username]);
-  audit(req,'user.add','user',_newU?_newU.id:null,displayName||username,{username,role});
+  if(_newU && validGroupIds.length>0) db.setUserGroups(_newU.id, validGroupIds);
+  audit(req,'user.add','user',_newU?_newU.id:null,displayName||username,{username,role,groupIds:validGroupIds});
   res.json({ok:true});
 });
 app.put('/api/users/:id', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
@@ -468,7 +336,16 @@ app.put('/api/users/:id', requireAuth, csrfCheck, requirePermission('admin.users
   let permissionsChanged=false;
   let perms=null;
   if(Array.isArray(permissions)){
+    const tgtU=db.query1('SELECT is_protected,permissions FROM users WHERE id=?',[id]);
     perms = permissions.filter(p=>db.PERMISSIONS.includes(p));
+    // Prevent removing admin.users from last admin
+    const hadAdmin = tgtU && JSON.parse(tgtU.permissions||'[]').includes('admin.users');
+    const willHaveAdmin = perms.includes('admin.users');
+    if(hadAdmin && !willHaveAdmin && _countAdmins(id)===0)
+      return res.status(400).json({error:'Cannot remove administrator access from the last administrator.'});
+    // Prevent self-removal of own admin access
+    if(id===req.session.userId && hadAdmin && !willHaveAdmin)
+      return res.status(400).json({error:'You cannot remove your own administrator access.'});
     db.run('UPDATE users SET permissions=? WHERE id=?',[JSON.stringify(perms),id]);
     permissionsChanged=true;
   }
@@ -493,12 +370,30 @@ app.put('/api/users/:id', requireAuth, csrfCheck, requirePermission('admin.users
 });
 app.delete('/api/users/:id', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
   const id=parseInt(req.params.id);
-  if(id===req.session.userId) return res.status(400).json({error:"Can't delete yourself"});
-  const _delU=db.query1('SELECT username,display_name FROM users WHERE id=?',[id]);
+  if(id===req.session.userId) return res.status(400).json({error:'You cannot delete your own account.'});
+  const _delU=db.query1('SELECT username,display_name,is_protected,permissions FROM users WHERE id=?',[id]);
+  if(!_delU) return res.status(404).json({error:'User not found'});
+  if(_delU.is_protected) return res.status(403).json({error:'This is a protected account and cannot be deleted.'});
+  try {
+    if(JSON.parse(_delU.permissions||'[]').includes('admin.users')&&_countAdmins(id)===0)
+      return res.status(400).json({error:'Cannot delete the last administrator account.'});
+  } catch(e){}
   db.run('DELETE FROM users WHERE id=?',[id]); db.save();
-  audit(req,'user.delete','user',id,_delU?(_delU.display_name||_delU.username):String(id));
+  audit(req,'user.delete','user',id,_delU.display_name||_delU.username);
   broadcast({type:'user_deleted',userId:id});
   res.json({ok:true});
+});
+
+app.put('/api/users/:id/protect', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
+  const id=parseInt(req.params.id);
+  if(id===req.session.userId) return res.status(400).json({error:'You cannot protect your own account.'});
+  const u=db.query1('SELECT id,display_name,username,is_protected FROM users WHERE id=?',[id]);
+  if(!u) return res.status(404).json({error:'User not found'});
+  const newVal=u.is_protected?0:1;
+  db.run('UPDATE users SET is_protected=? WHERE id=?',[newVal,id]);
+  db.save();
+  audit(req,'user.protect','user',id,u.display_name||u.username,{protected:newVal===1});
+  res.json({ok:true,protected:newVal===1});
 });
 
 // ── Permission profiles ───────────────────────────────────────────
@@ -520,6 +415,69 @@ app.put('/api/permission-profiles', requireAuth, csrfCheck, requirePermission('a
   audit(req,'profile.edit','settings',null,'Permission Profiles',{count:profiles.length,profiles:profiles.map(p=>p.key)});
   res.json({ok:true});
 });
+// ── Groups API ────────────────────────────────────────────────────
+app.get('/api/groups', requireAuth, requirePermission('admin.users'),(req,res)=>{
+  const groups = db.getGroups();
+  res.json(groups.map(g=>{
+    const cnt=db.query1('SELECT COUNT(*) as c FROM user_groups WHERE group_id=?',[g.id]);
+    return {...g, memberCount: cnt?cnt.c:0};
+  }));
+});
+app.post('/api/groups', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
+  const{key,label,permissions}=req.body;
+  if(!key||!label) return res.status(400).json({error:'Key and label required'});
+  if(!/^[a-z][a-z0-9_]{0,49}$/.test(key)) return res.status(400).json({error:'Key must start with a letter and use only lowercase letters, numbers, underscores'});
+  if(db.query1('SELECT id FROM groups WHERE key=?',[key])) return res.status(409).json({error:'A group with that key already exists'});
+  const g=db.createGroup(key,label,Array.isArray(permissions)?permissions:[]);
+  audit(req,'group.create','group',g?g.id:null,label,{key});
+  res.json({ok:true,id:g?g.id:null});
+});
+app.put('/api/groups/:id', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
+  const id=parseInt(req.params.id);
+  const g=db.query1('SELECT * FROM groups WHERE id=?',[id]);
+  if(!g) return res.status(404).json({error:'Group not found'});
+  const{label,permissions}=req.body;
+  if(!label) return res.status(400).json({error:'Label required'});
+  db.updateGroup(id,label,Array.isArray(permissions)?permissions:[]);
+  const members=db.query('SELECT user_id FROM user_groups WHERE group_id=?',[id]);
+  members.forEach(m=>broadcast({type:'permissions_updated',userId:m.user_id}));
+  audit(req,'group.edit','group',id,label,{permCount:(permissions||[]).length});
+  res.json({ok:true});
+});
+app.delete('/api/groups/:id', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
+  const id=parseInt(req.params.id);
+  const g=db.query1('SELECT * FROM groups WHERE id=?',[id]);
+  if(!g) return res.status(404).json({error:'Group not found'});
+  if(g.is_protected) return res.status(403).json({error:'This group is protected and cannot be deleted.'});
+  const affectedIds=db.deleteGroup(id);
+  affectedIds.forEach(uid=>broadcast({type:'permissions_updated',userId:uid}));
+  audit(req,'group.delete','group',id,g.label);
+  res.json({ok:true});
+});
+app.put('/api/users/:id/groups', requireAuth, csrfCheck, requirePermission('admin.users'),(req,res)=>{
+  const id=parseInt(req.params.id);
+  const u=db.query1('SELECT id,display_name,username FROM users WHERE id=?',[id]);
+  if(!u) return res.status(404).json({error:'User not found'});
+  const{groupIds}=req.body;
+  if(!Array.isArray(groupIds)) return res.status(400).json({error:'groupIds must be an array'});
+  for(const gid of groupIds){
+    if(!db.query1('SELECT id FROM groups WHERE id=?',[gid]))
+      return res.status(400).json({error:'Invalid group ID: '+gid});
+  }
+  const currentPerms=db.getUserEffectivePermissions(id);
+  const newPerms=db.computeGroupsPermissions(groupIds);
+  const hadAdmin=currentPerms.includes('admin.users');
+  const willHaveAdmin=newPerms.includes('admin.users');
+  if(hadAdmin&&!willHaveAdmin&&_countAdmins(id)===0)
+    return res.status(400).json({error:'Cannot remove administrator access from the last administrator.'});
+  if(id===req.session.userId&&hadAdmin&&!willHaveAdmin)
+    return res.status(400).json({error:'You cannot remove your own administrator access.'});
+  db.setUserGroups(id,groupIds);
+  broadcast({type:'permissions_updated',userId:id});
+  audit(req,'user.groups_change','user',id,u.display_name||u.username,{groupIds});
+  res.json({ok:true});
+});
+
 app.post('/api/users/me/password', requireAuth, csrfCheck,(req,res)=>{
   if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
   const{currentPassword,newPassword}=req.body;
@@ -568,6 +526,26 @@ app.get('/api/data', requireAuth,(req,res)=>{
 app.post('/api/data', requireAuth, csrfCheck,(req,res)=>{
   const d=req.body;
   if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
+
+  // Per-section permission enforcement (was previously missing — any authenticated user could write)
+  const _pu = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
+  const _perms = (_pu && _pu.permissions) ? JSON.parse(_pu.permissions) : (db.ROLE_PRESETS[req.session.role]||[]);
+  if (Array.isArray(d.clients) && d.clients.length > 0 && !_perms.includes('residents.edit') && !_perms.includes('facility.manage')) {
+    return res.status(403).json({error:'Permission denied (residents.edit or facility.manage required)'});
+  }
+  if (Array.isArray(d.reports) && d.reports.length > 0) {
+    const wantsClose = d.reports.some(r => r.is_closed);
+    if (!_perms.includes('reports.create')) {
+      return res.status(403).json({error:'Permission denied (reports.create required)'});
+    }
+    if (wantsClose && !_perms.includes('reports.close')) {
+      return res.status(403).json({error:'Permission denied (reports.close required to close a shift)'});
+    }
+  }
+  if (d.logos && !_perms.includes('admin.settings')) {
+    return res.status(403).json({error:'Permission denied (admin.settings required to change logos)'});
+  }
+
   if(Array.isArray(d.clients) && d.clients.length > 0) {
     // First: delete any VACANT rows for rooms that now have an active named resident
     const activeRooms = d.clients
@@ -639,8 +617,11 @@ app.patch('/api/data', requireAuth, csrfCheck,(req,res)=>{
   const _patchPerms = (_pu2 && _pu2.permissions) ? JSON.parse(_pu2.permissions) : (db.ROLE_PRESETS[req.session.role]||[]);
   if (patch.statuses    && !_patchPerms.includes('status.edit')) return res.status(403).json({error:'Permission denied'});
   if (patch.log_entry   && !_patchPerms.includes('log.add'))     return res.status(403).json({error:'Permission denied'});
-  if (patch.issues      !== undefined && !_patchPerms.includes('log.add')) return res.status(403).json({error:'Permission denied'});
-  if (patch.med_notes   !== undefined && !_patchPerms.includes('log.add')) return res.status(403).json({error:'Permission denied'});
+  if (patch.issues      !== undefined && !_patchPerms.includes('issues.edit')) return res.status(403).json({error:'Permission denied'});
+  if (patch.med_notes   !== undefined && !_patchPerms.includes('issues.edit')) return res.status(403).json({error:'Permission denied'});
+  if (patch.shiftData   && !_patchPerms.includes('reports.create')) return res.status(403).json({error:'Permission denied'});
+  if (patch.last_ua          !== undefined && !_patchPerms.includes('ua.request'))   return res.status(403).json({error:'Permission denied'});
+  if (patch.last_room_search !== undefined && !_patchPerms.includes('log.add'))      return res.status(403).json({error:'Permission denied'});
   const rptId=parseInt(patch.reportId);
   if(rptId) {
     if(patch.statuses){
@@ -677,6 +658,18 @@ app.patch('/api/data', requireAuth, csrfCheck,(req,res)=>{
       db.run('UPDATE reports SET med_notes=?,updated_at=? WHERE id=?',
         [JSON.stringify(patch.med_notes),new Date().toISOString(),rptId]);
     }
+    if(patch.last_ua && typeof patch.last_ua === 'object'){
+      const cur=db.query1('SELECT last_ua FROM reports WHERE id=?',[rptId]);
+      if(cur){ let u={}; try{u=JSON.parse(cur.last_ua||'{}')}catch(e){} Object.assign(u,patch.last_ua);
+        db.run('UPDATE reports SET last_ua=?,updated_at=? WHERE id=?',[JSON.stringify(u),new Date().toISOString(),rptId]);
+      }
+    }
+    if(patch.last_room_search && typeof patch.last_room_search === 'object'){
+      const cur=db.query1('SELECT last_room_search FROM reports WHERE id=?',[rptId]);
+      if(cur){ let u={}; try{u=JSON.parse(cur.last_room_search||'{}')}catch(e){} Object.assign(u,patch.last_room_search);
+        db.run('UPDATE reports SET last_room_search=?,updated_at=? WHERE id=?',[JSON.stringify(u),new Date().toISOString(),rptId]);
+      }
+    }
     db.save();
   }
   if(patch.log_entry) audit(req,'log.add','log_entry',null,(patch.log_entry.text||'').slice(0,80),{reportId:rptId});
@@ -702,6 +695,8 @@ app.patch('/api/data', requireAuth, csrfCheck,(req,res)=>{
   }
   if (patch.issues !== undefined) safePatch.issues = patch.issues;
   if (patch.med_notes !== undefined) safePatch.med_notes = patch.med_notes;
+  if (patch.last_ua && typeof patch.last_ua === 'object') safePatch.last_ua = patch.last_ua;
+  if (patch.last_room_search && typeof patch.last_room_search === 'object') safePatch.last_room_search = patch.last_room_search;
   broadcast({type:'patched', patch:safePatch, user:req.session.displayName,
     active_report_id:db.getSetting('active_report_id',null)});
   res.json({ok:true});
@@ -775,6 +770,22 @@ app.get('/api/log/:id/photo', requireAuth,(req,res)=>{  // VULN-6: all roles may
   res.json({ok:true,photo:b64});
 });
 
+// ── UA Log (log entries containing UA results) ────────────────────
+app.get('/api/ua-log', requireAuth, (req, res) => {
+  const limit  = Math.min(parseInt(req.query.limit)  || 200, 500);
+  const offset = parseInt(req.query.offset) || 0;
+  const rows = db.query(`
+    SELECT le.id, le.text, le.time, le.ua_photo, le.created_at,
+           r.report_date, r.shift, r.id AS report_id
+    FROM log_entries le
+    JOIN reports r ON r.id = le.report_id
+    WHERE le.text LIKE '% — UA:%'
+    ORDER BY r.report_date DESC, r.id DESC, le.id DESC
+    LIMIT ? OFFSET ?
+  `, [limit, offset]);
+  res.json(rows || []);
+});
+
 // ── Facility settings ─────────────────────────────────────────────
 app.get('/api/facility/settings', requireAuth,(req,res)=>{
   res.json({
@@ -785,11 +796,16 @@ app.get('/api/facility/settings', requireAuth,(req,res)=>{
     ua_panel:               db.getSetting('ua_panel',               db.DEFAULT_UA_PANEL),
     wellness_schedule:      db.getSetting('wellness_schedule',      []),
     walk_schedule:          db.getSetting('walk_schedule',          []),
+    shift_day_start:        db.getSetting('shift_day_start',        '07:00'),
+    shift_swing_start:      db.getSetting('shift_swing_start',      '15:00'),
+    shift_grave_start:      db.getSetting('shift_grave_start',      '23:00'),
+    ui_visibility:          db.getSetting('ui_visibility',          {tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,infractions:true},buttons:{wellness:true,walkthrough:true}}),
   });
 });
 app.put('/api/facility/settings', requireAuth, csrfCheck, requirePermission('admin.settings'),(req,res)=>{
   const{facility_name,wellness_interval_mins,walk_interval_mins,
-        walk_areas,ua_panel,wellness_schedule,walk_schedule}=req.body;
+        walk_areas,ua_panel,wellness_schedule,walk_schedule,
+        shift_day_start,shift_swing_start,shift_grave_start,ui_visibility}=req.body;
   if(!facility_name||!facility_name.trim()) return res.status(400).json({error:'Facility name required'});
   if(facility_name.trim().length > 200) return res.status(400).json({error:'Facility name too long (max 200 chars)'});
   db.setSetting('facility_name',facility_name.trim());
@@ -799,6 +815,10 @@ app.put('/api/facility/settings', requireAuth, csrfCheck, requirePermission('adm
   if(Array.isArray(ua_panel))               db.setSetting('ua_panel',ua_panel.filter(a=>a.trim()));
   if(Array.isArray(wellness_schedule))      db.setSetting('wellness_schedule',wellness_schedule);
   if(Array.isArray(walk_schedule))          db.setSetting('walk_schedule',walk_schedule);
+  if(shift_day_start&&typeof shift_day_start==='string')   db.setSetting('shift_day_start',   shift_day_start.trim());
+  if(shift_swing_start&&typeof shift_swing_start==='string') db.setSetting('shift_swing_start', shift_swing_start.trim());
+  if(shift_grave_start&&typeof shift_grave_start==='string') db.setSetting('shift_grave_start', shift_grave_start.trim());
+  if(ui_visibility && typeof ui_visibility==='object') db.setSetting('ui_visibility', ui_visibility);
   db.save();
   const settings={
     facility_name:          db.getSetting('facility_name'),
@@ -808,6 +828,10 @@ app.put('/api/facility/settings', requireAuth, csrfCheck, requirePermission('adm
     ua_panel:               db.getSetting('ua_panel'),
     wellness_schedule:      db.getSetting('wellness_schedule'),
     walk_schedule:          db.getSetting('walk_schedule'),
+    shift_day_start:        db.getSetting('shift_day_start'),
+    shift_swing_start:      db.getSetting('shift_swing_start'),
+    shift_grave_start:      db.getSetting('shift_grave_start'),
+    ui_visibility:          db.getSetting('ui_visibility'),
   };
   broadcast({type:'settings_updated',settings});
   audit(req,'facility.settings','settings',null,'Facility Settings',{facility_name:facility_name.trim()});
@@ -829,21 +853,57 @@ app.get('/api/facility/rooms/vacant', requireAuth,(req,res)=>{
      ORDER BY CAST(room AS INTEGER), room`));
 });
 
+// ── Add new client ─────────────────────────────────────────────
+app.post('/api/clients', requireAuth, csrfCheck, requirePermission('residents.edit'),(req,res)=>{
+  const{room,name,case_manager,phone,intake_date}=req.body;
+  if(!name||!String(name).trim()) return res.status(400).json({error:'Name is required'});
+  if(!room||!String(room).trim())  return res.status(400).json({error:'Room is required'});
+  // Block if a real (non-VACANT) resident already has this room
+  const occ=db.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0`,[String(room)]);
+  if(occ) return res.status(409).json({error:'Room '+room+' is already occupied by '+occ.name});
+  // If a VACANT row exists for this room, update it in-place (avoids duplicates)
+  const vacant=db.query1(`SELECT id FROM clients WHERE room=? AND name='VACANT' AND is_active=1`,[String(room)]);
+  let resultId;
+  if(vacant){
+    db.run(`UPDATE clients SET name=?,case_manager=?,phone=?,intake_date=?,is_active=1 WHERE id=?`,
+      [String(name).trim(),case_manager||'',phone||'',intake_date||null,vacant.id]);
+    resultId=vacant.id;
+  } else {
+    const maxRow=db.query1('SELECT MAX(sort_order) AS m FROM clients');
+    const sortOrder=(maxRow&&maxRow.m!=null?maxRow.m:0)+1;
+    db.run(`INSERT INTO clients (room,name,case_manager,phone,intake_date,is_active,is_special,sort_order)
+      VALUES (?,?,?,?,?,1,0,?)`,
+      [String(room),String(name).trim(),case_manager||'',phone||'',intake_date||null,sortOrder]);
+    const newId=db.query1('SELECT last_insert_rowid() AS id');
+    resultId=newId?newId.id:null;
+  }
+  db.save();
+  const newClient=resultId?db.query1('SELECT * FROM clients WHERE id=?',[resultId]):null;
+  audit(req,'client.add','client',resultId,String(name).trim()+' Rm.'+String(room));
+  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
+  res.json({ok:true,id:resultId,client:newClient});
+});
+
 // ── Direct client update (all authenticated roles) ─────────────
 app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents.edit'),(req,res)=>{
 
   const id=parseInt(req.params.id,10);
   if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{room,name,case_manager,phone,intake_date,discharge_date}=req.body;
+  const{room,name,case_manager,phone,intake_date,discharge_date,photo,is_active}=req.body;
   if(name!==undefined&&!name.trim()) return res.status(400).json({error:'Name cannot be empty'});
   // Check room conflict if room is changing
   if(room!==undefined){
-    const cur=db.query1('SELECT room FROM clients WHERE id=?',[id]);
+    const cur=db.query1('SELECT room,is_active FROM clients WHERE id=?',[id]);
     if(cur&&String(room)!==String(cur.room)){
       const occ=db.query1(
         `SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0 AND id!=?`,
         [String(room),id]);
       if(occ) return res.status(409).json({error:'Room '+room+' is already occupied by '+occ.name});
+    }
+    // Remove any VACANT placeholder for the target room when the client is active (or being reactivated)
+    const becomingActive = is_active !== undefined ? !!is_active : !!(cur && cur.is_active);
+    if(becomingActive) {
+      db.run(`DELETE FROM clients WHERE room=? AND name='VACANT' AND id!=?`,[String(room),id]);
     }
     db.run('UPDATE clients SET room=? WHERE id=?',[String(room),id]);
   }
@@ -852,6 +912,27 @@ app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents
   if(phone!==undefined)         db.run('UPDATE clients SET phone=? WHERE id=?',[phone,id]);
   if(intake_date!==undefined)   db.run('UPDATE clients SET intake_date=? WHERE id=?',[intake_date||null,id]);
   if(discharge_date!==undefined)db.run('UPDATE clients SET discharge_date=? WHERE id=?',[discharge_date||null,id]);
+  if(is_active!==undefined)     db.run('UPDATE clients SET is_active=? WHERE id=?',[is_active?1:0,id]);
+  if(photo!==undefined){
+    let pval=null;
+    if(photo&&typeof photo==='string'&&photo.startsWith('data:image/')){
+      const b64Part=photo.split(',')[1]||'';
+      if(b64Part.length<=5592406){
+        try{
+          const bytes=Buffer.from(b64Part.slice(0,12),'base64');
+          const isJpeg=bytes[0]===0xFF&&bytes[1]===0xD8&&bytes[2]===0xFF;
+          const isPng =bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4E&&bytes[3]===0x47;
+          const isGif =bytes[0]===0x47&&bytes[1]===0x49&&bytes[2]===0x46;
+          const isWebp=bytes[8]===0x57&&bytes[9]===0x45&&bytes[10]===0x42&&bytes[11]===0x50;
+          if(isJpeg||isPng||isGif||isWebp){
+            const ext=isGif?'gif':isPng?'png':isWebp?'webp':'jpg';
+            pval=db.savePhoto(photo,`client_${id}.${ext}`);
+          }
+        }catch{}
+      }
+    }
+    db.run('UPDATE clients SET photo=? WHERE id=?',[pval,id]);
+  }
   db.save();
   const _clt=db.query1('SELECT * FROM clients WHERE id=?',[id]);
   audit(req,'client.edit','client',id,_clt?(_clt.name+' Rm.'+_clt.room):String(id),{fields:Object.keys(req.body)});
@@ -952,8 +1033,51 @@ app.get('/photos/:filename', requireAuth,(req,res)=>{
 });
 
 app.get('/api/me', requireAuth,(req,res)=>{
-  res.json({id:req.session.userId,username:req.session.username,
-    displayName:req.session.displayName,role:req.session.role});
+  const _u = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
+  const perms = (_u&&_u.permissions)?JSON.parse(_u.permissions):(db.ROLE_PRESETS[req.session.role]||[]);
+  res.json({
+    id:req.session.userId, username:req.session.username,
+    displayName:req.session.displayName, role:req.session.role,
+    permissions:perms, mustChangePw:!!req.session.must_change_pw
+  });
+});
+
+// JSON login endpoint for React frontend
+app.post('/api/login', express.json(), (req,res)=>{
+  const loginOrigin = req.headers.origin;
+  if (loginOrigin) {
+    const proto = req.secure ? 'https' : 'http';
+    const expectedOrigin = proto + '://' + req.headers.host;
+    if (loginOrigin !== expectedOrigin) return res.status(403).json({error:'Forbidden'});
+  }
+  const ip = req.ip||req.connection.remoteAddress||'unknown';
+  if (loginRateCheck(ip)) return res.status(429).json({error:'Too many login attempts. Wait 15 minutes.'});
+  const {username,password} = req.body||{};
+  const u = db.query1('SELECT * FROM users WHERE LOWER(username)=LOWER(?)',[username||'']);
+  if (!u) {
+    const _dummy = crypto.randomBytes(16).toString('hex');
+    crypto.pbkdf2Sync('dummy',_dummy,600000,64,'sha512');
+    audit(req,'auth.login_fail','user',null,username||'?',{reason:'user_not_found'},{actorId:null,actorName:username||'?'});
+    return res.status(401).json({error:'Invalid username or password.'});
+  }
+  try { if (!verifyPw(password||'',u.hash,u.salt)) {
+    audit(req,'auth.login_fail','user',u.id,u.username,{reason:'bad_password'},{actorId:null,actorName:u.username});
+    return res.status(401).json({error:'Invalid username or password.'});
+  }} catch(e){ return res.status(500).json({error:'Login error.'}); }
+  const savedReturnTo = req.session.returnTo;
+  req.session.regenerate(function(err) {
+    if (err) return res.status(500).json({error:'Login error.'});
+    req.session.userId=u.id; req.session.username=u.username;
+    req.session.displayName=u.display_name; req.session.role=u.role;
+    const _pu=db.query1('SELECT permissions FROM users WHERE id=?',[u.id]);
+    req.session.permissions=(_pu&&_pu.permissions)?JSON.parse(_pu.permissions):(db.ROLE_PRESETS[u.role]||[]);
+    audit(req,'auth.login','user',u.id,u.display_name||u.username,null,{actorId:u.id,actorName:u.display_name||u.username});
+    if (u.must_change_pw) {
+      req.session.must_change_pw = true;
+      return req.session.save(()=>res.json({ok:true,mustChangePw:true}));
+    }
+    req.session.save(()=>res.json({ok:true,mustChangePw:false}));
+  });
 });
 
 // ── Staff Directory ───────────────────────────────────────────────
@@ -1046,8 +1170,11 @@ app.patch('/api/clients/:id/chore', requireAuth, csrfCheck, requirePermission('c
   broadcast({type:'data_saved',user:req.session.displayName});
   res.json({ok:true});
 });
-// Get chore log for a specific date
+// Get chore log — single date or date range (?from=YYYY-MM-DD&to=YYYY-MM-DD)
 app.get('/api/chore-log', requireAuth,(req,res)=>{
+  if(req.query.from && req.query.to){
+    return res.json(db.query('SELECT * FROM chore_log WHERE log_date>=? AND log_date<=? ORDER BY log_date',[req.query.from,req.query.to]));
+  }
   const date=req.query.date||new Date().toISOString().slice(0,10);
   res.json(db.query('SELECT * FROM chore_log WHERE log_date=?',[date]));
 });
@@ -1084,10 +1211,20 @@ app.post('/api/passes', requireAuth, csrfCheck, requirePermission('passes.edit')
   broadcast({type:'passes_updated',user:req.session.displayName});
   res.json({ok:true,pass:db.query1('SELECT * FROM passes ORDER BY id DESC LIMIT 1')});
 });
-app.put('/api/passes/:id', requireAuth, csrfCheck, requirePermission('passes.edit'),(req,res)=>{
+app.put('/api/passes/:id', requireAuth, csrfCheck, requireAnyPermission('passes.edit','passes.status'),(req,res)=>{
   const id=parseInt(req.params.id);
   if(!db.query1('SELECT id FROM passes WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
   const{departure,return_date,ua_notes,notes,status}=req.body;
+
+  // Status-only callers (passes.status) cannot touch any other field
+  const _pu = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
+  const _perms = (_pu && _pu.permissions) ? JSON.parse(_pu.permissions) : (db.ROLE_PRESETS[req.session.role]||[]);
+  const hasEdit = _perms.includes('passes.edit');
+  const touchingNonStatusField = departure !== undefined || return_date !== undefined || ua_notes !== undefined || notes !== undefined;
+  if (!hasEdit && touchingNonStatusField) {
+    return res.status(403).json({error:'Permission denied (passes.edit required to change pass details)'});
+  }
+
   if(departure!==undefined)   db.run('UPDATE passes SET departure=? WHERE id=?',[departure,id]);
   if(return_date!==undefined) db.run('UPDATE passes SET return_date=? WHERE id=?',[return_date,id]);
   if(ua_notes!==undefined)    db.run('UPDATE passes SET ua_notes=? WHERE id=?',[ua_notes,id]);
@@ -1158,8 +1295,60 @@ app.post('/api/ua-requests/:id/acknowledge', requireAuth, csrfCheck, requirePerm
   );
   db.save();
   audit(req,'ua.acknowledge','ua_request',id,_uar?(_uar.client_name+(_uar.room?' Rm.'+_uar.room:'')):String(id));
-  // No broadcast — each session manages its own dismissed view independently
+  const pending = db.query('SELECT * FROM ua_requests WHERE acknowledged=0 ORDER BY requested_at DESC');
+  broadcast({type:'ua_request', requests: pending});
   res.json({ok:true});
+});
+
+// ── UA Draws ───────────────────────────────────────────────────────
+app.get('/api/ua-draws', requireAuth, (req,res)=>{
+  const since = req.query.since || new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+  res.json(db.getUADraws(since));
+});
+
+app.get('/api/ua-draws/recent-clients', requireAuth, requirePermission('ua.draw'), (req,res)=>{
+  const days = Math.min(parseInt(req.query.days)||30, 365);
+  const ids = db.getRecentDrawnClientIds(days);
+  res.json({ ids: Array.from(ids) });
+});
+
+app.post('/api/ua-draws', requireAuth, csrfCheck, requirePermission('ua.draw'), (req,res)=>{
+  const { residents } = req.body;
+  if (!Array.isArray(residents)||residents.length===0)
+    return res.status(400).json({error:'residents required'});
+  const by   = req.session.displayName||req.session.username;
+  const byId = req.session.userId;
+  const draw = db.createUADraw(byId, by, residents);
+  residents.forEach(c=>{
+    db.run(
+      `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name) VALUES (?,?,?,?,0,'')`,
+      [c.id||0, c.name||'', c.room||'', by]
+    );
+  });
+  db.save();
+  audit(req,'ua.draw','ua_draw',draw.id,`${residents.length} residents`,{residents});
+  const pending = db.query('SELECT * FROM ua_requests WHERE acknowledged=0 ORDER BY requested_at DESC');
+  broadcast({type:'ua_draw_created', drawId:draw.id, draw, requests:pending});
+  res.json({ok:true, drawId:draw.id});
+});
+
+// ── Broadcasts ─────────────────────────────────────────────────────
+app.get('/api/broadcasts', requireAuth, (req,res)=>{
+  const hours = parseInt(req.query.hours)||24;
+  res.json(db.getBroadcasts(hours));
+});
+
+app.post('/api/broadcasts', requireAuth, csrfCheck, requirePermission('broadcast.send'), (req,res)=>{
+  const text = String(req.body.message||'').trim().slice(0,500);
+  if (!text) return res.status(400).json({error:'message required'});
+  const msg = db.createBroadcast(
+    req.session.userId,
+    req.session.displayName||req.session.username,
+    text
+  );
+  audit(req,'broadcast.send','broadcast',msg.id,text.slice(0,80));
+  broadcast({type:'broadcast_message', message:msg});
+  res.json({ok:true, message:msg});
 });
 
 // ── Mail Log ──────────────────────────────────────────────────────
@@ -1260,8 +1449,81 @@ app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('mail.dele
   res.json({ok:true});
 });
 
+// ── Infractions ───────────────────────────────────────────────────
+function _infractionCounts() {
+  const r=db.query1('SELECT COUNT(*) as c FROM infractions WHERE status=?',['pending']);
+  const a=db.query1('SELECT COUNT(*) as c FROM infractions WHERE status=?',['assigned']);
+  return {pendingReview:r?r.c:0, pendingConsequences:a?a.c:0};
+}
+
+app.get('/api/infractions', requireAuth, (req,res)=>{
+  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
+  const{status,client_id}=req.query;
+  let sql='SELECT * FROM infractions';
+  const params=[];
+  if(status&&status!=='all'){sql+=' WHERE status=?';params.push(status);}
+  if(client_id){sql+=(params.length?' AND':' WHERE')+' client_id=?';params.push(parseInt(client_id));}
+  sql+=' ORDER BY logged_at DESC';
+  res.json(db.query(sql,params));
+});
+
+app.post('/api/infractions', requireAuth, csrfCheck, requirePermission('infractions.log'), (req,res)=>{
+  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
+  const{client_id,client_name,room,infraction_date,description,notes}=req.body;
+  if(!client_id||!description) return res.status(400).json({error:'client_id and description required'});
+  const loggedBy=req.session.displayName||req.session.username;
+  db.run('INSERT INTO infractions (client_id,client_name,room,infraction_date,description,notes,logged_by) VALUES (?,?,?,?,?,?,?)',
+    [client_id,client_name||'',room||'',infraction_date||'',description,notes||'',loggedBy]);
+  const v=db.query1('SELECT * FROM infractions ORDER BY id DESC LIMIT 1');
+  audit(req,'infraction.log','infraction',v?v.id:null,String(client_name||client_id),{description});
+  broadcast({type:'infractions_updated',..._infractionCounts()});
+  res.json({ok:true,id:v?v.id:null});
+});
+
+app.put('/api/infractions/:id/review', requireAuth, csrfCheck, requirePermission('infractions.review'), (req,res)=>{
+  const id=parseInt(req.params.id);
+  const v=db.query1('SELECT * FROM infractions WHERE id=?',[id]);
+  if(!v) return res.status(404).json({error:'Not found'});
+  if(v.status!=='pending') return res.status(400).json({error:'Infraction is not pending review'});
+  const{action,consequence}=req.body;
+  const by=req.session.displayName||req.session.username;
+  const now=new Date().toISOString().slice(0,19).replace('T',' ');
+  if(action==='waive'){
+    db.run('UPDATE infractions SET status=?,consequence_by=?,consequence_at=? WHERE id=?',['waived',by,now,id]);
+  } else {
+    if(!consequence) return res.status(400).json({error:'consequence required'});
+    db.run('UPDATE infractions SET status=?,consequence=?,consequence_by=?,consequence_at=? WHERE id=?',['assigned',consequence,by,now,id]);
+  }
+  audit(req,'infraction.review','infraction',id,v.client_name,{action,consequence});
+  broadcast({type:'infractions_updated',..._infractionCounts()});
+  res.json({ok:true});
+});
+
+app.put('/api/infractions/:id/complete', requireAuth, csrfCheck, requirePermission('infractions.complete'), (req,res)=>{
+  const id=parseInt(req.params.id);
+  const v=db.query1('SELECT * FROM infractions WHERE id=?',[id]);
+  if(!v) return res.status(404).json({error:'Not found'});
+  if(v.status!=='assigned') return res.status(400).json({error:'Infraction must have an assigned consequence'});
+  const by=req.session.displayName||req.session.username;
+  const now=new Date().toISOString().slice(0,19).replace('T',' ');
+  db.run('UPDATE infractions SET status=?,completed_by=?,completed_at=? WHERE id=?',['completed',by,now,id]);
+  audit(req,'infraction.complete','infraction',id,v.client_name);
+  broadcast({type:'infractions_updated',..._infractionCounts()});
+  res.json({ok:true});
+});
+
+app.delete('/api/infractions/:id', requireAuth, csrfCheck, requirePermission('infractions.delete'), (req,res)=>{
+  const id=parseInt(req.params.id);
+  const v=db.query1('SELECT client_name FROM infractions WHERE id=?',[id]);
+  if(!v) return res.status(404).json({error:'Not found'});
+  db.run('DELETE FROM infractions WHERE id=?',[id]);
+  audit(req,'infraction.delete','infraction',id,v.client_name);
+  broadcast({type:'infractions_updated',..._infractionCounts()});
+  res.json({ok:true});
+});
+
 // ── Server restart (admin only) ───────────────────────────────────
-app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.settings'), (req,res)=>{
+app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.system'), (req,res)=>{
   audit(req,'server.restart','server',null,'Server Restart',{by:req.session.displayName||req.session.username});
   broadcast({type:'server_restarting',user:req.session.displayName||req.session.username});
   res.json({ok:true});
@@ -1276,7 +1538,7 @@ app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.
 });
 
 // ── Audit Log API ─────────────────────────────────────────────────
-app.get('/api/audit-log', requireAuth, requirePermission('admin.users'), (req,res)=>{
+app.get('/api/audit-log', requireAuth, requirePermission('admin.audit'), (req,res)=>{
   const{action,actorId,from,to,search,limit,offset}=req.query;
   const prefixes=action?action.split(',').map(s=>s.trim()).filter(Boolean):[];
   const result=db.getAuditLog({
@@ -1289,8 +1551,15 @@ app.get('/api/audit-log', requireAuth, requirePermission('admin.users'), (req,re
   res.json(result);
 });
 
+// ── React SPA catch-all (MUST be last — after all API routes) ────
+app.get('*',(req,res)=>{
+  if (!req.path.startsWith('/api/')) res.sendFile(path.join(REACT_DIST,'index.html'));
+  else res.status(404).json({error:'Not found'});
+});
+
 // ── Start ─────────────────────────────────────────────────────────
-db.init(DB_PATH).then(()=>{
+db.init(DB_PATH);
+(()=>{
   // Clean up stale logo paths from old installations (not data URIs = unusable)
   ['logo_pdec','logo_wcs'].forEach(k=>{
     const v = db.getSetting(k,'');
@@ -1334,10 +1603,10 @@ db.init(DB_PATH).then(()=>{
   });
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
-  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'ShiftPoint',{version:'1.14.0',tls:useTLS});
+  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'ShiftPoint',{version:'1.15.0',tls:useTLS});
   server.listen(PORT,'0.0.0.0',()=>{
     console.log('\n══════════════════════════════════════════════');
-    console.log('  ShiftPoint v1.14.0');
+    console.log('  ShiftPoint v1.15.0');
     console.log('══════════════════════════════════════════════');
     console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
     console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);
@@ -1347,4 +1616,4 @@ db.init(DB_PATH).then(()=>{
     const{exec}=require('child_process');
     setTimeout(()=>exec(`start ${proto}://localhost:${PORT}`),1200);
   });
-}).catch(err=>{ console.error('FATAL: DB init failed:',err); process.exit(1); });
+})();

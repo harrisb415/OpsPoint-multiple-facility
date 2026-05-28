@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // Auto-detect whether the backend is using TLS by checking for the cert file
 // Default to https since TLS certs exist in data/
@@ -19,7 +20,7 @@ function withOriginRewrite(target) {
 }
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
     proxy: {

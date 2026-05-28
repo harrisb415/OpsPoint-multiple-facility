@@ -794,18 +794,18 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
             <>
               {uiVis.buttons?.walkthrough !== false && (
                 <button onClick={fileWalkthroughs} title="File Walkthrough — filled filing record"
-                  className="btn btn-outline btn-sm" style={{ fontSize: '.68rem', padding: '5px 9px', background: 'rgba(219,234,254,.15)', borderColor: 'rgba(147,197,253,.4)', color: 'rgba(255,255,255,.8)' }}>
+                  className="btn btn-outline btn-sm" style={{ fontSize: '.68rem', padding: '5px 9px' }}>
                   📋 File Walkthrough
                 </button>
               )}
               {uiVis.buttons?.wellness !== false && (
                 <button onClick={fileWellnessChecks} title="File Wellness Check — filled filing record"
-                  className="btn btn-outline btn-sm" style={{ fontSize: '.68rem', padding: '5px 9px', background: 'rgba(220,252,231,.15)', borderColor: 'rgba(110,231,183,.4)', color: 'rgba(255,255,255,.8)' }}>
+                  className="btn btn-outline btn-sm" style={{ fontSize: '.68rem', padding: '5px 9px' }}>
                   💚 File Wellness
                 </button>
               )}
               <button onClick={sendOutlook} title="Email shift report"
-                className="btn btn-outline btn-sm" style={{ fontSize: '.68rem', padding: '5px 9px', background: 'rgba(254,243,199,.15)', borderColor: 'rgba(253,224,132,.4)', color: 'rgba(255,255,255,.8)' }}>
+                className="btn btn-outline btn-sm" style={{ fontSize: '.68rem', padding: '5px 9px' }}>
                 ✉ Email
               </button>
             </>

@@ -1449,7 +1449,7 @@ app.delete('/api/ua-requests/:id', requireAuth, csrfCheck, requireAnyPermission(
   res.json({ok:true});
 });
 
-app.post('/api/ua-requests/:id/acknowledge', requireAuth, csrfCheck, requirePermission('ua.acknowledge'), (req,res)=>{
+app.post('/api/ua-requests/:id/acknowledge', requireAuth, csrfCheck, requireAnyPermission('ua.acknowledge','ua.record'), (req,res)=>{
   const id = parseInt(req.params.id,10);
   const _uar=db.query1('SELECT client_name,room FROM ua_requests WHERE id=?',[id]);
   db.run(

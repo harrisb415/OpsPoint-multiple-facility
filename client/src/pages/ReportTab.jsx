@@ -16,6 +16,19 @@ const STATUS_OPTS = [
 ]
 
 
+const LOG_TYPE_STYLE = {
+  Wellness:      { bg: '#ccfbf1', color: '#0f766e' },
+  Walkthrough:   { bg: '#ccfbf1', color: '#0f766e' },
+  UA:            { bg: '#fef3c7', color: '#92400e' },
+  Lunch:         { bg: '#f0fdf9', color: '#6b7280' },
+  'Room Search': { bg: '#ede9fe', color: '#6d28d9' },
+  Mail:          { bg: '#dbeafe', color: '#1d4ed8' },
+  Violation:     { bg: '#fee2e2', color: '#991b1b' },
+  Intake:        { bg: '#dcfce7', color: '#15803d' },
+  Discharge:     { bg: '#f0fdf9', color: '#6b7280' },
+  Note:          { bg: '#f1f5f9', color: '#475569' },
+}
+
 const DEFAULT_WALK_AREAS = [
   'Supply Room','Basement / Offices','Kitchen','Meeting Room','Dining Room',
   'Laundry Area','Clothing Closet','Stairs to Roof','Floors 2, 3 & 4',
@@ -663,13 +676,26 @@ export default function ReportTab({ onNavigate }) {
             </div>
           )}
 
-          <div className="log-entries">
+          <div className="roster-wrap log-table-wrap">
             {logEntries.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 0' }}>No entries yet.</div>
+              <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 2px' }}>No entries yet.</div>
             )}
-            {logEntries.map(e => (
-              <LogEntry key={e.id ?? e.time + e.text} entry={e} canDelete={canDelLog} onDelete={handleDelLog} onPhotoSaved={loadData} />
-            ))}
+            {logEntries.length > 0 && (
+              <table className="log-table">
+                <thead>
+                  <tr>
+                    <th className="log-th">Time</th>
+                    <th className="log-th">Type</th>
+                    <th className="log-th">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {logEntries.map(e => (
+                    <LogEntry key={e.id ?? e.time + e.text} entry={e} canDelete={canDelLog} onDelete={handleDelLog} onPhotoSaved={loadData} />
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
           {canLog && !isClosed && (
             <div className="log-add">
@@ -1671,9 +1697,11 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
 }
 
 function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
-  const isPos     = e.text && /POS:/.test(e.text)
-  const isUA      = e.text && /— UA:/i.test(e.text)
-  const fileRef   = useRef(null)
+  const isPos   = e.text && /POS:/.test(e.text)
+  const isUA    = e.text && /— UA:/i.test(e.text)
+  const type    = classifyLogEntry(e.text)
+  const ts      = LOG_TYPE_STYLE[type] || LOG_TYPE_STYLE.Note
+  const fileRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [photoSrc, setPhotoSrc]   = useState(null)
   const [showPhoto, setShowPhoto] = useState(false)
@@ -1714,52 +1742,62 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
 
   return (
     <>
-      <div className="log-entry"
-        style={isPos ? { borderLeft: '4px solid #DC2626', background: '#fff5f5', paddingLeft: 8 } : {}}>
-        <span className="ts">{e.time}</span>
-        <span className="msg">
-          {isPos
-            ? e.text.split(/(POS:[^|<]+)/).map((part, i) =>
-                /^POS:/.test(part)
-                  ? <strong key={i} style={{ color: '#DC2626' }}>{part}</strong>
-                  : part
-              )
-            : e.text
-          }
-        </span>
-        {isUA && e.id && (
-          e.ua_photo
-            ? <button onClick={handleViewPhoto} title="View UA photo"
-                style={{ marginLeft: 6, fontSize: '.72rem', cursor: 'pointer', background: '#eff6ff',
-                  border: '1px solid #bfdbfe', borderRadius: 4, padding: '1px 7px', color: '#3b82f6', lineHeight: 1.6 }}>
-                📷 View
-              </button>
-            : <button onClick={() => fileRef.current?.click()} title="Attach UA photo"
-                disabled={uploading}
-                style={{ marginLeft: 6, fontSize: '.72rem', cursor: uploading ? 'not-allowed' : 'pointer',
-                  background: 'none', border: '1px solid #e2e8f0', borderRadius: 4,
-                  padding: '1px 7px', color: '#94a3b8', lineHeight: 1.6 }}>
-                {uploading ? '⏳' : '📷 Photo'}
-              </button>
-        )}
-        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
-        {canDelete && e.id && (
-          <button className="del-btn" onClick={() => onDelete(e.id)} title="Delete">&times;</button>
-        )}
-      </div>
+      <tr style={isPos ? { background: '#fff5f5' } : {}}>
+        <td className="log-td-time" style={isPos ? { borderLeft: '3px solid #DC2626' } : {}}>
+          {e.time}
+        </td>
+        <td className="log-td-type">
+          <span className="log-type-badge" style={{ background: ts.bg, color: ts.color }}>
+            {type}
+          </span>
+        </td>
+        <td className="log-td-details">
+          <span className="msg">
+            {isPos
+              ? e.text.split(/(POS:[^|<]+)/).map((part, i) =>
+                  /^POS:/.test(part)
+                    ? <strong key={i} style={{ color: '#DC2626' }}>{part}</strong>
+                    : part
+                )
+              : e.text
+            }
+          </span>
+          {isUA && e.id && (
+            e.ua_photo
+              ? <button onClick={handleViewPhoto} title="View UA photo"
+                  style={{ marginLeft: 6, fontSize: '.72rem', cursor: 'pointer', background: '#eff6ff',
+                    border: '1px solid #bfdbfe', borderRadius: 4, padding: '1px 7px', color: '#3b82f6', lineHeight: 1.6 }}>
+                  📷 View
+                </button>
+              : <button onClick={() => fileRef.current?.click()} title="Attach UA photo"
+                  disabled={uploading}
+                  style={{ marginLeft: 6, fontSize: '.72rem', cursor: uploading ? 'not-allowed' : 'pointer',
+                    background: 'none', border: '1px solid #e2e8f0', borderRadius: 4,
+                    padding: '1px 7px', color: '#94a3b8', lineHeight: 1.6 }}>
+                  {uploading ? '⏳' : '📷 Photo'}
+                </button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+          {canDelete && e.id && (
+            <button className="del-btn" onClick={() => onDelete(e.id)} title="Delete">&times;</button>
+          )}
+        </td>
+      </tr>
       {showPhoto && photoSrc && (
-        <div className="modal-overlay open" onClick={() => setShowPhoto(false)} style={{ zIndex: 2000 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 16, maxWidth: '92vw',
-            display: 'flex', flexDirection: 'column', gap: 10, boxShadow: '0 20px 60px rgba(0,0,0,.4)' }}
-            onClick={ev => ev.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 600, fontSize: '.9rem', color: '#0f172a' }}>UA Photo</span>
-              <button className="xbtn" onClick={() => setShowPhoto(false)}>&times;</button>
+        <tr><td colSpan={3} style={{ padding: 0, border: 'none' }}>
+          <div className="modal-overlay open" onClick={() => setShowPhoto(false)} style={{ zIndex: 2000 }}>
+            <div style={{ background: '#fff', borderRadius: 12, padding: 16, maxWidth: '92vw',
+              display: 'flex', flexDirection: 'column', gap: 10, boxShadow: '0 20px 60px rgba(0,0,0,.4)' }}
+              onClick={ev => ev.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontWeight: 600, fontSize: '.9rem', color: '#0f172a' }}>UA Photo</span>
+                <button className="xbtn" onClick={() => setShowPhoto(false)}>&times;</button>
+              </div>
+              <img src={photoSrc} alt="UA photo"
+                style={{ maxWidth: '80vw', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
             </div>
-            <img src={photoSrc} alt="UA photo"
-              style={{ maxWidth: '80vw', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
           </div>
-        </div>
+        </td></tr>
       )}
     </>
   )

@@ -499,14 +499,12 @@ function printViolationsReport({ facility, subtitle, entries }) {
     { key: 'logged_by',   label: 'Logged By',   width: '110px' },
   ]
 
-  const statusHtml = (s) => {
-    const map = {
-      pending:   '<span class="badge-pending">PENDING</span>',
-      assigned:  '<span class="badge-pending" style="background:#fed7aa;color:#9a3412;">ASSIGNED</span>',
-      waived:    '<span class="badge-pending" style="background:#e5e7eb;color:#374151;">WAIVED</span>',
-      completed: '<span class="badge-neg">COMPLETED</span>',
-    }
-    return map[s] || s
+  const statusBadge = (s) => {
+    if (s === 'completed') return { badge: 'neg', label: 'COMPLETED' }
+    if (s === 'assigned')  return { badge: 'pending', label: 'ASSIGNED' }
+    if (s === 'waived')    return { badge: 'pending', label: 'WAIVED' }
+    if (s === 'pending')   return { badge: 'pending', label: 'PENDING' }
+    return String(s || '—')
   }
 
   const fmt = (d) => {
@@ -520,7 +518,7 @@ function printViolationsReport({ facility, subtitle, entries }) {
     room:        v.room || '—',
     resident:    v.client_name || '—',
     description: v.description || '',
-    status:      { html: statusHtml(v.status) },
+    status:      statusBadge(v.status),
     consequence: v.consequence || (v.status === 'waived' ? 'Waived — no consequence' : '—'),
     logged_by:   v.logged_by || '—',
     _flag:       v.status === 'pending',

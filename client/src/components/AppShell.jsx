@@ -3,6 +3,7 @@ import { Outlet, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { DataProvider, useData } from '../contexts/DataContext.jsx'
+import ClientProfile from './ClientProfile.jsx'
 import JSZip from 'jszip'
 
 // ── Notification time-ago helper ──────────────────────────────────────
@@ -21,7 +22,7 @@ function esc(s) {
 }
 
 // ── Notification Panel ────────────────────────────────────────────────
-function NotifPanel({ open, onClose, notif, session, dismissBroadcast, onAckUA, onGoTab, dismissedDrawIds, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence }) {
+function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIncident, onAckUA, onGoTab, dismissedDrawIds, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence }) {
   const perm = session?.permissions || []
 
   const draws24h = (notif.uaDraws || []).filter(d => {
@@ -29,12 +30,16 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, onAckUA, 
     return ts >= Date.now() - 24 * 3600000 && !dismissedDrawIds?.has(d.id)
   })
 
+  const SEV_COLOR = { low:'#1e40af', medium:'#92400e', high:'#9a3412', critical:'#7c2d12' }
+  const SEV_BG    = { low:'#dbeafe', medium:'#fef3c7', high:'#fee2e2', critical:'#fce7f3' }
+
   const hasAny =
     (notif.uaRequests.length > 0 && perm.includes('ua.acknowledge'))
     || (draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')))
     || (notif.violReview > 0 && perm.includes('violations.notify_review'))
     || (notif.violConsequence > 0 && perm.includes('violations.notify_consequence'))
     || (notif.broadcasts.length > 0 && perm.includes('broadcast.receive'))
+    || ((notif.incidents || []).length > 0 && perm.includes('incidents.review'))
 
   return (
     <>
@@ -143,6 +148,37 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, onAckUA, 
             </div>
           )}
 
+          {/* Incident alerts — visible to staff who review incidents */}
+          {(notif.incidents || []).length > 0 && perm.includes('incidents.review') && (
+            <div className="notif-section">
+              <div className="notif-section-head">
+                🚨 New Incidents
+                <span className="notif-badge-sm">{notif.incidents.length}</span>
+              </div>
+              {notif.incidents.map(inc => (
+                <div key={inc.id} className="notif-item">
+                  <span className="notif-item-icon">🚨</span>
+                  <div className="notif-item-body">
+                    <div className="notif-item-name">
+                      {inc.client_name}{inc.room ? ` · Rm. ${inc.room}` : ''}
+                    </div>
+                    <div className="notif-item-meta" style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:700, fontSize:'.68rem', padding:'1px 7px', borderRadius:8,
+                        background: SEV_BG[inc.severity]||'#f1f5f9', color: SEV_COLOR[inc.severity]||'#475569',
+                        textTransform:'capitalize' }}>{inc.severity}</span>
+                      {inc.incident_type && <span>{inc.incident_type}</span>}
+                      <span>by {inc.logged_by}</span>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                    <button className="notif-item-action" onClick={() => { onGoTab('incidents'); onClose() }}>View</button>
+                    <button className="notif-item-action" onClick={() => dismissIncident(inc.id)} title="Dismiss">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Broadcasts */}
           {notif.broadcasts.length > 0 && perm.includes('broadcast.receive') && (
             <div className="notif-section">
@@ -238,7 +274,7 @@ function BroadcastModal({ open, onClose }) {
 function Header({ onGoTab }) {
   const { session, logout }                 = useAuth()
   const { hasPerm }                         = usePermission()
-  const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast } = useData()
+  const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident } = useData()
   const navigate                            = useNavigate()
 
   const [panelOpen, setPanelOpen]           = useState(false)
@@ -511,11 +547,12 @@ td { border-bottom:1px solid #D0DAEF; vertical-align:middle; font-size:11px; pad
   <div class="sig-b">Supervisor Review: <span class="sig-l"></span></div>
   <div class="sig-b">Date Filed: <span class="sig-l"></span></div>
 </div>
-<script>window.onload=function(){window.print()};<\/script>
 </body></html>`
     const w = window.open('', '_blank')
     if (!w) { alert('Popup blocked — allow popups for this site.'); return }
     w.document.write(html); w.document.close()
+    // Trigger print from parent context (CSP: no inline scripts allowed)
+    setTimeout(() => { try { w.focus(); w.print() } catch {} }, 250)
   }
 
   // ── File Wellness Checks — filled filing copy ────────────────────────
@@ -650,11 +687,12 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
   <div class="sig-b">Supervisor Review: <span class="sig-l"></span></div>
   <div class="sig-b">Date Filed: <span class="sig-l"></span></div>
 </div>
-<script>window.onload=function(){window.print()};<\/script>
 </body></html>`
     const w = window.open('', '_blank')
     if (!w) { alert('Popup blocked — allow popups for this site.'); return }
     w.document.write(html); w.document.close()
+    // Trigger print from parent context (CSP: no inline scripts allowed)
+    setTimeout(() => { try { w.focus(); w.print() } catch {} }, 250)
   }
 
   // ── Email shift report — generate DOCX then open mailto ──────────────
@@ -712,7 +750,8 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
     ((hasPerm('ua.draw') || hasPerm('ua.acknowledge')) ? draws24h.length : 0) +
     (hasPerm('violations.notify_review') && notif.violReview > (dismissedViolReview || 0) ? 1 : 0) +
     (hasPerm('violations.notify_consequence') && notif.violConsequence > (dismissedViolConsequence || 0) ? 1 : 0) +
-    (hasPerm('broadcast.receive') ? notif.broadcasts.length : 0)
+    (hasPerm('broadcast.receive') ? notif.broadcasts.length : 0) +
+    (hasPerm('incidents.review') ? (notif.incidents || []).length : 0)
 
   return (
     <>
@@ -729,7 +768,7 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
           <img src="/static/icons/icon-192.png" alt="" className="header-logo" />
           <div>
             <h1>{facilityName}</h1>
-            <div className="sub">OpsPoint &bull; Westside Community Services</div>
+            <div className="sub">OpsPoint</div>
           </div>
         </div>
         <div className="header-actions">
@@ -815,6 +854,7 @@ tfoot tr.init-row td { background:#f0f7f2; border-top:1px solid #8dbda0; padding
         notif={notif}
         session={session}
         dismissBroadcast={dismissBroadcast}
+        dismissIncident={dismissIncident}
         onAckUA={ackUA}
         onGoTab={onGoTab}
         dismissedDrawIds={dismissedDrawIds}
@@ -843,6 +883,8 @@ export default function AppShell() {
           <Outlet context={{ requestedTab, clearRequestedTab: () => setRequestedTab(null) }} />
         </div>
       </div>
+      {/* Profile drawer — rendered at root so it overlays all content */}
+      <ClientProfile onNavigateTab={setRequestedTab} />
     </DataProvider>
   )
 }

@@ -22,6 +22,27 @@ function esc(s) {
     .replace(/"/g, '&quot;')
 }
 
+// Allowed badge classes. Any caller-supplied class outside this list is dropped,
+// so untrusted data can never become arbitrary HTML.
+const BADGE_CLASSES = new Set(['pos','neg','pending','approved','delivered'])
+
+// Render a cell value safely. Values may be:
+//   - a string/number  → escaped and emitted
+//   - { badge: 'pos'|'neg'|'pending'|'approved'|'delivered', label?: '...' }
+//   - { value: '...' } (alias for plain text)
+// Anything else is coerced to its string form and escaped. No raw HTML accepted.
+function renderCell(v) {
+  if (v && typeof v === 'object') {
+    if (typeof v.badge === 'string' && BADGE_CLASSES.has(v.badge)) {
+      const label = v.label != null ? esc(v.label) : esc(v.badge.toUpperCase())
+      return '<span class="badge-' + v.badge + '">' + label + '</span>'
+    }
+    if ('value' in v) return esc(v.value)
+    return esc(String(v))
+  }
+  return esc(v)
+}
+
 export function openPrintWindow({
   title = 'Report',
   facility = 'OpsPoint',
@@ -55,8 +76,7 @@ export function openPrintWindow({
         + columns.map(c => {
           const v = r[c.key]
           const cls = (c.mono ? 'mono ' : '') + (c.align ? 'al-' + c.align + ' ' : '')
-          // Allow raw HTML when value is wrapped in { html: '...' }
-          const cellHtml = (v && typeof v === 'object' && 'html' in v) ? v.html : esc(v)
+          const cellHtml = renderCell(v)
           return '<td' + (cls.trim() ? ' class="' + cls.trim() + '"' : '') + '>' + cellHtml + '</td>'
         }).join('') + '</tr>'
     }).join('') + '</tbody>'
@@ -122,8 +142,8 @@ export function openPrintWindow({
     '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + esc(title) + '</title>' +
     '<style>' + css + '</style></head><body><div class="wrap">' +
     '<div class="no-print">' +
-      '<button class="btn-print" onclick="window.print()">🖨 Print / Save PDF</button>' +
-      '<button class="btn-close" onclick="window.close()">Close</button>' +
+      '<button class="btn-print" id="op-print">🖨 Print / Save PDF</button>' +
+      '<button class="btn-close" id="op-close">Close</button>' +
     '</div>' +
     '<div class="hdr">' +
       '<div class="meta">' + esc(facility) + ' · Confidential</div>' +
@@ -134,7 +154,6 @@ export function openPrintWindow({
     '<div class="tablewrap"><table>' + headHtml + bodyHtml + '</table></div>' +
     '<div class="footer">Printed ' + esc(printedAt) + '</div>' +
     '</div>' +
-    '<script>window.onload=function(){setTimeout(function(){window.print()},250)};<\/script>' +
     '</body></html>'
 
   const win = window.open('', '_blank')
@@ -144,6 +163,17 @@ export function openPrintWindow({
   }
   win.document.write(html)
   win.document.close()
+  // Wire up buttons + initial print from parent context — keeps script-src CSP
+  // free of 'unsafe-inline' (no inline <script> or onclick= in the popup).
+  setTimeout(() => {
+    try {
+      const printBtn = win.document.getElementById('op-print')
+      const closeBtn = win.document.getElementById('op-close')
+      if (printBtn) printBtn.addEventListener('click', () => win.print())
+      if (closeBtn) closeBtn.addEventListener('click', () => win.close())
+      win.focus(); win.print()
+    } catch {}
+  }, 250)
   return true
 }
 

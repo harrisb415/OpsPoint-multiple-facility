@@ -373,7 +373,6 @@ export default function Mobile() {
             <img src="/static/icons/icon-192.png" alt="" className="mob-hdr-logo" />
             <div className="mob-hdr-info">
               <div className="mob-hdr-title">{facilityName}</div>
-              <div className="mob-hdr-sub">Westside Community Services</div>
               <div className="mob-hdr-user">{session?.displayName || session?.username}</div>
             </div>
           </div>

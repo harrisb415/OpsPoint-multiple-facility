@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'rea
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
+import ConductUAModal from '../components/ConductUAModal.jsx'
 import { openPrintWindow, fmtDateFriendly, classifyLogEntry } from '../utils/printLog.js'
 
 const STATUS_OPTS = [
@@ -14,11 +15,6 @@ const STATUS_OPTS = [
   { v: 'hospital', l: 'Hospital',    c: 's-hospital' },
 ]
 
-const UA_LABELS = {
-  ETG:'Alcohol', THC:'Marijuana', K2:'Spice', FEN:'Fentanyl', AMP:'Amphetamines',
-  MDMA:'Ecstasy', MET:'Meth', PCP:'PCP', MOR:'Morphine', OXY:'Oxycodone',
-  OPI:'Opiates', BZO:'Benzos', MTD:'Methadone', BUP:'Buprenorphine', COC:'Cocaine',
-}
 
 const DEFAULT_WALK_AREAS = [
   'Supply Room','Basement / Offices','Kitchen','Meeting Room','Dining Room',
@@ -110,6 +106,7 @@ export default function ReportTab({ onNavigate }) {
   const canUA         = hasPerm('ua.request')
   const canReminders  = hasPerm('reminders.view')
   const canViolations = hasPerm('violations.log')
+  const canMailLog    = hasPerm('mail.log')
 
   // Settings from data
   const wellnessMins = Number(data?.wellness_interval_mins ?? 120)
@@ -653,9 +650,11 @@ export default function ReportTab({ onNavigate }) {
               <button className="pill pill-slate" onClick={() => setQuickModal('roomsearch')}>
                 🔎 Room Search
               </button>
-              <button className="pill pill-slate" onClick={() => setQuickModal('mail')}>
-                ✉ Mail
-              </button>
+              {canMailLog && (
+                <button className="pill pill-slate" onClick={() => setQuickModal('mail')}>
+                  ✉ Mail
+                </button>
+              )}
               {canViolations && (
                 <button className="pill pill-red" onClick={() => setQuickModal('violation')}>
                   ⚠ Violation
@@ -824,16 +823,11 @@ export default function ReportTab({ onNavigate }) {
         />
       )}
       {quickModal === 'ua' && (
-        <UAModal
+        <ConductUAModal
           clients={rosterClients}
           panel={uaPanel}
           onClose={() => setQuickModal(null)}
-          onSubmit={async (text, timeStr, clientId) => {
-            await addLogEntry(text, timeStr)
-            if (clientId && activeId) {
-              await patchData({ reportId: activeId, last_ua: { [clientId]: dateStamp() } })
-            }
-          }}
+          onSaved={async () => { setQuickModal(null); await loadData() }}
         />
       )}
       {quickModal === 'roomsearch' && (
@@ -852,7 +846,6 @@ export default function ReportTab({ onNavigate }) {
         <MailQuickModal
           clients={rosterClients}
           onClose={() => setQuickModal(null)}
-          onSubmit={addLogEntry}
         />
       )}
       {quickModal === 'violation' && (
@@ -1317,145 +1310,6 @@ function LunchModal({ onClose, onSubmit }) {
   )
 }
 
-// UA Result
-function UAModal({ clients, panel, onClose, onSubmit }) {
-  const [clientId, setClientId]   = useState('')
-  const [isInterview, setIsInterview] = useState(false)
-  const [interviewName, setInterviewName] = useState('')
-  const [staff, setStaff]         = useState('')
-  const [results, setResults]     = useState(() => Object.fromEntries(panel.map(c => [c, 'NEG'])))
-  const [time, setTime]           = useState(timeFieldDefault)
-  const [saving, setSaving]       = useState(false)
-
-  function cycleResult(code) {
-    setResults(prev => {
-      const cur = prev[code]
-      return { ...prev, [code]: cur === 'NEG' ? 'POS' : cur === 'POS' ? 'NT' : 'NEG' }
-    })
-  }
-
-  function resultColor(r) {
-    if (r === 'POS') return { bg: '#FEE2E2', color: '#991B1B', border: '#FCA5A5' }
-    if (r === 'NT')  return { bg: '#F1F5F9', color: '#94A3B8', border: '#E2E8F0' }
-    return { bg: '#D8F3DC', color: '#15803D', border: '#86EFAC' }
-  }
-
-  async function handleSubmit() {
-    const subject = isInterview
-      ? interviewName.trim() || 'Interview'
-      : clients.find(c => c.id === parseInt(clientId))
-    if (!isInterview && !clientId) return
-    if (!staff.trim()) return
-
-    const subjectName = isInterview ? (interviewName.trim() || 'Interview') : `${subject.name} (Rm. ${subject.room})`
-    const pos = panel.filter(c => results[c] === 'POS')
-    const neg = panel.filter(c => results[c] === 'NEG')
-    const nt  = panel.filter(c => results[c] === 'NT')
-
-    let resultParts = []
-    if (pos.length) resultParts.push(`POS: ${pos.join(', ')}`)
-    if (neg.length) resultParts.push(`NEG: ${neg.join(', ')}`)
-    if (nt.length)  resultParts.push(`NT: ${nt.join(', ')}`)
-    const resultStr = resultParts.join(' | ') || 'No results entered'
-
-    let msg
-    if (pos.length === 0 && nt.length === 0) {
-      msg = `${subjectName} — UA: NEG all${staff ? ' — by ' + staff.trim() : ''}`
-    } else {
-      msg = `${subjectName} — UA: ${resultStr}${staff ? ' — by ' + staff.trim() : ''}`
-    }
-
-    setSaving(true)
-    await onSubmit(msg, tsFromInput(time), isInterview ? null : parseInt(clientId))
-    setSaving(false)
-    onClose()
-  }
-
-  return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 620 }}>
-        <div className="modal-head">
-          <h2>🧪 UA Result</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div
-            onClick={() => setIsInterview(v => !v)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-              background: isInterview ? '#dbeafe' : '#f8fafc',
-              border: `1.5px solid ${isInterview ? '#93c5fd' : 'var(--line)'}`,
-              borderRadius: 8, cursor: 'pointer', userSelect: 'none', transition: 'all .12s',
-            }}>
-            <input type="checkbox" checked={isInterview} onChange={() => {}}
-              style={{ pointerEvents: 'none', accentColor: '#3b82f6', flexShrink: 0, width: 16, height: 16 }} />
-            <span style={{ fontSize: '.84rem', fontWeight: isInterview ? 600 : 400,
-              color: isInterview ? '#1e40af' : '#475569' }}>
-              Interview / Non-Resident
-            </span>
-          </div>
-          {isInterview ? (
-            <div className="field">
-              <label>Name</label>
-              <input type="text" value={interviewName} onChange={e => setInterviewName(e.target.value)}
-                placeholder="Interviewee name" autoFocus />
-            </div>
-          ) : (
-            <div className="field">
-              <label>Resident</label>
-              <select value={clientId} onChange={e => setClientId(e.target.value)} autoFocus>
-                <option value="">— Select resident —</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>Rm. {c.room} — {c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="field">
-            <label>Conducted by</label>
-            <input type="text" value={staff} onChange={e => setStaff(e.target.value)} placeholder="Staff name" />
-          </div>
-          <div className="field">
-            <label>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Results <span style={{ fontWeight: 400, fontSize: '.7rem', color: '#94A3B8' }}>— tap each to cycle: NEG → POS → NT</span></label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginTop: 4 }}>
-              {panel.map(code => {
-                const res = results[code]
-                const { bg, color, border } = resultColor(res)
-                return (
-                  <button key={code} type="button" onClick={() => cycleResult(code)}
-                    style={{
-                      background: bg, color, border: `1.5px solid ${border}`,
-                      borderRadius: 8, padding: '7px 4px', cursor: 'pointer',
-                      textAlign: 'center', fontFamily: 'var(--sans)',
-                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                      transition: 'all .15s', userSelect: 'none',
-                    }}>
-                    <div style={{ fontSize: '.78rem', fontWeight: 800, color: '#0F172A' }}>{code}</div>
-                    <div style={{ fontSize: '.62rem', color: '#64748B', lineHeight: 1.2, textAlign: 'center', marginBottom: 2 }}>
-                      {UA_LABELS[code] || code}
-                    </div>
-                    <div style={{ fontSize: '.7rem', fontWeight: 700, color }}>{res}</div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || (!isInterview && !clientId) || !staff.trim()}>
-            {saving ? 'Logging…' : 'Log Entry'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // Room Search
 function RoomSearchModal({ clients, onClose, onSubmit }) {
   const [clientId, setClientId] = useState('')
@@ -1518,10 +1372,10 @@ function RoomSearchModal({ clients, onClose, onSubmit }) {
 }
 
 // Mail quick log
-function MailQuickModal({ clients, onClose, onSubmit }) {
+function MailQuickModal({ clients, onClose }) {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [clientNotes, setClientNotes] = useState({}) // { [id]: string }
-  const [clientTypes, setClientTypes] = useState({}) // { [id]: 'Letter' }
+  const [clientTypes, setClientTypes] = useState({}) // { [id]: {letter:bool, package:bool, ...} }
   const [time, setTime]               = useState(timeFieldDefault)
   const [saving, setSaving]           = useState(false)
 
@@ -1535,8 +1389,8 @@ function MailQuickModal({ clients, onClose, onSubmit }) {
   function setNote(id, val) {
     setClientNotes(prev => ({ ...prev, [id]: val }))
   }
-  function setType(id, val) {
-    setClientTypes(prev => ({ ...prev, [id]: val }))
+  function toggleType(id, t) {
+    setClientTypes(prev => ({ ...prev, [id]: { ...(prev[id] || {}), [t]: !(prev[id] || {})[t] } }))
   }
   function selectAll() { setSelectedIds(new Set(clients.map(c => c.id))) }
   function clearAll()  { setSelectedIds(new Set()); setClientNotes({}); setClientTypes({}) }
@@ -1545,13 +1399,25 @@ function MailQuickModal({ clients, onClose, onSubmit }) {
     if (selectedIds.size === 0) return
     setSaving(true)
     const selected = clients.filter(c => selectedIds.has(c.id))
-    const ts = tsFromInput(time)
-    for (const client of selected) {
-      const note = (clientNotes[client.id] || '').trim()
-      const type = clientTypes[client.id] || 'Letter'
-      const msg = `Mail received for ${client.name} (Rm. ${client.room}) — ${type}${note ? ': ' + note : ''}`
-      await onSubmit(msg, ts)
-    }
+    const clientsList = selected.map(c => {
+      const t = clientTypes[c.id] || {}
+      const typeArr = ['letter', 'package'].filter(k => t[k])
+      return {
+        client_id: c.id,
+        client_name: c.name,
+        room: c.room,
+        notes: (clientNotes[c.id] || '').trim(),
+        mail_type: typeArr.join(','),
+      }
+    })
+    try {
+      await fetch('/api/mail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ clients: clientsList, log_time: tsFromInput(time) }),
+      })
+    } catch {}
     setSaving(false)
     onClose()
   }
@@ -1604,23 +1470,17 @@ function MailQuickModal({ clients, onClose, onSubmit }) {
                         borderRadius: '0 0 5px 5px', marginTop: -2,
                         display: 'flex', gap: 6, alignItems: 'center',
                       }}>
-                        <select
-                          value={clientTypes[c.id] || 'Letter'}
-                          onChange={e => setType(c.id, e.target.value)}
-                          title="Mail type"
-                          style={{
-                            flex: '0 0 110px', fontSize: '.78rem', padding: '4px 6px',
-                            border: '1px solid #bfdbfe', borderRadius: 4, outline: 'none',
-                            background: '#fff', color: 'var(--text)', fontFamily: 'var(--sans)',
-                            fontWeight: 600,
-                          }}
-                        >
-                          <option>Letter</option>
-                          <option>Package</option>
-                          <option>Legal</option>
-                          <option>Government</option>
-                          <option>Other</option>
-                        </select>
+                        {['letter', 'package'].map(t => {
+                          const checked = !!(clientTypes[c.id] || {})[t]
+                          return (
+                            <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                              <input type="checkbox" checked={checked}
+                                onChange={() => toggleType(c.id, t)}
+                                style={{ accentColor: '#1d4ed8', flexShrink: 0 }} />
+                              {t}
+                            </label>
+                          )
+                        })}
                         <input
                           type="text"
                           value={clientNotes[c.id] || ''}

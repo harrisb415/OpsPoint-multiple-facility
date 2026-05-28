@@ -100,7 +100,7 @@ app.use((req, res, next) => {
   // CSP: scoped for local-network app (VULN-15)
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; " + // VULN-11: unsafe-eval removed
+    "script-src 'self' https://cdnjs.cloudflare.com; " + // VULN-11: unsafe-eval removed; VULN-8: unsafe-inline removed (Tier 3)
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' data: https://fonts.gstatic.com; " +
     "img-src 'self' data: blob:; " +
@@ -150,6 +150,48 @@ function buildSession(secure) {
 _sessionMiddleware = buildSession(false);
 app.use((req,res,next) => _sessionMiddleware(req,res,next));
 
+// ── HIPAA: idle session timeout ──────────────────────────────────
+// Forces logout after N minutes of inactivity. Configurable via the
+// session_idle_mins facility setting (default 30). Static asset and
+// /api/heartbeat requests do NOT bump the activity timestamp so a tab
+// left open without user interaction will still time out.
+function idleSessionCheck(req, res, next) {
+  if (!req.session || !req.session.userId) return next();
+  const idleMins = parseInt(db.getSetting('session_idle_mins', 30)) || 30;
+  const maxIdleMs = idleMins * 60 * 1000;
+  const now = Date.now();
+  if (req.session.last_activity && (now - req.session.last_activity) > maxIdleMs) {
+    const uid = req.session.userId;
+    const name = req.session.displayName || req.session.username || '';
+    try { db.auditLog(uid, name, req.ip||'', 'auth.idle_timeout','user',String(uid),name,{idleMins}); } catch(e) {}
+    return req.session.destroy(() => {
+      if (req.path.startsWith('/api/')) return res.status(401).json({error:'Session expired (idle)', code:'IDLE_TIMEOUT'});
+      return res.redirect('/login');
+    });
+  }
+  // Only state-changing requests count as user activity. GET requests are passive
+  // (DataContext polls, WebSocket-driven reloads, etc.) — keeping the session
+  // alive on those would defeat the purpose of HIPAA §164.312(a)(2)(iii).
+  // Explicit user activity can also be signalled via the X-User-Activity header.
+  const isMutation = req.method === 'POST' || req.method === 'PUT'
+    || req.method === 'PATCH' || req.method === 'DELETE';
+  if (isMutation || req.headers['x-user-activity'] === '1') {
+    req.session.last_activity = now;
+  } else if (!req.session.last_activity) {
+    // First request of a session — start the idle clock
+    req.session.last_activity = now;
+  }
+  next();
+}
+app.use(idleSessionCheck);
+
+// Lightweight passive endpoint — client can poll this to check session validity
+// without bumping last_activity. (POST /api/heartbeat bumps activity.)
+app.get('/api/heartbeat', (req,res) => {
+  if (!req.session || !req.session.userId) return res.status(401).json({ok:false});
+  res.json({ok:true, idleMins:parseInt(db.getSetting('session_idle_mins',30))||30});
+});
+
 const requireForceChangePw = (req,res,next) => {
   // If user must change password, only allow specific routes until they do
   if (req.session && req.session.must_change_pw) {
@@ -176,6 +218,35 @@ const requireAuth = (req,res,next) => {
   if (req.path.startsWith('/api/')) return res.status(401).json({error:'Not authenticated'});
   req.session.returnTo = req.originalUrl; res.redirect('/login');
 };
+// Resolve the live permission set for the current session.
+// Always reads from DB (never trust session.permissions) so revokes take effect immediately.
+function _userPerms(req) {
+  if (!req.session || !req.session.userId) return [];
+  const u = db.query1('SELECT permissions,role FROM users WHERE id=?', [req.session.userId]);
+  if (!u) return [];
+  return u.permissions ? JSON.parse(u.permissions) : (db.ROLE_PRESETS[u.role] || []);
+}
+
+// Validation helpers — used by /api/data POST and PATCH to lock down user-controlled fields.
+const _TIME_RE = /^\d{1,2}:\d{2} (AM|PM)$/;
+function _validTime(s) {
+  if (typeof s !== 'string') return false;
+  const m = s.match(_TIME_RE);
+  if (!m) return false;
+  const h = parseInt(s.split(':')[0]);
+  return h >= 1 && h <= 12;
+}
+// Strip ASCII control chars (incl. nulls, newlines) and clip to N chars.
+// Use for free-text fields that get persisted and re-rendered (mod_name, names, etc).
+function _sanitizeText(s, max) {
+  return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max);
+}
+// Is the named report closed? Used to gate edits to sealed shift reports.
+function _isReportClosed(reportId) {
+  const r = db.query1('SELECT is_closed FROM reports WHERE id=?', [reportId]);
+  return !!(r && r.is_closed);
+}
+
 function requirePermission(perm) {
   return function(req,res,next) {
     if (!req.session||!req.session.userId) {
@@ -532,7 +603,7 @@ function apiRateCheck(req) {
 // ── Data API ──────────────────────────────────────────────────────
 app.get('/api/data', requireAuth,(req,res)=>{
   if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
-  res.json(db.getAllData());
+  res.json(db.getAllData(_userPerms(req)));
 });
 
 app.post('/api/data', requireAuth, csrfCheck,(req,res)=>{
@@ -596,19 +667,32 @@ app.post('/api/data', requireAuth, csrfCheck,(req,res)=>{
       }
     });
   }
-  if(Array.isArray(d.reports)) d.reports.forEach(r=>db.upsertReport(r));
-  if(d.logos){
-    ['pdec','wcs'].forEach(k=>{
-      if(d.logos[k]){
-        let v=d.logos[k];
-        if(v.startsWith('data:')){
-          // VULN-13: Validate logo magic bytes
-          if(!_validImageMagicBytes(v)) return;
-          v=db.savePhoto(v,`logo_${k}.${v.includes('gif')?'gif':'jpg'}`);
-        }
-        db.setSetting('logo_'+k,v);
+  if(Array.isArray(d.reports)) {
+    for (const r of d.reports) {
+      // VULN #2: never overwrite a closed (sealed) report
+      if (r.id && _isReportClosed(r.id) && !r.is_closed) {
+        // Existing is closed and client is trying to mutate (not just re-send the closed state)
+        return res.status(403).json({error:`Report ${r.id} is closed (sealed). Cannot modify.`});
       }
-    });
+      if (r.id && _isReportClosed(r.id) && r.is_closed) {
+        // Both sides agree it's closed — no-op (skip upsert to prevent silent data swap)
+        continue;
+      }
+      // VULN #3: sanitize user-supplied mod_name (100 chars, no control chars)
+      if (r.mod_name != null) r.mod_name = _sanitizeText(r.mod_name, 100);
+      // VULN #5: validate log entry times (regex H:MM AM/PM)
+      if (Array.isArray(r.log_entries)) {
+        for (const e of r.log_entries) {
+          if (e.time && !_validTime(e.time)) {
+            return res.status(400).json({error:`Invalid log entry time "${String(e.time).slice(0,20)}" — expected format H:MM AM/PM`});
+          }
+          if (e.text != null) e.text = _sanitizeText(e.text, 2000);
+        }
+      }
+      // Sanitize other free-text fields
+      if (r.shift != null) r.shift = _sanitizeText(r.shift, 50);
+      db.upsertReport(r);
+    }
   }
   if(d.active_report_id!==undefined) db.setSetting('active_report_id',d.active_report_id);
   db.save();
@@ -635,6 +719,33 @@ app.patch('/api/data', requireAuth, csrfCheck,(req,res)=>{
   if (patch.last_ua          !== undefined && !_patchPerms.includes('ua.request'))   return res.status(403).json({error:'Permission denied'});
   if (patch.last_room_search !== undefined && !_patchPerms.includes('log.add'))      return res.status(403).json({error:'Permission denied'});
   const rptId=parseInt(patch.reportId);
+
+  // VULN #1: reportId ownership — must be the active report
+  if (rptId) {
+    const activeReportId = parseInt(db.getSetting('active_report_id', null));
+    if (!activeReportId || rptId !== activeReportId) {
+      return res.status(403).json({error:'Cannot patch a report that is not currently active'});
+    }
+    // VULN #2: never patch a closed report
+    if (_isReportClosed(rptId)) {
+      return res.status(403).json({error:'Report is closed (sealed). Cannot modify.'});
+    }
+  }
+
+  // VULN #5: log entry time format
+  if (patch.log_entry && patch.log_entry.time && !_validTime(patch.log_entry.time)) {
+    return res.status(400).json({error:`Invalid log entry time "${String(patch.log_entry.time).slice(0,20)}" — expected format H:MM AM/PM`});
+  }
+  // VULN #3: sanitize free-text shiftData fields
+  if (patch.shiftData && typeof patch.shiftData === 'object') {
+    if (patch.shiftData.mod_name != null) patch.shiftData.mod_name = _sanitizeText(patch.shiftData.mod_name, 100);
+    if (patch.shiftData.shift     != null) patch.shiftData.shift     = _sanitizeText(patch.shiftData.shift, 50);
+  }
+  // Sanitize log entry text
+  if (patch.log_entry && patch.log_entry.text != null) {
+    patch.log_entry.text = _sanitizeText(patch.log_entry.text, 2000);
+  }
+
   if(rptId) {
     if(patch.statuses){
       const cur=db.query1('SELECT statuses FROM reports WHERE id=?',[rptId]);
@@ -647,8 +758,9 @@ app.patch('/api/data', requireAuth, csrfCheck,(req,res)=>{
     }
     if(patch.log_entry){
       const e=patch.log_entry;
-      db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
+      const _leIns=db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
         [rptId,e.time||'',e.text||'']);
+      patch._log_entry_id = _leIns.lastInsertRowid || null;
       db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),rptId]);
     }
     if(patch.shiftData){
@@ -711,7 +823,7 @@ app.patch('/api/data', requireAuth, csrfCheck,(req,res)=>{
   if (patch.last_room_search && typeof patch.last_room_search === 'object') safePatch.last_room_search = patch.last_room_search;
   broadcast({type:'patched', patch:safePatch, user:req.session.displayName,
     active_report_id:db.getSetting('active_report_id',null)});
-  res.json({ok:true});
+  res.json({ok:true, log_entry_id: patch._log_entry_id || null});
 });
 
 // Delete log entry — log.delete or ua.delete both grant access
@@ -867,25 +979,32 @@ app.get('/api/facility/rooms/vacant', requireAuth,(req,res)=>{
 
 // ── Add new client ─────────────────────────────────────────────
 app.post('/api/clients', requireAuth, csrfCheck, requirePermission('residents.edit'),(req,res)=>{
-  const{room,name,case_manager,phone,intake_date}=req.body;
+  const{room,name,case_manager,phone,intake_date,
+        referral_source,program_track,emergency_contacts,intake_notes}=req.body;
   if(!name||!String(name).trim()) return res.status(400).json({error:'Name is required'});
   if(!room||!String(room).trim())  return res.status(400).json({error:'Room is required'});
   // Block if a real (non-VACANT) resident already has this room
   const occ=db.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0`,[String(room)]);
   if(occ) return res.status(409).json({error:'Room '+room+' is already occupied by '+occ.name});
+  const ecJson = Array.isArray(emergency_contacts) ? JSON.stringify(emergency_contacts) : '[]';
   // If a VACANT row exists for this room, update it in-place (avoids duplicates)
   const vacant=db.query1(`SELECT id FROM clients WHERE room=? AND name='VACANT' AND is_active=1`,[String(room)]);
   let resultId;
   if(vacant){
-    db.run(`UPDATE clients SET name=?,case_manager=?,phone=?,intake_date=?,is_active=1 WHERE id=?`,
-      [String(name).trim(),case_manager||'',phone||'',intake_date||null,vacant.id]);
+    db.run(`UPDATE clients SET name=?,case_manager=?,phone=?,intake_date=?,is_active=1,
+            referral_source=?,program_track=?,emergency_contacts=?,intake_notes=? WHERE id=?`,
+      [String(name).trim(),case_manager||'',phone||'',intake_date||null,
+       referral_source||'', program_track||'', ecJson, intake_notes||'',
+       vacant.id]);
     resultId=vacant.id;
   } else {
     const maxRow=db.query1('SELECT MAX(sort_order) AS m FROM clients');
     const sortOrder=(maxRow&&maxRow.m!=null?maxRow.m:0)+1;
-    db.run(`INSERT INTO clients (room,name,case_manager,phone,intake_date,is_active,is_special,sort_order)
-      VALUES (?,?,?,?,?,1,0,?)`,
-      [String(room),String(name).trim(),case_manager||'',phone||'',intake_date||null,sortOrder]);
+    db.run(`INSERT INTO clients (room,name,case_manager,phone,intake_date,is_active,is_special,sort_order,
+            referral_source,program_track,emergency_contacts,intake_notes)
+      VALUES (?,?,?,?,?,1,0,?,?,?,?,?)`,
+      [String(room),String(name).trim(),case_manager||'',phone||'',intake_date||null,sortOrder,
+       referral_source||'', program_track||'', ecJson, intake_notes||'']);
     const newId=db.query1('SELECT last_insert_rowid() AS id');
     resultId=newId?newId.id:null;
   }
@@ -901,7 +1020,8 @@ app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents
 
   const id=parseInt(req.params.id,10);
   if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{room,name,case_manager,phone,intake_date,discharge_date,photo,is_active}=req.body;
+  const{room,name,case_manager,phone,intake_date,discharge_date,photo,is_active,
+        referral_source,program_track,emergency_contacts,intake_notes}=req.body;
   if(name!==undefined&&!name.trim()) return res.status(400).json({error:'Name cannot be empty'});
   // Check room conflict if room is changing
   if(room!==undefined){
@@ -925,6 +1045,11 @@ app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents
   if(intake_date!==undefined)   db.run('UPDATE clients SET intake_date=? WHERE id=?',[intake_date||null,id]);
   if(discharge_date!==undefined)db.run('UPDATE clients SET discharge_date=? WHERE id=?',[discharge_date||null,id]);
   if(is_active!==undefined)     db.run('UPDATE clients SET is_active=? WHERE id=?',[is_active?1:0,id]);
+  if(referral_source!==undefined)  db.run('UPDATE clients SET referral_source=? WHERE id=?',[String(referral_source||''),id]);
+  if(program_track!==undefined)    db.run('UPDATE clients SET program_track=? WHERE id=?',[String(program_track||''),id]);
+  if(emergency_contacts!==undefined) db.run('UPDATE clients SET emergency_contacts=? WHERE id=?',
+    [JSON.stringify(Array.isArray(emergency_contacts)?emergency_contacts:[]),id]);
+  if(intake_notes!==undefined)     db.run('UPDATE clients SET intake_notes=? WHERE id=?',[String(intake_notes||''),id]);
   if(photo!==undefined){
     let pval=null;
     if(photo&&typeof photo==='string'&&photo.startsWith('data:image/')){
@@ -951,6 +1076,18 @@ app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents
   broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
   res.json({ok:true,client:_clt});
 });
+// ── Client profile view (audit gate — HIPAA §164.312(b)) ─────────────
+app.get('/api/clients/:id/profile', requireAuth, (req,res)=>{
+  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
+  const id=parseInt(req.params.id,10);
+  if(isNaN(id)) return res.status(400).json({error:'Invalid id'});
+  const c=db.query1('SELECT id,name,room FROM clients WHERE id=?',[id]);
+  if(!c) return res.status(404).json({error:'Not found'});
+  // auditRead is defined later in the file but hoisted as a function declaration
+  audit(req,'record.read','client_profile',id,c.name+' Rm.'+c.room,'Profile drawer opened');
+  res.json({ok:true});
+});
+
 app.put('/api/facility/rooms/:id', requireAuth, csrfCheck, requirePermission('facility.manage'),(req,res)=>{
   const id=parseInt(req.params.id);
   if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
@@ -1298,6 +1435,20 @@ app.post('/api/ua-requests', requireAuth, csrfCheck, requirePermission('ua.reque
   res.json({ok:true});
 });
 
+app.delete('/api/ua-requests/:id', requireAuth, csrfCheck, requireAnyPermission('ua.acknowledge','ua.record'), (req,res)=>{
+  const id = parseInt(req.params.id,10);
+  if (isNaN(id)) return res.status(400).json({error:'Invalid id'});
+  const r = db.query1('SELECT client_name,room,acknowledged FROM ua_requests WHERE id=?',[id]);
+  if (!r) return res.status(404).json({error:'Not found'});
+  if (r.acknowledged) return res.status(409).json({error:'Request already acknowledged — cannot delete'});
+  db.run('DELETE FROM ua_requests WHERE id=?',[id]);
+  db.save();
+  audit(req,'ua.request.delete','ua_request',id,r.client_name+(r.room?' Rm.'+r.room:''),'Pending request cancelled');
+  const pending = db.query('SELECT * FROM ua_requests WHERE acknowledged=0 ORDER BY requested_at DESC');
+  broadcast({type:'ua_request', requests: pending});
+  res.json({ok:true});
+});
+
 app.post('/api/ua-requests/:id/acknowledge', requireAuth, csrfCheck, requirePermission('ua.acknowledge'), (req,res)=>{
   const id = parseInt(req.params.id,10);
   const _uar=db.query1('SELECT client_name,room FROM ua_requests WHERE id=?',[id]);
@@ -1374,7 +1525,7 @@ app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (re
   if(Array.isArray(req.body.clients)&&req.body.clients.length) list=req.body.clients;
   else if(req.body.client_id) list=[{client_id:req.body.client_id,client_name:req.body.client_name,room:req.body.room,notes:req.body.notes}];
   if(!list.length) return res.status(400).json({error:'No clients selected'});
-  const{logged_at,logged_by}=req.body;
+  const{logged_at,logged_by,log_time}=req.body;
   const by=String(logged_by||req.session.displayName||req.session.username||'').slice(0,100);
   const atTime=logged_at||new Date().toISOString();
   // Validate and resolve each client
@@ -1385,39 +1536,40 @@ app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (re
     const client=db.query1('SELECT id,room,name FROM clients WHERE id=?',[cid]);
     if(!client) continue;
     const itemNotes=String(item.notes||'').slice(0,500);
+    const itemType=String(item.mail_type||'').replace(/[^a-z,]/g,'').slice(0,50);
     resolved.push({
       client_id:client.id,
       client_name:String(item.client_name||client.name||'').slice(0,200),
       room:String(item.room||client.room||'').slice(0,20),
       notes:itemNotes,
+      mail_type:itemType,
     });
   }
   if(!resolved.length) return res.status(404).json({error:'No valid clients found'});
   // Insert one mail_log record per client (each with its own notes)
   for(const r of resolved){
     db.run(
-      `INSERT INTO mail_log (client_id,client_name,room,logged_by,logged_at,notes,status) VALUES (?,?,?,?,?,?,'pending')`,
-      [r.client_id,r.client_name,r.room,by,atTime,r.notes]
+      `INSERT INTO mail_log (client_id,client_name,room,logged_by,logged_at,notes,mail_type,status) VALUES (?,?,?,?,?,?,?,'pending')`,
+      [r.client_id,r.client_name,r.room,by,atTime,r.notes,r.mail_type]
     );
-    audit(req,'mail.log','mail',null,r.client_name+' Rm.'+r.room,{notes:r.notes});
+    audit(req,'mail.log','mail',null,r.client_name+' Rm.'+r.room,{notes:r.notes,mail_type:r.mail_type});
   }
   // ONE consolidated log entry for the active shift report
   const activeId=db.getSetting('active_report_id',null);
   if(activeId){
-    const now=new Date();
-    const h=now.getHours(),m=String(now.getMinutes()).padStart(2,'0');
-    const ap=h>=12?'PM':'AM',h12=h%12||12;
-    const timeStr=`${h12}:${m} ${ap}`;
-    let logText;
-    if(resolved.length===1){
-      const r=resolved[0];
-      logText=`Mail received for ${r.client_name} (Rm. ${r.room})`;
-      if(r.notes) logText+=` [${r.notes}]`;
-      logText+=` — logged by ${by}`;
-    } else {
-      const names=resolved.map(r=>r.notes?`${r.client_name} (Rm. ${r.room}) [${r.notes}]`:`${r.client_name} (Rm. ${r.room})`).join(', ');
-      logText=`Mail received for ${resolved.length} residents: ${names} — logged by ${by}`;
+    function fmtMailItem(r){
+      const types=(r.mail_type||'').split(',').filter(Boolean).map(t=>t.charAt(0).toUpperCase()+t.slice(1)).join('+');
+      let s=`${r.client_name} (Rm. ${r.room})`;
+      if(types) s+=`: ${types}`;
+      if(r.notes) s+=` — ${r.notes}`;
+      return s;
     }
+    const items=resolved.map(fmtMailItem).join(' | ');
+    const logText=`Mail received — ${items} — by ${by}`;
+    const _now=new Date();
+    const _h=_now.getHours(),_mi=String(_now.getMinutes()).padStart(2,'0');
+    const autoTime=`${_h%12||12}:${_mi} ${_h>=12?'PM':'AM'}`;
+    const timeStr=log_time&&/^\d{1,2}:\d{2} [AP]M$/.test(String(log_time))?String(log_time):autoTime;
     db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',[activeId,timeStr,logText]);
     db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),activeId]);
     broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
@@ -1549,6 +1701,424 @@ app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.
   }, 600);
 });
 
+// ════════════════════════════════════════════════════════════════════
+// EHR EXPANSION — clinical records, immutability, consent, idle session
+// ════════════════════════════════════════════════════════════════════
+
+// Helper: audit PHI read events. action='record.read' per HIPAA Security Rule.
+function auditRead(req, table, targetId, label, detail) {
+  audit(req, 'record.read', table, targetId, label||'', detail||'');
+}
+
+// Helper: 403 if the named clinical record is locked (24h immutability).
+// Records.unlock holders can bypass by calling the /unlock route first.
+function requireUnlocked(table) {
+  return function(req, res, next) {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({error:'Invalid id'});
+    if (db.isRecordLocked(table, id)) {
+      return res.status(403).json({
+        error:'Record is locked (24h immutability window has elapsed). A supervisor must unlock it first.',
+        code:'RECORD_LOCKED'
+      });
+    }
+    next();
+  };
+}
+
+// Helper: 42 CFR Part 2 consent gate — used by external-disclosure routes only.
+// Internal staff reads are exempt under the 2024 rule update (treatment/operations)
+// but are still audit-logged via auditRead().
+function requireConsent(clientIdFn, informationType) {
+  return function(req, res, next) {
+    try {
+      const cid = parseInt(typeof clientIdFn === 'function' ? clientIdFn(req) : req.params.client_id);
+      if (!cid) return res.status(400).json({error:'client_id required'});
+      const consent = db.findActiveConsent(cid, informationType);
+      if (!consent) {
+        audit(req,'consent.blocked','consent',cid,'External disclosure blocked',{informationType});
+        return res.status(403).json({
+          error:'42 CFR Part 2: No valid consent on file for this disclosure. Obtain written consent first.',
+          code:'CONSENT_REQUIRED'
+        });
+      }
+      req._consent = consent;
+      next();
+    } catch(e) {
+      res.status(500).json({error:'Consent check failed'});
+    }
+  };
+}
+
+// Compute days_in_program for a discharge record.
+function _daysBetween(a, b) {
+  if (!a || !b) return 0;
+  try {
+    const da = new Date(a + 'T00:00:00');
+    const db = new Date(b + 'T00:00:00');
+    return Math.max(0, Math.round((db - da) / 86400000));
+  } catch(e) { return 0; }
+}
+
+// ── UA Records (Phase 2) ─────────────────────────────────────────
+app.get('/api/ua-records', requireAuth, (req, res) => {
+  const filter = {
+    client_id: req.query.client_id ? parseInt(req.query.client_id) : null,
+    result:    req.query.result || null,
+    from:      req.query.from   || null,
+    to:        req.query.to     || null,
+  };
+  const rows = db.getUARecords(filter);
+  auditRead(req, 'ua_records', null, `UA records list (${rows.length})`, filter);
+  res.json(rows);
+});
+app.get('/api/ua-records/:id', requireAuth, (req, res) => {
+  const r = db.getUARecord(parseInt(req.params.id));
+  if (!r) return res.status(404).json({error:'Not found'});
+  auditRead(req, 'ua_records', r.id, r.client_name);
+  res.json(r);
+});
+app.post('/api/ua-records', requireAuth, csrfCheck, requirePermission('ua.record'), (req,res) => {
+  const b = req.body || {};
+  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.tested_at) return res.status(400).json({error:'tested_at required'});
+  const me = req.session;
+  const rec = db.createUARecord({
+    ...b,
+    witnessed_by_id:   b.witnessed_by_id   || me.userId,
+    witnessed_by_name: b.witnessed_by_name || me.displayName || me.username || '',
+    created_by_id:     me.userId,
+    created_by_name:   me.displayName || me.username || '',
+  });
+  audit(req,'ua.record.create','ua_records',rec.id,rec.client_name,{result:rec.result});
+  broadcast({type:'ua_records_updated'});
+  res.json({ok:true, record:rec});
+});
+app.patch('/api/ua-records/:id', requireAuth, csrfCheck, requirePermission('ua.record'),
+  requireUnlocked('ua_records'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const cur = db.getUARecord(id);
+  if (!cur) return res.status(404).json({error:'Not found'});
+  const updated = db.updateUARecord(id, req.body||{});
+  audit(req,'ua.record.edit','ua_records',id,cur.client_name,{fields:Object.keys(req.body||{})});
+  broadcast({type:'ua_records_updated'});
+  res.json({ok:true, record:updated});
+});
+app.delete('/api/ua-records/:id', requireAuth, csrfCheck, requirePermission('ua.delete'),
+  requireUnlocked('ua_records'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const cur = db.getUARecord(id);
+  if (!cur) return res.status(404).json({error:'Not found'});
+  db.deleteUARecord(id);
+  audit(req,'ua.record.delete','ua_records',id,cur.client_name);
+  broadcast({type:'ua_records_updated'});
+  res.json({ok:true});
+});
+
+// ── Med Administration Log (Phase 3) ─────────────────────────────
+app.get('/api/med-log', requireAuth, (req, res) => {
+  const filter = {
+    client_id: req.query.client_id ? parseInt(req.query.client_id) : null,
+    report_id: req.query.report_id ? parseInt(req.query.report_id) : null,
+    from:      req.query.from || null,
+  };
+  const rows = db.getMedLog(filter);
+  auditRead(req,'med_administration_log',null,`Med log list (${rows.length})`, filter);
+  res.json(rows);
+});
+app.post('/api/med-log', requireAuth, csrfCheck, requirePermission('med.witness'), (req,res) => {
+  const b = req.body || {};
+  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.administered_at) return res.status(400).json({error:'administered_at required'});
+  if (!b.medication || !String(b.medication).trim()) return res.status(400).json({error:'medication required'});
+  const me = req.session;
+  const rec = db.createMedLog({
+    ...b,
+    witnessed_by_id:   b.witnessed_by_id   || me.userId,
+    witnessed_by_name: b.witnessed_by_name || me.displayName || me.username || '',
+    created_by_id:     me.userId,
+    created_by_name:   me.displayName || me.username || '',
+  });
+  audit(req,'med.witness','med_administration_log',rec.id,rec.client_name,{med:rec.medication});
+  broadcast({type:'med_log_updated'});
+  res.json({ok:true, record:rec});
+});
+app.patch('/api/med-log/:id', requireAuth, csrfCheck, requirePermission('med.witness'),
+  requireUnlocked('med_administration_log'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const updated = db.updateMedLog(id, req.body||{});
+  if (!updated) return res.status(404).json({error:'Not found'});
+  audit(req,'med.edit','med_administration_log',id,updated.client_name);
+  broadcast({type:'med_log_updated'});
+  res.json({ok:true, record:updated});
+});
+app.delete('/api/med-log/:id', requireAuth, csrfCheck, requirePermission('med.delete'),
+  requireUnlocked('med_administration_log'), (req,res) => {
+  const id = parseInt(req.params.id);
+  db.deleteMedLog(id);
+  audit(req,'med.delete','med_administration_log',id,'');
+  broadcast({type:'med_log_updated'});
+  res.json({ok:true});
+});
+
+// ── Milestones (Phase 4) ─────────────────────────────────────────
+app.get('/api/milestones', requireAuth, (req, res) => {
+  const filter = {
+    client_id: req.query.client_id ? parseInt(req.query.client_id) : null,
+    status:    req.query.status || null,
+  };
+  const rows = db.getMilestones(filter);
+  auditRead(req,'milestones',null,`Milestones list (${rows.length})`, filter);
+  res.json(rows);
+});
+app.post('/api/milestones', requireAuth, csrfCheck, requirePermission('milestones.edit'), (req,res) => {
+  const b = req.body || {};
+  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.objective || !String(b.objective).trim()) return res.status(400).json({error:'objective required'});
+  const me = req.session;
+  const rec = db.createMilestone({
+    ...b,
+    created_by_name: me.displayName || me.username || '',
+  });
+  audit(req,'milestone.create','milestones',rec.id,rec.client_name,{phase:rec.phase,objective:rec.objective});
+  broadcast({type:'milestones_updated'});
+  res.json({ok:true, record:rec});
+});
+app.put('/api/milestones/:id', requireAuth, csrfCheck, requirePermission('milestones.edit'),
+  requireUnlocked('milestones'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const updated = db.updateMilestone(id, req.body||{});
+  if (!updated) return res.status(404).json({error:'Not found'});
+  audit(req,'milestone.edit','milestones',id,updated.client_name);
+  broadcast({type:'milestones_updated'});
+  res.json({ok:true, record:updated});
+});
+app.put('/api/milestones/:id/signoff', requireAuth, csrfCheck, requirePermission('milestones.signoff'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const me = req.session;
+  const updated = db.signoffMilestone(id, me.userId, me.displayName || me.username || '');
+  if (!updated) return res.status(404).json({error:'Not found'});
+  audit(req,'milestone.signoff','milestones',id,updated.client_name);
+  broadcast({type:'milestones_updated'});
+  res.json({ok:true, record:updated});
+});
+app.delete('/api/milestones/:id', requireAuth, csrfCheck, requirePermission('milestones.edit'),
+  requireUnlocked('milestones'), (req,res) => {
+  const id = parseInt(req.params.id);
+  db.deleteMilestone(id);
+  audit(req,'milestone.delete','milestones',id,'');
+  broadcast({type:'milestones_updated'});
+  res.json({ok:true});
+});
+
+// ── Incidents (Phase 5) ──────────────────────────────────────────
+app.get('/api/incidents', requireAuth, (req, res) => {
+  const filter = {
+    client_id: req.query.client_id ? parseInt(req.query.client_id) : null,
+    severity:  req.query.severity || null,
+    status:    req.query.status || null,
+  };
+  const rows = db.getIncidents(filter);
+  auditRead(req,'incidents',null,`Incidents list (${rows.length})`, filter);
+  res.json(rows);
+});
+app.post('/api/incidents', requireAuth, csrfCheck, requirePermission('incidents.log'), (req,res) => {
+  const b = req.body || {};
+  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.incident_date) return res.status(400).json({error:'incident_date required'});
+  if (!b.narrative || !String(b.narrative).trim()) return res.status(400).json({error:'narrative required'});
+  const sev = String(b.severity||'low').toLowerCase();
+  if (!['low','medium','high','critical'].includes(sev)) return res.status(400).json({error:'severity must be low|medium|high|critical'});
+  // Server enforces minimum required notifications based on severity (HIPAA + facility policy)
+  const policy = db.getSetting('incident_notifications', {});
+  const minReq = Array.isArray(policy[sev]) ? policy[sev] : [];
+  const supplied = Array.isArray(b.notifications_required) ? b.notifications_required : [];
+  const merged = Array.from(new Set([...minReq, ...supplied]));
+  const me = req.session;
+  const rec = db.createIncident({
+    ...b, severity:sev, notifications_required:merged,
+    logged_by_id:   me.userId,
+    logged_by_name: me.displayName || me.username || '',
+  });
+  audit(req,'incident.create','incidents',rec.id,rec.client_name,{severity:sev,notifications:merged});
+  broadcast({type:'incidents_updated'});
+  // Alert staff who have incidents.review permission
+  broadcast({type:'incident_notification', incident:{
+    id:rec.id, client_name:rec.client_name, room:rec.room,
+    severity:sev, incident_type:rec.incident_type, incident_date:rec.incident_date,
+    logged_by:me.displayName||me.username||'',
+  }});
+  res.json({ok:true, record:rec});
+});
+app.put('/api/incidents/:id', requireAuth, csrfCheck, requirePermission('incidents.log'),
+  requireUnlocked('incidents'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const updated = db.updateIncident(id, req.body||{});
+  if (!updated) return res.status(404).json({error:'Not found'});
+  audit(req,'incident.edit','incidents',id,updated.client_name);
+  broadcast({type:'incidents_updated'});
+  res.json({ok:true, record:updated});
+});
+app.put('/api/incidents/:id/review', requireAuth, csrfCheck, requirePermission('incidents.review'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const me = req.session;
+  const { review_notes, status } = req.body || {};
+  const newStatus = ['reviewed','closed'].includes(status) ? status : 'reviewed';
+  const updated = db.reviewIncident(id, me.userId, me.displayName || me.username || '',
+    review_notes || '', newStatus);
+  if (!updated) return res.status(404).json({error:'Not found'});
+  audit(req,'incident.review','incidents',id,updated.client_name,{status:newStatus});
+  broadcast({type:'incidents_updated'});
+  res.json({ok:true, record:updated});
+});
+app.delete('/api/incidents/:id', requireAuth, csrfCheck, requirePermission('incidents.delete'),
+  requireUnlocked('incidents'), (req,res) => {
+  const id = parseInt(req.params.id);
+  db.deleteIncident(id);
+  audit(req,'incident.delete','incidents',id,'');
+  broadcast({type:'incidents_updated'});
+  res.json({ok:true});
+});
+
+// ── Discharge Records (Phase 6) ──────────────────────────────────
+app.get('/api/discharge-records', requireAuth, (req,res) => {
+  const rows = db.getDischargeRecords({});
+  auditRead(req,'discharge_records',null,`Discharge records list (${rows.length})`);
+  res.json(rows);
+});
+app.get('/api/discharge-records/:client_id', requireAuth, (req,res) => {
+  const cid = parseInt(req.params.client_id);
+  const rows = db.getDischargeRecords({client_id:cid});
+  auditRead(req,'discharge_records',null,`Discharges for client ${cid}`,{client_id:cid});
+  res.json(rows);
+});
+app.post('/api/discharge-records', requireAuth, csrfCheck, requirePermission('residents.edit'), (req,res) => {
+  const b = req.body || {};
+  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.discharge_date) return res.status(400).json({error:'discharge_date required'});
+  if (!b.reason || !['graduate','ama','therapeutic','administrative'].includes(b.reason))
+    return res.status(400).json({error:'reason must be graduate|ama|therapeutic|administrative'});
+  const client = db.query1('SELECT * FROM clients WHERE id=?',[b.client_id]);
+  if (!client) return res.status(404).json({error:'Client not found'});
+  const me = req.session;
+  const rec = db.createDischargeRecord({
+    ...b,
+    client_name:    b.client_name    || client.name,
+    room:           b.room           || client.room,
+    program_track:  b.program_track  || client.program_track || '',
+    intake_date:    b.intake_date    || client.intake_date || null,
+    days_in_program:_daysBetween(client.intake_date, b.discharge_date),
+    created_by_id:   me.userId,
+    created_by_name: me.displayName || me.username || '',
+  });
+  // Also flip the client to inactive + stamp discharge date
+  db.run('UPDATE clients SET is_active=0, discharge_date=? WHERE id=?',
+    [b.discharge_date, b.client_id]);
+  db.save();
+  audit(req,'discharge.create','discharge_records',rec.id,client.name,{reason:rec.reason});
+  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
+  broadcast({type:'discharge_records_updated'});
+  res.json({ok:true, record:rec});
+});
+
+// ── 42 CFR Part 2 Consent (Phase 7) ──────────────────────────────
+app.get('/api/consent-records/:client_id', requireAuth, requirePermission('consent.manage'), (req,res) => {
+  const cid = parseInt(req.params.client_id);
+  const rows = db.getConsentRecords(cid);
+  auditRead(req,'consent_records',null,`Consents for client ${cid}`,{client_id:cid});
+  res.json(rows);
+});
+app.post('/api/consent-records', requireAuth, csrfCheck, requirePermission('consent.manage'), (req,res) => {
+  const b = req.body || {};
+  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.recipient_name) return res.status(400).json({error:'recipient_name required'});
+  if (!b.purpose) return res.status(400).json({error:'purpose required'});
+  if (!b.effective_date) return res.status(400).json({error:'effective_date required'});
+  const facility = db.getSetting('facility_name','OpsPoint');
+  const me = req.session;
+  const rec = db.createConsentRecord({
+    ...b,
+    program_name:    b.program_name || facility,
+    created_by_id:   me.userId,
+    created_by_name: me.displayName || me.username || '',
+  });
+  audit(req,'consent.create','consent_records',rec.id,b.recipient_name,
+    {client_id:b.client_id,information_type:b.information_type,expires:b.expiration_date});
+  res.json({ok:true, record:rec});
+});
+app.put('/api/consent-records/:id/revoke', requireAuth, csrfCheck, requirePermission('consent.manage'), (req,res) => {
+  const id = parseInt(req.params.id);
+  const me = req.session;
+  const cur = db.getConsentRecord(id);
+  if (!cur) return res.status(404).json({error:'Not found'});
+  const updated = db.revokeConsent(id, me.displayName || me.username || '');
+  audit(req,'consent.revoke','consent_records',id,cur.recipient_name,{client_id:cur.client_id});
+  res.json({ok:true, record:updated});
+});
+app.get('/api/disclosures/:client_id', requireAuth, requirePermission('disclosures.view'), (req,res) => {
+  const cid = parseInt(req.params.client_id);
+  const rows = db.getDisclosures(cid);
+  auditRead(req,'disclosures',null,`Disclosures for client ${cid}`,{client_id:cid});
+  res.json(rows);
+});
+// Log an external disclosure (called by export / print / share flows).
+// Gated by requireConsent — the client cannot trigger this without a valid consent.
+app.post('/api/disclosures', requireAuth, csrfCheck,
+  requireConsent(req => req.body && req.body.client_id, 'all'), (req,res) => {
+  const b = req.body || {};
+  const me = req.session;
+  const rec = db.logDisclosure({
+    ...b,
+    consent_id: b.consent_id || (req._consent && req._consent.id) || null,
+    disclosed_by_id: me.userId,
+    disclosed_by_name: me.displayName || me.username || '',
+  });
+  audit(req,'disclosure.log','disclosures',rec.id,b.recipient||'',
+    {client_id:b.client_id,information_type:b.information_type,method:b.method});
+  res.json({ok:true, record:rec});
+});
+
+// ── Phase 8: Supervisor unlock for clinical records ──────────────
+app.post('/api/:table/:id/unlock', requireAuth, csrfCheck, requirePermission('records.unlock'), (req,res) => {
+  const table = String(req.params.table||'');
+  if (!db.CLINICAL_TABLES.includes(table)) return res.status(400).json({error:'Invalid table'});
+  const id = parseInt(req.params.id);
+  const reason = (req.body && req.body.reason) || '';
+  if (!reason || !String(reason).trim())
+    return res.status(400).json({error:'Reason required to unlock a sealed record'});
+  const me = req.session;
+  if (!db.isRecordLocked(table, id))
+    return res.status(400).json({error:'Record is not locked'});
+  db.unlockRecord(table, id, me.displayName || me.username || '', reason);
+  audit(req,'record.unlock', table, id, '', {reason});
+  res.json({ok:true});
+});
+
+// ── Facility settings extension — program tracks / phases / etc. ──
+app.get('/api/facility/ehr-config', requireAuth, (req,res) => {
+  res.json({
+    program_tracks:         db.getSetting('program_tracks',         []),
+    program_phases:         db.getSetting('program_phases',         []),
+    incident_notifications: db.getSetting('incident_notifications', {}),
+    session_idle_mins:      parseInt(db.getSetting('session_idle_mins',30))||30,
+  });
+});
+app.put('/api/facility/ehr-config', requireAuth, csrfCheck, requirePermission('admin.settings'), (req,res) => {
+  const b = req.body || {};
+  if (Array.isArray(b.program_tracks)) db.setSetting('program_tracks', b.program_tracks.filter(s => String(s||'').trim()));
+  if (Array.isArray(b.program_phases)) db.setSetting('program_phases', b.program_phases);
+  if (b.incident_notifications && typeof b.incident_notifications === 'object')
+    db.setSetting('incident_notifications', b.incident_notifications);
+  if (b.session_idle_mins != null) {
+    const m = Math.max(5, Math.min(240, parseInt(b.session_idle_mins) || 30));
+    db.setSetting('session_idle_mins', String(m));
+  }
+  db.save();
+  audit(req,'facility.ehr_config','settings',null,'EHR configuration',{fields:Object.keys(b)});
+  broadcast({type:'settings_updated'});
+  res.json({ok:true});
+});
+
 // ── Audit Log API ─────────────────────────────────────────────────
 app.get('/api/audit-log', requireAuth, requirePermission('admin.audit'), (req,res)=>{
   const{action,actorId,from,to,search,limit,offset}=req.query;
@@ -1572,15 +2142,6 @@ app.get('*',(req,res)=>{
 // ── Start ─────────────────────────────────────────────────────────
 db.init(DB_PATH);
 (()=>{
-  // Clean up stale logo paths from old installations (not data URIs = unusable)
-  ['logo_pdec','logo_wcs'].forEach(k=>{
-    const v = db.getSetting(k,'');
-    if (v && !v.startsWith('data:')) {
-      db.setSetting(k,'');
-      db.save();
-      console.log('  Cleared stale logo path:', k, '=', v);
-    }
-  });
   // Clean up mojibake middle-dot in facility name (Â· = double-encoded ·)
   {
     const fn = db.getSetting('facility_name','');
@@ -1613,6 +2174,14 @@ db.init(DB_PATH);
     // Clients must use REST API; no peer-to-peer relay allowed
     ws.on('message',()=>{});
   });
+
+  // Hourly lock sweep — auto-locks clinical records past their 24h grace window
+  setInterval(() => {
+    try {
+      const n = db.runLockSweep();
+      if (n > 0) console.log(`  [lock-sweep] locked ${n} clinical records past 24h grace`);
+    } catch(e) {}
+  }, 60 * 60 * 1000);
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
   db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.0.0',tls:useTLS});

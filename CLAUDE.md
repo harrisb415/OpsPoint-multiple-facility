@@ -2,7 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Organization:** Westside Community Services  
 **Product:** OpsPoint v2.0.0 — React Edition
 
 ---
@@ -31,7 +30,7 @@ cd client && npm run dev
 cd client && npm run lint
 ```
 
-**Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `localhost:3000` automatically.
+**Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `https://localhost:3000` — the backend **must** be running with TLS (`data/cert.pem` + `data/key.pem` must exist) or the proxy will fail with SSL errors. Run `node generate_cert.js` first if certs don't exist.
 
 **Windows scripts:** `run.bat` installs dependencies and starts the server in one step. `install_startup.bat` (run as administrator) registers a Windows Scheduled Task for boot-time autostart under `NetworkService`.
 

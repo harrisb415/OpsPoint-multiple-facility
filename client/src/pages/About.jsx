@@ -46,7 +46,7 @@ export default function About() {
           v{VERSION} — React Edition
         </div>
         <div style={{ color: 'rgba(255,255,255,.55)', fontSize: '1rem', maxWidth: 520, margin: '0 auto' }}>
-          Shift management platform for Westside Community Services &amp; PDEC residential facilities.
+          Shift management platform for residential facilities.
         </div>
       </div>
 
@@ -104,7 +104,6 @@ export default function About() {
           {[
             { label: 'Version', value: `v${VERSION}` },
             { label: 'Edition', value: 'React (Vite + Express)' },
-            { label: 'Organization', value: 'Westside Community Services' },
             { label: 'Support', value: 'Contact your system administrator' },
           ].map(({ label, value }) => (
             <div key={label}>

@@ -37,7 +37,7 @@ function StatusBadge({ status }) {
 }
 
 export default function PassesTab() {
-  const { data } = useData()
+  const { data, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canEdit   = hasPerm('passes.edit')
   const canStatus = hasPerm('passes.status') || canEdit  // passes.edit implies status too
@@ -199,7 +199,13 @@ export default function PassesTab() {
                   {active.map(p => (
                     <tr key={p.id}>
                       <td className="rm">{p.room}</td>
-                      <td className="name-cell">{p.name}</td>
+                      <td className="name-cell">
+                        {p.client_id ? (
+                          <button onClick={() => openProfile(p.client_id)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'inherit', fontFamily:'inherit', fontSize:'inherit', fontWeight:'inherit', textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(27,47,110,.4)' }}>
+                            {p.name}
+                          </button>
+                        ) : p.name}
+                      </td>
                       <td>
                         {canStatus ? (
                           <select
@@ -274,7 +280,13 @@ export default function PassesTab() {
                   {retPaged.map(p => (
                     <tr key={p.id} style={{ opacity: .7 }}>
                       <td className="rm">{p.room}</td>
-                      <td className="name-cell">{p.name}</td>
+                      <td className="name-cell">
+                        {p.client_id ? (
+                          <button onClick={() => openProfile(p.client_id)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'inherit', fontFamily:'inherit', fontSize:'inherit', fontWeight:'inherit', textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(27,47,110,.4)' }}>
+                            {p.name}
+                          </button>
+                        ) : p.name}
+                      </td>
                       <td className="date-cell">{fmtDT(p.departure)}</td>
                       <td className="date-cell">{fmtDT(p.return_date)}</td>
                       <td style={{ fontSize: '.82rem', color: '#475569' }}>{p.notes || ''}</td>

@@ -16,3 +16,18 @@ export function ChangePasswordGuard() {
   if (!session.mustChangePw) return <Navigate to="/" replace />
   return <Outlet />
 }
+
+// Requires the named permission(s). Use as a route wrapper.
+//   <Route element={<PermGuard perm="admin.users" />}>...</Route>
+// or with multiple perms (any-of):
+//   <Route element={<PermGuard perms={['x','y']} />}>...</Route>
+export function PermGuard({ perm, perms }) {
+  const { session } = useAuth()
+  if (!session) return <Navigate to="/login" replace />
+  const userPerms = session.permissions || []
+  const required = perm ? [perm] : (perms || [])
+  if (required.length === 0) return <Outlet />
+  const ok = required.some(p => userPerms.includes(p))
+  if (!ok) return <Navigate to="/" replace />
+  return <Outlet />
+}

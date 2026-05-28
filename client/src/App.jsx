@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext.jsx'
-import { AuthGuard, ChangePasswordGuard } from './components/ProtectedRoute.jsx'
+import { AuthGuard, ChangePasswordGuard, PermGuard } from './components/ProtectedRoute.jsx'
 import AppShell from './components/AppShell.jsx'
 import Login from './pages/Login.jsx'
 import ChangePassword from './pages/ChangePassword.jsx'
@@ -89,7 +89,9 @@ export default function App() {
           <Route path="/about" element={<About />} />
           <Route element={<AppShell />}>
             <Route index element={<Dashboard />} />
-            <Route path="/admin" element={<Admin />} />
+            <Route element={<PermGuard perm="admin.users" />}>
+              <Route path="/admin" element={<Admin />} />
+            </Route>
           </Route>
         </Route>
 

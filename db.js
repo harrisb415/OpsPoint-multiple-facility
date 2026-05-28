@@ -54,6 +54,18 @@ const PERMISSIONS = [
   'broadcast.send',   // compose and send announcements to all staff
   'broadcast.receive',// receive announcements in the notification bell
   'ua.draw',          // run the random UA draw
+  // ── EHR / HIPAA expansion ───────────────────────────────────────
+  'ua.record',           // create / edit a formal UA record (panel results, COC)
+  'med.witness',         // record witnessed self-administration doses
+  'med.delete',          // delete a med administration entry
+  'milestones.edit',     // create / edit program milestones
+  'milestones.signoff',  // sign off on a completed milestone (counselor)
+  'incidents.log',       // log a behavioral incident report
+  'incidents.review',    // supervisor review of an incident
+  'incidents.delete',    // delete an incident (admin)
+  'consent.manage',      // create / revoke 42 CFR Part 2 consent records
+  'disclosures.view',    // view the disclosure audit log
+  'records.unlock',      // supervisor override to unlock a record past the 24h immutability window
 ];
 
 const ROLE_PRESETS = {
@@ -62,6 +74,7 @@ const ROLE_PRESETS = {
     'residents.edit', 'staff.edit', 'chores.edit', 'passes.status',
     'reminders.view', 'ua.acknowledge', 'mail.log', 'violations.log',
     'violations.notify_consequence', 'mobile.access',
+    'med.witness', 'incidents.log',
   ],
   supervisor: [
     'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
@@ -71,6 +84,8 @@ const ROLE_PRESETS = {
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'mobile.access',
+    'ua.record', 'med.witness', 'med.delete',
+    'milestones.edit', 'incidents.log', 'incidents.review',
   ],
   admin: [
     'reports.create', 'reports.close', 'reports.delete',
@@ -82,6 +97,10 @@ const ROLE_PRESETS = {
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'facility.manage', 'admin.users', 'admin.settings', 'admin.audit', 'admin.system',
     'mobile.access',
+    'ua.record', 'med.witness', 'med.delete',
+    'milestones.edit', 'milestones.signoff',
+    'incidents.log', 'incidents.review', 'incidents.delete',
+    'consent.manage', 'disclosures.view', 'records.unlock',
   ],
   case_manager: [
     'residents.edit', 'staff.edit', 'passes.edit',
@@ -89,6 +108,7 @@ const ROLE_PRESETS = {
     'violations.notify_review',
     'broadcast.send', 'broadcast.receive',
     'mobile.access',
+    'milestones.edit', 'milestones.signoff', 'consent.manage',
   ],
 };
 
@@ -117,6 +137,30 @@ function init(dbPath) {
     "ALTER TABLE ua_requests ADD COLUMN is_interview INTEGER DEFAULT 0",
     "ALTER TABLE ua_requests ADD COLUMN interview_name TEXT DEFAULT ''",
     "ALTER TABLE users ADD COLUMN is_protected INTEGER DEFAULT 0",
+    // ── Phase 1 — Resident profile completion ─────────────────────
+    "ALTER TABLE clients ADD COLUMN referral_source TEXT DEFAULT ''",
+    "ALTER TABLE clients ADD COLUMN program_track TEXT DEFAULT ''",
+    "ALTER TABLE clients ADD COLUMN emergency_contacts TEXT DEFAULT '[]'",
+    "ALTER TABLE clients ADD COLUMN intake_notes TEXT DEFAULT ''",
+    // ── Phase 8 — Supervisor unlock columns (idempotent on each clinical table) ──
+    "ALTER TABLE ua_records ADD COLUMN unlocked_by TEXT DEFAULT ''",
+    "ALTER TABLE ua_records ADD COLUMN unlocked_at TEXT DEFAULT NULL",
+    "ALTER TABLE ua_records ADD COLUMN unlock_reason TEXT DEFAULT ''",
+    "ALTER TABLE med_administration_log ADD COLUMN unlocked_by TEXT DEFAULT ''",
+    "ALTER TABLE med_administration_log ADD COLUMN unlocked_at TEXT DEFAULT NULL",
+    "ALTER TABLE med_administration_log ADD COLUMN unlock_reason TEXT DEFAULT ''",
+    "ALTER TABLE milestones ADD COLUMN unlocked_by TEXT DEFAULT ''",
+    "ALTER TABLE milestones ADD COLUMN unlocked_at TEXT DEFAULT NULL",
+    "ALTER TABLE milestones ADD COLUMN unlock_reason TEXT DEFAULT ''",
+    "ALTER TABLE incidents ADD COLUMN unlocked_by TEXT DEFAULT ''",
+    "ALTER TABLE incidents ADD COLUMN unlocked_at TEXT DEFAULT NULL",
+    "ALTER TABLE incidents ADD COLUMN unlock_reason TEXT DEFAULT ''",
+    // ── UA reason ────────────────────────────────────────────────────
+    "ALTER TABLE ua_records ADD COLUMN reason TEXT DEFAULT ''",
+    // ── UA ↔ log entry link (shared chain-of-custody photo) ──────────
+    "ALTER TABLE ua_records ADD COLUMN log_entry_id INTEGER DEFAULT NULL",
+    // ── Mail type ─────────────────────────────────────────────────────
+    "ALTER TABLE mail_log ADD COLUMN mail_type TEXT DEFAULT ''",
   ];
   migrations.forEach(sql => { try { _db.exec(sql); } catch(e) {} });
   _migrateRebrand();
@@ -128,6 +172,8 @@ function init(dbPath) {
   _migrateUserGroups();
   _migrateGroups();
   pruneAuditLog(365);
+  // Lock any clinical records past their 24h grace window (boot-time sweep)
+  try { runLockSweep(); } catch(e) {}
 }
 
 // One-time rebrand migration: ShiftPoint → OpsPoint
@@ -383,6 +429,158 @@ function _createSchema() {
     target_label TEXT    DEFAULT '',
     detail       TEXT    DEFAULT ''
   )`);
+
+  // ── EHR expansion tables ────────────────────────────────────────────
+
+  // Phase 2: formal UA records (replaces ad-hoc ua_photo on log entries)
+  _db.exec(`CREATE TABLE IF NOT EXISTS ua_records (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id          INTEGER NOT NULL,
+    client_name        TEXT    NOT NULL DEFAULT '',
+    room               TEXT    NOT NULL DEFAULT '',
+    ua_request_id      INTEGER DEFAULT NULL,
+    report_id          INTEGER DEFAULT NULL,
+    tested_at          TEXT    NOT NULL,
+    witnessed_by_id    INTEGER NOT NULL,
+    witnessed_by_name  TEXT    NOT NULL DEFAULT '',
+    collection_method  TEXT    NOT NULL DEFAULT 'observed',
+    result             TEXT    NOT NULL DEFAULT 'pending',
+    panel_results      TEXT    NOT NULL DEFAULT '{}',
+    chain_of_custody   TEXT    DEFAULT '',
+    photo              TEXT    DEFAULT NULL,
+    notes              TEXT    DEFAULT '',
+    locked_at          TEXT    DEFAULT NULL,
+    unlocked_by        TEXT    DEFAULT '',
+    unlocked_at        TEXT    DEFAULT NULL,
+    unlock_reason      TEXT    DEFAULT '',
+    created_by_id      INTEGER NOT NULL,
+    created_by_name    TEXT    NOT NULL DEFAULT '',
+    created_at         TEXT    DEFAULT (datetime('now'))
+  )`);
+
+  // Phase 3: witnessed self-administration log
+  _db.exec(`CREATE TABLE IF NOT EXISTS med_administration_log (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id          INTEGER NOT NULL,
+    client_name        TEXT    NOT NULL DEFAULT '',
+    room               TEXT    NOT NULL DEFAULT '',
+    report_id          INTEGER DEFAULT NULL,
+    medication         TEXT    NOT NULL DEFAULT '',
+    dose               TEXT    DEFAULT '',
+    administered_at    TEXT    NOT NULL,
+    witnessed_by_id    INTEGER NOT NULL,
+    witnessed_by_name  TEXT    NOT NULL DEFAULT '',
+    notes              TEXT    DEFAULT '',
+    locked_at          TEXT    DEFAULT NULL,
+    unlocked_by        TEXT    DEFAULT '',
+    unlocked_at        TEXT    DEFAULT NULL,
+    unlock_reason      TEXT    DEFAULT '',
+    created_by_id      INTEGER NOT NULL,
+    created_by_name    TEXT    NOT NULL DEFAULT '',
+    created_at         TEXT    DEFAULT (datetime('now'))
+  )`);
+
+  // Phase 4: milestone tracker
+  _db.exec(`CREATE TABLE IF NOT EXISTS milestones (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id        INTEGER NOT NULL,
+    client_name      TEXT    NOT NULL DEFAULT '',
+    phase            TEXT    NOT NULL DEFAULT '',
+    objective        TEXT    NOT NULL DEFAULT '',
+    target_date      TEXT    DEFAULT NULL,
+    completion_date  TEXT    DEFAULT NULL,
+    status           TEXT    NOT NULL DEFAULT 'in_progress',
+    counselor_id     INTEGER DEFAULT NULL,
+    counselor_name   TEXT    DEFAULT '',
+    signed_off_at    TEXT    DEFAULT NULL,
+    notes            TEXT    DEFAULT '',
+    locked_at        TEXT    DEFAULT NULL,
+    unlocked_by      TEXT    DEFAULT '',
+    unlocked_at      TEXT    DEFAULT NULL,
+    unlock_reason    TEXT    DEFAULT '',
+    created_by_name  TEXT    DEFAULT '',
+    created_at       TEXT    DEFAULT (datetime('now'))
+  )`);
+
+  // Phase 5: behavioral incident reports
+  _db.exec(`CREATE TABLE IF NOT EXISTS incidents (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id              INTEGER NOT NULL,
+    client_name            TEXT    NOT NULL DEFAULT '',
+    room                   TEXT    NOT NULL DEFAULT '',
+    incident_date          TEXT    NOT NULL,
+    incident_time          TEXT    DEFAULT '',
+    narrative              TEXT    NOT NULL DEFAULT '',
+    severity               TEXT    NOT NULL DEFAULT 'low',
+    corrective_action      TEXT    DEFAULT '',
+    notifications_required TEXT    DEFAULT '[]',
+    notifications_sent     TEXT    DEFAULT '[]',
+    logged_by_id           INTEGER NOT NULL,
+    logged_by_name         TEXT    NOT NULL DEFAULT '',
+    supervisor_id          INTEGER DEFAULT NULL,
+    supervisor_name        TEXT    DEFAULT '',
+    reviewed_at            TEXT    DEFAULT NULL,
+    review_notes           TEXT    DEFAULT '',
+    status                 TEXT    NOT NULL DEFAULT 'open',
+    locked_at              TEXT    DEFAULT NULL,
+    unlocked_by            TEXT    DEFAULT '',
+    unlocked_at            TEXT    DEFAULT NULL,
+    unlock_reason          TEXT    DEFAULT '',
+    created_at             TEXT    DEFAULT (datetime('now'))
+  )`);
+
+  // Phase 6: discharge records (immutable on create — no 24h grace, no unlock)
+  _db.exec(`CREATE TABLE IF NOT EXISTS discharge_records (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id        INTEGER NOT NULL,
+    client_name      TEXT    NOT NULL DEFAULT '',
+    room             TEXT    DEFAULT '',
+    program_track    TEXT    DEFAULT '',
+    intake_date      TEXT    DEFAULT NULL,
+    discharge_date   TEXT    NOT NULL,
+    days_in_program  INTEGER DEFAULT 0,
+    reason           TEXT    NOT NULL DEFAULT '',
+    narrative        TEXT    DEFAULT '',
+    aftercare_plan   TEXT    DEFAULT '',
+    referrals_made   TEXT    DEFAULT '[]',
+    created_by_id    INTEGER NOT NULL,
+    created_by_name  TEXT    NOT NULL DEFAULT '',
+    created_at       TEXT    DEFAULT (datetime('now'))
+  )`);
+
+  // Phase 7: 42 CFR Part 2 consent records
+  _db.exec(`CREATE TABLE IF NOT EXISTS consent_records (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id         INTEGER NOT NULL,
+    program_name      TEXT    NOT NULL DEFAULT '',
+    recipient_name    TEXT    NOT NULL DEFAULT '',
+    recipient_org     TEXT    DEFAULT '',
+    purpose           TEXT    NOT NULL DEFAULT '',
+    information_type  TEXT    NOT NULL DEFAULT '',
+    effective_date    TEXT    NOT NULL,
+    expiration_date   TEXT    DEFAULT NULL,
+    revoked           INTEGER DEFAULT 0,
+    revoked_at        TEXT    DEFAULT NULL,
+    revoked_by        TEXT    DEFAULT '',
+    signature_on_file INTEGER DEFAULT 0,
+    created_by_id     INTEGER NOT NULL,
+    created_by_name   TEXT    NOT NULL DEFAULT '',
+    created_at        TEXT    DEFAULT (datetime('now'))
+  )`);
+
+  // Phase 7: disclosures audit (separate from generic audit_log so we can index by client)
+  _db.exec(`CREATE TABLE IF NOT EXISTS disclosures (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id         INTEGER NOT NULL,
+    consent_id        INTEGER DEFAULT NULL,
+    recipient         TEXT    NOT NULL DEFAULT '',
+    information_type  TEXT    NOT NULL DEFAULT '',
+    disclosed_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    disclosed_by_id   INTEGER NOT NULL,
+    disclosed_by_name TEXT    NOT NULL DEFAULT '',
+    method            TEXT    DEFAULT '',
+    notes             TEXT    DEFAULT ''
+  )`);
 }
 
 function _hashPw(pw) {
@@ -417,8 +615,6 @@ function _seedDefaults() {
     ua_panel:               JSON.stringify(DEFAULT_UA_PANEL),
     wellness_schedule:      '[]',
     walk_schedule:          '[]',
-    logo_pdec:              '',
-    logo_wcs:               '',
     active_report_id:       'null',
     master_chores:          '[]',
     pass_notice:            '""',
@@ -426,7 +622,22 @@ function _seedDefaults() {
     shift_day_start:        '07:00',
     shift_swing_start:      '15:00',
     shift_grave_start:      '23:00',
-    ui_visibility:          JSON.stringify({tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,violations:true},buttons:{wellness:true,walkthrough:true}}),
+    ui_visibility:          JSON.stringify({tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,violations:true,ua_records:true,med_log:true,milestones:true,incidents:true},buttons:{wellness:true,walkthrough:true}}),
+    program_tracks:         JSON.stringify(['SUD Residential','Re-entry','Transitional','Sober Living']),
+    program_phases:         JSON.stringify([
+      { key:'orientation', label:'Orientation',  objectives:['Complete intake paperwork','Tour facility','Sign program agreement'] },
+      { key:'phase1',      label:'Phase 1',      objectives:['Attend daily groups','Establish routine'] },
+      { key:'phase2',      label:'Phase 2',      objectives:['Begin step work','Obtain ID / vital docs'] },
+      { key:'phase3',      label:'Phase 3',      objectives:['Employment / school enrollment','Save 30 days of expenses'] },
+      { key:'aftercare',   label:'Aftercare',    objectives:['Identify aftercare provider','Schedule discharge meeting'] },
+    ]),
+    incident_notifications: JSON.stringify({
+      low:      [],
+      medium:   ['supervisor'],
+      high:     ['supervisor','case_manager'],
+      critical: ['supervisor','case_manager','licensing','guardian'],
+    }),
+    session_idle_mins:      '30',  // HIPAA technical safeguard — minutes of inactivity before forced logout
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))
@@ -704,7 +915,7 @@ function _j(str, def) { try { return JSON.parse(str); } catch(e) { return def; }
 // ── Public API ────────────────────────────────────────────────────────
 function query(sql, p=[])  { return _q(sql, p); }
 function query1(sql, p=[]) { return _q1(sql, p); }
-function run(sql, p=[])    { _run(sql, p); }
+function run(sql, p=[])    { return _run(sql, p); }
 function save()             { /* no-op */ }
 function runAndSave(sql, p) { _run(sql, p); }
 
@@ -744,11 +955,35 @@ function resolveClientPhoto(photo) {
 }
 
 // ── Full data (legacy JSON shape) ─────────────────────────────────────
-function getAllData() {
+// Permissions that grant access to clinical / treatment-record fields.
+// A user without ANY of these is non-clinical (PA, shift lead, front desk) and
+// must not see treatment narratives, medical observations, or intake details.
+const CLINICAL_PERMS = [
+  'ua.record', 'med.witness',
+  'milestones.edit', 'milestones.signoff',
+  'incidents.log',   'incidents.review',
+  'consent.manage',  'disclosures.view',
+];
+
+function _hasClinical(perms) {
+  if (!Array.isArray(perms)) return false;
+  return CLINICAL_PERMS.some(p => perms.includes(p));
+}
+
+function getAllData(perms) {
+  const isClinical = _hasClinical(perms);
+
   const clients = _q('SELECT * FROM clients ORDER BY sort_order, CAST(room AS INTEGER), room');
   clients.forEach(c => {
     c.is_special = !!c.is_special; c.is_active = !!c.is_active;
     c.photo = resolveClientPhoto(c.photo);
+    c.emergency_contacts = _j(c.emergency_contacts, []);
+    // Strip treatment-record fields for non-clinical staff (HIPAA minimum necessary)
+    if (!isClinical) {
+      c.intake_notes    = '';
+      c.referral_source = '';
+      c.program_track   = '';
+    }
   });
 
   const reports = _q('SELECT * FROM reports ORDER BY created_at');
@@ -759,7 +994,7 @@ function getAllData() {
     r.last_ua          = _j(r.last_ua, {});
     r.last_room_search = _j(r.last_room_search, {});
     r.issues           = _j(r.issues, []);
-    r.med_notes        = _j(r.med_notes, []);
+    r.med_notes        = isClinical ? _j(r.med_notes, []) : [];
     r.roster_snapshot  = _j(r.roster_snapshot, null);
     r.log_entries = _q('SELECT * FROM log_entries WHERE report_id=? ORDER BY rowid', [r.id]);
     r.log_entries.forEach(function(e) {
@@ -769,9 +1004,6 @@ function getAllData() {
     });
   });
 
-  const logoP = getSetting('logo_pdec', '');
-  const logoW = getSetting('logo_wcs', '');
-
   const today = new Date().toISOString().slice(0, 10);
   const staffRows = _q('SELECT * FROM staff ORDER BY sort_order, id');
   const passRows  = _q("SELECT * FROM passes ORDER BY CASE status WHEN 'Out' THEN 0 WHEN 'Extended' THEN 1 ELSE 2 END, return_date ASC");
@@ -779,7 +1011,6 @@ function getAllData() {
 
   return {
     clients, reports,
-    logos:                  { pdec: getPhotoB64(logoP) || null, wcs: getPhotoB64(logoW) || null },
     facility_name:          getSetting('facility_name',          'OpsPoint'),
     wellness_interval_mins: getSetting('wellness_interval_mins', 120),
     walk_interval_mins:     getSetting('walk_interval_mins',     240),
@@ -794,8 +1025,324 @@ function getAllData() {
     master_chores:          getSetting('master_chores',          []),
     pass_notice:            getSetting('pass_notice',            ''),
     staff_categories:       getSetting('staff_categories',       ['Director','Case Manager','Program Assistant','Other']),
+    program_tracks:         getSetting('program_tracks',         ['SUD Residential','Re-entry','Transitional','Sober Living']),
+    program_phases:         getSetting('program_phases',         []),
+    incident_notifications: getSetting('incident_notifications', { low:[], medium:['supervisor'], high:['supervisor','case_manager'], critical:['supervisor','case_manager','licensing','guardian'] }),
+    session_idle_mins:      parseInt(getSetting('session_idle_mins', 30)) || 30,
+    ui_visibility:          getSetting('ui_visibility',          {}),
   };
 }
+
+// ── Clinical record helpers (Phases 2-7) ──────────────────────────────
+// All clinical tables share the locked_at immutability pattern and audit-traced reads.
+const CLINICAL_TABLES = ['ua_records','med_administration_log','milestones','incidents'];
+
+function _parseJsonFields(row, fields) {
+  if (!row) return row;
+  fields.forEach(f => { if (row[f] != null) row[f] = _j(row[f], f === 'panel_results' ? {} : []); });
+  return row;
+}
+
+function isRecordLocked(table, id) {
+  if (!CLINICAL_TABLES.includes(table)) return false;
+  const row = _q1(`SELECT locked_at FROM ${table} WHERE id=?`, [id]);
+  return !!(row && row.locked_at);
+}
+
+function unlockRecord(table, id, by, reason) {
+  if (!CLINICAL_TABLES.includes(table)) throw new Error('Invalid table');
+  _run(`UPDATE ${table} SET locked_at=NULL, unlocked_by=?, unlocked_at=datetime('now'), unlock_reason=? WHERE id=?`,
+    [String(by||''), String(reason||''), id]);
+}
+
+// Scheduled job — lock any clinical record whose 24h grace period has elapsed.
+// Called at boot and every hour.
+function runLockSweep() {
+  let total = 0;
+  CLINICAL_TABLES.forEach(t => {
+    try {
+      const r = _run(
+        `UPDATE ${t} SET locked_at=datetime('now')
+         WHERE locked_at IS NULL AND created_at < datetime('now','-24 hours')`
+      );
+      total += r.changes || 0;
+    } catch(e) {}
+  });
+  return total;
+}
+
+// ── UA Records ────────────────────────────────────────────────────────
+function createUARecord(rec) {
+  const r = _run(
+    `INSERT INTO ua_records
+     (client_id,client_name,room,ua_request_id,report_id,log_entry_id,tested_at,
+      witnessed_by_id,witnessed_by_name,collection_method,reason,result,panel_results,
+      chain_of_custody,photo,notes,created_by_id,created_by_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      rec.client_id, rec.client_name||'', rec.room||'',
+      rec.ua_request_id||null, rec.report_id||null,
+      rec.log_entry_id||null,
+      rec.tested_at,
+      rec.witnessed_by_id, rec.witnessed_by_name||'',
+      rec.collection_method||'observed',
+      rec.reason||'',
+      rec.result||'pending',
+      JSON.stringify(rec.panel_results||{}),
+      rec.chain_of_custody||'', rec.photo||null, rec.notes||'',
+      rec.created_by_id, rec.created_by_name||'',
+    ]
+  );
+  return getUARecord(r.lastInsertRowid);
+}
+// Join log_entries so callers can tell whether the linked log entry has a photo
+const _UA_SELECT = `
+  SELECT ur.*,
+    CASE WHEN le.ua_photo IS NOT NULL THEN 1 ELSE 0 END AS has_log_photo
+  FROM ua_records ur
+  LEFT JOIN log_entries le ON le.id = ur.log_entry_id`;
+function getUARecord(id) {
+  return _parseJsonFields(_q1(_UA_SELECT + ' WHERE ur.id=?', [id]), ['panel_results']);
+}
+function getUARecords(filter) {
+  filter = filter || {};
+  let sql = _UA_SELECT + ' WHERE 1=1';
+  const p = [];
+  if (filter.client_id) { sql += ' AND ur.client_id=?'; p.push(filter.client_id); }
+  if (filter.result)    { sql += ' AND ur.result=?';    p.push(filter.result); }
+  if (filter.from)      { sql += ' AND ur.tested_at >= ?'; p.push(filter.from); }
+  if (filter.to)        { sql += ' AND ur.tested_at <= ?'; p.push(filter.to); }
+  sql += ' ORDER BY ur.tested_at DESC, ur.id DESC LIMIT 500';
+  return _q(sql, p).map(r => _parseJsonFields(r, ['panel_results']));
+}
+function updateUARecord(id, patch) {
+  const fields = [], vals = [];
+  ['tested_at','collection_method','result','chain_of_custody','notes','photo']
+    .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
+  if (patch.panel_results !== undefined) { fields.push('panel_results=?'); vals.push(JSON.stringify(patch.panel_results||{})); }
+  if (!fields.length) return getUARecord(id);
+  vals.push(id);
+  _run(`UPDATE ua_records SET ${fields.join(',')} WHERE id=?`, vals);
+  return getUARecord(id);
+}
+function deleteUARecord(id) { _run('DELETE FROM ua_records WHERE id=?', [id]); }
+
+// ── Med Administration Log ────────────────────────────────────────────
+function createMedLog(rec) {
+  const r = _run(
+    `INSERT INTO med_administration_log
+     (client_id,client_name,room,report_id,medication,dose,administered_at,
+      witnessed_by_id,witnessed_by_name,notes,created_by_id,created_by_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [rec.client_id, rec.client_name||'', rec.room||'', rec.report_id||null,
+     rec.medication||'', rec.dose||'', rec.administered_at,
+     rec.witnessed_by_id, rec.witnessed_by_name||'', rec.notes||'',
+     rec.created_by_id, rec.created_by_name||'']
+  );
+  return _q1('SELECT * FROM med_administration_log WHERE id=?', [r.lastInsertRowid]);
+}
+function getMedLog(filter) {
+  filter = filter || {};
+  let sql = 'SELECT * FROM med_administration_log WHERE 1=1';
+  const p = [];
+  if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
+  if (filter.report_id) { sql += ' AND report_id=?'; p.push(filter.report_id); }
+  if (filter.from)      { sql += ' AND administered_at >= ?'; p.push(filter.from); }
+  sql += ' ORDER BY administered_at DESC, id DESC LIMIT 1000';
+  return _q(sql, p);
+}
+function updateMedLog(id, patch) {
+  const fields = [], vals = [];
+  ['medication','dose','administered_at','notes']
+    .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
+  if (!fields.length) return null;
+  vals.push(id);
+  _run(`UPDATE med_administration_log SET ${fields.join(',')} WHERE id=?`, vals);
+  return _q1('SELECT * FROM med_administration_log WHERE id=?', [id]);
+}
+function deleteMedLog(id) { _run('DELETE FROM med_administration_log WHERE id=?', [id]); }
+
+// ── Milestones ────────────────────────────────────────────────────────
+function createMilestone(rec) {
+  const r = _run(
+    `INSERT INTO milestones
+     (client_id,client_name,phase,objective,target_date,status,notes,created_by_name)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [rec.client_id, rec.client_name||'', rec.phase||'', rec.objective||'',
+     rec.target_date||null, rec.status||'in_progress', rec.notes||'', rec.created_by_name||'']
+  );
+  return _q1('SELECT * FROM milestones WHERE id=?', [r.lastInsertRowid]);
+}
+function getMilestones(filter) {
+  filter = filter || {};
+  let sql = 'SELECT * FROM milestones WHERE 1=1';
+  const p = [];
+  if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
+  if (filter.status)    { sql += ' AND status=?';    p.push(filter.status); }
+  sql += ' ORDER BY client_id, phase, id DESC';
+  return _q(sql, p);
+}
+function updateMilestone(id, patch) {
+  const fields = [], vals = [];
+  ['phase','objective','target_date','completion_date','status','notes']
+    .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
+  if (!fields.length) return null;
+  vals.push(id);
+  _run(`UPDATE milestones SET ${fields.join(',')} WHERE id=?`, vals);
+  return _q1('SELECT * FROM milestones WHERE id=?', [id]);
+}
+function signoffMilestone(id, counselorId, counselorName) {
+  _run(`UPDATE milestones SET counselor_id=?, counselor_name=?,
+        signed_off_at=datetime('now'), status='completed',
+        completion_date=COALESCE(completion_date, date('now'))
+        WHERE id=?`,
+       [counselorId, counselorName||'', id]);
+  return _q1('SELECT * FROM milestones WHERE id=?', [id]);
+}
+function deleteMilestone(id) { _run('DELETE FROM milestones WHERE id=?', [id]); }
+
+// ── Incidents ─────────────────────────────────────────────────────────
+function createIncident(rec) {
+  const r = _run(
+    `INSERT INTO incidents
+     (client_id,client_name,room,incident_date,incident_time,narrative,
+      severity,corrective_action,notifications_required,notifications_sent,
+      logged_by_id,logged_by_name,status)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [rec.client_id, rec.client_name||'', rec.room||'',
+     rec.incident_date, rec.incident_time||'',
+     rec.narrative||'', rec.severity||'low', rec.corrective_action||'',
+     JSON.stringify(rec.notifications_required||[]),
+     JSON.stringify(rec.notifications_sent||[]),
+     rec.logged_by_id, rec.logged_by_name||'',
+     'open']
+  );
+  return getIncident(r.lastInsertRowid);
+}
+function getIncident(id) {
+  return _parseJsonFields(_q1('SELECT * FROM incidents WHERE id=?', [id]),
+    ['notifications_required','notifications_sent']);
+}
+function getIncidents(filter) {
+  filter = filter || {};
+  let sql = 'SELECT * FROM incidents WHERE 1=1';
+  const p = [];
+  if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
+  if (filter.severity)  { sql += ' AND severity=?';  p.push(filter.severity); }
+  if (filter.status)    { sql += ' AND status=?';    p.push(filter.status); }
+  sql += ' ORDER BY incident_date DESC, id DESC LIMIT 500';
+  return _q(sql, p).map(r => _parseJsonFields(r, ['notifications_required','notifications_sent']));
+}
+function updateIncident(id, patch) {
+  const fields = [], vals = [];
+  ['incident_date','incident_time','narrative','severity','corrective_action']
+    .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
+  if (patch.notifications_required !== undefined) {
+    fields.push('notifications_required=?'); vals.push(JSON.stringify(patch.notifications_required||[]));
+  }
+  if (patch.notifications_sent !== undefined) {
+    fields.push('notifications_sent=?'); vals.push(JSON.stringify(patch.notifications_sent||[]));
+  }
+  if (!fields.length) return getIncident(id);
+  vals.push(id);
+  _run(`UPDATE incidents SET ${fields.join(',')} WHERE id=?`, vals);
+  return getIncident(id);
+}
+function reviewIncident(id, supervisorId, supervisorName, reviewNotes, newStatus) {
+  _run(`UPDATE incidents SET supervisor_id=?, supervisor_name=?,
+        reviewed_at=datetime('now'), review_notes=?, status=? WHERE id=?`,
+       [supervisorId, supervisorName||'', reviewNotes||'', newStatus||'reviewed', id]);
+  return getIncident(id);
+}
+function deleteIncident(id) { _run('DELETE FROM incidents WHERE id=?', [id]); }
+
+// ── Discharge Records ─────────────────────────────────────────────────
+function createDischargeRecord(rec) {
+  const r = _run(
+    `INSERT INTO discharge_records
+     (client_id,client_name,room,program_track,intake_date,discharge_date,
+      days_in_program,reason,narrative,aftercare_plan,referrals_made,
+      created_by_id,created_by_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [rec.client_id, rec.client_name||'', rec.room||'', rec.program_track||'',
+     rec.intake_date||null, rec.discharge_date,
+     parseInt(rec.days_in_program||0),
+     rec.reason||'', rec.narrative||'', rec.aftercare_plan||'',
+     JSON.stringify(rec.referrals_made||[]),
+     rec.created_by_id, rec.created_by_name||'']
+  );
+  return getDischargeRecord(r.lastInsertRowid);
+}
+function getDischargeRecord(id) {
+  const row = _q1('SELECT * FROM discharge_records WHERE id=?', [id]);
+  if (row) row.referrals_made = _j(row.referrals_made, []);
+  return row;
+}
+function getDischargeRecords(filter) {
+  filter = filter || {};
+  let sql = 'SELECT * FROM discharge_records WHERE 1=1';
+  const p = [];
+  if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
+  sql += ' ORDER BY discharge_date DESC, id DESC';
+  return _q(sql, p).map(r => ({ ...r, referrals_made: _j(r.referrals_made, []) }));
+}
+
+// ── 42 CFR Part 2 Consent Records ─────────────────────────────────────
+function createConsentRecord(rec) {
+  const r = _run(
+    `INSERT INTO consent_records
+     (client_id,program_name,recipient_name,recipient_org,purpose,information_type,
+      effective_date,expiration_date,signature_on_file,created_by_id,created_by_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [rec.client_id, rec.program_name||'', rec.recipient_name||'', rec.recipient_org||'',
+     rec.purpose||'', rec.information_type||'all',
+     rec.effective_date, rec.expiration_date||null,
+     rec.signature_on_file?1:0,
+     rec.created_by_id, rec.created_by_name||'']
+  );
+  return _q1('SELECT * FROM consent_records WHERE id=?', [r.lastInsertRowid]);
+}
+function getConsentRecord(id) { return _q1('SELECT * FROM consent_records WHERE id=?', [id]); }
+function getConsentRecords(clientId) {
+  return _q('SELECT * FROM consent_records WHERE client_id=? ORDER BY effective_date DESC, id DESC', [clientId]);
+}
+function revokeConsent(id, by) {
+  _run(`UPDATE consent_records SET revoked=1, revoked_at=datetime('now'), revoked_by=? WHERE id=?`,
+       [String(by||''), id]);
+  return _q1('SELECT * FROM consent_records WHERE id=?', [id]);
+}
+// Returns the active consent that covers a (client, informationType) pair, or null if blocked.
+function findActiveConsent(clientId, informationType) {
+  const now = new Date().toISOString().slice(0,10);
+  const rows = _q(
+    `SELECT * FROM consent_records
+     WHERE client_id=? AND revoked=0
+       AND effective_date <= ?
+       AND (expiration_date IS NULL OR expiration_date >= ?)
+       AND (information_type='all' OR information_type=?)
+     ORDER BY id DESC LIMIT 1`,
+    [clientId, now, now, informationType]
+  );
+  return rows[0] || null;
+}
+
+// ── Disclosures ───────────────────────────────────────────────────────
+function logDisclosure(rec) {
+  const r = _run(
+    `INSERT INTO disclosures
+     (client_id,consent_id,recipient,information_type,disclosed_by_id,disclosed_by_name,method,notes)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [rec.client_id, rec.consent_id||null,
+     rec.recipient||'', rec.information_type||'',
+     rec.disclosed_by_id, rec.disclosed_by_name||'',
+     rec.method||'', rec.notes||'']
+  );
+  return _q1('SELECT * FROM disclosures WHERE id=?', [r.lastInsertRowid]);
+}
+function getDisclosures(clientId) {
+  return _q('SELECT * FROM disclosures WHERE client_id=? ORDER BY disclosed_at DESC, id DESC', [clientId]);
+}
+
 
 // ── Report upsert (wrapped in a transaction) ──────────────────────────
 function upsertReport(r) {
@@ -996,4 +1543,20 @@ module.exports = {
   // Broadcasts
   createBroadcast, getBroadcast, getBroadcasts,
   auditLog, getAuditLog, pruneAuditLog,
+  // ── EHR clinical records ──────────────────────────────────────
+  CLINICAL_TABLES,
+  isRecordLocked, unlockRecord, runLockSweep,
+  // UA Records
+  createUARecord, getUARecord, getUARecords, updateUARecord, deleteUARecord,
+  // Med Administration Log
+  createMedLog, getMedLog, updateMedLog, deleteMedLog,
+  // Milestones
+  createMilestone, getMilestones, updateMilestone, signoffMilestone, deleteMilestone,
+  // Incidents
+  createIncident, getIncident, getIncidents, updateIncident, reviewIncident, deleteIncident,
+  // Discharge records
+  createDischargeRecord, getDischargeRecord, getDischargeRecords,
+  // Consent + disclosures (42 CFR Part 2)
+  createConsentRecord, getConsentRecord, getConsentRecords, revokeConsent, findActiveConsent,
+  logDisclosure, getDisclosures,
 };

@@ -12,6 +12,10 @@ import CaseloadsTab from './tabs/CaseloadsTab.jsx'
 import MailTab from './tabs/MailTab.jsx'
 import UARequestsTab from './tabs/UARequestsTab.jsx'
 import ViolationsTab from './tabs/ViolationsTab.jsx'
+import MedLogTab     from './tabs/MedLogTab.jsx'
+import MilestonesTab from './tabs/MilestonesTab.jsx'
+import IncidentsTab  from './tabs/IncidentsTab.jsx'
+import ConsentTab    from './tabs/ConsentTab.jsx'
 
 const ALL_TABS = [
   { id: 'report',     label: 'Report',      icon: '📋' },
@@ -22,8 +26,12 @@ const ALL_TABS = [
   { id: 'passes',     label: 'Passes',      icon: '🚪' },
   { id: 'caseloads',  label: 'Caseloads',   icon: '📂' },
   { id: 'mail',       label: 'Mail',        icon: '📬' },
-  { id: 'ua',         label: 'UA Log',      icon: '🧪' },
+  { id: 'ua',         label: 'UA',          icon: '🧪' },
+  { id: 'med_log',    label: 'Med Log',     icon: '💊', perm: 'med.witness' },
+  { id: 'milestones', label: 'Milestones',  icon: '🎯', perms: ['milestones.edit','milestones.signoff'] },
+  { id: 'incidents',  label: 'Incidents',   icon: '🚨', perms: ['incidents.log','incidents.review'] },
   { id: 'violations', label: 'Violations',  icon: '⚠️' },
+  { id: 'consent',    label: 'Consents',    icon: '📜', perm: 'consent.manage' },
 ]
 
 // ── UA Draw Modal ─────────────────────────────────────────────────────
@@ -298,7 +306,11 @@ export default function Dashboard() {
         {active?.id === 'caseloads'  && <CaseloadsTab />}
         {active?.id === 'mail'       && <MailTab />}
         {active?.id === 'ua'         && <UARequestsTab />}
+        {active?.id === 'med_log'    && <MedLogTab />}
+        {active?.id === 'milestones' && <MilestonesTab />}
+        {active?.id === 'incidents'  && <IncidentsTab />}
         {active?.id === 'violations' && <ViolationsTab />}
+        {active?.id === 'consent'    && <ConsentTab />}
       </main>
 
       <UADrawModal

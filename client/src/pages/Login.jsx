@@ -25,9 +25,6 @@ export default function Login() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-card-top">
-          <div className="auth-org">
-            Westside Community Services
-          </div>
           <img
             src="/static/icons/icon-192.png"
             alt="OpsPoint"
@@ -74,7 +71,7 @@ export default function Login() {
         </div>
       </div>
       <div className="auth-footer">
-        &copy; 2026 Westside Community Services &nbsp;&bull;&nbsp; OpsPoint v2.0.0 &nbsp;&bull;&nbsp; All rights reserved
+        &copy; 2026 OpsPoint v2.0.0 &nbsp;&bull;&nbsp; All rights reserved
         &nbsp;&bull;&nbsp; <Link to="/about">About</Link>
       </div>
     </div>

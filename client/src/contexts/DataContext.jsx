@@ -10,6 +10,7 @@ const NOTIF_DEFAULT = {
   broadcasts:      [],   // active broadcasts (not dismissed)
   violReview:      0,    // # violations pending review
   violConsequence: 0,    // # violations with consequence assigned
+  incidents:       [],   // new incident alerts (dismissed per session)
 }
 
 export function DataProvider({ children }) {
@@ -19,6 +20,7 @@ export function DataProvider({ children }) {
   const [notif, setNotif]             = useState(NOTIF_DEFAULT)
   const [serverRestarting, setServerRestarting] = useState(false)
   const [wsConnected, setWsConnected] = useState(false)
+  const [profileClientId, setProfileClientId] = useState(null)
 
   const wsRef         = useRef(null)
   const seenUAIds     = useRef(new Set())
@@ -47,21 +49,46 @@ export function DataProvider({ children }) {
     setNotif(prev => ({ ...prev, broadcasts: prev.broadcasts.filter(b => b.id !== parseInt(id)) }))
   }, [saveDismissed])
 
+  const dismissIncident = useCallback((id) => {
+    setNotif(prev => ({ ...prev, incidents: prev.incidents.filter(i => i.id !== parseInt(id)) }))
+  }, [])
+
+  // ── Client profile drawer ─────────────────────────────────────────
+  const openProfile = useCallback((clientId) => {
+    setProfileClientId(clientId)
+    // Fire-and-forget HIPAA audit log — profile drawer open is a PHI access event
+    fetch(`/api/clients/${clientId}/profile`, { credentials: 'include' }).catch(() => {})
+  }, [])
+
+  const closeProfile = useCallback(() => {
+    setProfileClientId(null)
+  }, [])
+
   // ── Data load ─────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
-      const [dataRes, mailRes, uaRes] = await Promise.all([
-        fetch('/api/data',        { credentials: 'include' }),
-        fetch('/api/mail',        { credentials: 'include' }),
-        fetch('/api/ua-requests', { credentials: 'include' }),
+      const [dataRes, mailRes, uaRes, uaRecRes, medRes, mileRes, incRes, disRes] = await Promise.all([
+        fetch('/api/data',              { credentials: 'include' }),
+        fetch('/api/mail',              { credentials: 'include' }),
+        fetch('/api/ua-requests',       { credentials: 'include' }),
+        fetch('/api/ua-records',        { credentials: 'include' }),
+        fetch('/api/med-log',           { credentials: 'include' }),
+        fetch('/api/milestones',        { credentials: 'include' }),
+        fetch('/api/incidents',         { credentials: 'include' }),
+        fetch('/api/discharge-records', { credentials: 'include' }),
       ])
       if (!dataRes.ok) throw new Error('Failed to load data')
-      const [base, mail, ua_requests] = await Promise.all([
+      const [base, mail, ua_requests, ua_records, med_log, milestones, incidents, discharge_records] = await Promise.all([
         dataRes.json(),
-        mailRes.ok  ? mailRes.json() : [],
-        uaRes.ok    ? uaRes.json()   : [],
+        mailRes.ok   ? mailRes.json()   : [],
+        uaRes.ok     ? uaRes.json()     : [],
+        uaRecRes.ok  ? uaRecRes.json()  : [],
+        medRes.ok    ? medRes.json()    : [],
+        mileRes.ok   ? mileRes.json()   : [],
+        incRes.ok    ? incRes.json()    : [],
+        disRes.ok    ? disRes.json()    : [],
       ])
-      setData({ ...base, mail, ua_requests })
+      setData({ ...base, mail, ua_requests, ua_records, med_log, milestones, incidents, discharge_records })
 
       // Seed seen UA IDs so we don't re-fire sounds for already-known requests
       seenUAIds.current = new Set((ua_requests || []).map(r => r.id))
@@ -139,6 +166,11 @@ export function DataProvider({ children }) {
         case 'pass_notice_updated':
         case 'permissions_updated':
         case 'settings_updated':
+        case 'ua_records_updated':
+        case 'med_log_updated':
+        case 'milestones_updated':
+        case 'incidents_updated':
+        case 'discharge_records_updated':
           loadData()
           break
 
@@ -197,6 +229,17 @@ export function DataProvider({ children }) {
           break
         }
 
+        case 'incident_notification': {
+          if (msg.incident && _hasSessionPerm('incidents.review')) {
+            setNotif(prev => ({
+              ...prev,
+              incidents: [msg.incident, ...prev.incidents.filter(i => i.id !== msg.incident.id)],
+            }))
+            playSound('violation-review')
+          }
+          break
+        }
+
         case 'server_restarting':
           setServerRestarting(true)
           setTimeout(() => window.location.reload(), 5000)
@@ -237,6 +280,24 @@ export function DataProvider({ children }) {
       ws?.close()
     }
   }, [session, loadData])
+
+  // ── HIPAA idle session timeout: poll heartbeat ────────────────────
+  // Server enforces idle expiry; client polls to detect it quickly and
+  // surface a "session expired" prompt instead of a silent 401 loop.
+  const [sessionExpired, setSessionExpired] = useState(false)
+  useEffect(() => {
+    if (!session) return
+    let cancelled = false
+    async function check() {
+      if (cancelled) return
+      try {
+        const r = await fetch('/api/heartbeat', { credentials:'include' })
+        if (r.status === 401 && !cancelled) setSessionExpired(true)
+      } catch {}
+    }
+    const id = setInterval(check, 60_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [session])
 
   // ── Save / Patch ───────────────────────────────────────────────────
   const saveData = useCallback(async (payload) => {
@@ -281,9 +342,34 @@ export function DataProvider({ children }) {
     <DataContext.Provider value={{
       data, loading, saveStatus, notif, serverRestarting, wsConnected,
       loadData, saveData, patchData, setData,
-      dismissBroadcast,
+      dismissBroadcast, dismissIncident,
+      profileClientId, openProfile, closeProfile,
+      sessionExpired,
     }}>
       {children}
+      {sessionExpired && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(15,23,42,.65)',
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:5000,
+        }}>
+          <div style={{
+            background:'#fff', borderRadius:12, padding:'24px 28px', maxWidth:420,
+            boxShadow:'0 20px 60px rgba(0,0,0,.4)',
+          }}>
+            <h2 style={{ marginTop:0, color:'#7c2d12' }}>Session expired</h2>
+            <p style={{ fontSize:'.92em', color:'#475569' }}>
+              You were signed out automatically after a period of inactivity (HIPAA technical safeguard).
+              Please sign in again to continue.
+            </p>
+            <div style={{ marginTop:14, textAlign:'right' }}>
+              <button className="btn btn-primary"
+                onClick={() => { window.location.href = '/login' }}>
+                Sign in again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </DataContext.Provider>
   )
 }

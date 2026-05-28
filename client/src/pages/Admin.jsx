@@ -90,6 +90,12 @@ const PERM_CATEGORIES = [
   { label: 'UA System',        perms: ['ua.request','ua.acknowledge','ua.delete'] },
   { label: 'Mail Management',  perms: ['mail.log','mail.approve','mail.delete'] },
   { label: 'Violations',      perms: ['violations.log','violations.review','violations.complete','violations.delete','violations.notify_review','violations.notify_consequence'] },
+  { label: 'UA Records (EHR)', perms: ['ua.record'] },
+  { label: 'Med Witnessing',   perms: ['med.witness','med.delete'] },
+  { label: 'Milestones',       perms: ['milestones.edit','milestones.signoff'] },
+  { label: 'Incidents',        perms: ['incidents.log','incidents.review','incidents.delete'] },
+  { label: '42 CFR Part 2',    perms: ['consent.manage','disclosures.view'] },
+  { label: 'Records Unlock',   perms: ['records.unlock'] },
   { label: 'Facility Manage',  perms: ['facility.manage'] },
   { label: 'Administration',   perms: ['admin.users','admin.settings','admin.audit','admin.system'] },
   { label: 'Mobile Access',    perms: ['mobile.access'] },
@@ -107,6 +113,11 @@ const PERM_LABELS = {
   'violations.notify_review':'Banner — pending review','violations.notify_consequence':'Banner — consequence assigned',
   'facility.manage':'Room & roster management','admin.users':'User management','admin.settings':'Facility settings',
   'admin.audit':'View audit log','admin.system':'Server controls','mobile.access':'Use mobile shift app',
+  'ua.record':'Create / edit UA records','med.witness':'Witness self-administration','med.delete':'Delete med admin entries',
+  'milestones.edit':'Create / edit milestones','milestones.signoff':'Sign off completed milestones (counselor)',
+  'incidents.log':'Log a behavioral incident','incidents.review':'Supervisor review of incident','incidents.delete':'Delete incident reports',
+  'consent.manage':'Manage 42 CFR Part 2 consent records','disclosures.view':'View disclosure audit',
+  'records.unlock':'Supervisor override — unlock sealed records past 24h',
 }
 
 function PermEditor({ value, onChange, disabled }) {
@@ -638,6 +649,7 @@ const FAC_TABS = [
   { id: 'display',  label: 'Display',                                  perm: 'admin.settings' },
   { id: 'walk',     label: 'Walk Areas',                               perm: 'admin.settings' },
   { id: 'ua',       label: 'UA Panel',                                 perm: 'admin.settings' },
+  { id: 'ehr',      label: 'EHR / Compliance',                         perm: 'admin.settings' },
   { id: 'resetfac', label: 'Reset', danger: true,                      perm: 'facility.manage' },
 ]
 
@@ -678,7 +690,182 @@ function FacilitySetupTab() {
       {sub === 'display'  && hasPerm('admin.settings')  && <DisplaySettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'walk'     && hasPerm('admin.settings')  && <WalkAreas settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ua'       && hasPerm('admin.settings')  && <UAPanelSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
+      {sub === 'ehr'      && hasPerm('admin.settings')  && <EHRConfigSettings />}
       {sub === 'resetfac' && hasPerm('facility.manage') && <FacilityReset />}
+    </div>
+  )
+}
+
+// ── EHR / Compliance Config ──────────────────────────────────────────
+function EHRConfigSettings() {
+  const [cfg, setCfg] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState('')
+
+  const load = useCallback(async () => {
+    const r = await apiFetch('/api/facility/ehr-config')
+    if (r.ok) setCfg(await r.json())
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  if (!cfg) return <div className="empty-state" style={{ paddingTop: 48 }}>Loading…</div>
+
+  function setTrack(idx, val) {
+    const next = [...(cfg.program_tracks||[])]; next[idx] = val
+    setCfg({ ...cfg, program_tracks: next })
+  }
+  function removeTrack(idx) {
+    const next = [...(cfg.program_tracks||[])]; next.splice(idx,1)
+    setCfg({ ...cfg, program_tracks: next })
+  }
+  function addTrack() { setCfg({ ...cfg, program_tracks: [...(cfg.program_tracks||[]), ''] }) }
+
+  function setPhaseField(idx, key, val) {
+    const next = [...(cfg.program_phases||[])]
+    next[idx] = { ...next[idx], [key]: val }
+    setCfg({ ...cfg, program_phases: next })
+  }
+  function setPhaseObjectives(idx, text) {
+    const objectives = text.split('\n').map(s => s.trim()).filter(Boolean)
+    setPhaseField(idx, 'objectives', objectives)
+  }
+  function removePhase(idx) {
+    const next = [...(cfg.program_phases||[])]; next.splice(idx,1)
+    setCfg({ ...cfg, program_phases: next })
+  }
+  function addPhase() {
+    setCfg({ ...cfg, program_phases: [...(cfg.program_phases||[]), { key:'', label:'', objectives:[] }] })
+  }
+
+  function toggleNotif(sev, key) {
+    const policy = { ...(cfg.incident_notifications||{}) }
+    const list = Array.isArray(policy[sev]) ? policy[sev] : []
+    policy[sev] = list.includes(key) ? list.filter(k => k !== key) : [...list, key]
+    setCfg({ ...cfg, incident_notifications: policy })
+  }
+
+  async function save() {
+    setSaving(true); setErr('')
+    try {
+      const r = await apiFetch('/api/facility/ehr-config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          program_tracks:         (cfg.program_tracks||[]).filter(s => s && s.trim()),
+          program_phases:         (cfg.program_phases||[]).filter(p => p.label && p.label.trim()),
+          incident_notifications: cfg.incident_notifications || {},
+          session_idle_mins:      parseInt(cfg.session_idle_mins||30)||30,
+        }),
+      })
+      if (!r.ok) { const j = await r.json().catch(()=>({})); setErr(j.error||'Save failed'); return }
+      setSaved(true); setTimeout(()=>setSaved(false), 2500)
+      load()
+    } finally { setSaving(false) }
+  }
+
+  const NOTIFIERS = ['supervisor','case_manager','licensing','guardian','doh','insurance','law_enforcement']
+  const SEVS = ['low','medium','high','critical']
+
+  return (
+    <div style={{ maxWidth: 760 }}>
+      {err && <div className="auth-error" style={{ marginBottom: 12 }}>{err}</div>}
+
+      {/* Program tracks */}
+      <div className="section">
+        <div className="section-head">
+          <div className="sh-left"><span className="sh-dot" /><span>Program Tracks</span></div>
+        </div>
+        <div className="section-body">
+          <p style={{ fontSize:'.78rem', color:'#64748b' }}>Tracks shown in the resident profile dropdown.</p>
+          {(cfg.program_tracks||[]).map((t, idx) => (
+            <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
+              <input value={t} onChange={e=>setTrack(idx, e.target.value)} style={{ flex:1 }}/>
+              <button className="btn btn-sm btn-danger" onClick={()=>removeTrack(idx)}>×</button>
+            </div>
+          ))}
+          <button className="btn btn-sm" onClick={addTrack}>+ Add track</button>
+        </div>
+      </div>
+
+      {/* Program phases */}
+      <div className="section">
+        <div className="section-head">
+          <div className="sh-left"><span className="sh-dot" /><span>Program Phases &amp; Objectives</span></div>
+        </div>
+        <div className="section-body">
+          <p style={{ fontSize:'.78rem', color:'#64748b' }}>Used by the Milestones tab to seed objectives per phase. One objective per line.</p>
+          {(cfg.program_phases||[]).map((p, idx) => (
+            <div key={idx} style={{ border:'1px solid var(--line)', borderRadius:6, padding:10, marginBottom:10 }}>
+              <div style={{ display:'flex', gap:8, marginBottom:6 }}>
+                <input placeholder="key (e.g. phase1)" value={p.key||''}   onChange={e=>setPhaseField(idx, 'key', e.target.value)} style={{ flex:1 }}/>
+                <input placeholder="Label"             value={p.label||''} onChange={e=>setPhaseField(idx, 'label', e.target.value)} style={{ flex:2 }}/>
+                <button className="btn btn-sm btn-danger" onClick={()=>removePhase(idx)}>×</button>
+              </div>
+              <textarea rows={3} placeholder="One objective per line"
+                value={(p.objectives||[]).join('\n')}
+                onChange={e=>setPhaseObjectives(idx, e.target.value)}
+                style={{ width:'100%' }}/>
+            </div>
+          ))}
+          <button className="btn btn-sm" onClick={addPhase}>+ Add phase</button>
+        </div>
+      </div>
+
+      {/* Incident notification policy */}
+      <div className="section">
+        <div className="section-head">
+          <div className="sh-left"><span className="sh-dot" /><span>Incident Notification Policy</span></div>
+        </div>
+        <div className="section-body">
+          <p style={{ fontSize:'.78rem', color:'#64748b' }}>
+            Mandatory notification parties per incident severity. The server enforces these minimums when an incident is logged.
+          </p>
+          <table className="table" style={{ marginTop:6 }}>
+            <thead><tr>
+              <th>Severity</th>
+              {NOTIFIERS.map(n => <th key={n} style={{ fontSize:'.7em', textTransform:'capitalize' }}>{n.replace(/_/g,' ')}</th>)}
+            </tr></thead>
+            <tbody>
+              {SEVS.map(sev => (
+                <tr key={sev}>
+                  <td style={{ fontWeight:700, textTransform:'capitalize' }}>{sev}</td>
+                  {NOTIFIERS.map(n => (
+                    <td key={n} style={{ textAlign:'center' }}>
+                      <input type="checkbox"
+                        checked={(cfg.incident_notifications?.[sev]||[]).includes(n)}
+                        onChange={()=>toggleNotif(sev, n)} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* HIPAA idle session timeout */}
+      <div className="section">
+        <div className="section-head">
+          <div className="sh-left"><span className="sh-dot" /><span>HIPAA Idle Session Timeout</span></div>
+        </div>
+        <div className="section-body">
+          <p style={{ fontSize:'.78rem', color:'#64748b' }}>
+            Minutes of inactivity before a session is automatically terminated (HIPAA technical safeguard, 45 CFR §164.312(a)(2)(iii)).
+            Range: 5–240 minutes.
+          </p>
+          <div className="field" style={{ maxWidth: 200 }}>
+            <label>Idle timeout (minutes)</label>
+            <input type="number" min={5} max={240}
+              value={cfg.session_idle_mins}
+              onChange={e => setCfg({ ...cfg, session_idle_mins: e.target.value })}/>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-end', marginTop:12 }}>
+        {saved && <SaveMsg ok />}
+        <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?'Saving…':'Save EHR Config'}</button>
+      </div>
     </div>
   )
 }

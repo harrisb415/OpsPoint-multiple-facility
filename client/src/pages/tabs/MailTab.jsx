@@ -33,7 +33,7 @@ function StatusBadge({ status }) {
 }
 
 export default function MailTab() {
-  const { data, loadData } = useData()
+  const { data, loadData, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canLog = hasPerm('mail.log')
   const canApprove = hasPerm('mail.approve')
@@ -47,6 +47,7 @@ export default function MailTab() {
   const [modal, setModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [notes, setNotes] = useState({}) // clientId → notes string
+  const [mailTypes, setMailTypes] = useState({}) // clientId → {letter:bool, package:bool}
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -104,6 +105,7 @@ export default function MailTab() {
   function openModal() {
     setSelectedIds([])
     setNotes({})
+    setMailTypes({})
     setError('')
     setModal(true)
   }
@@ -114,7 +116,15 @@ export default function MailTab() {
     try {
       const clientsList = selectedIds.map(id => {
         const c = clients.find(x => String(x.id) === id)
-        return { client_id: parseInt(id), client_name: c?.name || '', room: c?.room || '', notes: notes[id] || '' }
+        const t = mailTypes[id] || {}
+        const typeArr = ['letter', 'package'].filter(k => t[k])
+        return {
+          client_id: parseInt(id),
+          client_name: c?.name || '',
+          room: c?.room || '',
+          notes: notes[id] || '',
+          mail_type: typeArr.join(','),
+        }
       })
       const r = await fetch('/api/mail', {
         method: 'POST',
@@ -202,7 +212,7 @@ export default function MailTab() {
                     <SortableTh label="Name"   k="name"      curKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Status" k="status"    curKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Logged" k="logged_at" curKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <th>By</th><th>Notes</th>
+                    <th>By</th><th>Type</th><th>Notes</th>
                     {(canApprove || canDelete) && <th className="tc">Actions</th>}
                   </tr>
                 </thead>
@@ -210,10 +220,29 @@ export default function MailTab() {
                   {paged.map(m => (
                     <tr key={m.id}>
                       <td className="rm">{m.room}</td>
-                      <td className="name-cell">{m.client_name}</td>
+                      <td className="name-cell">
+                        {m.client_id ? (
+                          <button onClick={() => openProfile(m.client_id)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'inherit', fontFamily:'inherit', fontSize:'inherit', fontWeight:'inherit', textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(27,47,110,.4)' }}>
+                            {m.client_name}
+                          </button>
+                        ) : m.client_name}
+                      </td>
                       <td><StatusBadge status={m.status} /></td>
                       <td className="date-cell">{fmtDT(m.logged_at)}</td>
                       <td style={{ fontSize: '.82rem', color: '#475569' }}>{m.logged_by || '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>
+                        {(m.mail_type || '').split(',').filter(Boolean).map(t => (
+                          <span key={t} style={{
+                            display: 'inline-block', marginRight: 3,
+                            fontSize: '.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                            background: t === 'package' ? '#fef3c7' : '#eff6ff',
+                            color: t === 'package' ? '#92400e' : '#1e40af',
+                            border: `1px solid ${t === 'package' ? '#fde68a' : '#bfdbfe'}`,
+                            textTransform: 'capitalize',
+                          }}>{t}</span>
+                        ))}
+                        {!(m.mail_type || '') && <span style={{ color: '#94a3b8', fontSize: '.78rem' }}>—</span>}
+                      </td>
                       <td style={{ fontSize: '.82rem', color: '#475569', maxWidth: 200 }}>{m.notes || ''}</td>
                       {(canApprove || canDelete) && (
                         <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
@@ -299,10 +328,23 @@ export default function MailTab() {
                       <span style={{ fontSize: '.84rem', fontWeight: 600, minWidth: 32 }}>Rm {c.room}</span>
                       <span style={{ fontSize: '.84rem', flex: 1 }}>{c.name}</span>
                       {selected && (
-                        <input type="text" placeholder="Notes (optional)"
-                          value={notes[sid] || ''}
-                          onChange={e => setNotes(n => ({ ...n, [sid]: e.target.value }))}
-                          style={{ fontSize: '.78rem', padding: '3px 8px', border: '1px solid var(--line)', borderRadius: 4, width: 160 }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          {['letter', 'package'].map(t => {
+                            const checked = !!(mailTypes[sid] || {})[t]
+                            return (
+                              <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize', userSelect: 'none' }}>
+                                <input type="checkbox" checked={checked}
+                                  onChange={() => setMailTypes(m => ({ ...m, [sid]: { ...(m[sid] || {}), [t]: !checked } }))}
+                                  style={{ width: 13, height: 13 }} />
+                                {t}
+                              </label>
+                            )
+                          })}
+                          <input type="text" placeholder="Notes (optional)"
+                            value={notes[sid] || ''}
+                            onChange={e => setNotes(n => ({ ...n, [sid]: e.target.value }))}
+                            style={{ fontSize: '.78rem', padding: '3px 8px', border: '1px solid var(--line)', borderRadius: 4, width: 140 }} />
+                        </div>
                       )}
                     </div>
                   )
@@ -361,14 +403,15 @@ function printMailLogReport({ facility, subtitle, entries }) {
     { key: 'room',       label: 'Rm',         width: '50px',  mono: true, align: 'center' },
     { key: 'name',       label: 'Resident',   width: '170px' },
     { key: 'status',     label: 'Status',     width: '85px',  align: 'center' },
+    { key: 'mail_type',  label: 'Type',       width: '100px' },
     { key: 'logged_by',  label: 'Logged By',  width: '120px' },
     { key: 'notes',      label: 'Notes' },
   ]
 
-  const statusBadgeHtml = (s) => {
-    if (s === 'delivered') return '<span class="badge-delivered">DELIVERED</span>'
-    if (s === 'approved')  return '<span class="badge-pending" style="background:#dbeafe;color:#1e40af;">APPROVED</span>'
-    return '<span class="badge-pending">PENDING</span>'
+  const statusBadge = (s) => {
+    if (s === 'delivered') return { badge: 'delivered' }
+    if (s === 'approved')  return { badge: 'approved' }
+    return { badge: 'pending' }
   }
 
   const fmt = (s) => {
@@ -384,7 +427,8 @@ function printMailLogReport({ facility, subtitle, entries }) {
     logged:    fmt(m.logged_at),
     room:      m.room || '—',
     name:      m.client_name || '—',
-    status:    { html: statusBadgeHtml(m.status) },
+    status:    statusBadge(m.status),
+    mail_type: (m.mail_type || '').split(',').filter(Boolean).map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(' + ') || '—',
     logged_by: m.logged_by || '—',
     notes:     m.notes || '',
   }))

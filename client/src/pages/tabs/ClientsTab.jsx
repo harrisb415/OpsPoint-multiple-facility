@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 
@@ -19,15 +19,28 @@ function formatPhone(raw) {
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
-const BLANK_FORM = { room: '', name: '', case_manager: '', phone: '', intake_date: '', discharge_date: '' }
-const BLANK_ADD  = { room: '', name: '', case_manager: '', phone: '', intake_date: todayStr() }
+const BLANK_FORM = {
+  room: '', name: '', case_manager: '', phone: '', intake_date: '', discharge_date: '',
+  referral_source: '', program_track: '', intake_notes: '', emergency_contacts: [],
+}
+const BLANK_ADD  = {
+  room: '', name: '', case_manager: '', phone: '', intake_date: todayStr(),
+  referral_source: '', program_track: '', intake_notes: '', emergency_contacts: [],
+}
 
 function blankAdd(vacantRooms) {
-  return { room: vacantRooms[0] || '', name: '', case_manager: '', phone: '', intake_date: todayStr() }
+  return { ...BLANK_ADD, room: vacantRooms[0] || '' }
+}
+
+const BLANK_DISCHARGE = {
+  discharge_date: todayStr(),
+  reason: 'graduate',
+  narrative: '', aftercare_plan: '',
+  referrals_made: [],
 }
 
 export default function ClientsTab() {
-  const { data, saveData } = useData()
+  const { data, saveData, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canEdit = hasPerm('residents.edit')
 
@@ -52,8 +65,11 @@ export default function ClientsTab() {
   // Photo popout
   const [photoPopout, setPhotoPopout] = useState(null) // null | { src, name }
 
-  // Discharge modal
+  // Discharge modal (creates a discharge_record + flips client to inactive)
   const [dischargeModal, setDischargeModal] = useState(null) // null | client
+  const [dischargeForm, setDischargeForm] = useState(BLANK_DISCHARGE)
+  const [dischargeErr, setDischargeErr]   = useState('')
+  const [dischargeSaving, setDischargeSaving] = useState(false)
 
   // Reactivate modal
   const [reactivateModal, setReactivateModal] = useState(null) // null | client
@@ -101,6 +117,10 @@ export default function ClientsTab() {
           case_manager: addForm.case_manager,
           phone: addForm.phone,
           intake_date: addForm.intake_date || null,
+          referral_source:    addForm.referral_source || '',
+          program_track:      addForm.program_track   || '',
+          emergency_contacts: Array.isArray(addForm.emergency_contacts) ? addForm.emergency_contacts : [],
+          intake_notes:       addForm.intake_notes    || '',
         }),
       })
       const j = await r.json()
@@ -111,7 +131,15 @@ export default function ClientsTab() {
   }
 
   function openEdit(c) {
-    setEditForm({ room: c.room || '', name: c.name || '', case_manager: c.case_manager || '', phone: c.phone || '', intake_date: c.intake_date || '', discharge_date: c.discharge_date || '' })
+    setEditForm({
+      room: c.room || '', name: c.name || '',
+      case_manager: c.case_manager || '', phone: c.phone || '',
+      intake_date: c.intake_date || '', discharge_date: c.discharge_date || '',
+      referral_source:    c.referral_source || '',
+      program_track:      c.program_track   || '',
+      emergency_contacts: Array.isArray(c.emergency_contacts) ? c.emergency_contacts : [],
+      intake_notes:       c.intake_notes    || '',
+    })
     setEditPhoto(null)
     setEditError('')
     setEditModal(c)
@@ -133,6 +161,10 @@ export default function ClientsTab() {
           phone: editForm.phone,
           intake_date: editForm.intake_date || null,
           discharge_date: editForm.discharge_date || null,
+          referral_source:    editForm.referral_source || '',
+          program_track:      editForm.program_track   || '',
+          emergency_contacts: Array.isArray(editForm.emergency_contacts) ? editForm.emergency_contacts : [],
+          intake_notes:       editForm.intake_notes    || '',
           ...(editPhoto === 'REMOVE' ? { photo: null } : editPhoto ? { photo: editPhoto } : {}),
         }),
       })
@@ -143,11 +175,80 @@ export default function ClientsTab() {
     finally { setEditSaving(false) }
   }
 
-  async function discharge(c) {
-    const updated = clients.map(x => x.id === c.id ? { ...x, is_active: false, discharge_date: x.discharge_date || todayStr() } : x)
-    await saveData({ clients: updated })
-    setDischargeModal(null)
+  function openDischarge(c) {
+    setDischargeForm({
+      ...BLANK_DISCHARGE,
+      discharge_date: todayStr(),
+    })
+    setDischargeErr('')
+    setDischargeModal(c)
   }
+
+  async function discharge() {
+    if (!dischargeModal) return
+    if (!dischargeForm.reason) { setDischargeErr('Reason required'); return }
+    if (!dischargeForm.discharge_date) { setDischargeErr('Discharge date required'); return }
+    setDischargeSaving(true); setDischargeErr('')
+    try {
+      const r = await fetch('/api/discharge-records', {
+        method:'POST', credentials:'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          client_id: dischargeModal.id,
+          client_name: dischargeModal.name,
+          room: dischargeModal.room,
+          program_track: dischargeModal.program_track || '',
+          intake_date: dischargeModal.intake_date || null,
+          discharge_date: dischargeForm.discharge_date,
+          reason: dischargeForm.reason,
+          narrative: dischargeForm.narrative || '',
+          aftercare_plan: dischargeForm.aftercare_plan || '',
+          referrals_made: dischargeForm.referrals_made || [],
+        }),
+      })
+      const j = await r.json()
+      if (!r.ok) { setDischargeErr(j.error || 'Discharge failed'); return }
+      setDischargeModal(null); setDischargeForm(BLANK_DISCHARGE)
+    } catch { setDischargeErr('Network error') }
+    finally { setDischargeSaving(false) }
+  }
+
+  function addEmergencyContact(setForm, form) {
+    const ec = Array.isArray(form.emergency_contacts) ? form.emergency_contacts : []
+    setForm({ ...form, emergency_contacts: [...ec, { name:'', relationship:'', phone:'' }] })
+  }
+  function updateEmergencyContact(setForm, form, idx, key, val) {
+    const ec = [...(form.emergency_contacts || [])]
+    ec[idx] = { ...ec[idx], [key]: val }
+    setForm({ ...form, emergency_contacts: ec })
+  }
+  function removeEmergencyContact(setForm, form, idx) {
+    const ec = [...(form.emergency_contacts || [])]
+    ec.splice(idx, 1)
+    setForm({ ...form, emergency_contacts: ec })
+  }
+
+  function addReferral() {
+    setDischargeForm(f => ({
+      ...f, referrals_made: [...(f.referrals_made||[]), { agency:'', contact:'', date:todayStr(), type:'' }]
+    }))
+  }
+  function updateReferral(idx, key, val) {
+    setDischargeForm(f => {
+      const rs = [...(f.referrals_made||[])]
+      rs[idx] = { ...rs[idx], [key]: val }
+      return { ...f, referrals_made: rs }
+    })
+  }
+  function removeReferral(idx) {
+    setDischargeForm(f => {
+      const rs = [...(f.referrals_made||[])]
+      rs.splice(idx, 1)
+      return { ...f, referrals_made: rs }
+    })
+  }
+
+  const programTracks = data?.program_tracks || []
 
   const vacantRooms = useMemo(
     () => clients.filter(c => c.is_active && c.name === 'VACANT').map(c => c.room).sort((a, b) => (parseInt(a)||0)-(parseInt(b)||0)),
@@ -265,7 +366,16 @@ export default function ClientsTab() {
                                     marginRight: 8, verticalAlign: 'middle', border: '1px solid var(--line)',
                                     cursor: 'pointer' }} />
                               )}
-                              {c.name}
+                              <button
+                                onClick={() => openProfile(c.id)}
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                                  color: 'inherit', fontWeight: 'inherit', fontFamily: 'inherit',
+                                  fontSize: 'inherit', textAlign: 'left',
+                                  textDecoration: 'underline', textDecorationStyle: 'dotted',
+                                  textDecorationColor: 'rgba(27,47,110,.4)' }}
+                              >
+                                {c.name}
+                              </button>
                               {!c.is_active && <span style={{ marginLeft: 7, fontSize: '.62rem', fontWeight: 700, background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 10, textTransform: 'uppercase' }}>Discharged</span>}
                             </>
                           )}
@@ -300,7 +410,7 @@ export default function ClientsTab() {
                                   <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
                                     onClick={() => openEdit(c)}>✎ Edit</button>
                                   {c.is_active
-                                    ? <button className="btn-danger-sm" onClick={() => setDischargeModal(c)}>Discharge</button>
+                                    ? <button className="btn-danger-sm" onClick={() => openDischarge(c)}>Discharge</button>
                                     : <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
                                         onClick={() => openReactivate(c)}>Reactivate</button>
                                   }
@@ -390,6 +500,29 @@ export default function ClientsTab() {
                 <input type="date" value={editForm.intake_date} onChange={e => setEditForm(f => ({ ...f, intake_date: e.target.value }))} /></div>
               <div className="field"><label>Discharge Date</label>
                 <input type="date" value={editForm.discharge_date} onChange={e => setEditForm(f => ({ ...f, discharge_date: e.target.value }))} /></div>
+              <div className="field"><label>Referral source</label>
+                <input type="text" placeholder="Referring agency / person"
+                  value={editForm.referral_source} onChange={e => setEditForm(f => ({ ...f, referral_source: e.target.value }))} /></div>
+              <div className="field"><label>Program track</label>
+                <select value={editForm.program_track} onChange={e => setEditForm(f => ({ ...f, program_track: e.target.value }))}>
+                  <option value="">— select —</option>
+                  {programTracks.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Emergency contacts</label>
+                {(editForm.emergency_contacts||[]).map((c, idx) => (
+                  <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
+                    <input placeholder="Name"         value={c.name||''}         onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'name', e.target.value)} style={{ flex:2 }}/>
+                    <input placeholder="Relationship" value={c.relationship||''} onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'relationship', e.target.value)} style={{ flex:1 }}/>
+                    <input placeholder="Phone"        value={c.phone||''}        onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'phone', e.target.value)} style={{ flex:1 }}/>
+                    <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeEmergencyContact(setEditForm, editForm, idx)}>×</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-sm" onClick={()=>addEmergencyContact(setEditForm, editForm)}>+ Add contact</button>
+              </div>
+              <div className="field"><label>Intake notes</label>
+                <textarea rows={3} value={editForm.intake_notes} onChange={e => setEditForm(f => ({ ...f, intake_notes: e.target.value }))} /></div>
             </div>
             <div className="modal-foot">
               <button className="btn-cancel" onClick={() => setEditModal(null)}>Cancel</button>
@@ -471,6 +604,29 @@ export default function ClientsTab() {
                 <input type="text" value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" /></div>
               <div className="field"><label>Intake Date <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
                 <input type="date" value={addForm.intake_date} onChange={e => setAddForm(f => ({ ...f, intake_date: e.target.value }))} /></div>
+              <div className="field"><label>Referral source <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                <input type="text" placeholder="Referring agency / person"
+                  value={addForm.referral_source} onChange={e => setAddForm(f => ({ ...f, referral_source: e.target.value }))} /></div>
+              <div className="field"><label>Program track <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                <select value={addForm.program_track} onChange={e => setAddForm(f => ({ ...f, program_track: e.target.value }))}>
+                  <option value="">— select —</option>
+                  {programTracks.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label>Emergency contacts <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                {(addForm.emergency_contacts||[]).map((c, idx) => (
+                  <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
+                    <input placeholder="Name"         value={c.name||''}         onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'name', e.target.value)} style={{ flex:2 }}/>
+                    <input placeholder="Relationship" value={c.relationship||''} onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'relationship', e.target.value)} style={{ flex:1 }}/>
+                    <input placeholder="Phone"        value={c.phone||''}        onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'phone', e.target.value)} style={{ flex:1 }}/>
+                    <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeEmergencyContact(setAddForm, addForm, idx)}>×</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-sm" onClick={()=>addEmergencyContact(setAddForm, addForm)}>+ Add contact</button>
+              </div>
+              <div className="field"><label>Intake notes <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                <textarea rows={3} value={addForm.intake_notes} onChange={e => setAddForm(f => ({ ...f, intake_notes: e.target.value }))} /></div>
             </div>
             <div className="modal-foot">
               <button className="btn-cancel" onClick={() => setAddModal(false)}>Cancel</button>
@@ -496,27 +652,66 @@ export default function ClientsTab() {
         </div>
       )}
 
-      {/* Discharge Modal */}
+      {/* Discharge Modal — creates a formal discharge_record and marks client inactive */}
       {dischargeModal && (
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setDischargeModal(null)}>
-          <div className="modal">
+          <div className="modal" style={{ maxWidth:580 }}>
             <div className="modal-head">
               <h2>Discharge {dischargeModal.name}</h2>
               <button className="xbtn" onClick={() => setDischargeModal(null)}>&times;</button>
             </div>
             <div className="modal-body">
-              <p style={{ fontSize: '.88rem', color: '#475569' }}>
-                This will mark <strong>{dischargeModal.name}</strong> (Room {dischargeModal.room}) as discharged. Their record will be preserved in the archive.
+              {dischargeErr && <div className="auth-error">{dischargeErr}</div>}
+              <p style={{ fontSize: '.85rem', color: '#475569', marginBottom: 12 }}>
+                A discharge record is created and is <strong>immutable</strong> after submission.
+                The client will be marked inactive.
               </p>
-              <div className="field"><label>Discharge Date</label>
-                <input type="date" defaultValue={todayStr()} id="dc-date" /></div>
+              <div style={{ display:'flex', gap:12 }}>
+                <div className="field" style={{ flex:1 }}>
+                  <label>Discharge date</label>
+                  <input type="date" value={dischargeForm.discharge_date}
+                    onChange={e => setDischargeForm(f => ({ ...f, discharge_date: e.target.value }))} />
+                </div>
+                <div className="field" style={{ flex:1 }}>
+                  <label>Reason</label>
+                  <select value={dischargeForm.reason}
+                    onChange={e => setDischargeForm(f => ({ ...f, reason: e.target.value }))}>
+                    <option value="graduate">Graduate / Successful completion</option>
+                    <option value="ama">AMA (Against Medical Advice)</option>
+                    <option value="therapeutic">Therapeutic discharge</option>
+                    <option value="administrative">Administrative discharge</option>
+                  </select>
+                </div>
+              </div>
+              <div className="field">
+                <label>Narrative</label>
+                <textarea rows={3} value={dischargeForm.narrative}
+                  onChange={e => setDischargeForm(f => ({ ...f, narrative: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label>Aftercare plan</label>
+                <textarea rows={3} value={dischargeForm.aftercare_plan}
+                  onChange={e => setDischargeForm(f => ({ ...f, aftercare_plan: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label>Referrals made</label>
+                {(dischargeForm.referrals_made||[]).map((r, idx) => (
+                  <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
+                    <input placeholder="Agency"  value={r.agency||''}  onChange={e=>updateReferral(idx,'agency', e.target.value)} style={{ flex:2 }}/>
+                    <input placeholder="Contact" value={r.contact||''} onChange={e=>updateReferral(idx,'contact',e.target.value)} style={{ flex:2 }}/>
+                    <input type="date" value={r.date||''}              onChange={e=>updateReferral(idx,'date',   e.target.value)} style={{ flex:1 }}/>
+                    <input placeholder="Type"    value={r.type||''}    onChange={e=>updateReferral(idx,'type',   e.target.value)} style={{ flex:1 }}/>
+                    <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeReferral(idx)}>×</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-sm" onClick={addReferral}>+ Add referral</button>
+              </div>
             </div>
             <div className="modal-foot">
               <button className="btn-cancel" onClick={() => setDischargeModal(null)}>Cancel</button>
-              <button className="btn btn-red" onClick={() => {
-                const d = document.getElementById('dc-date')?.value || todayStr()
-                discharge({ ...dischargeModal, discharge_date: d })
-              }}>Discharge</button>
+              <button className="btn btn-red" onClick={discharge} disabled={dischargeSaving}>
+                {dischargeSaving ? 'Saving…' : 'Discharge & Save Record'}
+              </button>
             </div>
           </div>
         </div>

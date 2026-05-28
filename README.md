@@ -1,6 +1,6 @@
 # OpsPoint · v2.0.0 · React Edition
 
-Shift report and resident management platform for Westside Community Services residential facilities. Built with React 18 + Vite on the frontend, Node.js + Express + WebSockets + SQLite on the backend.
+Shift report and resident management platform for residential facilities. Built with React 18 + Vite on the frontend, Node.js + Express + WebSockets + SQLite on the backend.
 
 ---
 

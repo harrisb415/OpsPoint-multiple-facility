@@ -87,8 +87,8 @@ export function openPrintWindow({
     body { font-family: Calibri, Arial, sans-serif; font-size: 12px; color: #111; background: #fff; }
     .wrap { max-width: 11in; margin: 0 auto; padding: 16px 20px; }
     .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-    .hdr { background: #1b2f6e; color: #fff; padding: 12px 16px; border-radius: 8px 8px 0 0;
-           border-bottom: 3px solid #D97706; }
+    .hdr { background: #0f4c5c; color: #fff; padding: 12px 16px; border-radius: 8px 8px 0 0;
+           border-bottom: 3px solid #f97316; }
     .hdr h1 { font-size: 1.1rem; font-weight: 800; }
     .hdr .sub { color: #a8c0e8; font-size: .8rem; margin-top: 2px; }
     .hdr .meta { color: #a8c0e8; font-size: .65rem; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 2px; }
@@ -96,11 +96,11 @@ export function openPrintWindow({
                border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; }
     .sumbox { font-size: .75rem; }
     .sum-l { color: #64748b; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; font-size: .65rem; }
-    .sum-v { color: #1b2f6e; font-weight: 800; font-size: .95rem; }
+    .sum-v { color: #0f4c5c; font-weight: 800; font-size: .95rem; }
     .tablewrap { background: #fff; border: 1px solid #e2e8f0; border-radius: 0 0 8px 8px;
                  overflow: hidden; }
     table { width: 100%; border-collapse: collapse; }
-    thead th { background: #1b2f6e; color: #a8c0e8; padding: 7px 10px; text-align: left;
+    thead th { background: #0f4c5c; color: #cce8ef; padding: 7px 10px; text-align: left;
                font-size: .65rem; letter-spacing: .06em; text-transform: uppercase; font-weight: 700; }
     tbody td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; font-size: .82rem;
                vertical-align: top; }
@@ -120,7 +120,7 @@ export function openPrintWindow({
     .badge-delivered { background: #dbeafe; color: #1e40af; padding: 1px 6px; border-radius: 4px;
                        font-size: .68rem; font-weight: 700; }
     .no-print { margin-bottom: 8px; }
-    .btn-print { background: #1b2f6e; color: #fff; border: none; padding: 7px 14px;
+    .btn-print { background: #0f4c5c; color: #fff; border: none; padding: 7px 14px;
                  border-radius: 6px; font-weight: 700; cursor: pointer; font-family: inherit; }
     .btn-close { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
                  padding: 7px 14px; border-radius: 6px; font-weight: 700; cursor: pointer;

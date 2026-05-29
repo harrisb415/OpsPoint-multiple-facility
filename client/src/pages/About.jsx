@@ -34,15 +34,15 @@ export default function About() {
           style={{ width: 80, height: 80, borderRadius: 18, marginBottom: 16, boxShadow: '0 4px 20px rgba(0,0,0,.4)' }}
         />
         <div style={{
-          fontFamily: 'Libre Baskerville, serif', fontSize: '2.2rem', fontWeight: 700,
+          fontFamily: 'var(--sans)', fontSize: '2.2rem', fontWeight: 700,
           color: '#fff', letterSpacing: '-.02em', marginBottom: 8,
         }}>
           <span style={{ color: 'var(--orange)' }}>O</span>psPoint
         </div>
         <div style={{
-          display: 'inline-block', background: 'rgba(212,160,23,.2)', color: 'var(--orange)',
+          display: 'inline-block', background: 'rgba(249,115,22,.18)', color: 'var(--orange)',
           fontSize: '.75rem', fontWeight: 700, padding: '4px 12px', borderRadius: 20,
-          border: '1px solid rgba(212,160,23,.35)', letterSpacing: '.06em', marginBottom: 14,
+          border: '1px solid rgba(249,115,22,.35)', letterSpacing: '.06em', marginBottom: 14,
         }}>
           v{VERSION} — React Edition
         </div>

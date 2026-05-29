@@ -311,7 +311,7 @@ export default function ClientsTab() {
               Show discharged
             </label>
             <input type="text" placeholder="Search…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }}
-              style={{ fontSize: '.78rem', padding: '4px 10px', border: '1px solid rgba(255,255,255,.2)', borderRadius: 5, background: 'rgba(255,255,255,.1)', color: '#fff', outline: 'none', width: 160 }} />
+              style={{ fontSize: '.78rem', padding: '4px 10px', border: '1px solid var(--border-light)', borderRadius: 5, background: '#fff', color: 'var(--text-primary)', outline: 'none', width: 160 }} />
           </div>
         </div>
         <div className="section-body" style={{ padding: 0 }}>

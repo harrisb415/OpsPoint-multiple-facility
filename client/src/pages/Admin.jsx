@@ -21,7 +21,7 @@ export default function Admin() {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top nav bar */}
       <div style={{
-        background: 'var(--dark)', borderBottom: '2px solid rgba(255,255,255,.1)',
+        background: '#fff', borderBottom: '1px solid var(--border-light)',
         padding: '0 24px', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', gap: 16, flexShrink: 0,
       }}>
@@ -31,15 +31,15 @@ export default function Admin() {
               background: 'none', border: 'none', cursor: 'pointer',
               padding: '12px 18px', fontSize: '.78rem', fontWeight: 700,
               letterSpacing: '.06em', textTransform: 'uppercase', fontFamily: 'var(--sans)',
-              color: active === t.id ? '#fff' : '#64748b',
-              borderBottom: active === t.id ? '3px solid var(--orange)' : '3px solid transparent',
+              color: active === t.id ? 'var(--accent)' : 'var(--text-muted)',
+              borderBottom: active === t.id ? '3px solid var(--accent)' : '3px solid transparent',
               transition: 'color .15s', display: 'flex', alignItems: 'center', gap: 7,
             }}>
-              {t.icon} {t.label}
+              {t.label}
             </button>
           ))}
         </div>
-        <Link to="/" style={{ color: 'rgba(255,255,255,.5)', textDecoration: 'none', fontSize: '.78rem', fontWeight: 600 }}>
+        <Link to="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '.78rem', fontWeight: 600 }}>
           ← Back to Shift
         </Link>
       </div>

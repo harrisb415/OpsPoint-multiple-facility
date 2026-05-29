@@ -219,11 +219,11 @@ export default function ViolationsTab() {
               title="Print violations log"
               style={{
                 fontSize: '.72rem', padding: '4px 10px',
-                background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)',
-                color: '#fff', borderRadius: 5, cursor: violations.length ? 'pointer' : 'not-allowed',
+                background: '#f1f5f9', border: '1px solid var(--border-light)',
+                color: 'var(--text-muted)', borderRadius: 5, cursor: violations.length ? 'pointer' : 'not-allowed',
                 fontWeight: 600, opacity: violations.length ? 1 : .5,
               }}>
-              🖨 Print
+              Print
             </button>
             {canLog && <button className="btn btn-sm btn-primary" onClick={openAdd}>+ Log Violation</button>}
           </div>

@@ -633,10 +633,10 @@ export default function ReportTab({ onNavigate }) {
               title="Print activity log"
               style={{
                 fontSize: '.72rem', padding: '4px 10px',
-                background: 'rgba(255,255,255,.1)', border: '1px solid rgba(255,255,255,.2)',
-                color: '#fff', borderRadius: 5, cursor: 'pointer', fontWeight: 600,
+                background: '#f1f5f9', border: '1px solid var(--border-light)',
+                color: 'var(--text-muted)', borderRadius: 5, cursor: 'pointer', fontWeight: 600,
               }}>
-              🖨 Print
+              Print
             </button>
           </div>
         </div>
@@ -781,8 +781,8 @@ export default function ReportTab({ onNavigate }) {
             onChange={e => setSearch(e.target.value)}
             style={{
               fontSize: '.78rem', padding: '4px 10px',
-              border: '1px solid rgba(255,255,255,.2)', borderRadius: 5,
-              background: 'rgba(255,255,255,.1)', color: '#fff', outline: 'none', width: 160,
+              border: '1px solid var(--border-light)', borderRadius: 5,
+              background: '#fff', color: 'var(--text-primary)', outline: 'none', width: 160,
             }}
           />
         </div>
@@ -931,9 +931,9 @@ function sortBtnStyle(active, dir) {
   return {
     padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
     fontSize: '.7rem', fontWeight: 600,
-    background: active ? '#D97706' : 'rgba(255,255,255,.1)',
-    border: `1px solid ${active ? '#D97706' : 'rgba(255,255,255,.2)'}`,
-    color: '#fff',
+    background: active ? 'var(--accent)' : '#f1f5f9',
+    border: `1px solid ${active ? 'var(--accent)' : 'var(--border-light)'}`,
+    color: active ? '#fff' : 'var(--text-muted)',
   }
 }
 

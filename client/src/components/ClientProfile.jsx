@@ -129,10 +129,10 @@ function OverviewTab({ client, data }) {
       <div style={{ background: '#f8fafc', borderRadius: 8, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
           <Field label="Room">
-            <span style={{ fontWeight: 700, fontFamily: 'var(--mono)', color: '#1b2f6e' }}>Rm. {client.room}</span>
+            <span style={{ fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--sidebar-bg)' }}>Rm. {client.room}</span>
           </Field>
           <Field label="Days in Program">
-            <span style={{ fontWeight: 700, color: '#1b2f6e' }}>{days != null ? days : '—'}</span>
+            <span style={{ fontWeight: 700, color: 'var(--sidebar-bg)' }}>{days != null ? days : '—'}</span>
           </Field>
           <Field label="Case Manager">
             <span style={{ fontWeight: 600 }}>{client.case_manager || '—'}</span>
@@ -229,7 +229,7 @@ function TimelineTab({ client, data }) {
       {entries.map((e, i) => (
         <div key={e.id || i} style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
           <div style={{ flexShrink: 0, width: 60, textAlign: 'right' }}>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: '.7rem', color: '#1b2f6e', fontWeight: 700 }}>{e.time}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--sidebar-bg)', fontWeight: 700 }}>{e.time}</div>
             <div style={{ fontSize: '.62rem', color: '#94a3b8', marginTop: 1 }}>{fmtDate(e.report_date)}</div>
           </div>
           <div style={{ flex: 1, fontSize: '.81rem', color: '#0f172a', lineHeight: 1.45 }}>{e.text}</div>
@@ -789,7 +789,7 @@ export default function ClientProfile({ onNavigateTab }) {
       }}>
 
         {/* ── Header ── */}
-        <div style={{ background: '#1b2f6e', color: '#fff', padding: '12px 16px 10px', flexShrink: 0 }}>
+        <div style={{ background: 'var(--sidebar-bg)', color: '#fff', padding: '12px 16px 10px', flexShrink: 0 }}>
 
           {/* Caseload nav row */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -870,10 +870,10 @@ export default function ClientProfile({ onNavigateTab }) {
               onClick={() => setActiveTab(t.id)}
               style={{
                 padding: '8px 12px', border: 'none',
-                borderBottom: activeTab === t.id ? '2px solid #1b2f6e' : '2px solid transparent',
+                borderBottom: activeTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
                 background: 'none',
                 fontSize: '.74rem', fontWeight: activeTab === t.id ? 700 : 500,
-                color: activeTab === t.id ? '#1b2f6e' : '#64748b',
+                color: activeTab === t.id ? 'var(--accent)' : '#64748b',
                 cursor: 'pointer', whiteSpace: 'nowrap', marginBottom: -2,
               }}
             >

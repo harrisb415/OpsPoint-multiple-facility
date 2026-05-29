@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 
-const VERSION = '2.0.0'
+const VERSION = '2.1.0'
 
 const STACK = [
-  'React 19', 'React Router v7', 'Vite', 'Node.js', 'Express',
-  'SQLite (better-sqlite3)', 'WebSocket (ws)', 'PBKDF2-SHA512',
+  'React 19', 'React Router v7', 'Vite', 'Tailwind CSS v4',
+  'Node.js', 'Express', 'SQLite (better-sqlite3)', 'WebSocket (ws)', 'PBKDF2-SHA512',
 ]
 
 const FEATURES = [
@@ -15,8 +15,9 @@ const FEATURES = [
   { icon: '🧹', title: 'Chore Tracking', desc: 'Assign and log daily chore completions per resident.' },
   { icon: '🚪', title: 'Weekend Passes', desc: 'Track resident passes with departure/return dates and UA notes.' },
   { icon: '📬', title: 'Mail Log', desc: 'Track incoming mail with approval and delivery workflow.' },
-  { icon: '🧪', title: 'UA Requests', desc: 'Flag residents for urinalysis with real-time banner alerts.' },
-  { icon: '🔒', title: 'Secure', desc: 'PBKDF2-SHA512 passwords, CSRF protection, session fixation prevention, and rate limiting.' },
+  { icon: '🧪', title: 'UA Module', desc: 'Random draw, request system, witnessed administration log, result records with photo attachment.' },
+  { icon: '🏥', title: 'HIPAA Clinical', desc: 'UA records, milestone tracker, behavioral incident reports, discharge records, 42 CFR Part 2 consent & disclosures.' },
+  { icon: '🔒', title: 'Secure', desc: 'PBKDF2-SHA512 passwords, CSRF protection, session fixation prevention, rate limiting, and full audit log.' },
 ]
 
 export default function About() {

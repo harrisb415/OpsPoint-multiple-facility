@@ -2,6 +2,35 @@
 
 ---
 
+## v2.1.0 — HIPAA Clinical Modules & Clinical Teal (2026-05-28)
+
+### HIPAA clinical modules
+- **UA Records** — full result records linked to shift log entries; photo attachment on each record; table view with filters and export
+- **Witnessed self-administration log** — per-resident log of witnessed medication self-administration events; links to log entries
+- **Milestone tracker** — configurable milestones per resident; track completion dates and staff notes
+- **Behavioral incident reports** — structured incident forms (type, severity, narrative, follow-up); review workflow; notification bell integration
+- **Discharge records** — discharge summary with reason, destination, and follow-up fields; links discharged clients to their record history
+- **42 CFR Part 2 consent & disclosures** — consent form tracking per resident; disclosure log for SUD-related record releases; re-disclosure warnings
+- **HIPAA technical safeguards** — full audit log (actor, action, target, IP, timestamp); audit log viewer in Admin panel; log pruning on schedule
+
+### Design system — Clinical Teal
+- **Tailwind CSS v4** — installed `tailwindcss` + `@tailwindcss/vite`; `vite.config.js` updated; no `tailwind.config.js` needed
+- **Clinical Teal palette** — `@theme {}` tokens: sidebar `#134e4a`, topnav `#0f766e`, accent `#0d9488`, page background `#f0fdf9`; all semantic CSS classes rewritten to teal
+- **Legacy CSS vars preserved** — `:root` vars (`--dark`, `--crimson`, `--mid`, etc.) remapped to teal equivalents so inline JSX styles continue working without changes
+- **Activity log table** — restructured from a flat div list to a `TIME | TYPE | DETAILS` table; color-coded `LOG_TYPE_STYLE` badges per entry type (Wellness, UA, Walkthrough, Violation, etc.)
+- **Header buttons** — File Walkthrough, File Wellness, Email buttons now render as clean white-bg teal-text pills (`.btn-outline`) against the teal topnav
+
+### Bug fixes
+- **UA records photo button showed "—" on all records** — `db.run()` public wrapper was not returning the SQLite statement result; `lastInsertRowid` was inaccessible, so `log_entry_id` was never stored; fixed by adding `return` to the wrapper
+- **Dismiss ✕ button not visible on UA requests** — button was gated on `ua.acknowledge` only; users with `ua.record` (Administrators) could not see it; fixed to `(canAck || canRecord)` on frontend
+- **403 Forbidden when conducting a UA** — `POST /api/ua-requests/:id/acknowledge` only accepted `ua.acknowledge`; conducting a UA should auto-acknowledge the request; fixed with `requireAnyPermission('ua.acknowledge', 'ua.record')`
+
+### Branding
+- Removed all references to prior organization names from all source files; replaced with generic facility-name-from-settings pattern
+- Login footer, About page, and AppShell header updated
+
+---
+
 ## v2.0.0 — React Edition (2026-05-23)
 
 Complete rewrite of the OpsPoint frontend as a React SPA (React 18 + Vite + React Router v6), deployed alongside the existing Express/SQLite backend. All v1.x features are carried forward; the database schema and API are fully backward-compatible.

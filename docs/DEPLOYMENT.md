@@ -14,7 +14,7 @@ This guide covers installing OpsPoint on a Windows machine that will act as the 
 6. [Windows autostart](#6-windows-autostart)
 7. [User management](#7-user-management)
 8. [Backup strategy](#8-backup-strategy)
-9. [Updating OpsPoint](#9-updating-shiftpoint)
+9. [Updating OpsPoint](#9-updating-opspoint)
 10. [Troubleshooting](#10-troubleshooting)
 
 ---

@@ -303,8 +303,6 @@ td.date-cell { font-family: var(--mono); font-size: .74rem; color: #6b7280; }
 }
 .btn-add-b { background: #0d9488; color: #fff; }
 .btn-add-b:hover { background: #0f766e; box-shadow: 0 3px 10px rgba(13,148,136,.28); }
-.btn-add-a { background: #d97706; color: #fff; }
-.btn-add-a:hover { background: #b45309; box-shadow: 0 3px 10px rgba(217,119,6,.28); }
 
 /* ─ Activity log table ────────────────────────────────────── */
 .log-table-wrap { overflow-x: auto; }

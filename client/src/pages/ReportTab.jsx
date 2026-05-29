@@ -657,7 +657,7 @@ export default function ReportTab({ onNavigate }) {
               <button className="pill pill-yellow" onClick={() => setQuickModal('lunch')}>
                 🍕 Lunch Break
               </button>
-              <button className="pill pill-orange" onClick={() => setQuickModal('ua')}>
+              <button className="pill pill-yellow" onClick={() => setQuickModal('ua')}>
                 🧪 UA
               </button>
               <button className="pill pill-slate" onClick={() => setQuickModal('roomsearch')}>
@@ -736,7 +736,7 @@ export default function ReportTab({ onNavigate }) {
               <input ref={issueRef} type="text" value={issueText}
                 onChange={e => setIssueText(e.target.value)}
                 placeholder="Add issue…" onKeyDown={e => e.key === 'Enter' && handleAddIssue()} />
-              <button className="btn-add btn-add-a" onClick={handleAddIssue}>+ Add</button>
+              <button className="btn-add btn-add-b" onClick={handleAddIssue}>+ Add</button>
             </div>
           )}
         </div>

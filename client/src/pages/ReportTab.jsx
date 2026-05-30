@@ -502,30 +502,52 @@ export default function ReportTab({ onNavigate }) {
   }
 
   // ── Report ────────────────────────────────────────────────────────
+  const facilityName = data?.facility_name || ''
+  const shiftRange = shift === 'Day Shift'
+    ? `${data?.shift_day_start || '7:00 AM'} – ${data?.shift_swing_start || '3:00 PM'}`
+    : shift === 'Swing Shift'
+      ? `${data?.shift_swing_start || '3:00 PM'} – ${data?.shift_grave_start || '11:00 PM'}`
+      : `${data?.shift_grave_start || '11:00 PM'} – ${data?.shift_day_start || '7:00 AM'}`
+
   return (
     <div>
-      {/* Meta */}
+      {/* Report Hero */}
+      <div className="report-hero">
+        <div className="report-hero-left">
+          <div className="report-hero-eyebrow">
+            Daily Ops · Shift Report {activeId ? `#${activeId}` : ''}
+          </div>
+          <h2 className="report-hero-title">{shift} Report</h2>
+          <div className="report-hero-meta">
+            {reportDate} · {shiftRange}{facilityName ? ` · ${facilityName}` : ''}
+          </div>
+        </div>
+        <div className="report-hero-actions">
+          {isClosed && <span className="report-hero-badge">Closed</span>}
+          {canClose && !isClosed && activeId && (
+            <button className="report-hero-btn-outline" onClick={handleCloseShift}>Close Shift</button>
+          )}
+          {canCreate && isClosed && (
+            <button className="report-hero-btn-gold" onClick={handleNewReport} disabled={creating}>
+              {creating ? 'Creating…' : '+ New Report'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Shift Details */}
       <div className="section">
         <div className="section-head">
           <div className="sh-left">
             <span className="sh-dot" />
-            <span>Shift Report {activeId ? `#${activeId}` : ''}</span>
+            <span>Shift Details</span>
           </div>
-          <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-            {isClosed && (
-              <span style={{ fontSize: '.72rem', color: '#94a3b8', fontWeight: 700, letterSpacing: '.08em' }}>
-                CLOSED
-              </span>
-            )}
-            {canClose && !isClosed && activeId && (
-              <button className="btn btn-sm btn-danger-sm" onClick={handleCloseShift}>Close Shift</button>
-            )}
-            {canCreate && (
-              <button className="btn btn-sm btn-primary" onClick={handleNewReport} disabled={creating}>
-                {creating ? 'Creating…' : '+ New Report'}
-              </button>
-            )}
-          </div>
+          {activeId && (
+            <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase',
+                           color: isClosed ? 'var(--text-muted)' : 'var(--teal-600)' }}>
+              Report #{activeId} · {isClosed ? 'Closed' : 'Open'}
+            </span>
+          )}
         </div>
         <div className="section-body">
           <div className="meta-grid">
@@ -556,8 +578,8 @@ export default function ReportTab({ onNavigate }) {
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Census</span></div>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>
-            {censusTotal} residents
+          <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: 'var(--teal-700)', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>
+            {censusTotal} Residents
           </span>
         </div>
         <div className="section-body">
@@ -571,7 +593,7 @@ export default function ReportTab({ onNavigate }) {
               { key: 'hospital', label: 'Hospital' },
               { key: 'out',      label: 'Out / Other' },
             ].map(({ key, label }) => (
-              <div key={key} className={`census-card${census[key] > 0 ? ' hi' : ''}`}>
+              <div key={key} className="census-card">
                 <div className="count">{census[key]}</div>
                 <div className="clabel">{label}</div>
               </div>

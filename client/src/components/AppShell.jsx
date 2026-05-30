@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Outlet, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
@@ -10,7 +10,7 @@ import {
   FileText, CheckSquare, Ticket, Mail,
   FlaskConical, Pill, Award,
   AlertTriangle, Ban, PenLine, Archive,
-  Dice5, Bell, Megaphone, Settings, Info, LogOut,
+  Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse,
   LayoutDashboard,
 } from 'lucide-react'
 
@@ -545,6 +545,46 @@ function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen }
   )
 }
 
+// ── Settings gear dropdown ────────────────────────────────────────────
+function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
+  return (
+    <div className="header-menu" ref={ref} style={{ position: 'relative' }}>
+      <button
+        className="settings-gear-btn"
+        onClick={() => setOpen(o => !o)}
+        title="Settings"
+        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                 width:34, height:34, border:'none', background:'none', borderRadius:6, cursor:'pointer' }}
+      >
+        <Settings size={18} />
+      </button>
+      {open && (
+        <div className="header-dropdown">
+          <button className="dropdown-item" onClick={() => { setOpen(false); onAbout?.() }}>
+            <Info size={16} /> About
+          </button>
+          {showAdmin && (
+            <button className="dropdown-item" onClick={() => { setOpen(false); onAdmin?.() }}>
+              <Shield size={16} /> Admin
+            </button>
+          )}
+          <div className="dropdown-sep" />
+          <button className="dropdown-item danger" onClick={() => { setOpen(false); onSignOut?.() }}>
+            <LogOut size={16} /> Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Header ─────────────────────────────────────────────────────────────
 function Header({ onGoTab }) {
   const { session, logout }                 = useAuth()
@@ -836,13 +876,6 @@ function Header({ onGoTab }) {
     (hasPerm('broadcast.receive') ? notif.broadcasts.length : 0) +
     (hasPerm('incidents.review') ? (notif.incidents || []).length : 0)
 
-  const ghostBtn = {
-    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-    fontSize: '13px', fontWeight: 600, padding: '5px 8px', borderRadius: 6,
-    display: 'inline-flex', alignItems: 'center', gap: 5,
-    fontFamily: 'var(--sans)', transition: 'background 150ms, color 150ms',
-  }
-
   return (
     <>
       {serverRestarting && (
@@ -853,7 +886,9 @@ function Header({ onGoTab }) {
       <header className="site-header">
         <div className="header-brand">
           <img src="/static/icons/icon-192.png" alt="" className="header-brand-logo" />
-          <span className="header-brand-name">{facilityName}</span>
+          <span className="header-brand-name">OpsPoint</span>
+          <span className="header-brand-sep">|</span>
+          <span className="header-brand-facility">{facilityName}</span>
         </div>
 
         <div className="header-actions">
@@ -863,54 +898,45 @@ function Header({ onGoTab }) {
 
           <div title={wsConnected ? 'Server connected' : 'Reconnecting…'} style={{
             display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: '11px', color: wsConnected ? '#16a34a' : '#dc2626', fontWeight: 600,
+            fontSize: '11px', color: wsConnected ? 'var(--gold-300)' : '#fca5a5', fontWeight: 600,
           }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: wsConnected ? '#22c55e' : '#ef4444', flexShrink: 0, display: 'inline-block' }} />
+            <span style={{ width: 7, height: 7, borderRadius: '50%',
+                           background: wsConnected ? 'var(--gold-400)' : '#ef4444',
+                           flexShrink: 0, display: 'inline-block' }} />
             {wsConnected ? 'Live' : 'Offline'}
           </div>
 
           {hasPerm('reports.create') && (
             <>
               {uiVis.buttons?.walkthrough !== false && (
-                <button onClick={fileWalkthroughs} title="File Walkthrough — filled filing record" style={ghostBtn}>
-                  File Walkthrough
+                <button className="header-link" onClick={fileWalkthroughs} title="File Walkthrough — filled filing record">
+                  <Footprints size={14} /> File Walkthrough
                 </button>
               )}
               {uiVis.buttons?.wellness !== false && (
-                <button onClick={fileWellnessChecks} title="File Wellness Check — filled filing record" style={ghostBtn}>
-                  File Wellness
+                <button className="header-link" onClick={fileWellnessChecks} title="File Wellness Check — filled filing record">
+                  <HeartPulse size={14} /> File Wellness
                 </button>
               )}
-              <button onClick={sendOutlook} title="Email shift report" style={ghostBtn}>
-                Email
+              <button className="header-link" onClick={sendOutlook} title="Email shift report">
+                <Mail size={14} /> Email
               </button>
             </>
           )}
 
           {hasPerm('broadcast.send') && (
-            <button onClick={() => setBroadcastOpen(true)} title="Send Announcement" style={ghostBtn}>
+            <button className="header-link" onClick={() => setBroadcastOpen(true)} title="Send Announcement">
               <Megaphone size={14} />
               Announce
             </button>
           )}
 
-          {hasPerm('admin.users') && (
-            <Link to="/admin" style={{ ...ghostBtn, textDecoration: 'none' }}>
-              <Settings size={14} />
-              Admin
-            </Link>
-          )}
-          <Link to="/about" style={{ ...ghostBtn, textDecoration: 'none', opacity: .7 }}>
-            <Info size={14} />
-            About
-          </Link>
-          <button style={{ ...ghostBtn }} onClick={handleLogout}
-            onMouseEnter={e => { e.currentTarget.style.color='var(--danger)'; e.currentTarget.style.background='var(--danger-bg)' }}
-            onMouseLeave={e => { e.currentTarget.style.color='var(--text-muted)'; e.currentTarget.style.background='none' }}
-          >
-            <LogOut size={14} />
-            Sign Out
-          </button>
+          <SettingsMenu
+            showAdmin={hasPerm('admin.users')}
+            onAbout={() => navigate('/about')}
+            onAdmin={() => navigate('/admin')}
+            onSignOut={handleLogout}
+          />
 
           <button className="notif-bell-btn" onClick={() => setPanelOpen(o => !o)} title="Notifications">
             <Bell size={18} />

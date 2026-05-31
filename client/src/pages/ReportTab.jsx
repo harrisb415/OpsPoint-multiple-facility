@@ -734,7 +734,8 @@ export default function ReportTab({ onNavigate }) {
         </div>
       </div>
 
-      {/* Issues & Concerns */}
+      {/* Issues & Concerns + Medical Notes — side by side */}
+      <div className="report-2col">
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Issues & Concerns</span></div>
@@ -792,6 +793,7 @@ export default function ReportTab({ onNavigate }) {
             </div>
           )}
         </div>
+      </div>
       </div>
 
       {/* Roster */}

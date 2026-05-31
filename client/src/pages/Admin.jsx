@@ -21,7 +21,7 @@ export default function Admin() {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Top nav bar */}
       <div style={{
-        background: '#fff', borderBottom: '1px solid var(--border-light)',
+        background: '#fff', borderBottom: '2px solid var(--teal-200)',
         padding: '0 24px', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', gap: 16, flexShrink: 0,
       }}>
@@ -29,17 +29,18 @@ export default function Admin() {
           {visible.map(t => (
             <button key={t.id} onClick={() => setActive(t.id)} style={{
               background: 'none', border: 'none', cursor: 'pointer',
-              padding: '12px 18px', fontSize: '.78rem', fontWeight: 700,
+              padding: '14px 18px', fontSize: '.78rem', fontWeight: 700,
               letterSpacing: '.06em', textTransform: 'uppercase', fontFamily: 'var(--sans)',
-              color: active === t.id ? 'var(--accent)' : 'var(--text-muted)',
-              borderBottom: active === t.id ? '3px solid var(--accent)' : '3px solid transparent',
-              transition: 'color .15s', display: 'flex', alignItems: 'center', gap: 7,
+              color: active === t.id ? 'var(--teal-700)' : 'var(--text-muted)',
+              borderBottom: active === t.id ? '3px solid var(--teal-600)' : '3px solid transparent',
+              marginBottom: -2,
+              transition: 'color .15s',
             }}>
               {t.label}
             </button>
           ))}
         </div>
-        <Link to="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '.78rem', fontWeight: 600 }}>
+        <Link to="/" style={{ color: 'var(--teal-600)', textDecoration: 'none', fontSize: '.78rem', fontWeight: 600 }}>
           ← Back to Shift
         </Link>
       </div>
@@ -62,19 +63,26 @@ function apiFetch(url, opts = {}) {
 
 function SubTabs({ tabs, active, onChange }) {
   return (
-    <div style={{ display: 'flex', gap: 4, padding: '12px 0 0', borderBottom: '1px solid var(--line)', marginBottom: 20, flexWrap: 'wrap' }}>
-      {tabs.map(t => (
-        <button key={t.id} onClick={() => onChange(t.id)} style={{
-          padding: '6px 16px', borderRadius: '6px 6px 0 0', fontSize: '.8rem', fontWeight: 700,
-          border: '1.5px solid', borderBottom: active === t.id ? '1.5px solid #fff' : '1.5px solid var(--line)',
-          marginBottom: -1, cursor: 'pointer', background: active === t.id ? '#fff' : '#f1f5f9',
-          color: active === t.id ? 'var(--text)' : 'var(--steel)',
-          borderColor: active === t.id ? 'var(--line)' : 'var(--line)',
-        }}>
-          {t.label}
-          {t.danger && <span style={{ color: 'var(--crimson)', marginLeft: 4 }}>⚠</span>}
-        </button>
-      ))}
+    <div style={{ display: 'flex', gap: 6, padding: '0 0 0', borderBottom: '2px solid var(--teal-200)', marginBottom: 20, flexWrap: 'wrap' }}>
+      {tabs.map(t => {
+        const isActive = active === t.id
+        return (
+          <button key={t.id} onClick={() => onChange(t.id)} style={{
+            padding: '8px 16px', borderRadius: '6px 6px 0 0', fontSize: '.8rem', fontWeight: 700,
+            fontFamily: 'var(--sans)', cursor: 'pointer',
+            border: '1.5px solid',
+            borderColor: isActive ? 'var(--teal-200)' : 'transparent',
+            borderBottom: isActive ? '2px solid var(--raised-bg)' : '2px solid transparent',
+            marginBottom: -2,
+            background: isActive ? 'var(--raised-bg)' : 'transparent',
+            color: isActive ? 'var(--teal-700)' : 'var(--text-muted)',
+            transition: 'color .12s, background .12s',
+          }}>
+            {t.label}
+            {t.danger && <span style={{ color: 'var(--danger)', marginLeft: 4 }}>⚠</span>}
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -1289,13 +1297,21 @@ function DisplaySettings({ settings, onSave, saving }) {
   const [saved, setSaved] = useState(false)
 
   const TAB_OPTS = [
-    { key: 'staff',      label: 'Staff Directory' },
-    { key: 'chores',     label: 'Chores' },
-    { key: 'passes',     label: 'Passes' },
-    { key: 'caseloads',  label: 'Caseloads' },
-    { key: 'mail',       label: 'Mail' },
-    { key: 'ua',         label: 'UA Log' },
-    { key: 'violations',label: 'Violations / Violations' },
+    // People (Clients is core — cannot be hidden)
+    { key: 'staff',       label: 'Staff' },
+    { key: 'caseloads',   label: 'Caseloads' },
+    // Daily Ops (Report is core)
+    { key: 'chores',      label: 'Chores' },
+    { key: 'passes',      label: 'Passes' },
+    { key: 'mail',        label: 'Mail' },
+    // Health & Compliance
+    { key: 'ua',          label: 'UA' },
+    { key: 'med_log',     label: 'Med Log' },
+    { key: 'milestones',  label: 'Milestones' },
+    // Records (Archive is core)
+    { key: 'incidents',   label: 'Incidents' },
+    { key: 'violations',  label: 'Violations' },
+    { key: 'consent',     label: 'Consents' },
   ]
   const BTN_OPTS = [
     { key: 'wellness', label: 'Wellness Check button' },
@@ -1321,7 +1337,7 @@ function DisplaySettings({ settings, onSave, saving }) {
           </div>
         </div>
         <div className="section-body">
-          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 12 }}>Core tabs (Report, Archive, Clients) cannot be hidden.</p>
+          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 12 }}>Core tabs (Clients, Report, Archive) cannot be hidden.</p>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: '.84rem', marginBottom: 8 }}>Navigation Tabs</div>
             {TAB_OPTS.map(t => (

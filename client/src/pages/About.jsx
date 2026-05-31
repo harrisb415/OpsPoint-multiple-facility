@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const VERSION = '2.1.0'
+const VERSION = '2.2.0'
 
 const STACK = [
   'React 19', 'React Router v7', 'Vite', 'Tailwind CSS v4',
@@ -22,7 +22,7 @@ const FEATURES = [
 
 export default function About() {
   return (
-    <div style={{ flex: 1, overflow: 'auto', background: 'var(--bg)' }}>
+    <div style={{ height: '100vh', overflowY: 'auto', background: 'var(--bg)' }}>
       {/* Hero */}
       <div style={{
         background: 'var(--dark)', padding: '48px 28px', textAlign: 'center',
@@ -44,7 +44,7 @@ export default function About() {
           fontSize: '.75rem', fontWeight: 700, padding: '4px 12px', borderRadius: 20,
           border: '1px solid rgba(249,115,22,.35)', letterSpacing: '.06em', marginBottom: 14,
         }}>
-          v{VERSION} — React Edition
+          v{VERSION}
         </div>
         <div style={{ color: 'rgba(255,255,255,.55)', fontSize: '1rem', maxWidth: 520, margin: '0 auto' }}>
           Shift management platform for residential facilities.

@@ -543,10 +543,7 @@ export default function ReportTab({ onNavigate }) {
             <span>Shift Details</span>
           </div>
           {activeId && (
-            <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.06em', textTransform: 'uppercase',
-                           color: isClosed ? 'var(--text-muted)' : 'var(--teal-600)' }}>
-              Report #{activeId} · {isClosed ? 'Closed' : 'Open'}
-            </span>
+            <span>Report #{activeId} · {isClosed ? 'Closed' : 'Open'}</span>
           )}
         </div>
         <div className="section-body">
@@ -578,9 +575,7 @@ export default function ReportTab({ onNavigate }) {
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Census</span></div>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: 'var(--teal-700)', fontWeight: 600, letterSpacing: '.05em', textTransform: 'uppercase' }}>
-            {censusTotal} Residents
-          </span>
+          <span>{censusTotal} Residents</span>
         </div>
         <div className="section-body">
           <div className="census-grid">
@@ -638,9 +633,7 @@ export default function ReportTab({ onNavigate }) {
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Activity Log</span></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>
-              {logEntries.length} {logEntries.length === 1 ? 'entry' : 'entries'}
-            </span>
+            <span>{logEntries.length} {logEntries.length === 1 ? 'Entry' : 'Entries'}</span>
             <div style={{ display: 'flex', gap: 4, fontSize: '.7rem' }}>
               <button onClick={() => toggleLogSort('time')} title="Sort by time"
                 style={sortBtnStyle(logSortKey === 'time', logSortDir)}>
@@ -1695,9 +1688,9 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
           <input type="text" value={comment} placeholder="—" disabled={isClosed}
             onChange={e => onCommentChange(c.id, e.target.value)}
             style={{
-              width: '100%', fontFamily: 'var(--sans)', fontSize: '.84rem',
-              padding: '4px 8px', border: '1.5px solid var(--line)', borderRadius: 5,
-              background: isClosed ? '#f8fafc' : '#fff', outline: 'none', color: 'var(--text)',
+              width: '100%', fontSize: '.84rem',
+              padding: '4px 8px',
+              background: isClosed ? '#f8fafc' : '#fff', color: 'var(--text)',
             }}
           />
         )}

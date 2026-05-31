@@ -2,6 +2,39 @@
 
 ---
 
+## v2.2.0 — Jewel Teal Design System & UI Polish (2026-05-31)
+
+### Design system — Jewel Teal + Warm Gold
+- **Full palette reskin** — new jewel teal (`#0a4655` sidebar, `#106f88` links/active) and warm gold (`#c9780c` accent, `#fcc858` hero numbers) replaces the flat clinical teal
+- **Header** — teal gradient (`135deg #106f88 → #0a4655`); OpsPoint | Facility branding with logo ring; pill nav buttons (File Walkthrough, File Wellness, Email, Announce) with gold icons; gear settings dropdown
+- **Sidebar** — gradient background; user identity card pinned at top of sidebar (above nav groups, always visible); gold glowing active-item rail; UA Draw moved into Health & Compliance group
+- **Page background** — teal-tinted gradient wash (`var(--grad-page)`)
+- **Section heads** — `#eaf3f6` raised surface, teal-700 text, gold dot
+- **Census cards** — only Total tile gets teal gradient fill + gold number; other tiles plain white
+- **Report hero band** — teal gradient header band for shift report title with eyebrow, date/range meta, and action buttons; New Report gated to closed-shift state only
+- **Auth page** — teal gradient card top with gold radial glow
+
+### Layout fixes
+- **Tab full-width** — `.app-content` now uses `flex: 1; min-width: 0` to properly fill the flex-row parent; all tabs (Clients, Staff, etc.) render at full width
+- **Scrollable About page** — fixed `min-height: 100vh` on `.app-content` (grew to fit content, preventing child scroll); changed to `height: 100%`; About page outside AppShell fixed separately with `height: 100vh; overflowY: auto`
+- **Sidebar scroll** — sidebar outer container uses `overflow: hidden`; only `.sidebar-body` scrolls; user card stays locked at top
+
+### Input & focus improvements
+- **Global focus ring** — all `input`, `select`, and `textarea` elements show gold glow (`border-color: var(--gold-500)`, `box-shadow: var(--glow-gold)`) on focus; `!important` used to override inline border styles consistently
+- **Global input normalization** — bare inputs (no `.field` wrapper) now get a visible `1px solid var(--border-light)` border and `outline: none` base style
+- **EHR/Compliance textareas** — previously had no visible border; resolved by global base rule
+
+### Admin panel
+- **Display settings** — TAB_OPTS updated to match current sidebar: added Med Log, Milestones, Incidents, Consents; corrected labels (Staff not "Staff Directory", UA not "UA Log"); removed "Violations / Violations" duplicate
+- **Tab contrast** — top-level tabs now use teal-600 underline and teal-700 active text; SubTabs redesigned with teal-200 border, raised-bg fill for active, transparent inactive; fixed bug where both active and inactive had identical `borderColor: var(--line)`
+
+### Other
+- **CSS encoding** — replaced mojibake box-drawing characters (`â"€`, UTF-8 re-encoded from CP1252) with plain ASCII hyphens; file re-saved as UTF-8 without BOM
+- **Section head meta consistency** — removed inline color overrides from Report/Census/Log count spans; all fall through to unified `color: var(--text-muted)` CSS rule
+- **Version label** — removed "React Edition" label from About page
+
+---
+
 ## v2.1.0 — HIPAA Clinical Modules & Clinical Teal (2026-05-28)
 
 ### HIPAA clinical modules

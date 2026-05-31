@@ -490,6 +490,16 @@ function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen }
 
   return (
     <aside className="sidebar">
+      <div className="sidebar-user-card">
+        <div className="sidebar-avatar">{initials}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="sidebar-user-name">
+            {session?.displayName || session?.username}
+          </div>
+          <div className="sidebar-user-role">{session?.role || 'Staff'}</div>
+        </div>
+      </div>
+
       <div className="sidebar-body">
         {SIDEBAR_GROUPS.map(group => {
           const visItems = group.items.filter(item => {
@@ -512,34 +522,15 @@ function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen }
                   {label}
                 </button>
               ))}
+              {group.label === 'HEALTH & COMPLIANCE' && hasPerm('ua.draw') && (
+                <button className="sidebar-item" onClick={onDrawOpen}>
+                  <Dice5 size={16} className="sidebar-icon" />
+                  UA Draw
+                </button>
+              )}
             </div>
           )
         })}
-
-        {hasPerm('ua.draw') && (
-          <div>
-            <div className="sidebar-group-label">ACTIONS</div>
-            <button
-              className="sidebar-item"
-              onClick={onDrawOpen}
-            >
-              <Dice5 size={16} className="sidebar-icon" />
-              UA Draw
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="sidebar-footer">
-        <div className="sidebar-user">
-          <div className="sidebar-avatar">{initials}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {session?.displayName || session?.username}
-            </div>
-            <div className="sidebar-user-role">{session?.role || 'Staff'}</div>
-          </div>
-        </div>
       </div>
     </aside>
   )

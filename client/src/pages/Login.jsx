@@ -71,8 +71,7 @@ export default function Login() {
         </div>
       </div>
       <div className="auth-footer">
-        &copy; 2026 OpsPoint v2.1.0 &nbsp;&bull;&nbsp; All rights reserved
-        &nbsp;&bull;&nbsp; <Link to="/about">About</Link>
+        &copy; 2026 OpsPoint &nbsp;&bull;&nbsp; All rights reserved
       </div>
     </div>
   )

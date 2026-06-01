@@ -71,9 +71,9 @@ body {
 /* - Top nav ----------------------------------------------------- */
 .site-header {
   position: fixed; top: 0; left: 0; right: 0; height: 56px;
-  background: var(--grad-teal); border-bottom: 1px solid var(--teal-900);
+  background: var(--grad-teal); border-bottom: 2px solid var(--gold-600);
   z-index: 30; display: flex; align-items: center; padding: 0 20px; gap: 12px;
-  flex-shrink: 0; box-shadow: var(--shadow-card);
+  flex-shrink: 0; box-shadow: 0 3px 14px rgba(0,0,0,0.28);
 }
 .header-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .header-brand-logo {

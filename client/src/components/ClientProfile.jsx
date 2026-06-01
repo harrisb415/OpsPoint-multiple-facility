@@ -555,7 +555,7 @@ function ConsentsTab({ client }) {
 
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/consent-records?client_id=${client.id}`, { credentials: 'include' })
+    fetch(`/api/consent-records/${client.id}`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(d => { setRecords(Array.isArray(d) ? d : []); setLoading(false) })
       .catch(() => { setRecords([]); setLoading(false) })
@@ -572,29 +572,35 @@ function ConsentsTab({ client }) {
 
   return (
     <div>
-      {records.map(c => (
-        <div key={c.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-            <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
-              {c.consent_type}
+      {records.map(c => {
+        const active = !c.revoked
+        return (
+          <div key={c.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
+                {c.recipient_name || '—'}
+              </div>
+              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
+                background: active ? '#dcfce7' : '#fee2e2',
+                color:      active ? '#15803d' : '#991b1b' }}>
+                {active ? 'Active' : 'Revoked'}
+              </span>
             </div>
-            <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
-              background: c.status === 'active' ? '#dcfce7' : '#fee2e2',
-              color:      c.status === 'active' ? '#15803d' : '#991b1b' }}>
-              {c.status}
-            </span>
-          </div>
-          <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
-            Signed {fmtDate(c.signed_at)} · by {c.signed_by_name}
-            {c.expires_at ? ` · expires ${fmtDate(c.expires_at)}` : ''}
-          </div>
-          {c.information_types && (
-            <div style={{ fontSize: '.74rem', color: '#475569', marginTop: 3 }}>
-              {Array.isArray(c.information_types) ? c.information_types.join(', ') : c.information_types}
+            <div style={{ fontSize: '.74rem', color: '#475569', marginTop: 2 }}>
+              {c.purpose}
             </div>
-          )}
-        </div>
-      ))}
+            <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+              Effective {fmtDate(c.effective_date)} · by {c.created_by_name}
+              {c.expiration_date ? ` · expires ${fmtDate(c.expiration_date)}` : ''}
+            </div>
+            {c.information_type && (
+              <div style={{ fontSize: '.74rem', color: '#475569', marginTop: 3 }}>
+                {c.information_type}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

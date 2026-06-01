@@ -183,6 +183,7 @@ export function DataProvider({ children }) {
           const hasNew   = requests.some(r => !seenUAIds.current.has(r.id))
           seenUAIds.current = new Set(requests.map(r => r.id))
           setNotif(prev => ({ ...prev, uaRequests: requests }))
+          setData(prev => prev ? { ...prev, ua_requests: requests } : prev)
           // Only the people who can act on UA requests should hear the sound
           if (hasNew && _hasSessionPerm('ua.acknowledge')) playSound('ua')
           break

@@ -49,7 +49,6 @@ export default function Mobile() {
 
   const [activeTab, setActiveTab]       = useState('wellness') // wellness | walk | log | census
   const [clients, setClients]           = useState([])
-  const [reports, setReports]           = useState([])
   const [currentRpt, setCurrentRpt]     = useState(null) // local mirror of the active report
   const [facilityName, setFacilityName] = useState('OpsPoint')
   const [areas, setAreas]               = useState(DEFAULT_AREAS)
@@ -103,7 +102,7 @@ export default function Mobile() {
         if (cfg.facility_name) setFacilityName(cfg.facility_name)
         if (Array.isArray(cfg.walk_areas) && cfg.walk_areas.length) setAreas(cfg.walk_areas)
       }
-    } catch {}
+    } catch { /* empty */ }
 
     // Data
     try {
@@ -114,7 +113,6 @@ export default function Mobile() {
       const cls = data.clients || []
       const rps = data.reports || []
       setClients(cls)
-      setReports(rps)
       if (data.active_report_id !== undefined) activeIdRef.current = data.active_report_id
 
       const cCount = cls.filter(c => c.is_active && !c.is_special).length
@@ -182,7 +180,7 @@ export default function Mobile() {
               return updated
             })
           }
-        } catch {}
+        } catch { /* empty */ }
       }
     }
 
@@ -190,7 +188,7 @@ export default function Mobile() {
     return () => {
       clearTimeout(reconnectRef.current)
       wsRef.current = null
-      try { ws?.close() } catch {}
+      try { ws?.close() } catch { /* empty */ }
     }
   }, [session, loadAll, showToast])
 
@@ -341,7 +339,7 @@ export default function Mobile() {
     const cnt = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
     activeClients.forEach(c => {
       const st = statuses[c.id] || 'building'
-      if (cnt.hasOwnProperty(st)) cnt[st]++
+      if (Object.hasOwn(cnt, st)) cnt[st]++
     })
     const tot = Object.values(cnt).reduce((a, b) => a + b, 0)
     return { cnt, tot }

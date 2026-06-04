@@ -25,9 +25,24 @@
  *   🚨 Incident (incidents.log)  → navigates dashboard to incidents tab
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
+import { openPrintWindow, classifyLogEntry } from '../utils/printLog.js'
+
+const LOG_TYPE_STYLE = {
+  Wellness:      { bg: '#ccfbf1', color: '#0f766e' },
+  Walkthrough:   { bg: '#ccfbf1', color: '#0f766e' },
+  UA:            { bg: '#fef3c7', color: '#92400e' },
+  Lunch:         { bg: '#f0fdf9', color: '#6b7280' },
+  'Room Search': { bg: '#ede9fe', color: '#6d28d9' },
+  Mail:          { bg: '#dbeafe', color: '#1d4ed8' },
+  Infraction:    { bg: '#fee2e2', color: '#991b1b' },
+  Intake:        { bg: '#dcfce7', color: '#15803d' },
+  Discharge:     { bg: '#f0fdf9', color: '#6b7280' },
+  Group:         { bg: '#ede9fe', color: '#6d28d9' },
+  Note:          { bg: '#f1f5f9', color: '#475569' },
+}
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
@@ -200,7 +215,6 @@ function TimelineTab({ client, data }) {
     for (const report of (data?.reports || [])) {
       for (const entry of (report.log_entries || [])) {
         const t = (entry.text || '').toLowerCase()
-        // Match by name, "Rm. 101", "Rm.101", or "room 101" patterns
         if (
           t.includes(name) ||
           t.includes(`rm. ${rm}`) ||
@@ -226,15 +240,43 @@ function TimelineTab({ client, data }) {
 
   return (
     <div>
-      {entries.map((e, i) => (
-        <div key={e.id || i} style={{ display: 'flex', gap: 12, padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-          <div style={{ flexShrink: 0, width: 60, textAlign: 'right' }}>
-            <div style={{ fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--sidebar-bg)', fontWeight: 700 }}>{e.time}</div>
-            <div style={{ fontSize: '.62rem', color: '#94a3b8', marginTop: 1 }}>{fmtDate(e.report_date)}</div>
+      {entries.map((e, i) => {
+        const type  = classifyLogEntry(e.text)
+        const ts    = LOG_TYPE_STYLE[type] || LOG_TYPE_STYLE.Note
+        const isPos = e.text && /POS:/.test(e.text)
+        return (
+          <div key={e.id || i} style={{
+            display: 'flex', gap: 12, padding: '10px 16px',
+            borderBottom: '1px solid #f1f5f9',
+            background: isPos ? '#fff5f5' : undefined,
+            borderLeft: isPos ? '3px solid #DC2626' : undefined,
+          }}>
+            <div style={{ flexShrink: 0, width: 56, textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--sidebar-bg)', fontWeight: 700 }}>{e.time}</div>
+              <div style={{ fontSize: '.6rem', color: '#94a3b8', marginTop: 1 }}>{fmtDate(e.report_date)}</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{
+                display: 'inline-block', marginBottom: 4,
+                fontSize: '.62rem', fontWeight: 700, padding: '1px 7px', borderRadius: 8,
+                background: ts.bg, color: ts.color,
+              }}>
+                {type}
+              </span>
+              <div style={{ fontSize: '.81rem', color: '#0f172a', lineHeight: 1.45 }}>
+                {isPos
+                  ? e.text.split(/(POS:[^|<]+)/).map((part, pi) =>
+                      /^POS:/.test(part)
+                        ? <strong key={pi} style={{ color: '#DC2626' }}>{part}</strong>
+                        : part
+                    )
+                  : e.text
+                }
+              </div>
+            </div>
           </div>
-          <div style={{ flex: 1, fontSize: '.81rem', color: '#0f172a', lineHeight: 1.45 }}>{e.text}</div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -549,6 +591,139 @@ function IncidentsTab({ client, data }) {
   )
 }
 
+function DischargeTab({ client, data }) {
+  const REASON_LABEL = {
+    graduate:       'Graduate / Successful Completion',
+    ama:            'AMA (Against Medical Advice)',
+    therapeutic:    'Therapeutic Discharge',
+    administrative: 'Administrative Discharge',
+  }
+
+  function parseReferrals(raw) {
+    if (Array.isArray(raw)) return raw
+    try { return JSON.parse(raw || '[]') } catch { return [] }
+  }
+
+  const records = (data?.discharge_records || [])
+    .filter(r => r.client_id === client.id)
+    .sort((a, b) => (b.discharge_date || '').localeCompare(a.discharge_date || ''))
+
+  if (records.length === 0) return (
+    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
+      No discharge records for this resident.
+    </div>
+  )
+
+  function printDischarge() {
+    const facilityName = data?.settings?.facility_name || 'OpsPoint'
+    const rows = records.map(r => {
+      const refs = parseReferrals(r.referrals_made)
+      return {
+        date:      fmtDate(r.discharge_date),
+        reason:    REASON_LABEL[r.reason] || r.reason || '—',
+        days:      r.days_in_program != null ? String(r.days_in_program) : '—',
+        filed_by:  r.created_by_name || '—',
+        narrative: r.narrative || '—',
+        aftercare: r.aftercare_plan || '—',
+        referrals: refs.length
+          ? refs.map(rf => [rf.agency, rf.type, rf.date ? fmtDate(rf.date) : ''].filter(Boolean).join(' · ')).join(' | ')
+          : '—',
+      }
+    })
+    openPrintWindow({
+      title: `Discharge Summary — ${client.name}`,
+      facility: facilityName,
+      subtitle: `Rm. ${client.room}${client.intake_date ? ' · Admitted ' + fmtDate(client.intake_date) : ''}`,
+      columns: [
+        { key: 'date',      label: 'Date',          width: '90px' },
+        { key: 'reason',    label: 'Reason',         width: '155px' },
+        { key: 'days',      label: 'Days',           width: '46px', align: 'center' },
+        { key: 'filed_by',  label: 'Filed By',       width: '95px' },
+        { key: 'narrative', label: 'Narrative' },
+        { key: 'aftercare', label: 'Aftercare Plan' },
+        { key: 'referrals', label: 'Referrals',      width: '130px' },
+      ],
+      rows,
+      emptyMessage: 'No discharge records.',
+    })
+  }
+
+  return (
+    <div>
+      {/* Print toolbar */}
+      <div style={{ padding: '8px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end' }}>
+        <button className="btn btn-sm" onClick={printDischarge}>🖨 Print</button>
+      </div>
+
+      {records.map((r, i) => {
+        const referrals = parseReferrals(r.referrals_made)
+        return (
+          <div key={r.id || i} style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
+            {/* Header row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '.9rem', color: '#0f172a' }}>
+                  {REASON_LABEL[r.reason] || r.reason || 'Discharge'}
+                </div>
+                <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 2 }}>
+                  Discharged {fmtDate(r.discharge_date)}
+                  {r.days_in_program != null ? ` · ${r.days_in_program} days in program` : ''}
+                  {r.created_by_name ? ` · by ${r.created_by_name}` : ''}
+                </div>
+              </div>
+              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
+                background: '#fee2e2', color: '#991b1b' }}>
+                Discharged
+              </span>
+            </div>
+
+            {/* Narrative */}
+            {r.narrative && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: '.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
+                  Narrative
+                </div>
+                <div style={{ fontSize: '.82rem', color: '#334155', lineHeight: 1.5, background: '#f8fafc', borderRadius: 6, padding: '8px 10px', border: '1px solid #e2e8f0' }}>
+                  {r.narrative}
+                </div>
+              </div>
+            )}
+
+            {/* Aftercare plan */}
+            {r.aftercare_plan && (
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: '.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
+                  Aftercare Plan
+                </div>
+                <div style={{ fontSize: '.82rem', color: '#334155', lineHeight: 1.5, background: '#f0fdf4', borderRadius: 6, padding: '8px 10px', border: '1px solid #bbf7d0' }}>
+                  {r.aftercare_plan}
+                </div>
+              </div>
+            )}
+
+            {/* Referrals */}
+            {referrals.length > 0 && (
+              <div>
+                <div style={{ fontSize: '.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+                  Referrals Made
+                </div>
+                {referrals.map((ref, j) => (
+                  <div key={j} style={{ fontSize: '.78rem', color: '#334155', padding: '5px 0', borderBottom: j < referrals.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                    <span style={{ fontWeight: 600 }}>{ref.agency || '—'}</span>
+                    {ref.contact ? <span style={{ color: '#64748b' }}> · {ref.contact}</span> : null}
+                    {ref.type   ? <span style={{ color: '#64748b' }}> · {ref.type}</span> : null}
+                    {ref.date   ? <span style={{ color: '#94a3b8' }}> · {fmtDate(ref.date)}</span> : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function ConsentsTab({ client }) {
   const [records, setRecords] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -679,6 +854,156 @@ function QuickMailForm({ client, onDone, onCancel }) {
   )
 }
 
+// ── Violations profile tab ────────────────────────────────────────────────
+
+function ViolationsProfileTab({ client }) {
+  const [records, setRecords] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/violations', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(all => {
+        const mine = (Array.isArray(all) ? all : [])
+          .filter(v => v.client_id === client.id)
+          .sort((a, b) => (b.violation_date || '').localeCompare(a.violation_date || ''))
+        setRecords(mine)
+        setLoading(false)
+      })
+      .catch(() => { setRecords([]); setLoading(false) })
+  }, [client.id])
+
+  const STATUS_STYLE = {
+    pending:   { background: '#fef3c7', color: '#92400e',  label: 'Pending'   },
+    assigned:  { background: '#dbeafe', color: '#1e40af',  label: 'Assigned'  },
+    completed: { background: '#dcfce7', color: '#15803d',  label: 'Completed' },
+    waived:    { background: '#f1f5f9', color: '#475569',  label: 'Waived'    },
+  }
+
+  if (loading) return (
+    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontSize: '.84rem' }}>Loading…</div>
+  )
+  if (!records?.length) return (
+    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
+      No infraction records for this resident.
+    </div>
+  )
+
+  return (
+    <div>
+      {records.map((v, i) => {
+        const s = STATUS_STYLE[v.status] || { background: '#f1f5f9', color: '#475569', label: v.status }
+        return (
+          <div key={v.id || i} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a', lineHeight: 1.4 }}>
+                  {v.description || 'Infraction'}
+                </div>
+                <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+                  {fmtDate(v.violation_date)}{v.logged_by ? ` · logged by ${v.logged_by}` : ''}
+                </div>
+                {v.notes && (
+                  <div style={{ fontSize: '.76rem', color: '#475569', marginTop: 3 }}>{v.notes}</div>
+                )}
+                {(v.status === 'assigned' || v.status === 'completed') && v.consequence && (
+                  <div style={{ fontSize: '.76rem', color: '#1e40af', marginTop: 3 }}>
+                    Consequence: {v.consequence}
+                    {v.consequence_by ? <span style={{ color: '#94a3b8' }}> · by {v.consequence_by}</span> : null}
+                  </div>
+                )}
+                {v.status === 'waived' && (
+                  <div style={{ fontSize: '.76rem', color: '#64748b', marginTop: 3 }}>Waived — no consequence</div>
+                )}
+              </div>
+              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8, ...s }}>
+                {s.label}
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Groups profile tab ────────────────────────────────────────────────────
+
+function GroupsProfileTab({ client }) {
+  const [sessions, setSessions] = useState(null)
+  const [loading,  setLoading]  = useState(true)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/group-sessions?from=2000-01-01&to=2099-12-31', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : [])
+      .then(all => {
+        const mine = all
+          .filter(s => (s.attendance || []).some(a => a.client_id === client.id))
+          .map(s => ({
+            ...s,
+            myAtt: (s.attendance || []).find(a => a.client_id === client.id),
+          }))
+          .sort((a, b) => b.session_date.localeCompare(a.session_date))
+        setSessions(mine)
+        setLoading(false)
+      })
+      .catch(() => { setSessions([]); setLoading(false) })
+  }, [client.id])
+
+  if (loading) return (
+    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontSize: '.84rem' }}>Loading…</div>
+  )
+  if (!sessions?.length) return (
+    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
+      No group session records for this resident.
+    </div>
+  )
+
+  return (
+    <div>
+      {sessions.map(s => {
+        const present = (s.attendance || []).filter(a => a.present).length
+        const total   = (s.attendance || []).length
+        return (
+          <div key={s.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
+                  {s.group_name}
+                  {s.time_of_day && (
+                    <span style={{ fontSize: '.63rem', fontWeight: 800, background: '#dbeafe', color: '#1e40af', padding: '1px 6px', borderRadius: 8 }}>
+                      {s.time_of_day}
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+                  {fmtDate(s.session_date)}{s.facilitator ? ` · ${s.facilitator}` : ''}
+                </div>
+                {total > 0 && (
+                  <div style={{ fontSize: '.71rem', color: '#64748b', marginTop: 1 }}>
+                    Group: {present}/{total} attended
+                  </div>
+                )}
+              </div>
+              {s.myAtt && (
+                <span style={{
+                  flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
+                  background: s.myAtt.present ? '#dcfce7' : '#f1f5f9',
+                  color:      s.myAtt.present ? '#15803d' : '#94a3b8',
+                }}>
+                  {s.myAtt.present ? 'Present' : 'Absent'}
+                </span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── NavButton helper ─────────────────────────────────────────────────────
 
 function NavBtn({ onClick, disabled, children }) {
@@ -697,33 +1022,17 @@ function NavBtn({ onClick, disabled, children }) {
   )
 }
 
-function QuickActionBtn({ onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.22)',
-        color: '#fff', padding: '4px 10px', borderRadius: 5,
-        fontSize: '.71rem', cursor: 'pointer', whiteSpace: 'nowrap',
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
 // ── Main drawer component ─────────────────────────────────────────────────
 
 export default function ClientProfile({ onNavigateTab }) {
   const { profileClientId, openProfile, closeProfile, data } = useData()
   const { hasPerm } = usePermission()
 
-  const [activeTab,    setActiveTab]    = useState('overview')
-  const [showMailForm, setShowMailForm] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
 
   // Reset when profile changes
   useEffect(() => {
-    if (profileClientId) { setActiveTab('overview'); setShowMailForm(false) }
+    if (profileClientId) { setActiveTab('overview') }
   }, [profileClientId])
 
   const clients = data?.clients || []
@@ -756,9 +1065,15 @@ export default function ClientProfile({ onNavigateTab }) {
     if (hasPerm('milestones.edit') || hasPerm('milestones.signoff'))
       t.push({ id: 'milestones', label: '🏁 Milestones' })
     if (hasPerm('incidents.log') || hasPerm('incidents.review'))
-      t.push({ id: 'incidents', label: '🚨 Incidents' })
+      t.push({ id: 'incidents', label: '🚨 Incident Reports' })
+    if (hasPerm('violations.log') || hasPerm('violations.review'))
+      t.push({ id: 'violations', label: '⚠ Infractions' })
     if (hasPerm('consent.manage') || hasPerm('disclosures.view'))
       t.push({ id: 'consents', label: '📋 Consents' })
+    if (hasPerm('groups.view'))
+      t.push({ id: 'groups', label: '👥 Groups' })
+    if (!client.is_active)
+      t.push({ id: 'discharge', label: '📤 Discharge' })
     return t
   }, [client, hasPerm])
 
@@ -766,12 +1081,6 @@ export default function ClientProfile({ onNavigateTab }) {
 
   const riskLevel = computeRisk(client.id, data)
   const days      = daysSince(client.intake_date)
-
-  // Quick-action: navigate dashboard tab + close drawer
-  function goDashTab(tabId) {
-    closeProfile()
-    if (onNavigateTab) onNavigateTab(tabId)
-  }
 
   return (
     <>
@@ -843,26 +1152,6 @@ export default function ClientProfile({ onNavigateTab }) {
             <RiskChip level={riskLevel} />
           </div>
 
-          {/* Quick-action buttons */}
-          <div style={{ display: 'flex', gap: 5, marginTop: 10, flexWrap: 'wrap' }}>
-            {hasPerm('passes.edit') && (
-              <QuickActionBtn onClick={() => setActiveTab('passes')}>🚪 Passes</QuickActionBtn>
-            )}
-            {hasPerm('mail.log') && (
-              <QuickActionBtn onClick={() => { setActiveTab('mail'); setShowMailForm(v => !v) }}>
-                ✉ Mail
-              </QuickActionBtn>
-            )}
-            {hasPerm('ua.request') && (
-              <QuickActionBtn onClick={() => setActiveTab('ua')}>🧪 UA</QuickActionBtn>
-            )}
-            {hasPerm('violations.log') && (
-              <QuickActionBtn onClick={() => goDashTab('violations')}>⚠ Violation</QuickActionBtn>
-            )}
-            {hasPerm('incidents.log') && (
-              <QuickActionBtn onClick={() => goDashTab('incidents')}>🚨 Incident</QuickActionBtn>
-            )}
-          </div>
         </div>
 
         {/* ── Tab bar ── */}
@@ -891,24 +1180,18 @@ export default function ClientProfile({ onNavigateTab }) {
         {/* ── Tab body (scrollable) ── */}
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
 
-          {/* Inline mail form — shown when mail tab active + form toggled */}
-          {activeTab === 'mail' && showMailForm && hasPerm('mail.log') && (
-            <QuickMailForm
-              client={client}
-              onDone={() => setShowMailForm(false)}
-              onCancel={() => setShowMailForm(false)}
-            />
-          )}
-
-          {activeTab === 'overview'    && <OverviewTab    client={client} data={data} />}
-          {activeTab === 'timeline'    && <TimelineTab    client={client} data={data} />}
-          {activeTab === 'passes'      && <PassesTab      client={client} data={data} />}
-          {activeTab === 'mail'        && <MailSubTab     client={client} data={data} />}
-          {activeTab === 'ua'          && <UATab          client={client} data={data} hasPerm={hasPerm} />}
-          {activeTab === 'meds'        && <MedsTab        client={client} data={data} />}
-          {activeTab === 'milestones'  && <MilestonesTab  client={client} data={data} />}
-          {activeTab === 'incidents'   && <IncidentsTab   client={client} data={data} />}
-          {activeTab === 'consents'    && <ConsentsTab    client={client} />}
+          {activeTab === 'overview'    && <OverviewTab       client={client} data={data} />}
+          {activeTab === 'timeline'    && <TimelineTab       client={client} data={data} />}
+          {activeTab === 'passes'      && <PassesTab         client={client} data={data} />}
+          {activeTab === 'mail'        && <MailSubTab        client={client} data={data} />}
+          {activeTab === 'ua'          && <UATab             client={client} data={data} hasPerm={hasPerm} />}
+          {activeTab === 'meds'        && <MedsTab           client={client} data={data} />}
+          {activeTab === 'milestones'  && <MilestonesTab     client={client} data={data} />}
+          {activeTab === 'incidents'   && <IncidentsTab         client={client} data={data} />}
+          {activeTab === 'violations'  && <ViolationsProfileTab client={client} />}
+          {activeTab === 'consents'    && <ConsentsTab          client={client} />}
+          {activeTab === 'groups'      && <GroupsProfileTab  client={client} />}
+          {activeTab === 'discharge'   && <DischargeTab      client={client} data={data} />}
         </div>
       </div>
 

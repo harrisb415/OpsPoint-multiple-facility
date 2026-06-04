@@ -1,5 +1,5 @@
 ﻿/**
- * OpsPoint — Server v2.0.0
+ * OpsPoint — Server v2.3.2
  * SQLite + HTTPS + Session Auth + Role-based access
  */
 'use strict';
@@ -18,8 +18,20 @@ const app  = express();
 app.disable('x-powered-by');
 const PORT = 3000;
 const BASE = __dirname;
+
+// ── Local timestamp helper ────────────────────────────────────────────────
+// Returns "YYYY-MM-DD HH:MM:SS" in the SERVER's local timezone.
+// Use this everywhere a human-readable timestamp is stored/displayed.
+// Do NOT use new Date().toISOString() for display timestamps — that returns
+// UTC and browsers will parse the stored string as local, causing a time offset.
+function nowLocal() {
+  const d = new Date(), p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
 const DATA = path.join(BASE, 'data');
-const DB_PATH      = path.join(DATA, 'opspoint.db');
+// OPSPOINT_DB env override lets tests point at an isolated database without
+// touching the production data/opspoint.db. Defaults to the real DB.
+const DB_PATH      = process.env.OPSPOINT_DB || path.join(DATA, 'opspoint.db');
 const LEGACY_DB_PATH = path.join(DATA, 'shift.db');
 
 // One-time rename: data/shift.db → data/opspoint.db (from the ShiftPoint era)
@@ -1008,6 +1020,18 @@ app.post('/api/clients', requireAuth, csrfCheck, requirePermission('residents.ed
     const newId=db.query1('SELECT last_insert_rowid() AS id');
     resultId=newId?newId.id:null;
   }
+  // Add intake log entry to active shift report
+  const _intakeActiveId = db.getSetting('active_report_id', null);
+  if (_intakeActiveId) {
+    const _n=new Date(),_h=_n.getHours(),_m=String(_n.getMinutes()).padStart(2,'0');
+    const _ap=_h>=12?'PM':'AM',_h12=_h%12||12;
+    const _ts=`${_h12}:${_m} ${_ap}`;
+    let _intakeStr='';
+    if(intake_date){try{const _d=new Date(intake_date+'T12:00:00');_intakeStr=' Intake: '+_d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'.';}catch(e){}}
+    db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
+      [_intakeActiveId,_ts,`Resident admitted: ${String(name).trim()}, Rm. ${String(room)}.${_intakeStr}`]);
+    db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),_intakeActiveId]);
+  }
   db.save();
   const newClient=resultId?db.query1('SELECT * FROM clients WHERE id=?',[resultId]):null;
   audit(req,'client.add','client',resultId,String(name).trim()+' Rm.'+String(room));
@@ -1298,7 +1322,7 @@ app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staf
 app.get('/api/master-chores', requireAuth,(req,res)=>{
   res.json(db.getSetting('master_chores',[]));
 });
-app.put('/api/master-chores', requireAuth, csrfCheck, requirePermission('chores.edit'),(req,res)=>{
+app.put('/api/master-chores', requireAuth, csrfCheck, requirePermission('chores.assign'),(req,res)=>{
   const{chores}=req.body;
   if(!Array.isArray(chores)) return res.status(400).json({error:'chores must be array'});
   db.setSetting('master_chores',chores.filter(c=>c&&c.trim()));
@@ -1307,12 +1331,13 @@ app.put('/api/master-chores', requireAuth, csrfCheck, requirePermission('chores.
   res.json({ok:true});
 });
 // Update a single client's chore assignment (supervisor only)
-app.patch('/api/clients/:id/chore', requireAuth, csrfCheck, requirePermission('chores.edit'),(req,res)=>{
+app.patch('/api/clients/:id/chore', requireAuth, csrfCheck, requirePermission('chores.assign'),(req,res)=>{
   const id=parseInt(req.params.id);
   if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{chore,chore_time}=req.body;
+  const{chore,chore_time,chore_days}=req.body;
   if(chore!==undefined)      db.run('UPDATE clients SET chore=? WHERE id=?',[chore||'',id]);
   if(chore_time!==undefined) db.run('UPDATE clients SET chore_time=? WHERE id=?',[chore_time||'',id]);
+  if(chore_days!==undefined) db.run('UPDATE clients SET chore_days=? WHERE id=?',[chore_days!=null?JSON.stringify(chore_days):null,id]);
   db.save();
   const _cc=db.query1('SELECT name,room FROM clients WHERE id=?',[id]);
   audit(req,'chore.assign','client',id,_cc?(_cc.name+' Rm.'+_cc.room):String(id),{chore:chore||'',chore_time:chore_time||''});
@@ -1328,7 +1353,7 @@ app.get('/api/chore-log', requireAuth,(req,res)=>{
   res.json(db.query('SELECT * FROM chore_log WHERE log_date=?',[date]));
 });
 // Upsert a chore log entry (any authenticated user can initial)
-app.put('/api/chore-log', requireAuth, csrfCheck, requirePermission('chores.edit'),(req,res)=>{
+app.put('/api/chore-log', requireAuth, csrfCheck, requirePermission('chores.log'),(req,res)=>{
   const{client_id,log_date,initials}=req.body;
   if(!client_id||!log_date) return res.status(400).json({error:'client_id and log_date required'});
   db.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials) VALUES (?,?,?)',
@@ -1336,6 +1361,76 @@ app.put('/api/chore-log', requireAuth, csrfCheck, requirePermission('chores.edit
   db.save();
   audit(req,'chore.initial','client',client_id,String(client_id),{log_date,initials:initials||''});
   broadcast({type:'chore_log_updated',user:req.session.displayName,client_id,log_date,initials});
+  res.json({ok:true});
+});
+
+// ── Group Sessions ────────────────────────────────────────────────
+app.get('/api/master-groups', requireAuth,(req,res)=>{
+  res.json(db.getSetting('master_groups',[]));
+});
+app.put('/api/master-groups', requireAuth, csrfCheck, requirePermission('groups.log'),(req,res)=>{
+  const{groups}=req.body;
+  if(!Array.isArray(groups)) return res.status(400).json({error:'groups must be array'});
+  db.setSetting('master_groups',groups.filter(g=>g&&g.trim()));
+  db.save();
+  audit(req,'groups.master_edit','settings',null,'Master Groups',{count:groups.length});
+  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
+  res.json({ok:true});
+});
+app.get('/api/group-sessions', requireAuth, requirePermission('groups.view'),(req,res)=>{
+  const{date,from,to}=req.query;
+  const sessions=db.getGroupSessions({date,from,to});
+  sessions.forEach(s=>{s.attendance=db.getGroupAttendance(s.id);});
+  auditRead(req,'group_sessions',null,`Group sessions (${sessions.length})`);
+  res.json(sessions);
+});
+app.post('/api/group-sessions', requireAuth, csrfCheck, requirePermission('groups.log'),(req,res)=>{
+  const b=req.body||{};
+  if(!b.group_name) return res.status(400).json({error:'group_name required'});
+  if(!b.session_date) return res.status(400).json({error:'session_date required'});
+  const me=req.session;
+  const sess=db.createGroupSession({
+    session_date:  b.session_date,
+    group_name:    b.group_name,
+    time_of_day:   b.time_of_day||'',
+    facilitator:   b.facilitator||'',
+    notes:         b.notes||'',
+    created_by_id:   me.userId,
+    created_by_name: me.displayName||me.username||'',
+  });
+  // Save attendance if provided
+  if(Array.isArray(b.attendance)&&b.attendance.length>0){
+    db.saveGroupAttendance(sess.id,b.attendance);
+  }
+  // Log to active shift report
+  const _activeId=db.getSetting('active_report_id',null);
+  if(_activeId){
+    const _n=new Date(),_h=_n.getHours(),_m=String(_n.getMinutes()).padStart(2,'0');
+    const _ap=_h>=12?'PM':'AM',_h12=_h%12||12;
+    const _ts=`${_h12}:${_m} ${_ap}`;
+    const _att=Array.isArray(b.attendance)?b.attendance:[];
+    const _present=_att.filter(a=>a.present).length;
+    const _total=_att.length;
+    const _timePart=b.time_of_day?` (${b.time_of_day})`:'';
+    const _facPart=b.facilitator?`. Facilitator: ${b.facilitator}.`:'';
+    const _cntPart=_total>0?` — ${_present}/${_total} attended`:'';
+    db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
+      [_activeId,_ts,`Group: ${b.group_name}${_timePart}${_cntPart}${_facPart}`]);
+    db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),_activeId]);
+  }
+  db.save();
+  audit(req,'groups.session_create','group_sessions',sess.id,b.group_name,{date:b.session_date});
+  broadcast({type:'data_saved',user:me.displayName||me.username});
+  res.json({ok:true,session:sess});
+});
+app.delete('/api/group-sessions/:id', requireAuth, csrfCheck, requirePermission('groups.log'),(req,res)=>{
+  const id=parseInt(req.params.id);
+  const s=db.query1('SELECT id,group_name FROM group_sessions WHERE id=?',[id]);
+  if(!s) return res.status(404).json({error:'Not found'});
+  db.deleteGroupSession(id);
+  db.save();
+  audit(req,'groups.session_delete','group_sessions',id,s.group_name);
+  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
   res.json({ok:true});
 });
 
@@ -1425,8 +1520,8 @@ app.post('/api/ua-requests', requireAuth, csrfCheck, requirePermission('ua.reque
   if (isIntv && !intvName) return res.status(400).json({error:'interview_name required'});
   const by = req.session.displayName||req.session.username;
   db.run(
-    `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name) VALUES (?,?,?,?,?,?)`,
-    [client_id||0, client_name||'', room||'', by, isIntv, intvName]
+    `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name,requested_at) VALUES (?,?,?,?,?,?,?)`,
+    [client_id||0, client_name||'', room||'', by, isIntv, intvName, nowLocal()]
   );
   db.save();
   audit(req,'ua.request','client',client_id||null,isIntv?intvName:(client_name||String(client_id)),{room:room||'',interview:isIntv});
@@ -1453,8 +1548,8 @@ app.post('/api/ua-requests/:id/acknowledge', requireAuth, csrfCheck, requireAnyP
   const id = parseInt(req.params.id,10);
   const _uar=db.query1('SELECT client_name,room FROM ua_requests WHERE id=?',[id]);
   db.run(
-    `UPDATE ua_requests SET acknowledged=1, acknowledged_by=?, acknowledged_at=datetime('now') WHERE id=?`,
-    [req.session.displayName||req.session.username, id]
+    `UPDATE ua_requests SET acknowledged=1, acknowledged_by=?, acknowledged_at=? WHERE id=?`,
+    [req.session.displayName||req.session.username, nowLocal(), id]
   );
   db.save();
   audit(req,'ua.acknowledge','ua_request',id,_uar?(_uar.client_name+(_uar.room?' Rm.'+_uar.room:'')):String(id));
@@ -1484,8 +1579,8 @@ app.post('/api/ua-draws', requireAuth, csrfCheck, requirePermission('ua.draw'), 
   const draw = db.createUADraw(byId, by, residents);
   residents.forEach(c=>{
     db.run(
-      `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name) VALUES (?,?,?,?,0,'')`,
-      [c.id||0, c.name||'', c.room||'', by]
+      `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name,requested_at) VALUES (?,?,?,?,0,'',?)`,
+      [c.id||0, c.name||'', c.room||'', by, nowLocal()]
     );
   });
   db.save();
@@ -1527,7 +1622,7 @@ app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (re
   if(!list.length) return res.status(400).json({error:'No clients selected'});
   const{logged_at,logged_by,log_time}=req.body;
   const by=String(logged_by||req.session.displayName||req.session.username||'').slice(0,100);
-  const atTime=logged_at||new Date().toISOString();
+  const atTime=logged_at||nowLocal();
   // Validate and resolve each client
   const resolved=[];
   for(const item of list){
@@ -1584,18 +1679,18 @@ app.put('/api/mail/:id/approve', requireAuth, csrfCheck, requirePermission('mail
   if(!db.query1('SELECT id FROM mail_log WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
   const by=req.session.displayName||req.session.username;
   const _mlA=db.query1('SELECT client_name,room FROM mail_log WHERE id=?',[id]);
-  db.run(`UPDATE mail_log SET status='approved',approved_by=?,approved_at=datetime('now') WHERE id=?`,[by,id]);
+  db.run(`UPDATE mail_log SET status='approved',approved_by=?,approved_at=? WHERE id=?`,[by,nowLocal(),id]);
   db.save();
   audit(req,'mail.approve','mail',id,_mlA?(_mlA.client_name+' Rm.'+_mlA.room):String(id));
   broadcast({type:'mail_updated',user:by});
   res.json({ok:true});
 });
 
-app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, (req,res)=>{
+app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, requirePermission('mail.deliver'), (req,res)=>{
   const id=parseInt(req.params.id);
   const _mlD=db.query1('SELECT client_name,room FROM mail_log WHERE id=?',[id]);
   if(!_mlD) return res.status(404).json({error:'Not found'});
-  db.run(`UPDATE mail_log SET status='delivered',delivered_at=datetime('now') WHERE id=?`,[id]);
+  db.run(`UPDATE mail_log SET status='delivered',delivered_at=? WHERE id=?`,[nowLocal(),id]);
   db.save();
   audit(req,'mail.deliver','mail',id,_mlD.client_name+' Rm.'+_mlD.room);
   broadcast({type:'mail_updated',user:req.session.displayName||req.session.username});
@@ -1651,7 +1746,7 @@ app.put('/api/violations/:id/review', requireAuth, csrfCheck, requirePermission(
   if(v.status!=='pending') return res.status(400).json({error:'Violation is not pending review'});
   const{action,consequence}=req.body;
   const by=req.session.displayName||req.session.username;
-  const now=new Date().toISOString().slice(0,19).replace('T',' ');
+  const now=nowLocal();
   if(action==='waive'){
     db.run('UPDATE violations SET status=?,consequence_by=?,consequence_at=? WHERE id=?',['waived',by,now,id]);
   } else {
@@ -1669,7 +1764,7 @@ app.put('/api/violations/:id/complete', requireAuth, csrfCheck, requirePermissio
   if(!v) return res.status(404).json({error:'Not found'});
   if(v.status!=='assigned') return res.status(400).json({error:'Violation must have an assigned consequence'});
   const by=req.session.displayName||req.session.username;
-  const now=new Date().toISOString().slice(0,19).replace('T',' ');
+  const now=nowLocal();
   db.run('UPDATE violations SET status=?,completed_by=?,completed_at=? WHERE id=?',['completed',by,now,id]);
   audit(req,'violation.complete','violation',id,v.client_name);
   broadcast({type:'violations_updated',..._violationCounts()});
@@ -2014,6 +2109,22 @@ app.post('/api/discharge-records', requireAuth, csrfCheck, requirePermission('re
   // Also flip the client to inactive + stamp discharge date
   db.run('UPDATE clients SET is_active=0, discharge_date=? WHERE id=?',
     [b.discharge_date, b.client_id]);
+  // Free the room — insert a VACANT placeholder so the room shows available for new intake.
+  // POST /api/clients will update this row in-place; PUT (reactivate) will delete it.
+  db.run(`INSERT INTO clients (room,name,is_active,is_special,sort_order) VALUES (?,?,1,0,?)`,
+    [client.room, 'VACANT', client.sort_order || 0]);
+  // Add discharge log entry to active shift report
+  const _dischActiveId = db.getSetting('active_report_id', null);
+  if (_dischActiveId) {
+    const _n=new Date(),_h=_n.getHours(),_m=String(_n.getMinutes()).padStart(2,'0');
+    const _ap=_h>=12?'PM':'AM',_h12=_h%12||12;
+    const _ts=`${_h12}:${_m} ${_ap}`;
+    const _reasonLabels={graduate:'Graduate',ama:'AMA',therapeutic:'Therapeutic discharge',administrative:'Administrative discharge'};
+    const _rLabel=_reasonLabels[b.reason]||b.reason;
+    db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
+      [_dischActiveId,_ts,`Resident discharged: ${client.name}, Rm. ${client.room}. Reason: ${_rLabel}.`]);
+    db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),_dischActiveId]);
+  }
   db.save();
   audit(req,'discharge.create','discharge_records',rec.id,client.name,{reason:rec.reason});
   broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
@@ -2133,6 +2244,174 @@ app.get('/api/audit-log', requireAuth, requirePermission('admin.audit'), (req,re
   res.json(result);
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// Structured Clinical Lite — clinical_notes, treatment_plans, assessments,
+// group_notes (+attendees), discharge_summaries.
+//   • Every route is gated behind requirePermission().
+//   • goals (treatment-plans) and content (assessments) are JSON-parsed before
+//     the response is sent — clients always receive objects, never strings.
+//   • group-notes responses embed an `attendees` array (done in the db layer).
+//   • Draft lock: clinical_notes + discharge_summaries return 400 on PUT/DELETE
+//     once status==='final'.
+//   • Every mutation broadcasts a typed WebSocket event.
+// ════════════════════════════════════════════════════════════════════════
+function _clinicalParse(row, jsonFields) {
+  if (!row || !jsonFields || !jsonFields.length) return row;
+  jsonFields.forEach(f => {
+    if (typeof row[f] === 'string') {
+      try { row[f] = JSON.parse(row[f]); }
+      catch (e) { row[f] = (f === 'content') ? {} : []; }
+    }
+  });
+  return row;
+}
+
+function registerClinicalRoutes(opts) {
+  const { seg, perm, entity, required = [], jsonFields = [], locked = false, wsType, authorField = 'author_id' } = opts;
+  const base  = `/api/clinical/${seg}`;
+  const ttype = seg.replace(/-/g, '_');
+
+  // LIST — accepts ?clientId= filter
+  app.get(base, requireAuth, requirePermission(perm), (req, res) => {
+    const clientId = req.query.clientId ? parseInt(req.query.clientId) : null;
+    const rows = entity.getAll(undefined, clientId);
+    rows.forEach(r => _clinicalParse(r, jsonFields));
+    auditRead(req, ttype, null, `Clinical ${seg} list (${rows.length})`, clientId ? { clientId } : undefined);
+    res.json(rows);
+  });
+
+  // SINGLE
+  app.get(`${base}/:id`, requireAuth, requirePermission(perm), (req, res) => {
+    const row = entity.getById(undefined, parseInt(req.params.id));
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    _clinicalParse(row, jsonFields);
+    auditRead(req, ttype, row.id, `Clinical ${seg} #${row.id}`);
+    res.json(row);
+  });
+
+  // CREATE
+  app.post(base, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+    const b = req.body || {};
+    for (const f of required) {
+      if (b[f] == null || b[f] === '') return res.status(400).json({ error: `${f} required` });
+    }
+    const fields = { ...b, [authorField]: req.session.userId };
+    const rec = entity.create(undefined, fields);
+    _clinicalParse(rec, jsonFields);
+    audit(req, `${wsType}.create`, ttype, rec.id, '');
+    broadcast({ type: `${wsType}_created`, data: rec });
+    res.json({ ok: true, record: rec });
+  });
+
+  // UPDATE — blocked once finalised for locked resources
+  app.put(`${base}/:id`, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = entity.getById(undefined, id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (locked && existing.status === 'final')
+      return res.status(400).json({ error: 'Record is finalised and can no longer be edited.' });
+    const rec = entity.update(undefined, id, req.body || {}, req.session.userId);
+    _clinicalParse(rec, jsonFields);
+    audit(req, `${wsType}.update`, ttype, id, '');
+    broadcast({ type: `${wsType}_updated`, data: rec });
+    res.json({ ok: true, record: rec });
+  });
+
+  // SIGN / finalise
+  app.patch(`${base}/:id/sign`, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = entity.getById(undefined, id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const rec = entity.sign(undefined, id, req.session.userId);
+    _clinicalParse(rec, jsonFields);
+    audit(req, `${wsType}.sign`, ttype, id, '');
+    broadcast({ type: `${wsType}_signed`, data: rec });
+    res.json({ ok: true, record: rec });
+  });
+
+  // DELETE — blocked once finalised for locked resources
+  app.delete(`${base}/:id`, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = entity.getById(undefined, id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (locked && existing.status === 'final')
+      return res.status(400).json({ error: 'Record is finalised and cannot be deleted.' });
+    entity.delete(undefined, id, req.session.userId);
+    audit(req, `${wsType}.delete`, ttype, id, '');
+    broadcast({ type: `${wsType}_deleted`, id });
+    res.json({ ok: true });
+  });
+}
+
+registerClinicalRoutes({ seg: 'notes',               perm: 'clinical.notes',       entity: db.clinicalDb.notes,              required: ['client_id'],  locked: true, wsType: 'clinical_note' });
+registerClinicalRoutes({ seg: 'treatment-plans',     perm: 'clinical.treatment',   entity: db.clinicalDb.treatmentPlans,     required: ['client_id'],  jsonFields: ['goals'],   wsType: 'treatment_plan' });
+registerClinicalRoutes({ seg: 'assessments',         perm: 'clinical.assessments', entity: db.clinicalDb.assessments,        required: ['client_id'],  jsonFields: ['content'], wsType: 'assessment' });
+registerClinicalRoutes({ seg: 'discharge-summaries', perm: 'clinical.discharge',   entity: db.clinicalDb.dischargeSummaries, required: ['client_id'],  locked: true, wsType: 'discharge_summary' });
+
+// ── Group notes — shared between the main Groups tab (attendance entry) and
+// the clinical section (full note + sign). Two roles on ONE record:
+//   • groups.log    → create/edit attendance only (content + status stripped)
+//   • clinical.groups → add the clinical note + sign
+//   • groups.view   → read-only
+// PAs do the attendance footwork; clinicians finish the note. ────────────────
+const _GN = db.clinicalDb.groupNotes;
+const _hasClinicalGroups = req => _userPerms(req).includes('clinical.groups');
+
+app.get('/api/clinical/group-notes', requireAuth, requireAnyPermission('clinical.groups', 'groups.log', 'groups.view'), (req, res) => {
+  const clientId = req.query.clientId ? parseInt(req.query.clientId) : null;
+  const rows = _GN.getAll(undefined, clientId);
+  auditRead(req, 'group_notes', null, `Group notes list (${rows.length})`, clientId ? { clientId } : undefined);
+  res.json(rows);
+});
+app.get('/api/clinical/group-notes/:id', requireAuth, requireAnyPermission('clinical.groups', 'groups.log', 'groups.view'), (req, res) => {
+  const row = _GN.getById(undefined, parseInt(req.params.id));
+  if (!row) return res.status(404).json({ error: 'Not found' });
+  auditRead(req, 'group_notes', row.id, `Group note #${row.id}`);
+  res.json(row);
+});
+app.post('/api/clinical/group-notes', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), (req, res) => {
+  const b = req.body || {};
+  if (!b.group_name) return res.status(400).json({ error: 'group_name required' });
+  const fields = { ...b, facilitator_id: req.session.userId };
+  if (!_hasClinicalGroups(req)) { delete fields.content; delete fields.status; }  // attendance-only
+  const rec = _GN.create(undefined, fields);
+  audit(req, 'group_note.create', 'group_notes', rec.id, fields.group_name || '');
+  broadcast({ type: 'group_note_created', data: rec });
+  res.json({ ok: true, record: rec });
+});
+app.put('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), (req, res) => {
+  const id = parseInt(req.params.id);
+  const existing = _GN.getById(undefined, id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const clinical = _hasClinicalGroups(req);
+  if (!clinical && existing.status === 'final') return res.status(400).json({ error: 'Finalised — only clinical staff can edit.' });
+  const b = { ...req.body };
+  if (!clinical) { delete b.content; delete b.status; }     // attendance-only edit can't touch the note
+  const rec = _GN.update(undefined, id, b, req.session.userId);
+  audit(req, 'group_note.update', 'group_notes', id, '');
+  broadcast({ type: 'group_note_updated', data: rec });
+  res.json({ ok: true, record: rec });
+});
+app.patch('/api/clinical/group-notes/:id/sign', requireAuth, csrfCheck, requirePermission('clinical.groups'), (req, res) => {
+  const id = parseInt(req.params.id);
+  const existing = _GN.getById(undefined, id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  const rec = _GN.sign(undefined, id, req.session.userId);
+  audit(req, 'group_note.sign', 'group_notes', id, '');
+  broadcast({ type: 'group_note_signed', data: rec });
+  res.json({ ok: true, record: rec });
+});
+app.delete('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), (req, res) => {
+  const id = parseInt(req.params.id);
+  const existing = _GN.getById(undefined, id);
+  if (!existing) return res.status(404).json({ error: 'Not found' });
+  if (!_hasClinicalGroups(req) && existing.status === 'final') return res.status(400).json({ error: 'Finalised — only clinical staff can delete.' });
+  _GN.delete(undefined, id, req.session.userId);
+  audit(req, 'group_note.delete', 'group_notes', id, '');
+  broadcast({ type: 'group_note_deleted', id });
+  res.json({ ok: true });
+});
+
 // ── React SPA catch-all (MUST be last — after all API routes) ────
 app.get('*',(req,res)=>{
   if (!req.path.startsWith('/api/')) res.sendFile(path.join(REACT_DIST,'index.html'));
@@ -2141,7 +2420,13 @@ app.get('*',(req,res)=>{
 
 // ── Start ─────────────────────────────────────────────────────────
 db.init(DB_PATH);
-(()=>{
+
+// Export app + db so integration tests (supertest) can import the configured
+// Express app without binding a port. The listener, TLS detection, WebSocket
+// server, and browser launch only run when server.js is executed directly.
+module.exports = { app, db };
+
+if (require.main === module) (()=>{
   // Clean up mojibake middle-dot in facility name (Â· = double-encoded ·)
   {
     const fn = db.getSetting('facility_name','');
@@ -2184,10 +2469,10 @@ db.init(DB_PATH);
   }, 60 * 60 * 1000);
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
-  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.0.0',tls:useTLS});
+  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.3.2',tls:useTLS});
   server.listen(PORT,'0.0.0.0',()=>{
     console.log('\n══════════════════════════════════════════════');
-    console.log('  OpsPoint v2.0.0');
+    console.log('  OpsPoint v2.3.2');
     console.log('══════════════════════════════════════════════');
     console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
     console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);

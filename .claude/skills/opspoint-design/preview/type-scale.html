@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--card-bg); padding: 22px 24px; color: var(--ink-900); }
+  .specimen { display: flex; flex-direction: column; gap: 13px; }
+  .line { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px dashed var(--line); padding-bottom: 12px; }
+  .line:last-child { border-bottom: none; }
+  .meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-400); width: 130px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+  <div class="specimen">
+    <div class="line"><span class="meta">display · 32/700</span><span style="font-size:32px;font-weight:700;letter-spacing:-.01em">Welcome back</span></div>
+    <div class="line"><span class="meta">h1 · 20/700</span><span style="font-size:20px;font-weight:700;letter-spacing:-.01em">Swing Shift Report</span></div>
+    <div class="line"><span class="meta">h2 · 16/600</span><span style="font-size:16px;font-weight:600">Census &amp; Roster</span></div>
+    <div class="line"><span class="meta">body · 14/400</span><span style="font-size:14px">All residents accounted for during the 9:00 PM wellness check.</span></div>
+    <div class="line"><span class="meta">sm · 13/400</span><span style="font-size:13px;color:var(--ink-700)">Program Assistant on duty · D. Okonkwo</span></div>
+    <div class="line"><span class="meta">eyebrow · 11/600</span><span style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-500)">Health &amp; Compliance</span></div>
+  </div>
+</body>
+</html>

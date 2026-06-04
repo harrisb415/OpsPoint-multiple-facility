@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Product:** OpsPoint v2.2.0
+**Product:** OpsPoint v2.3.2
 
 ---
 
@@ -266,11 +266,6 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 
 ---
 
-## Planned features
-
-`docs/FEATURE-NOTIFICATIONS.md` contains a full implementation spec for a notification bell, UA random draw, and broadcast messages system. **Note:** this spec was ported from OpsPoint (a vanilla-JS predecessor) and references DOM/JS patterns (`js/app.js`, `js/sync.js`, `index.html` banner elements) that do not exist in this React codebase. Any implementation must be adapted to the React component and context architecture described above.
-
----
 
 ## Key files
 

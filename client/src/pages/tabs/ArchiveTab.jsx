@@ -38,7 +38,7 @@ function parseTimeMins(t) {
 }
 
 export default function ArchiveTab() {
-  const { data, saveData } = useData()
+  const { data } = useData()
   const { hasPerm } = usePermission()
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState(null)
@@ -237,7 +237,7 @@ function printArchivedReport(r, data) {
       if (pb) pb.addEventListener('click', () => win.print())
       if (cb) cb.addEventListener('click', () => win.close())
       win.focus(); win.print()
-    } catch {}
+    } catch { /* empty */ }
   }, 250)
 }
 

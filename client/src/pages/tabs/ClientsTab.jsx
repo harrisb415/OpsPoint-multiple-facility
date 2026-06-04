@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from 'react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import ClientReportModal from '../../components/ClientReportModal.jsx'
 
 const PAGE_SIZE = 50
 
@@ -32,6 +33,18 @@ function blankAdd(vacantRooms) {
   return { ...BLANK_ADD, room: vacantRooms[0] || '' }
 }
 
+function SortTh({ col, sortKey, sortDir, onSort, children }) {
+  const active = sortKey === col
+  return (
+    <th onClick={() => onSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+      {children}
+      <span style={{ marginLeft: 4, fontSize: '.65em', opacity: active ? 0.9 : 0.35, color: active ? 'var(--accent)' : 'inherit' }}>
+        {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
+      </span>
+    </th>
+  )
+}
+
 const BLANK_DISCHARGE = {
   discharge_date: todayStr(),
   reason: 'graduate',
@@ -40,13 +53,16 @@ const BLANK_DISCHARGE = {
 }
 
 export default function ClientsTab() {
-  const { data, saveData, openProfile } = useData()
+  const { data, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canEdit = hasPerm('residents.edit')
 
   const [search, setSearch] = useState('')
   const [showDischarged, setShowDischarged] = useState(false)
   const [page, setPage] = useState(0)
+  const [sortKey, setSortKey] = useState('room')
+  const [sortDir, setSortDir] = useState('asc')
+  const [reportModal, setReportModal] = useState(false)
 
   // Edit modal
   const [editModal, setEditModal] = useState(null) // null | client object
@@ -78,10 +94,15 @@ export default function ClientsTab() {
 
   const clients = data?.clients || []
 
+  function handleSort(col) {
+    if (sortKey === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(col); setSortDir('asc') }
+    setPage(0)
+  }
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return clients
-      // Always include vacant + special rooms; only hide discharged residents unless toggled
+    const list = clients
       .filter(c => {
         if (c.is_special) return true
         if (c.name === 'VACANT') return true
@@ -96,8 +117,45 @@ export default function ClientsTab() {
           || (c.phone || '').toLowerCase().includes(q)
       })
       .slice()
-      .sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
-  }, [clients, search, showDischarged])
+
+    list.sort((a, b) => {
+      let av, bv
+      switch (sortKey) {
+        case 'name':
+          av = (a.is_special ? (a.special_label || a.name) : (a.name || '')).toLowerCase()
+          bv = (b.is_special ? (b.special_label || b.name) : (b.name || '')).toLowerCase()
+          break
+        case 'case_manager':
+          av = (a.case_manager || '').toLowerCase()
+          bv = (b.case_manager || '').toLowerCase()
+          break
+        case 'phone':
+          av = (a.phone || '').toLowerCase()
+          bv = (b.phone || '').toLowerCase()
+          break
+        case 'intake':
+          av = a.intake_date || ''
+          bv = b.intake_date || ''
+          break
+        case 'discharge':
+          av = a.discharge_date || ''
+          bv = b.discharge_date || ''
+          break
+        case 'status': {
+          const rank = c => c.is_special ? 2 : (c.name === 'VACANT' ? 1 : (c.is_active ? 0 : 3))
+          av = rank(a); bv = rank(b)
+          break
+        }
+        default: // 'room'
+          av = parseInt(a.room) || 0
+          bv = parseInt(b.room) || 0
+      }
+      const cmp = typeof av === 'number' ? av - bv : (av < bv ? -1 : av > bv ? 1 : 0)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+
+    return list
+  }, [clients, search, showDischarged, sortKey, sortDir])
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -306,6 +364,11 @@ export default function ClientsTab() {
                 + Add Client
               </button>
             )}
+            <button className="btn btn-sm"
+              style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
+              onClick={() => setReportModal(true)}>
+              📊 Report
+            </button>
             <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '.78rem', color: '#94a3b8' }}>
               <input type="checkbox" checked={showDischarged} onChange={e => { setShowDischarged(e.target.checked); setPage(0) }} />
               Show discharged
@@ -323,13 +386,13 @@ export default function ClientsTab() {
                 <table>
                   <thead>
                     <tr>
-                      <th>Rm</th>
-                      <th>Name</th>
-                      <th>Case Manager</th>
-                      <th>Phone</th>
-                      <th>Intake</th>
-                      <th>Discharge</th>
-                      <th>Status</th>
+                      <SortTh col="room"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Rm</SortTh>
+                      <SortTh col="name"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Name</SortTh>
+                      <SortTh col="case_manager" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Case Manager</SortTh>
+                      <SortTh col="phone"        sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Phone</SortTh>
+                      <SortTh col="intake"       sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Intake</SortTh>
+                      <SortTh col="discharge"    sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Discharge</SortTh>
+                      <SortTh col="status"       sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Status</SortTh>
                       {canEdit && <th>Actions</th>}
                     </tr>
                   </thead>
@@ -337,6 +400,7 @@ export default function ClientsTab() {
                     {paged.map(c => {
                       const isVacant  = c.name === 'VACANT' && !c.is_special
                       const isSpecial = !!c.is_special
+                      const isLocked  = !c.is_active && !!c.discharge_date && c.discharge_date < todayStr()
                       const rowStyle  = isVacant
                         ? { background: 'rgba(148,163,184,.06)' }
                         : isSpecial
@@ -391,13 +455,13 @@ export default function ClientsTab() {
                             <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#64748b' }}>Vacant</span>
                           ) : (
                             <span style={{ fontSize: '.75rem', fontWeight: 700, color: c.is_active ? '#15803d' : '#94a3b8' }}>
-                              {c.is_active ? 'Active' : 'Discharged'}
+                              {c.is_active ? 'Active' : isLocked ? '🔒 Discharged' : 'Discharged'}
                             </span>
                           )}
                         </td>
                         {canEdit && (
                           <td>
-                            <div style={{ display: 'flex', gap: 5, whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', gap: 5, whiteSpace: 'nowrap', alignItems: 'center' }}>
                               {isVacant ? (
                                 <button className="btn btn-sm btn-primary"
                                   onClick={() => { setAddForm({ ...BLANK_ADD, room: c.room }); setAddError(''); setAddModal(true) }}>
@@ -405,16 +469,18 @@ export default function ClientsTab() {
                                 </button>
                               ) : isSpecial ? (
                                 <span style={{ fontSize: '.72rem', color: '#94a3b8', fontStyle: 'italic' }}>Manage in Facility Setup</span>
-                              ) : (
+                              ) : c.is_active ? (
                                 <>
                                   <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
                                     onClick={() => openEdit(c)}>✎ Edit</button>
-                                  {c.is_active
-                                    ? <button className="btn-danger-sm" onClick={() => openDischarge(c)}>Discharge</button>
-                                    : <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
-                                        onClick={() => openReactivate(c)}>Reactivate</button>
-                                  }
+                                  <button className="btn-danger-sm" onClick={() => openDischarge(c)}>Discharge</button>
                                 </>
+                              ) : isLocked ? (
+                                <span style={{ fontSize: '.72rem', color: '#94a3b8', fontStyle: 'italic' }}>🔒 Record locked</span>
+                              ) : (
+                                <button className="btn btn-sm"
+                                  style={{ background: '#15803d', border: 'none', color: '#fff', fontWeight: 700 }}
+                                  onClick={() => openReactivate(c)}>↩ Reactivate</button>
                               )}
                             </div>
                           </td>
@@ -650,6 +716,11 @@ export default function ClientsTab() {
               style={{ maxWidth: '80vw', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
           </div>
         </div>
+      )}
+
+      {/* Client Report Builder */}
+      {reportModal && (
+        <ClientReportModal data={data} onClose={() => setReportModal(false)} />
       )}
 
       {/* Discharge Modal — creates a formal discharge_record and marks client inactive */}

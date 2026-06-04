@@ -12,15 +12,6 @@ function fmtDate(d) {
   catch { return d }
 }
 
-function fmtDT(s) {
-  if (!s) return '—'
-  try {
-    const d = new Date(s)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  } catch { return s }
-}
-
 function StatusBadge({ status }) {
   const cls = {
     pending:   'vbadge vbadge-pending',
@@ -35,7 +26,7 @@ function StatusBadge({ status }) {
 const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', notes: '' }
 
 export default function ViolationsTab() {
-  const { data, loadData }      = useData()
+  const { data }                = useData()
   const { hasPerm }             = usePermission()
 
   const canLog      = hasPerm('violations.log')
@@ -212,7 +203,7 @@ export default function ViolationsTab() {
     <div>
       <div className="section">
         <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Violations</span></div>
+          <div className="sh-left"><span className="sh-dot" /><span>Infractions</span></div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{violations.length} total</span>
             <button onClick={() => setPrintOpen(true)} disabled={violations.length === 0}
@@ -451,7 +442,7 @@ export default function ViolationsTab() {
 
       <PrintScopeModal
         open={printOpen}
-        title="Print Violations Log"
+        title="Print Infractions Log"
         shiftLabel="Current filter view"
         defaultMode="range"
         onClose={() => setPrintOpen(false)}
@@ -459,7 +450,7 @@ export default function ViolationsTab() {
           setPrintOpen(false)
           const facility = data?.facility_name || 'OpsPoint'
           let rows = filtered
-          let subtitle = ''
+          let subtitle
           if (mode === 'shift') {
             subtitle = `Current filters · ${rows.length} records`
           } else {
@@ -525,7 +516,7 @@ function printViolationsReport({ facility, subtitle, entries }) {
   }))
 
   openPrintWindow({
-    title: 'Violations Log Report',
+    title: 'Infractions Log',
     facility,
     subtitle,
     summary,

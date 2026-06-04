@@ -1,17 +1,17 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { Outlet, useNavigate, Link } from 'react-router-dom'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { DataProvider, useData } from '../contexts/DataContext.jsx'
+import { CLINICAL_SECTION_PERMS } from '../pages/clinical/clinicalShared.jsx'
 import ClientProfile from './ClientProfile.jsx'
 import JSZip from 'jszip'
 import {
   Users, UserCheck, ClipboardList,
-  FileText, CheckSquare, Ticket, Mail,
-  FlaskConical, Pill, Award,
-  AlertTriangle, Ban, PenLine, Archive,
-  Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse,
-  LayoutDashboard,
+  FileText, CheckSquare, Ticket, Mail, CalendarCheck,
+  FlaskConical, Pill,
+  Ban, PenLine, Archive,
+  Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse, Stethoscope,
 } from 'lucide-react'
 
 // ── Sidebar group config ──────────────────────────────────────────────
@@ -29,6 +29,7 @@ const SIDEBAR_GROUPS = [
     items: [
       { id: 'report',     label: 'Report',     Icon: FileText },
       { id: 'chores',     label: 'Chores',     Icon: CheckSquare },
+      { id: 'groups',     label: 'Groups',     Icon: CalendarCheck, perm: 'groups.view' },
       { id: 'passes',     label: 'Passes',     Icon: Ticket },
       { id: 'mail',       label: 'Mail',       Icon: Mail },
     ]
@@ -38,14 +39,12 @@ const SIDEBAR_GROUPS = [
     items: [
       { id: 'ua',         label: 'UA',         Icon: FlaskConical },
       { id: 'med_log',    label: 'Med Log',    Icon: Pill,   perm: 'med.witness' },
-      { id: 'milestones', label: 'Milestones', Icon: Award,  perms: ['milestones.edit','milestones.signoff'] },
     ]
   },
   {
     label: 'RECORDS',
     items: [
-      { id: 'incidents',  label: 'Incidents',  Icon: AlertTriangle, perms: ['incidents.log','incidents.review'] },
-      { id: 'violations', label: 'Violations', Icon: Ban },
+      { id: 'violations', label: 'Infractions',      Icon: Ban },
       { id: 'consent',    label: 'Consents',   Icon: PenLine, perm: 'consent.manage' },
       { id: 'archive',    label: 'Archive',    Icon: Archive },
     ]
@@ -153,7 +152,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
           {notif.violReview > 0 && notif.violReview > (dismissedViolReview || 0) && perm.includes('violations.notify_review') && (
             <div className="notif-section">
               <div className="notif-section-head">
-                Violations: Pending Review
+                Infractions: Pending Review
                 <span className="notif-badge-sm">{notif.violReview}</span>
               </div>
               <div className="notif-item">
@@ -193,7 +192,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
           {(notif.incidents || []).length > 0 && perm.includes('incidents.review') && (
             <div className="notif-section">
               <div className="notif-section-head">
-                New Incidents
+                New Incident Reports
                 <span className="notif-badge-sm">{notif.incidents.length}</span>
               </div>
               {notif.incidents.map(inc => (
@@ -348,7 +347,7 @@ function UADrawModal({ open, onClose, clients, statuses }) {
         const r = await fetch(`/api/ua-draws/recent-clients?days=${lookback}`, { credentials: 'include' })
         const d = await r.json()
         excludeIds = new Set((d.ids || []).map(Number))
-      } catch {}
+      } catch { /* empty */ }
     }
     const pool = buildPool(excludeIds)
     const totalPool = buildPool(new Set())
@@ -477,7 +476,7 @@ function UADrawModal({ open, onClose, clients, statuses }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────
-function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen }) {
+function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen, onClinical }) {
   function isTabVisible(id) {
     if (uiVis.tabs && Object.keys(uiVis.tabs).length > 0) {
       if (uiVis.tabs[id] === false) return false
@@ -526,6 +525,12 @@ function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen }
                 <button className="sidebar-item" onClick={onDrawOpen}>
                   <Dice5 size={16} className="sidebar-icon" />
                   UA Draw
+                </button>
+              )}
+              {group.label === 'HEALTH & COMPLIANCE' && CLINICAL_SECTION_PERMS.some(p => hasPerm(p)) && (
+                <button className="sidebar-item" onClick={onClinical}>
+                  <Stethoscope size={16} className="sidebar-icon" />
+                  Clinical
                 </button>
               )}
             </div>
@@ -595,7 +600,7 @@ function Header({ onGoTab }) {
     setDismissedDrawIds(prev => {
       const next = new Set(prev)
       next.add(id)
-      try { localStorage.setItem('spDismissedDraws', JSON.stringify([...next])) } catch {}
+      try { localStorage.setItem('spDismissedDraws', JSON.stringify([...next])) } catch { /* empty */ }
       return next
     })
   }
@@ -608,11 +613,11 @@ function Header({ onGoTab }) {
   })
   function dismissViolReview(count) {
     setDismissedViolReview(count)
-    try { localStorage.setItem('spDismissedViolReview', String(count)) } catch {}
+    try { localStorage.setItem('spDismissedViolReview', String(count)) } catch { /* empty */ }
   }
   function dismissViolConsequence(count) {
     setDismissedViolConsequence(count)
-    try { localStorage.setItem('spDismissedViolConsequence', String(count)) } catch {}
+    try { localStorage.setItem('spDismissedViolConsequence', String(count)) } catch { /* empty */ }
   }
 
   const facilityName = data?.facility_name || 'OpsPoint'
@@ -622,7 +627,7 @@ function Header({ onGoTab }) {
     if (!data?.ui_visibility) return def
     try { return typeof data.ui_visibility === 'string' ? JSON.parse(data.ui_visibility) : data.ui_visibility }
     catch { return def }
-  }, [data?.ui_visibility])
+  }, [data])
 
   const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
 
@@ -683,7 +688,7 @@ function Header({ onGoTab }) {
     const stLbl={building:'In Building',work:'Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out / Other',vacant:'Vacant'}
     const cnt={building:0,work:0,pass:0,bhc:0,efc:0,hospital:0,out:0}
     clients.filter(c=>c.is_active&&!c.is_special&&c.name!=='VACANT').forEach(c=>{
-      const st=statuses[c.id]||'building'; if(cnt.hasOwnProperty(st))cnt[st]++
+      const st=statuses[c.id]||'building'; if(Object.hasOwn(cnt, st))cnt[st]++
     })
     const tot=Object.values(cnt).reduce((a,b)=>a+b,0)
     const CW=9360
@@ -776,7 +781,7 @@ function Header({ onGoTab }) {
     const w = window.open('', '_blank')
     if (!w) { alert('Popup blocked — allow popups for this site.'); return }
     w.document.write(html); w.document.close()
-    setTimeout(() => { try { w.focus(); w.print() } catch {} }, 250)
+    setTimeout(() => { try { w.focus(); w.print() } catch { /* empty */ } }, 250)
   }
 
   function fileWellnessChecks() {
@@ -823,7 +828,7 @@ function Header({ onGoTab }) {
     const w = window.open('', '_blank')
     if (!w) { alert('Popup blocked — allow popups for this site.'); return }
     w.document.write(html); w.document.close()
-    setTimeout(() => { try { w.focus(); w.print() } catch {} }, 250)
+    setTimeout(() => { try { w.focus(); w.print() } catch { /* empty */ } }, 250)
   }
 
   async function sendOutlook() {
@@ -965,17 +970,23 @@ function InnerShell() {
   const { session }      = useAuth()
   const { hasPerm }      = usePermission()
   const { data }         = useData()
+  const location         = useLocation()
 
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState('report')
   const [requestedTab, setRequestedTab] = useState(null)
   const [drawOpen, setDrawOpen]   = useState(false)
+
+  const isAdmin    = location.pathname === '/admin'
+  const isClinical = location.pathname.startsWith('/clinical')
+  const fullBleed  = isAdmin || isClinical   // routes that supply their own layout
 
   const uiVis = useMemo(() => {
     const def = { tabs: {}, buttons: {} }
     if (!data?.ui_visibility) return def
     try { return typeof data.ui_visibility === 'string' ? JSON.parse(data.ui_visibility) : data.ui_visibility }
     catch { return def }
-  }, [data?.ui_visibility])
+  }, [data])
 
   const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
   const statuses     = activeReport?.statuses || {}
@@ -985,15 +996,18 @@ function InnerShell() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Header onGoTab={setRequestedTab} />
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        <Sidebar
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          session={session}
-          hasPerm={hasPerm}
-          uiVis={uiVis}
-          onDrawOpen={() => setDrawOpen(true)}
-        />
-        <div className="app-content">
+        {!fullBleed && (
+          <Sidebar
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            session={session}
+            hasPerm={hasPerm}
+            uiVis={uiVis}
+            onDrawOpen={() => setDrawOpen(true)}
+            onClinical={() => navigate('/clinical')}
+          />
+        )}
+        <div className="app-content" style={fullBleed ? { marginLeft: 0 } : undefined}>
           <Outlet context={{ activeTab, setActiveTab, requestedTab, clearRequestedTab: () => setRequestedTab(null) }} />
         </div>
       </div>

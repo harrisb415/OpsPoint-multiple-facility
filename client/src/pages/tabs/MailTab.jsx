@@ -35,9 +35,10 @@ function StatusBadge({ status }) {
 export default function MailTab() {
   const { data, loadData, openProfile } = useData()
   const { hasPerm } = usePermission()
-  const canLog = hasPerm('mail.log')
+  const canLog     = hasPerm('mail.log')
   const canApprove = hasPerm('mail.approve')
-  const canDelete = hasPerm('mail.delete')
+  const canDeliver = hasPerm('mail.deliver')
+  const canDelete  = hasPerm('mail.delete')
 
   const mail = data?.mail || []
   const clients = data?.clients || []
@@ -213,7 +214,7 @@ export default function MailTab() {
                     <SortableTh label="Status" k="status"    curKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <SortableTh label="Logged" k="logged_at" curKey={sortKey} dir={sortDir} onSort={toggleSort} />
                     <th>By</th><th>Type</th><th>Notes</th>
-                    {(canApprove || canDelete) && <th className="tc">Actions</th>}
+                    {(canApprove || canDeliver || canDelete) && <th className="tc">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -244,12 +245,12 @@ export default function MailTab() {
                         {!(m.mail_type || '') && <span style={{ color: '#94a3b8', fontSize: '.78rem' }}>—</span>}
                       </td>
                       <td style={{ fontSize: '.82rem', color: '#475569', maxWidth: 200 }}>{m.notes || ''}</td>
-                      {(canApprove || canDelete) && (
+                      {(canApprove || canDeliver || canDelete) && (
                         <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                           {canApprove && m.status === 'pending' && (
                             <button className="btn btn-sm btn-primary" style={{ marginRight: 4 }} onClick={() => approve(m)}>Approve</button>
                           )}
-                          {m.status === 'approved' && (
+                          {canDeliver && m.status === 'approved' && (
                             <button className="btn btn-sm btn-green" style={{ marginRight: 4 }} onClick={() => deliver(m)}>Deliver</button>
                           )}
                           {canDelete && (
@@ -283,7 +284,7 @@ export default function MailTab() {
           setPrintOpen(false)
           const facility = data?.facility_name || 'OpsPoint'
           let entries = filtered
-          let subtitle = ''
+          let subtitle
           if (mode === 'shift') {
             // For mail, "shift" mode prints whatever's visible (matching the current filter view)
             subtitle = filter === 'all'

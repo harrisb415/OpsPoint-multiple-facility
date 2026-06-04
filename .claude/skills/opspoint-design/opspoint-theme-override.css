@@ -1,0 +1,244 @@
+/* ============================================================================
+   OpsPoint — Jewel-Teal + Gold THEME OVERRIDE
+   ----------------------------------------------------------------------------
+   Drop-in reskin for client/src/index.css. Maps the souped-up palette onto your
+   EXISTING variable names AND overrides the rules that hardcode colors (the
+   white header, white table heads, the orange census fills, etc.) — which a
+   token-only swap can't reach.
+
+   ── HOW TO INSTALL ──────────────────────────────────────────────────────────
+   Easiest: paste this whole file at the very BOTTOM of client/src/index.css
+   (after everything, including the @media print block). Later same-specificity
+   rules win the cascade, so these override the defaults with no !important.
+
+   Or keep it separate and import it LAST:
+       import './index.css'
+       import './opspoint-theme-override.css'   // <-- after index.css
+
+   Nothing in your JSX/components needs to change. (One OPTIONAL component tweak
+   for the report "hero band" is noted at the very bottom.)
+============================================================================ */
+
+/* ── 1 · TOKENS ─────────────────────────────────────────────────────────────
+   Redefine your existing :root vars + add a teal/gold scale and gradients the
+   override rules below reference. */
+:root {
+  /* your existing token names — new values */
+  --sidebar-bg:        #0a4655;   /* was #0f4c5c — deeper jewel teal */
+  --sidebar-active:    #106f88;   /* was #1a6b80 */
+  --sidebar-text:      #d4eef4;
+  --sidebar-group:     #74c6da;
+  --accent:            #c9780c;   /* was #f97316 — gold (legible w/ white text) */
+  --accent-hover:      #a85d08;   /* was #ea580c */
+  --page-bg:           #d4e4ea;   /* was #f4f7f9 — teal-tinted, not grey/white */
+  --card-bg:           #ffffff;
+  --text-primary:      #0f2430;   /* teal-tinted ink, was #1e293b */
+  --text-muted:        #5c7081;   /* was #64748b */
+  --border-light:      #d8e6ec;   /* hairline, faintly teal */
+  --table-row-alt:     #eef5f8;
+  --status-green:      #15a34a;
+  --status-green-bg:   #e3f8ea;
+  --danger:            #d62828;
+  --danger-bg:         #fde3e3;
+  --shadow-card:       0 1px 2px rgba(7,51,63,.06), 0 3px 10px rgba(7,51,63,.05);
+  --shadow-modal:      0 24px 64px rgba(7,51,63,.24);
+  --shadow-drop:       0 8px 24px rgba(7,51,63,.13);
+
+  /* legacy vars — keep inline JSX var() refs on-brand */
+  --dark:   #0a4655;  --crimson:#c9780c;  --mid:#106f88;
+  --orange: #c9780c;  --gold:   #e8920f;  --gold-light:#fff8e6;
+  --bg:     #d4e4ea;  --white:  #ffffff;  --line:#d8e6ec;
+  --sky:    #eef5f8;  --steel:  #5c7081;  --text:#0f2430;
+  --red:    #d62828;  --amber:  #c9780c;  --green:#15a34a;
+  --navy:   #0a4655;  --blue:   #106f88;
+
+  /* NEW — teal scale */
+  --teal-900:#07333f; --teal-800:#0a4655; --teal-700:#0d5a6e; --teal-600:#106f88;
+  --teal-300:#74c6da; --teal-200:#aaddeb; --teal-100:#d4eef4; --teal-50:#eef8fb;
+  /* NEW — gold scale */
+  --gold-700:#a85d08; --gold-600:#c9780c; --gold-500:#e8920f;
+  --gold-400:#f7ad2e; --gold-300:#fcc858; --gold-200:#fde08f; --gold-50:#fff8e6;
+  /* NEW — surfaces, gradients, glows */
+  --raised-bg:   #eaf3f6;
+  --grad-sidebar:linear-gradient(180deg,#0a4655 0%,#07333f 78%,#062a33 100%);
+  --grad-teal:   linear-gradient(135deg,#106f88 0%,#0a4655 100%);
+  --grad-census: linear-gradient(150deg,#106f88 0%,#0a4655 100%);
+  --grad-page:   linear-gradient(170deg,#d4eef4 0%,#e0edf1 180px,#d4e4ea 460px);
+  --grad-gold:   linear-gradient(135deg,#f7ad2e 0%,#c9780c 100%);
+  --glow-gold:   0 0 0 3px rgba(232,146,15,.18);
+}
+
+/* ── 2 · PAGE WASH ─ stop the content area being white ──────────────────── */
+.app-content { background: var(--grad-page); }
+
+/* ── 3 · TOP HEADER ─ teal gradient, light text/icons ───────────────────── */
+.site-header {
+  background: var(--grad-teal);
+  border-bottom: 1px solid var(--teal-900);
+  box-shadow: var(--shadow-card);
+}
+.header-brand-name { color: #fff; }
+
+/* ── 3b · HEADER NAV ─ visible pills + gear menu ──────────────────────────
+   These target the classes you add in the AppShell.jsx markup edit (see
+   HANDOFF.md): the four nav buttons become `.hdr-pill`, the gear is `.hdr-gear`
+   inside a <details class="hdr-menu">, with `.hdr-menu-item` rows. */
+.site-header .hdr-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 13px; border-radius: 6px;
+  font-family: var(--sans); font-size: 13px; font-weight: 600; color: #fff; cursor: pointer;
+  background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.18);
+  transition: background 140ms, border-color 140ms, transform 90ms, box-shadow 140ms;
+}
+.site-header .hdr-pill svg { color: var(--gold-300); }
+.site-header .hdr-pill:hover {
+  background: rgba(255,255,255,.22); border-color: rgba(255,255,255,.42);
+  transform: translateY(-1px); box-shadow: 0 4px 12px rgba(2,20,26,.28); color: #fff;
+}
+.site-header .hdr-pill:active { transform: translateY(0); }
+
+/* live indicator dot → gold, pulsing */
+.site-header .live-dot, .header-live .live-dot {
+  background: var(--gold-400); box-shadow: 0 0 7px 1px rgba(247,173,46,.7);
+}
+.site-header .live, .header-live { color: var(--gold-300); }
+
+/* icon buttons & bell sit on teal now */
+.notif-bell-btn { color: var(--teal-100); }
+.notif-bell-btn:hover { background: rgba(255,255,255,.12); color: #fff; }
+.notif-bell-badge { background: var(--gold-500); color: #3a2403; box-shadow: 0 0 0 2px var(--teal-700); }
+.site-header .save-status { color: var(--teal-200); }
+.site-header .save-status.saved  { color: var(--gold-300); }
+.site-header .save-status.saving { color: var(--teal-100); }
+
+/* settings gear (a <summary>) */
+.site-header .hdr-menu { position: relative; }
+.site-header .hdr-gear {
+  list-style: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 6px; cursor: pointer; color: var(--teal-100);
+  transition: background 120ms, color 120ms;
+}
+.site-header .hdr-gear::-webkit-details-marker { display: none; }
+.site-header .hdr-gear:hover,
+.site-header .hdr-menu[open] .hdr-gear { background: rgba(255,255,255,.16); color: #fff; }
+
+/* gear dropdown */
+.hdr-menu-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; min-width: 184px; z-index: 60;
+  background: #fff; border: 1px solid var(--border-light); border-radius: 8px;
+  box-shadow: var(--shadow-drop); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.hdr-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 11px; border: none; background: none; border-radius: 6px; text-decoration: none;
+  font-family: var(--sans); font-size: 13px; font-weight: 600; color: #33485a; cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.hdr-menu-item svg { color: #8597a6; }
+.hdr-menu-item:hover { background: var(--teal-50); color: var(--teal-800); }
+.hdr-menu-item:hover svg { color: var(--teal-600); }
+.hdr-menu-item.danger { color: var(--danger); }
+.hdr-menu-item.danger svg { color: var(--danger); }
+.hdr-menu-item.danger:hover { background: var(--danger-bg); }
+.hdr-menu-sep { height: 1px; background: #eef2f5; margin: 4px 2px; }
+
+/* ── 4 · SIDEBAR ─ gradient + glowing gold active rail ──────────────────── */
+.sidebar { background: var(--grad-sidebar); }
+.sidebar-item.active { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+.sidebar-item.active::before {
+  background: var(--gold-500);
+  box-shadow: 0 0 10px 1px rgba(232,146,15,.55);
+  width: 3px; height: 22px; border-radius: 0 3px 3px 0;
+}
+.sidebar-avatar { background: var(--grad-gold); color: #3a2403; box-shadow: 0 0 0 2px rgba(255,255,255,.12); }
+
+/* ── 5 · SECTION & TABLE HEADERS ─ teal tint, not white ─────────────────── */
+.section { border-color: var(--teal-200); }
+.section-head,
+thead th,
+.log-th {
+  background: var(--raised-bg);
+  color: var(--teal-700);
+  border-bottom: 1px solid var(--teal-200);
+}
+.sh-dot { background: var(--gold-500); box-shadow: 0 0 6px rgba(232,146,15,.5); }
+tbody tr:hover,
+.log-table tbody tr:hover { background: var(--teal-50); }
+
+/* ── 6 · CENSUS CARDS ─ kill the orange; only the total tile is filled ──────
+   Your Census fills tiles with .hi. We reskin that fill to the teal gradient
+   with a gold number, and make every other tile a clean white card with a
+   teal number. */
+.census-card { border-color: var(--teal-200); }
+.census-card .count { color: var(--teal-600); }
+.census-card.hi { background: var(--grad-census); border-color: transparent; box-shadow: var(--shadow-drop); }
+.census-card.hi .count  { color: var(--gold-300); }
+.census-card.hi .clabel { color: rgba(255,255,255,.82); }
+
+/* ── 7 · FOCUS RINGS ─ gold glow instead of orange ──────────────────────── */
+.field input:not([type=checkbox]):not([type=radio]):focus,
+.field select:focus, .field textarea:focus,
+.log-add input[type="text"]:focus,
+.issue-add input:focus,
+.auth-field input:focus { box-shadow: var(--glow-gold); }
+
+/* ── 8 · STATUS SELECTS ─ richer jewel tones ────────────────────────────── */
+.s-building { background:#d7f5e1; color:#13733e; border-color:#6fdc9c; }
+.s-work     { background:#d8e9fe; color:#1652c4; border-color:#88b6f5; }
+.s-pass     { background:#fdeec4; color:#8a5a08; border-color:#f6c75a; }
+.s-bhc      { background:#e8e2fd; color:#6428c9; border-color:#bba6f4; }
+.s-efc      { background:#fce0ef; color:#b21a6b; border-color:#f49ac9; }
+.s-hospital { background:#fdd9d9; color:#b81d1d; border-color:#f59a9a; }
+.s-out      { background:#ffe4cc; color:#9a3d12; border-color:#fbb277; }
+.s-vacant   { background:#eef2f5; color:#8597a6; border-color:#cfd9e0; }
+
+/* ── 9 · ICON CHIPS ─ gold instead of pale orange ───────────────────────── */
+.icon-chip, .icon-chip-sm, .icon-chip-lg {
+  background: var(--gold-50); color: var(--gold-700); border-color: var(--gold-200);
+}
+
+/* ── 10 · AUTH ─ teal header band + gold halo on the login card ─────────── */
+.auth-page { background: var(--grad-sidebar); position: relative; overflow: hidden; }
+.auth-page::before {
+  content:''; position:absolute; top:-10%; left:50%; transform:translateX(-50%);
+  width:680px; height:680px; pointer-events:none;
+  background: radial-gradient(circle, rgba(247,173,46,.18) 0%, transparent 64%);
+}
+.auth-card { border: none; overflow: hidden; }
+.auth-card-top { background: var(--grad-census); position: relative; overflow: hidden; }
+.auth-card-top::after {
+  content:''; position:absolute; top:-70px; left:50%; transform:translateX(-50%);
+  width:280px; height:280px; pointer-events:none;
+  background: radial-gradient(circle, rgba(247,173,46,.32) 0%, transparent 62%);
+}
+.auth-card-top h1 { color: #fff; position: relative; z-index: 1; }
+.auth-sub { color: var(--teal-200); position: relative; z-index: 1; }
+.auth-app-icon { position: relative; z-index: 1; box-shadow: 0 0 0 4px rgba(255,255,255,.14), 0 6px 22px rgba(2,20,26,.45); }
+.auth-orange-bar { height: 4px; background: var(--grad-gold); box-shadow: 0 0 14px rgba(232,146,15,.6); }
+
+/* ── 11 · LOADING SCREEN ─ match the deeper teal ────────────────────────── */
+.loading-screen { background: var(--grad-sidebar); }
+
+/* ── 12 · MODAL OVERLAY ─ teal-tinted scrim ─────────────────────────────── */
+.modal-overlay { background: rgba(7,42,51,.42); }
+
+/* ============================================================================
+   OPTIONAL · Report "hero band"  (needs a 1-line markup change)
+   ----------------------------------------------------------------------------
+   To turn the "SHIFT REPORT #" title block into the teal hero band, add the
+   class `report-hero` to that header element in your Report page, then keep the
+   rule below. Skip this and everything above still works.
+
+   .report-hero {
+     background: var(--grad-census); border-radius: 12px; padding: 18px 22px;
+     margin-bottom: 18px; box-shadow: var(--shadow-drop);
+     position: relative; overflow: hidden;
+   }
+   .report-hero::after {
+     content:''; position:absolute; right:-40px; top:-60px; width:220px; height:220px;
+     background: radial-gradient(circle, rgba(247,173,46,.22) 0%, transparent 68%);
+     pointer-events:none;
+   }
+   .report-hero, .report-hero * { color: #fff; }
+   .report-hero .page-date, .report-hero .meta { color: var(--teal-200); }
+============================================================================ */

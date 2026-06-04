@@ -13,9 +13,8 @@ import MailTab from './tabs/MailTab.jsx'
 import UARequestsTab from './tabs/UARequestsTab.jsx'
 import ViolationsTab from './tabs/ViolationsTab.jsx'
 import MedLogTab     from './tabs/MedLogTab.jsx'
-import MilestonesTab from './tabs/MilestonesTab.jsx'
-import IncidentsTab  from './tabs/IncidentsTab.jsx'
 import ConsentTab    from './tabs/ConsentTab.jsx'
+import GroupsTab     from './tabs/GroupsTab.jsx'
 
 const ALL_TABS = [
   { id: 'report',     label: 'Report' },
@@ -23,14 +22,13 @@ const ALL_TABS = [
   { id: 'clients',    label: 'Clients' },
   { id: 'staff',      label: 'Staff' },
   { id: 'chores',     label: 'Chores' },
+  { id: 'groups',     label: 'Groups',  perm: 'groups.view' },
   { id: 'passes',     label: 'Passes' },
   { id: 'caseloads',  label: 'Caseloads' },
   { id: 'mail',       label: 'Mail' },
   { id: 'ua',         label: 'UA' },
   { id: 'med_log',    label: 'Med Log',    perm: 'med.witness' },
-  { id: 'milestones', label: 'Milestones', perms: ['milestones.edit','milestones.signoff'] },
-  { id: 'incidents',  label: 'Incidents',  perms: ['incidents.log','incidents.review'] },
-  { id: 'violations', label: 'Violations' },
+  { id: 'violations', label: 'Infractions' },
   { id: 'consent',    label: 'Consents',   perm: 'consent.manage' },
 ]
 
@@ -46,7 +44,7 @@ export default function Dashboard() {
     if (!data?.ui_visibility) return def
     try { return typeof data.ui_visibility === 'string' ? JSON.parse(data.ui_visibility) : data.ui_visibility }
     catch { return def }
-  }, [data?.ui_visibility])
+  }, [data])
 
   // Handle cross-component tab navigation (e.g. from notification panel "View violations")
   useEffect(() => {
@@ -94,10 +92,9 @@ export default function Dashboard() {
       {active?.id === 'mail'       && <MailTab />}
       {active?.id === 'ua'         && <UARequestsTab />}
       {active?.id === 'med_log'    && <MedLogTab />}
-      {active?.id === 'milestones' && <MilestonesTab />}
-      {active?.id === 'incidents'  && <IncidentsTab />}
       {active?.id === 'violations' && <ViolationsTab />}
       {active?.id === 'consent'    && <ConsentTab />}
+      {active?.id === 'groups'     && <GroupsTab />}
     </div>
   )
 }

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); background: var(--card-bg); padding: 22px 24px; color: var(--ink-900); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .fam { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 15px 16px; }
+  .fam .tag { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-500); }
+  .fam .stack { font-size: 11px; font-family: var(--font-mono); color: var(--ink-400); margin-top: 3px; }
+  .fam .big { font-size: 26px; margin-top: 12px; }
+  .fam .glyphs { font-size: 14px; color: var(--ink-700); margin-top: 7px; letter-spacing: .02em; }
+  .cap { margin-top: 14px; display: flex; align-items: baseline; gap: 10px; }
+  .cap b { font-size: 13px; font-weight: 700; }
+  .cap span { font-size: 12px; color: var(--ink-500); }
+</style>
+</head>
+<body>
+  <div class="two">
+    <div class="fam">
+      <div class="tag">Sans · UI</div>
+      <div class="stack">-apple-system, Segoe UI, Roboto…</div>
+      <div class="big" style="font-family:var(--font-sans)">Aa Bb Cc 0123</div>
+      <div class="glyphs" style="font-family:var(--font-sans)">The quick brown fox · 400 / 500 / 600 / 700</div>
+    </div>
+    <div class="fam">
+      <div class="tag">Mono · Data</div>
+      <div class="stack">SFMono, ui-monospace, Consolas…</div>
+      <div class="big" style="font-family:var(--font-mono);font-variant-numeric:tabular-nums">09:42 PM · Rm 214</div>
+      <div class="glyphs" style="font-family:var(--font-mono)">times · room # · counts · 0123456789</div>
+    </div>
+  </div>
+  <div class="cap"><b>Type families</b><span>Native system sans (fast, no webfont flash, clinical). Tabular monospace carries times, room numbers &amp; census counts — core to the log feel.</span></div>
+</body>
+</html>

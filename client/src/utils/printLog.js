@@ -65,7 +65,7 @@ export function openPrintWindow({
           + '>' + esc(c.label) + '</th>'
   ).join('') + '</tr></thead>'
 
-  let bodyHtml = ''
+  let bodyHtml
   if (rows.length === 0) {
     bodyHtml = '<tbody><tr><td colspan="' + columns.length + '" class="empty">' + esc(emptyMessage) + '</td></tr></tbody>'
   } else {
@@ -172,7 +172,7 @@ export function openPrintWindow({
       if (printBtn) printBtn.addEventListener('click', () => win.print())
       if (closeBtn) closeBtn.addEventListener('click', () => win.close())
       win.focus(); win.print()
-    } catch {}
+    } catch { /* empty */ }
   }, 250)
   return true
 }
@@ -194,8 +194,9 @@ export function classifyLogEntry(text) {
   if (t.includes('lunch break'))            return 'Lunch'
   if (t.includes(' — ua:') || t.match(/\bua:/i)) return 'UA'
   if (t.includes('room search'))            return 'Room Search'
-  if (t.includes('mail logged') || t.includes('mail delivered')) return 'Mail'
-  if (t.includes('violation') || t.includes('infraction')) return 'Violation'
+  if (t.includes('mail logged') || t.includes('mail delivered') || t.startsWith('mail received')) return 'Mail'
+  if (t.includes('violation') || t.includes('infraction')) return 'Infraction'
+  if (t.startsWith('group:'))               return 'Group'
   if (t.includes('intake'))                 return 'Intake'
   if (t.includes('discharge'))              return 'Discharge'
   return 'Note'

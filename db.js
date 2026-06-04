@@ -11,6 +11,12 @@ const crypto = require('crypto');
 let _db     = null;
 let _dbPath = null;
 
+// Returns "YYYY-MM-DD HH:MM:SS" in local time — use instead of datetime('now') (UTC).
+function nowLocal() {
+  const d = new Date(), p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
 const DEFAULT_WALK_AREAS = [
   'Supply Room','Basement / Offices','Kitchen','Meeting Room','Dining Room',
   'Laundry Area','Clothing Closet','Stairs to Roof','Floors 2, 3 & 4',
@@ -29,7 +35,8 @@ const PERMISSIONS = [
   'status.edit',      // change resident status badges (In Building, At Work, etc.)
   'residents.edit',   // edit resident info (room, name, case manager, phone, dates)
   'staff.edit',       // add / edit / delete staff members and categories
-  'chores.edit',      // assign chores and log completions
+  'chores.assign',    // assign chores to residents, manage master chore list
+  'chores.log',       // initial / log chore completions
   'passes.edit',      // create / edit / delete passes and pass notice
   'passes.status',    // change pass In/Out status and mark as Returned (check in/out)
   'reminders.view',   // see wellness check and walkthrough reminder banners
@@ -38,6 +45,7 @@ const PERMISSIONS = [
   'ua.delete',        // delete individual UA log entries from the report
   'mail.log',         // log incoming resident mail
   'mail.approve',     // approve logged mail for delivery to resident
+  'mail.deliver',     // mark approved mail as delivered to resident
   'mail.delete',      // delete mail log records
   'violations.log',      // log a new violation
   'violations.review',   // review a violation (assign consequence or waive)
@@ -66,32 +74,43 @@ const PERMISSIONS = [
   'consent.manage',      // create / revoke 42 CFR Part 2 consent records
   'disclosures.view',    // view the disclosure audit log
   'records.unlock',      // supervisor override to unlock a record past the 24h immutability window
+  'groups.view',         // view group sessions and attendance records
+  'groups.log',          // log group sessions and mark attendance
+  // ── Structured Clinical Lite ────────────────────────────────────
+  'clinical.notes',         // create / edit clinical progress notes
+  'clinical.treatment',     // create / edit treatment plans
+  'clinical.assessments',   // create / edit clinical assessments
+  'clinical.groups',        // create / edit group session notes
+  'clinical.discharge',     // create / edit discharge summaries
 ];
 
 const ROLE_PRESETS = {
   pa: [
     'reports.create', 'reports.close', 'log.add', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit', 'passes.status',
-    'reminders.view', 'ua.acknowledge', 'mail.log', 'violations.log',
+    'residents.edit', 'staff.edit', 'chores.assign', 'chores.log', 'passes.status',
+    'reminders.view', 'ua.acknowledge', 'mail.log', 'mail.deliver', 'violations.log',
     'violations.notify_consequence', 'mobile.access',
     'med.witness', 'incidents.log',
+    'groups.view', 'groups.log',
   ],
   supervisor: [
     'reports.create', 'reports.close', 'log.add', 'log.delete', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
-    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log',
+    'residents.edit', 'staff.edit', 'chores.assign', 'chores.log', 'passes.edit', 'passes.status',
+    'reminders.view', 'ua.request', 'ua.acknowledge', 'mail.log', 'mail.deliver',
     'violations.log', 'violations.review', 'violations.complete',
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'mobile.access',
     'ua.record', 'med.witness', 'med.delete',
     'milestones.edit', 'incidents.log', 'incidents.review',
+    'groups.view', 'groups.log',
+    'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   ],
   admin: [
     'reports.create', 'reports.close', 'reports.delete',
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
-    'residents.edit', 'staff.edit', 'chores.edit', 'passes.edit', 'passes.status',
-    'ua.request', 'ua.delete', 'mail.log', 'mail.approve', 'mail.delete',
+    'residents.edit', 'staff.edit', 'chores.assign', 'chores.log', 'passes.edit', 'passes.status',
+    'ua.request', 'ua.delete', 'mail.log', 'mail.approve', 'mail.deliver', 'mail.delete',
     'violations.log', 'violations.review', 'violations.complete', 'violations.delete',
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
@@ -101,6 +120,8 @@ const ROLE_PRESETS = {
     'milestones.edit', 'milestones.signoff',
     'incidents.log', 'incidents.review', 'incidents.delete',
     'consent.manage', 'disclosures.view', 'records.unlock',
+    'groups.view', 'groups.log',
+    'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   ],
   case_manager: [
     'residents.edit', 'staff.edit', 'passes.edit',
@@ -109,6 +130,8 @@ const ROLE_PRESETS = {
     'broadcast.send', 'broadcast.receive',
     'mobile.access',
     'milestones.edit', 'milestones.signoff', 'consent.manage',
+    'groups.view',
+    'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   ],
 };
 
@@ -121,163 +144,71 @@ function init(dbPath) {
   _db.pragma('foreign_keys = ON');
   console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
 
-  // OpsPoint rebrand: rename legacy `infractions` table → `violations` (and column)
-  // BEFORE _createSchema() so that the IF NOT EXISTS check finds the renamed table.
-  try { _db.exec('ALTER TABLE infractions RENAME TO violations'); } catch(e) {}
-  try { _db.exec('ALTER TABLE violations RENAME COLUMN infraction_date TO violation_date'); } catch(e) {}
-
   _createSchema();
-  // Migrations — add columns that may not exist in older DBs
+  _applyClinicalLiteMigration();   // Structured Clinical Lite — idempotent (CREATE IF NOT EXISTS)
+  // Backward-compat column additions for DBs that predate the current schema.
+  // All entries are try/catch no-ops once the column exists.
   const migrations = [
-    "ALTER TABLE users ADD COLUMN must_change_pw INTEGER DEFAULT 0",
-    "ALTER TABLE reports ADD COLUMN roster_snapshot TEXT DEFAULT NULL",
+    // clients — added post-launch (not in original CREATE TABLE)
     "ALTER TABLE clients ADD COLUMN chore TEXT DEFAULT ''",
     "ALTER TABLE clients ADD COLUMN chore_time TEXT DEFAULT ''",
-    "ALTER TABLE users ADD COLUMN permissions TEXT DEFAULT NULL",
-    "ALTER TABLE ua_requests ADD COLUMN is_interview INTEGER DEFAULT 0",
-    "ALTER TABLE ua_requests ADD COLUMN interview_name TEXT DEFAULT ''",
-    "ALTER TABLE users ADD COLUMN is_protected INTEGER DEFAULT 0",
-    // ── Phase 1 — Resident profile completion ─────────────────────
+    "ALTER TABLE clients ADD COLUMN chore_days TEXT DEFAULT NULL",
     "ALTER TABLE clients ADD COLUMN referral_source TEXT DEFAULT ''",
     "ALTER TABLE clients ADD COLUMN program_track TEXT DEFAULT ''",
     "ALTER TABLE clients ADD COLUMN emergency_contacts TEXT DEFAULT '[]'",
     "ALTER TABLE clients ADD COLUMN intake_notes TEXT DEFAULT ''",
-    // ── Phase 8 — Supervisor unlock columns (idempotent on each clinical table) ──
-    "ALTER TABLE ua_records ADD COLUMN unlocked_by TEXT DEFAULT ''",
-    "ALTER TABLE ua_records ADD COLUMN unlocked_at TEXT DEFAULT NULL",
-    "ALTER TABLE ua_records ADD COLUMN unlock_reason TEXT DEFAULT ''",
-    "ALTER TABLE med_administration_log ADD COLUMN unlocked_by TEXT DEFAULT ''",
-    "ALTER TABLE med_administration_log ADD COLUMN unlocked_at TEXT DEFAULT NULL",
-    "ALTER TABLE med_administration_log ADD COLUMN unlock_reason TEXT DEFAULT ''",
-    "ALTER TABLE milestones ADD COLUMN unlocked_by TEXT DEFAULT ''",
-    "ALTER TABLE milestones ADD COLUMN unlocked_at TEXT DEFAULT NULL",
-    "ALTER TABLE milestones ADD COLUMN unlock_reason TEXT DEFAULT ''",
-    "ALTER TABLE incidents ADD COLUMN unlocked_by TEXT DEFAULT ''",
-    "ALTER TABLE incidents ADD COLUMN unlocked_at TEXT DEFAULT NULL",
-    "ALTER TABLE incidents ADD COLUMN unlock_reason TEXT DEFAULT ''",
-    // ── UA reason ────────────────────────────────────────────────────
+    // ua_requests — added post-launch
+    "ALTER TABLE ua_requests ADD COLUMN is_interview INTEGER DEFAULT 0",
+    "ALTER TABLE ua_requests ADD COLUMN interview_name TEXT DEFAULT ''",
+    // ua_records — added post-launch
     "ALTER TABLE ua_records ADD COLUMN reason TEXT DEFAULT ''",
-    // ── UA ↔ log entry link (shared chain-of-custody photo) ──────────
     "ALTER TABLE ua_records ADD COLUMN log_entry_id INTEGER DEFAULT NULL",
-    // ── Mail type ─────────────────────────────────────────────────────
+    // mail_log — added post-launch
     "ALTER TABLE mail_log ADD COLUMN mail_type TEXT DEFAULT ''",
+    // users — is_protected predates the current CREATE TABLE on some installs
+    "ALTER TABLE users ADD COLUMN is_protected INTEGER DEFAULT 0",
+    // milestones — optional link to a treatment-plan goal (Structured Clinical Lite)
+    "ALTER TABLE milestones ADD COLUMN treatment_plan_id INTEGER DEFAULT NULL",
+    "ALTER TABLE milestones ADD COLUMN goal_id TEXT DEFAULT NULL",
   ];
   migrations.forEach(sql => { try { _db.exec(sql); } catch(e) {} });
-  _migrateRebrand();
   _seedDefaults();
   _seedExistingUserPermissions();
   _migratePermissions();
-  _migrateProfiles();
+  const _bootNewPerms = _migrateProfiles();
   _seedGroups();
   _migrateUserGroups();
-  _migrateGroups();
+  _migrateGroups(_bootNewPerms);
   pruneAuditLog(365);
   // Lock any clinical records past their 24h grace window (boot-time sweep)
   try { runLockSweep(); } catch(e) {}
 }
 
-// One-time rebrand migration: ShiftPoint → OpsPoint
-//  • role `monitor` → `pa` (display "Program Assistant")
-//  • permission keys `infractions.*` → `violations.*`
-//  • staff category "Monitor" → "Program Assistant"
-//  • facility_name 'ShiftPoint' → 'OpsPoint' (only if untouched)
-//  • ui_visibility tab `infractions` → `violations`
-// All steps are idempotent — safe to run on every boot.
-function _migrateRebrand() {
-  try { _db.exec("UPDATE users SET role='pa' WHERE role='monitor'"); } catch(e) {}
-  try { _db.exec("UPDATE users SET display_name='Program Assistant' WHERE username='monitor' AND (display_name='Monitor' OR display_name IS NULL OR display_name='')"); } catch(e) {}
-  try { _db.exec("UPDATE users SET username='pa' WHERE username='monitor'"); } catch(e) {}
-  try { _db.exec("UPDATE groups SET key='pa', label='Program Assistant' WHERE key='monitor'"); } catch(e) {}
-
-  // Rewrite permission JSON arrays on users
-  try {
-    const rows = _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL');
-    rows.forEach(r => {
-      const before = r.permissions || '[]';
-      const after  = before.replace(/"infractions\./g, '"violations.');
-      if (after !== before) _run('UPDATE users SET permissions=? WHERE id=?', [after, r.id]);
-    });
-  } catch(e) {}
-
-  // Rewrite permission JSON arrays on groups
-  try {
-    const rows = _q('SELECT id, permissions FROM groups');
-    rows.forEach(r => {
-      const before = r.permissions || '[]';
-      const after  = before.replace(/"infractions\./g, '"violations.');
-      if (after !== before) _run('UPDATE groups SET permissions=? WHERE id=?', [after, r.id]);
-    });
-  } catch(e) {}
-
-  // Rewrite stored permission_profiles setting
-  try {
-    const row = _q1("SELECT value FROM settings WHERE key='permission_profiles'");
-    if (row && row.value) {
-      let updated = row.value
-        .replace(/"infractions\./g, '"violations.')
-        .replace(/"key":"monitor"/g, '"key":"pa"')
-        .replace(/"label":"Monitor"/g, '"label":"Program Assistant"');
-      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='permission_profiles'", [updated]);
-    }
-  } catch(e) {}
-
-  // staff_categories: Monitor → Program Assistant
-  try {
-    const row = _q1("SELECT value FROM settings WHERE key='staff_categories'");
-    if (row && row.value) {
-      const updated = row.value.replace(/"Monitor"/g, '"Program Assistant"');
-      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='staff_categories'", [updated]);
-    }
-  } catch(e) {}
-
-  // ui_visibility: tabs.infractions → tabs.violations
-  try {
-    const row = _q1("SELECT value FROM settings WHERE key='ui_visibility'");
-    if (row && row.value) {
-      const updated = row.value.replace(/"infractions":/g, '"violations":');
-      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='ui_visibility'", [updated]);
-    }
-  } catch(e) {}
-
-  // facility_name: 'ShiftPoint' → 'OpsPoint' (only if user hasn't customized)
-  try {
-    const row = _q1("SELECT value FROM settings WHERE key='facility_name'");
-    if (row && (row.value === 'ShiftPoint' || row.value === '"ShiftPoint"')) {
-      _run("UPDATE settings SET value=? WHERE key='facility_name'", ['OpsPoint']);
-    }
-  } catch(e) {}
-
-  // known_permissions cache: rewrite infractions.* → violations.*
-  try {
-    const row = _q1("SELECT value FROM settings WHERE key='known_permissions'");
-    if (row && row.value) {
-      const updated = row.value.replace(/"infractions\./g, '"violations.');
-      if (updated !== row.value) _run("UPDATE settings SET value=? WHERE key='known_permissions'", [updated]);
-    }
-  } catch(e) {}
-
-  // Audit log: rewrite action/target_type strings for historical entries
-  try { _db.exec("UPDATE audit_log SET action=replace(action,'infraction','violation') WHERE action LIKE 'infraction%'"); } catch(e) {}
-  try { _db.exec("UPDATE audit_log SET target_type='violation' WHERE target_type='infraction'"); } catch(e) {}
-}
 
 function _createSchema() {
   _db.exec(`CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY, value TEXT
   )`);
   _db.exec(`CREATE TABLE IF NOT EXISTS clients (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    room           TEXT    NOT NULL,
-    name           TEXT    NOT NULL DEFAULT 'VACANT',
-    case_manager   TEXT    DEFAULT '',
-    phone          TEXT    DEFAULT '',
-    photo          TEXT    DEFAULT NULL,
-    intake_date    TEXT    DEFAULT NULL,
-    discharge_date TEXT    DEFAULT NULL,
-    is_special     INTEGER DEFAULT 0,
-    is_active      INTEGER DEFAULT 1,
-    special_label  TEXT    DEFAULT NULL,
-    sort_order     INTEGER DEFAULT 0
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    room              TEXT    NOT NULL,
+    name              TEXT    NOT NULL DEFAULT 'VACANT',
+    case_manager      TEXT    DEFAULT '',
+    phone             TEXT    DEFAULT '',
+    photo             TEXT    DEFAULT NULL,
+    intake_date       TEXT    DEFAULT NULL,
+    discharge_date    TEXT    DEFAULT NULL,
+    is_special        INTEGER DEFAULT 0,
+    is_active         INTEGER DEFAULT 1,
+    special_label     TEXT    DEFAULT NULL,
+    sort_order        INTEGER DEFAULT 0,
+    chore             TEXT    DEFAULT '',
+    chore_time        TEXT    DEFAULT '',
+    chore_days        TEXT    DEFAULT NULL,
+    referral_source   TEXT    DEFAULT '',
+    program_track     TEXT    DEFAULT '',
+    emergency_contacts TEXT   DEFAULT '[]',
+    intake_notes      TEXT    DEFAULT ''
   )`);
   _db.exec(`CREATE TABLE IF NOT EXISTS reports (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -312,7 +243,8 @@ function _createSchema() {
     salt         TEXT,
     created_at   TEXT DEFAULT (datetime('now')),
     must_change_pw INTEGER DEFAULT 0,
-    permissions  TEXT DEFAULT NULL
+    permissions  TEXT DEFAULT NULL,
+    is_protected INTEGER DEFAULT 0
   )`);
   _db.exec(`CREATE TABLE IF NOT EXISTS staff (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -352,7 +284,9 @@ function _createSchema() {
     requested_at    TEXT    DEFAULT (datetime('now')),
     acknowledged    INTEGER DEFAULT 0,
     acknowledged_by TEXT    DEFAULT '',
-    acknowledged_at TEXT    DEFAULT ''
+    acknowledged_at TEXT    DEFAULT '',
+    is_interview    INTEGER DEFAULT 0,
+    interview_name  TEXT    DEFAULT ''
   )`);
   _db.exec(`CREATE TABLE IF NOT EXISTS mail_log (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -367,6 +301,7 @@ function _createSchema() {
     approved_by  TEXT    DEFAULT '',
     approved_at  TEXT    DEFAULT '',
     delivered_at TEXT    DEFAULT '',
+    mail_type    TEXT    DEFAULT '',
     created_at   TEXT    DEFAULT (datetime('now'))
   )`);
   _db.exec(`CREATE TABLE IF NOT EXISTS violations (
@@ -449,6 +384,8 @@ function _createSchema() {
     chain_of_custody   TEXT    DEFAULT '',
     photo              TEXT    DEFAULT NULL,
     notes              TEXT    DEFAULT '',
+    reason             TEXT    DEFAULT '',
+    log_entry_id       INTEGER DEFAULT NULL,
     locked_at          TEXT    DEFAULT NULL,
     unlocked_by        TEXT    DEFAULT '',
     unlocked_at        TEXT    DEFAULT NULL,
@@ -494,6 +431,8 @@ function _createSchema() {
     counselor_name   TEXT    DEFAULT '',
     signed_off_at    TEXT    DEFAULT NULL,
     notes            TEXT    DEFAULT '',
+    treatment_plan_id INTEGER DEFAULT NULL,
+    goal_id          TEXT    DEFAULT NULL,
     locked_at        TEXT    DEFAULT NULL,
     unlocked_by      TEXT    DEFAULT '',
     unlocked_at      TEXT    DEFAULT NULL,
@@ -581,6 +520,29 @@ function _createSchema() {
     method            TEXT    DEFAULT '',
     notes             TEXT    DEFAULT ''
   )`);
+
+  // ── Group sessions + attendance (groups.view / groups.log) ────────────
+  _db.exec(`CREATE TABLE IF NOT EXISTS group_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_date    TEXT    NOT NULL,
+    group_name      TEXT    NOT NULL,
+    time_of_day     TEXT    DEFAULT '',
+    facilitator     TEXT    DEFAULT '',
+    notes           TEXT    DEFAULT '',
+    created_by_id   INTEGER,
+    created_by_name TEXT    DEFAULT '',
+    created_at      TEXT    DEFAULT (datetime('now'))
+  )`);
+  _db.exec(`CREATE TABLE IF NOT EXISTS group_attendance (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  INTEGER NOT NULL REFERENCES group_sessions(id) ON DELETE CASCADE,
+    client_id   INTEGER NOT NULL,
+    client_name TEXT    NOT NULL DEFAULT '',
+    room        TEXT    NOT NULL DEFAULT '',
+    present     INTEGER DEFAULT 1,
+    notes       TEXT    DEFAULT '',
+    UNIQUE(session_id, client_id)
+  )`);
 }
 
 function _hashPw(pw) {
@@ -617,6 +579,7 @@ function _seedDefaults() {
     walk_schedule:          '[]',
     active_report_id:       'null',
     master_chores:          '[]',
+    master_groups:          '[]',
     pass_notice:            '""',
     staff_categories:       JSON.stringify(['Director','Case Manager','Program Assistant','Other']),
     shift_day_start:        '07:00',
@@ -681,66 +644,15 @@ function _seedExistingUserPermissions() {
   });
 }
 
-// Migrate permissions for existing users when new permissions are added to presets
+// Strip any retired permissions (no longer in PERMISSIONS) from user rows.
+// New permissions propagate via _migrateGroups — no need to enumerate them here.
 function _migratePermissions() {
-  const users = _q('SELECT id, role, permissions FROM users WHERE permissions IS NOT NULL');
-  users.forEach(u => {
+  _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL').forEach(u => {
     try {
-      let perms = JSON.parse(u.permissions || '[]');
-      let changed = false;
-      if ((u.role === 'pa' || u.role === 'supervisor') && !perms.includes('ua.acknowledge')) {
-        perms.push('ua.acknowledge'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.log')) {
-        perms.push('mail.log'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.approve')) {
-        perms.push('mail.approve'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('status.edit')) {
-        perms.push('status.edit'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('issues.edit')) {
-        perms.push('issues.edit'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('ua.delete')) {
-        perms.push('ua.delete'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor') && !perms.includes('reminders.view')) {
-        perms.push('reminders.view'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin' || u.role === 'case_manager') && !perms.includes('mobile.access')) {
-        perms.push('mobile.access'); changed = true;
-      }
-      // Strip deprecated mobile.full permission from existing users
-      if (perms.includes('mobile.full')) {
-        perms = perms.filter(p => p !== 'mobile.full'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('passes.status')) {
-        perms.push('passes.status'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('mail.delete')) {
-        perms.push('mail.delete'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.log')) {
-        perms.push('violations.log'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.review')) {
-        perms.push('violations.review'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.complete')) {
-        perms.push('violations.complete'); changed = true;
-      }
-      if (u.role === 'admin' && !perms.includes('violations.delete')) {
-        perms.push('violations.delete'); changed = true;
-      }
-      if ((u.role === 'pa' || u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.notify_consequence')) {
-        perms.push('violations.notify_consequence'); changed = true;
-      }
-      if ((u.role === 'supervisor' || u.role === 'admin') && !perms.includes('violations.notify_review')) {
-        perms.push('violations.notify_review'); changed = true;
-      }
-      if (changed) _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
+      const perms   = JSON.parse(u.permissions || '[]');
+      const cleaned = perms.filter(p => PERMISSIONS.includes(p));
+      if (cleaned.length !== perms.length)
+        _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(cleaned), u.id]);
     } catch(e) {}
   });
 }
@@ -776,6 +688,7 @@ function _migrateProfiles() {
     }
   });
   if (changed) setSetting('permission_profiles', profiles);
+  return newPerms; // pass to _migrateGroups so it uses the same delta
 }
 
 // ── Groups ────────────────────────────────────────────────────────────
@@ -809,16 +722,18 @@ function _migrateUserGroups() {
 // Ensure every built-in group contains all permissions its ROLE_PRESET says it should have,
 // and strip any retired permissions (no longer in PERMISSIONS) from every group.
 // Runs on every boot — idempotent.
-function _migrateGroups() {
+function _migrateGroups(newPerms = []) {
   const groups = _q('SELECT * FROM groups');
   groups.forEach(g => {
     const perms   = _j(g.permissions, []);
     const preset  = ROLE_PRESETS[g.key];
-    const missing = preset ? preset.filter(p => !perms.includes(p)) : [];
+    // Only add permissions that are NEWLY introduced in this boot (not previously known).
+    // Never add back permissions that were deliberately removed from a group.
+    const toAdd   = preset ? newPerms.filter(p => preset.includes(p) && !perms.includes(p)) : [];
     const cleaned = perms.filter(p => PERMISSIONS.includes(p)); // drop retired perms
     const stripped = cleaned.length !== perms.length;
-    if (!missing.length && !stripped) return;
-    const updated = cleaned.concat(missing.filter(p => PERMISSIONS.includes(p)));
+    if (!toAdd.length && !stripped) return;
+    const updated = cleaned.concat(toAdd);
     _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(updated), g.id]);
     recomputeGroupMemberPermissions(g.id);
   });
@@ -1023,6 +938,7 @@ function getAllData(perms) {
     passes:                 passRows,
     chore_log:              choreLog,
     master_chores:          getSetting('master_chores',          []),
+    master_groups:          getSetting('master_groups',          []),
     pass_notice:            getSetting('pass_notice',            ''),
     staff_categories:       getSetting('staff_categories',       ['Director','Case Manager','Program Assistant','Other']),
     program_tracks:         getSetting('program_tracks',         ['SUD Residential','Re-entry','Transitional','Sober Living']),
@@ -1031,6 +947,43 @@ function getAllData(perms) {
     session_idle_mins:      parseInt(getSetting('session_idle_mins', 30)) || 30,
     ui_visibility:          getSetting('ui_visibility',          {}),
   };
+}
+
+// ── Group sessions + attendance ───────────────────────────────────────
+function getGroupSessions({ date, from, to }) {
+  if (from && to) {
+    return _q('SELECT * FROM group_sessions WHERE session_date>=? AND session_date<=? ORDER BY session_date, id', [from, to]);
+  }
+  const d = date || new Date().toISOString().slice(0, 10);
+  return _q('SELECT * FROM group_sessions WHERE session_date=? ORDER BY id', [d]);
+}
+
+function createGroupSession({ session_date, group_name, time_of_day, facilitator, notes, created_by_id, created_by_name }) {
+  _run(`INSERT INTO group_sessions (session_date,group_name,time_of_day,facilitator,notes,created_by_id,created_by_name,created_at)
+        VALUES (?,?,?,?,?,?,?,?)`,
+    [session_date, group_name, time_of_day||'', facilitator||'', notes||'', created_by_id||null, created_by_name||'', nowLocal()]);
+  const row = _q1('SELECT last_insert_rowid() AS id');
+  return row ? _q1('SELECT * FROM group_sessions WHERE id=?', [row.id]) : null;
+}
+
+function deleteGroupSession(id) {
+  _run('DELETE FROM group_sessions WHERE id=?', [id]);
+}
+
+function getGroupAttendance(session_id) {
+  return _q('SELECT * FROM group_attendance WHERE session_id=? ORDER BY room, client_name', [session_id]);
+}
+
+function saveGroupAttendance(session_id, attendees) {
+  // attendees: [{client_id, client_name, room, present, notes}]
+  attendees.forEach(a => {
+    _run(`INSERT INTO group_attendance (session_id,client_id,client_name,room,present,notes)
+          VALUES (?,?,?,?,?,?)
+          ON CONFLICT(session_id,client_id) DO UPDATE SET
+            present=excluded.present, notes=excluded.notes,
+            client_name=excluded.client_name, room=excluded.room`,
+      [session_id, a.client_id, a.client_name||'', a.room||'', a.present?1:0, a.notes||'']);
+  });
 }
 
 // ── Clinical record helpers (Phases 2-7) ──────────────────────────────
@@ -1051,8 +1004,8 @@ function isRecordLocked(table, id) {
 
 function unlockRecord(table, id, by, reason) {
   if (!CLINICAL_TABLES.includes(table)) throw new Error('Invalid table');
-  _run(`UPDATE ${table} SET locked_at=NULL, unlocked_by=?, unlocked_at=datetime('now'), unlock_reason=? WHERE id=?`,
-    [String(by||''), String(reason||''), id]);
+  _run(`UPDATE ${table} SET locked_at=NULL, unlocked_by=?, unlocked_at=?, unlock_reason=? WHERE id=?`,
+    [String(by||''), nowLocal(), String(reason||''), id]);
 }
 
 // Scheduled job — lock any clinical record whose 24h grace period has elapsed.
@@ -1062,8 +1015,9 @@ function runLockSweep() {
   CLINICAL_TABLES.forEach(t => {
     try {
       const r = _run(
-        `UPDATE ${t} SET locked_at=datetime('now')
-         WHERE locked_at IS NULL AND created_at < datetime('now','-24 hours')`
+        `UPDATE ${t} SET locked_at=?
+         WHERE locked_at IS NULL AND created_at < datetime('now','-24 hours')`,
+        [nowLocal()]
       );
       total += r.changes || 0;
     } catch(e) {}
@@ -1166,10 +1120,11 @@ function deleteMedLog(id) { _run('DELETE FROM med_administration_log WHERE id=?'
 function createMilestone(rec) {
   const r = _run(
     `INSERT INTO milestones
-     (client_id,client_name,phase,objective,target_date,status,notes,created_by_name)
-     VALUES (?,?,?,?,?,?,?,?)`,
+     (client_id,client_name,phase,objective,target_date,status,notes,treatment_plan_id,goal_id,created_by_name)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [rec.client_id, rec.client_name||'', rec.phase||'', rec.objective||'',
-     rec.target_date||null, rec.status||'in_progress', rec.notes||'', rec.created_by_name||'']
+     rec.target_date||null, rec.status||'in_progress', rec.notes||'',
+     rec.treatment_plan_id||null, rec.goal_id||null, rec.created_by_name||'']
   );
   return _q1('SELECT * FROM milestones WHERE id=?', [r.lastInsertRowid]);
 }
@@ -1184,7 +1139,7 @@ function getMilestones(filter) {
 }
 function updateMilestone(id, patch) {
   const fields = [], vals = [];
-  ['phase','objective','target_date','completion_date','status','notes']
+  ['phase','objective','target_date','completion_date','status','notes','treatment_plan_id','goal_id']
     .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
   if (!fields.length) return null;
   vals.push(id);
@@ -1193,10 +1148,10 @@ function updateMilestone(id, patch) {
 }
 function signoffMilestone(id, counselorId, counselorName) {
   _run(`UPDATE milestones SET counselor_id=?, counselor_name=?,
-        signed_off_at=datetime('now'), status='completed',
+        signed_off_at=?, status='completed',
         completion_date=COALESCE(completion_date, date('now'))
         WHERE id=?`,
-       [counselorId, counselorName||'', id]);
+       [counselorId, counselorName||'', nowLocal(), id]);
   return _q1('SELECT * FROM milestones WHERE id=?', [id]);
 }
 function deleteMilestone(id) { _run('DELETE FROM milestones WHERE id=?', [id]); }
@@ -1250,8 +1205,8 @@ function updateIncident(id, patch) {
 }
 function reviewIncident(id, supervisorId, supervisorName, reviewNotes, newStatus) {
   _run(`UPDATE incidents SET supervisor_id=?, supervisor_name=?,
-        reviewed_at=datetime('now'), review_notes=?, status=? WHERE id=?`,
-       [supervisorId, supervisorName||'', reviewNotes||'', newStatus||'reviewed', id]);
+        reviewed_at=?, review_notes=?, status=? WHERE id=?`,
+       [supervisorId, supervisorName||'', nowLocal(), reviewNotes||'', newStatus||'reviewed', id]);
   return getIncident(id);
 }
 function deleteIncident(id) { _run('DELETE FROM incidents WHERE id=?', [id]); }
@@ -1307,8 +1262,8 @@ function getConsentRecords(clientId) {
   return _q('SELECT * FROM consent_records WHERE client_id=? ORDER BY effective_date DESC, id DESC', [clientId]);
 }
 function revokeConsent(id, by) {
-  _run(`UPDATE consent_records SET revoked=1, revoked_at=datetime('now'), revoked_by=? WHERE id=?`,
-       [String(by||''), id]);
+  _run(`UPDATE consent_records SET revoked=1, revoked_at=?, revoked_by=? WHERE id=?`,
+       [nowLocal(), String(by||''), id]);
   return _q1('SELECT * FROM consent_records WHERE id=?', [id]);
 }
 // Returns the active consent that covers a (client, informationType) pair, or null if blocked.
@@ -1527,8 +1482,234 @@ function getBroadcasts(limitHours) {
   );
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Structured Clinical Lite — clinical_notes, treatment_plans, assessments,
+// group_notes (+attendees), discharge_summaries.
+//
+// Helpers accept an OPTIONAL `db` (a better-sqlite3 instance) that defaults to
+// the module connection. Server code calls them param-less; unit tests inject
+// an isolated in-memory database seeded with migrations/001_clinical_lite.sql.
+//
+// Constraints honoured here:
+//   • synchronous (no async) — matches the rest of this file
+//   • every create/update/sign/delete writes an audit_log row + calls save()
+//   • goals (treatment_plans) and content (assessments) are serialised to JSON
+//     on write and returned AS-IS (routes parse) per spec
+//   • NO medications / e-prescribe / claims / labs anywhere
+// ════════════════════════════════════════════════════════════════════════
+
+// Apply the clinical-lite migration file against a connection. Idempotent.
+function _applyClinicalLiteMigration(db = _db) {
+  const file = path.join(__dirname, 'migrations', '001_clinical_lite.sql');
+  try {
+    if (fs.existsSync(file)) db.exec(fs.readFileSync(file, 'utf8'));
+  } catch (e) { console.error('  clinical-lite migration failed:', e.message); }
+}
+
+// Write an audit row using the EXISTING audit_log schema so clinical activity
+// shows up in the same audit viewer as everything else. Never throws.
+function _clinicalAudit(db, userId, action, table, recordId, detail) {
+  try {
+    let name = '';
+    try {
+      const u = db.prepare('SELECT display_name, username FROM users WHERE id=?').get(userId);
+      if (u) name = u.display_name || u.username || '';
+    } catch (e) { /* users table may be absent in isolated test dbs */ }
+    db.prepare(
+      `INSERT INTO audit_log (actor_id,actor_name,ip,action,target_type,target_id,target_label,detail)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).run(
+      userId || null, String(name).slice(0, 100), '',
+      String(action), String(table).slice(0, 50),
+      recordId != null ? String(recordId) : '', '',
+      (detail && typeof detail === 'object') ? JSON.stringify(detail).slice(0, 2000) : String(detail || '').slice(0, 2000)
+    );
+  } catch (e) { /* never let an audit failure crash the caller */ }
+}
+
+// Stable short id for treatment-plan goals so milestones can reference a goal
+// even as the goals array is edited/reordered.
+function _genId() { return crypto.randomBytes(8).toString('hex'); }
+
+// Ensure every goal in a treatment plan carries a stable `id` (assign on write
+// if missing). Milestones link to a goal via (treatment_plan_id, goal_id).
+function _ensureGoalIds(fields) {
+  if (!fields || !Array.isArray(fields.goals)) return fields;
+  return {
+    ...fields,
+    goals: fields.goals.map(g => (g && typeof g === 'object') ? { ...g, id: g.id || _genId() } : g),
+  };
+}
+
+// Generic CRUD factory for the single-table clinical entities.
+function _makeClinical(table, opts) {
+  const { jsonFields = [], createCols, updateCols, signFinal = true, dateCol, onWrite } = opts;
+  const order = dateCol ? `ORDER BY ${dateCol} DESC, id DESC` : 'ORDER BY id DESC';
+
+  function _ser(fields) {
+    const out = { ...fields };
+    jsonFields.forEach(f => {
+      if (out[f] !== undefined) {
+        const fallback = (f === 'content') ? {} : [];
+        out[f] = JSON.stringify(out[f] == null ? fallback : out[f]);
+      }
+    });
+    return out;
+  }
+  function getById(db = _db, id) {
+    return db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id) || null;
+  }
+  function getAll(db = _db, clientId) {
+    if (clientId != null)
+      return db.prepare(`SELECT * FROM ${table} WHERE client_id=? ${order}`).all(clientId);
+    return db.prepare(`SELECT * FROM ${table} ${order}`).all();
+  }
+  function getByClient(db = _db, clientId) {
+    return db.prepare(`SELECT * FROM ${table} WHERE client_id=? ${order}`).all(clientId);
+  }
+  function create(db = _db, fields = {}) {
+    if (onWrite) fields = onWrite(fields);
+    const f    = _ser(fields);
+    const cols = createCols.filter(c => f[c] !== undefined);
+    const now  = nowLocal();
+    const allCols = [...cols, 'created_at', 'updated_at'];
+    const vals    = cols.map(c => f[c]); vals.push(now, now);
+    const ph      = allCols.map(() => '?').join(',');
+    const info = db.prepare(`INSERT INTO ${table} (${allCols.join(',')}) VALUES (${ph})`).run(...vals);
+    const id   = info.lastInsertRowid;
+    _clinicalAudit(db, fields.author_id != null ? fields.author_id : fields.facilitator_id, `${table}.create`, table, id);
+    save();
+    return getById(db, id);
+  }
+  function update(db = _db, id, fields = {}, userId) {
+    if (onWrite) fields = onWrite(fields);
+    const f    = _ser(fields);
+    const cols = updateCols.filter(c => f[c] !== undefined);
+    const sets = cols.map(c => `${c}=?`); sets.push('updated_at=?');
+    const vals = cols.map(c => f[c]); vals.push(nowLocal(), id);
+    db.prepare(`UPDATE ${table} SET ${sets.join(',')} WHERE id=?`).run(...vals);
+    _clinicalAudit(db, userId, `${table}.update`, table, id);
+    save();
+    return getById(db, id);
+  }
+  function sign(db = _db, id, userId) {
+    const now = nowLocal();
+    if (signFinal)
+      db.prepare(`UPDATE ${table} SET status='final', signed_at=?, signed_by=?, updated_at=? WHERE id=?`).run(now, userId || null, now, id);
+    else
+      db.prepare(`UPDATE ${table} SET signed_at=?, signed_by=?, updated_at=? WHERE id=?`).run(now, userId || null, now, id);
+    _clinicalAudit(db, userId, `${table}.sign`, table, id);
+    save();
+    return getById(db, id);
+  }
+  function del(db = _db, id, userId) {
+    db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
+    _clinicalAudit(db, userId, `${table}.delete`, table, id);
+    save();
+    return true;
+  }
+  return { getAll, getByClient, getById, create, update, sign, delete: del };
+}
+
+// ── Group notes — extends the base with attendee handling ──────────────────
+const _gnBase = _makeClinical('group_notes', {
+  createCols: ['group_name', 'facilitator_id', 'session_date', 'topic', 'content', 'status'],
+  updateCols: ['group_name', 'session_date', 'topic', 'content'],
+  signFinal:  true,
+  dateCol:    'session_date',
+});
+
+function _gnGetAttendees(db = _db, groupNoteId) {
+  return db.prepare(
+    `SELECT a.group_note_id, a.client_id, a.participation, a.individual_note,
+            c.name AS client_name, c.room AS room
+       FROM group_note_attendees a
+       LEFT JOIN clients c ON c.id = a.client_id
+      WHERE a.group_note_id = ?
+      ORDER BY CAST(c.room AS INTEGER), c.room, c.name`
+  ).all(groupNoteId);
+}
+function _gnInsertAttendees(db, groupNoteId, attendees) {
+  const stmt = db.prepare(
+    `INSERT INTO group_note_attendees (group_note_id,client_id,participation,individual_note) VALUES (?,?,?,?)`
+  );
+  (attendees || []).forEach(a => {
+    if (!a || a.client_id == null) return;
+    const part = ['present', 'absent', 'excused'].includes(a.participation) ? a.participation : 'present';
+    try { stmt.run(groupNoteId, a.client_id, part, a.individual_note || ''); } catch (e) { /* skip dup/bad */ }
+  });
+}
+function _gnEmbed(db, row) { if (row) row.attendees = _gnGetAttendees(db, row.id); return row; }
+
+const _groupNotes = {
+  getAll(db = _db, clientId) {
+    const rows = (clientId != null)
+      ? db.prepare(`SELECT gn.* FROM group_notes gn
+                    JOIN group_note_attendees a ON a.group_note_id = gn.id
+                    WHERE a.client_id = ? ORDER BY gn.session_date DESC, gn.id DESC`).all(clientId)
+      : _gnBase.getAll(db);
+    return rows.map(r => _gnEmbed(db, r));
+  },
+  getByClient(db = _db, clientId) { return _groupNotes.getAll(db, clientId); },
+  getById(db = _db, id) { return _gnEmbed(db, _gnBase.getById(db, id)); },
+  getAttendees: _gnGetAttendees,
+  create(db = _db, fields = {}) {
+    const row = _gnBase.create(db, fields);
+    _gnInsertAttendees(db, row.id, fields.attendees);
+    save();
+    return _gnEmbed(db, _gnBase.getById(db, row.id));
+  },
+  update(db = _db, id, fields = {}, userId) {
+    _gnBase.update(db, id, fields, userId);
+    if (fields.attendees !== undefined) {
+      db.prepare(`DELETE FROM group_note_attendees WHERE group_note_id=?`).run(id);
+      _gnInsertAttendees(db, id, fields.attendees);
+      save();
+    }
+    return _gnEmbed(db, _gnBase.getById(db, id));
+  },
+  sign(db = _db, id, userId) { _gnBase.sign(db, id, userId); return _gnEmbed(db, _gnBase.getById(db, id)); },
+  delete(db = _db, id, userId) {
+    db.prepare(`DELETE FROM group_note_attendees WHERE group_note_id=?`).run(id); // explicit cascade (FK-off test dbs)
+    return _gnBase.delete(db, id, userId);
+  },
+};
+
+const clinicalDb = {
+  notes: _makeClinical('clinical_notes', {
+    createCols: ['client_id', 'author_id', 'note_type', 'note_date', 'content', 'status'],
+    updateCols: ['note_type', 'note_date', 'content'],
+    signFinal:  true,
+    dateCol:    'note_date',
+  }),
+  treatmentPlans: _makeClinical('treatment_plans', {
+    jsonFields: ['goals'],
+    createCols: ['client_id', 'author_id', 'plan_date', 'target_date', 'presenting_problem', 'goals', 'strengths', 'barriers', 'status', 'review_date'],
+    updateCols: ['plan_date', 'target_date', 'presenting_problem', 'goals', 'strengths', 'barriers', 'status', 'review_date'],
+    signFinal:  false,   // status enum is active|completed|discontinued — sign only stamps signed_at/by
+    dateCol:    'plan_date',
+    onWrite:    _ensureGoalIds,   // stamp stable ids on goals so milestones can link to them
+  }),
+  assessments: _makeClinical('assessments', {
+    jsonFields: ['content'],
+    createCols: ['client_id', 'author_id', 'assessment_type', 'assessment_date', 'content', 'score', 'score_label', 'status'],
+    updateCols: ['assessment_type', 'assessment_date', 'content', 'score', 'score_label'],
+    signFinal:  true,
+    dateCol:    'assessment_date',
+  }),
+  groupNotes: _groupNotes,
+  dischargeSummaries: _makeClinical('discharge_summaries', {
+    createCols: ['client_id', 'author_id', 'discharge_date', 'admission_date', 'discharge_type', 'discharge_to', 'presenting_problem', 'treatment_summary', 'progress_toward_goals', 'aftercare_plan', 'follow_up_date', 'status'],
+    updateCols: ['discharge_date', 'admission_date', 'discharge_type', 'discharge_to', 'presenting_problem', 'treatment_summary', 'progress_toward_goals', 'aftercare_plan', 'follow_up_date'],
+    signFinal:  true,
+    dateCol:    'discharge_date',
+  }),
+  applyMigration: _applyClinicalLiteMigration,
+};
+
 module.exports = {
   init, save, query, query1, run, runAndSave,
+  clinicalDb,
   getSetting, setSetting, setSettingAndSave,
   getAllData, upsertReport, savePhoto, getPhotoB64,
   DEFAULT_WALK_AREAS, DEFAULT_UA_PANEL,
@@ -1556,6 +1737,9 @@ module.exports = {
   createIncident, getIncident, getIncidents, updateIncident, reviewIncident, deleteIncident,
   // Discharge records
   createDischargeRecord, getDischargeRecord, getDischargeRecords,
+  // Group sessions + attendance
+  getGroupSessions, createGroupSession, deleteGroupSession,
+  getGroupAttendance, saveGroupAttendance,
   // Consent + disclosures (42 CFR Part 2)
   createConsentRecord, getConsentRecord, getConsentRecords, revokeConsent, findActiveConsent,
   logDisclosure, getDisclosures,

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="../ui_kits/opspoint/opspoint.css">
+<style>
+  body { background: #fff; padding: 22px 24px; }
+  .reminder-bar { margin-bottom: 14px; }
+  .cap { margin-top: 8px; display: flex; align-items: baseline; gap: 10px; }
+  .cap b { font-size: 13px; font-weight: 700; }
+  .cap span { font-size: 12px; color: var(--ink-500); }
+</style>
+</head>
+<body>
+  <div class="reminder-bar">
+    <div class="reminder-card ok"><span>🟢</span><span>Wellness Check</span><span class="rtime">next in 48m</span></div>
+    <div class="reminder-card warn"><span>🟡</span><span>Walkthrough</span><span class="rtime">due in 9m</span></div>
+    <div class="reminder-card overdue"><span>🔴</span><span>Wellness Check</span><span class="rtime">OVERDUE +12m</span></div>
+  </div>
+  <div class="cap"><b>Reminder cards</b><span>Interval timers for wellness checks &amp; walkthroughs — calm green → amber warning → red overdue, mapped to the semantic signals.</span></div>
+</body>
+</html>

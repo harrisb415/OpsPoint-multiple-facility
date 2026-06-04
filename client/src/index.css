@@ -765,6 +765,45 @@ th.sortable.desc::after { content: ' â†“'; opacity: 1; color: var(--gold-50
 .report-2col > .section { margin-bottom: 0; }
 @media (max-width: 720px) { .report-2col { grid-template-columns: 1fr; } }
 
+/* - Admin shell (clinical-style panels; scoped — no global bleed) -- */
+/* Re-skins the legacy boxed `.section` chrome to match the clinical look:
+   light bordered card, no gold dot, readable normal-case title. Panels
+   fill the content width; form inputs stay capped so they don't stretch. */
+.admin-shell .section {
+  background: #fff;
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: none;
+  margin-bottom: 14px;
+}
+.admin-shell .section-head {
+  background: #fff;
+  border-bottom: 1px solid var(--line, #e2e8f0);
+  padding: 14px 18px;
+  min-height: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.admin-shell .sh-dot { display: none; }
+.admin-shell .section-head .sh-left > span:not(.sh-dot) {
+  font-size: 1.02rem; font-weight: 800;
+  letter-spacing: -.01em; text-transform: none; color: #0f172a;
+}
+.admin-shell .section-body { padding: 18px; }
+
+/* Keep inputs readable now that cards span the full width. */
+.admin-shell .section-body .field input:not([type=checkbox]):not([type=radio]),
+.admin-shell .section-body .field select { max-width: 440px; }
+
+/* Field rows that should fill the width flow into responsive columns. */
+.admin-shell .adm-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 18px;
+}
+.admin-shell .adm-row .field input:not([type=checkbox]):not([type=radio]),
+.admin-shell .adm-row .field select { max-width: none; }
+
 /* - Print ------------------------------------------------------- */
 @media print {
   .site-header, .sidebar, .header-actions,

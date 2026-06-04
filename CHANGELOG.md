@@ -2,6 +2,116 @@
 
 ---
 
+## v2.3.2 — Structured Clinical Lite & Admin Rebuild (2026-06-04)
+
+### Structured Clinical Lite — new Clinical section
+- New `/clinical` area with a left-rail layout: **Clinical Notes, Treatment Plans, Milestones, Assessments, Group Notes, Incident Reports, Discharge Summaries**
+- New tables (`migrations/001_clinical_lite.sql`, idempotent): `clinical_notes`, `treatment_plans`, `assessments`, `group_notes`, `group_note_attendees`, `discharge_summaries`
+- Draft → **sign/finalise** workflow; signed records are locked from further edits/deletes
+- Five new permissions: `clinical.notes`, `clinical.treatment`, `clinical.assessments`, `clinical.groups`, `clinical.discharge`. Clinical button appears when a user holds **any** clinical-section permission
+
+### Group notes — unified PA → clinician workflow
+- Main **Groups** tab is now attendance-entry only (`groups.log`), writing to the shared `group_notes` record
+- Clinician completes and signs the note in **Clinical → Group Notes** (`clinical.groups`)
+- Server strips note content/status from attendance-only role; two-role split enforced server-side
+
+### Incidents & Milestones moved into Clinical
+- Both removed from the main sidebar and the Display/Features visibility list — they're now permission-gated inside the Clinical section, eliminating the milestone/treatment-plan double-up
+
+### Milestone ↔ Treatment Plan soft link
+- Treatment-plan goals get stable IDs; a milestone can optionally **advance a specific goal**
+- Treatment Plan view shows a per-goal milestone rollup chip; milestone views show **completed date** and **logged date**
+
+### Permission editor — domain grouping
+- Reorganised into 6 collapsible domains with tri-state master toggles and granted/total counts; search auto-expands matches
+- Added previously-missing permissions: `ua.draw`, `broadcast.send`, `broadcast.receive`; new **Clinical Charting** category
+
+### Admin panel — clinical-rail rebuild
+- `/admin` rebuilt to the clinical left-rail layout (Accounts / Facility / Records / System), permission-filtered — replaces the nested top-tabs + sub-tabs
+- Panels restyled to the clinical card look: full-width, no boxed `.section` chrome, forms flow into responsive columns
+- Facility **Display → Features**; **Facility Name + Shift Times + Reminders** consolidated into a single **General** page
+
+### Fixes
+- Milestone "Custom objective" input no longer disappears on first keystroke
+- Milestone logged-date timezone handling
+
+### Tests
+- Added clinical unit + integration test suites (`tests/clinical.unit.test.js`, `tests/clinical.integration.test.js`)
+
+---
+
+## v2.3.1 — Scheduled Reminders, Permission Fixes & UI Polish (2026-06-02)
+
+### Wellness & walkthrough reminders — schedule-based
+- Reminders now fire at **specific clock times** configured in Admin → Facility Setup → Reminders, replacing the old interval-based system
+- Cards show "next at 2:00 PM" or "OVERDUE — missed at 1:00 PM"; no cards shown when no schedule is configured
+- Dismiss expires when the schedule advances to the next time slot
+
+### Permissions — group stability fix
+- Group permissions no longer reset on server restart; boot migration now only adds genuinely new permissions (delta tracking via `known_permissions` settings key), preserving intentional removals
+
+### `mail.deliver` permission
+- New gated permission for marking mail as delivered to resident
+- Added to admin permission editor (Mail Management), PA/Supervisor/Admin role presets, and MailTab deliver button
+
+### Permission editor — search
+- Admin panel group/profile permission editor has a search bar filtering across all categories by key or label
+
+### Admin panel layout
+- `/admin` route no longer has a 210 px left indent when sidebar is hidden
+
+### Client report builder — Activity Timeline
+- New section option: **Activity Timeline** — log entries from any shift report mentioning the resident by name or room, newest-first with type badge
+
+### About & Login pages
+- About page redesigned: compact hero, feature grid, description block
+- Version badge added to login page
+
+### DB migration cleanup
+- Removed ShiftPoint → OpsPoint rebrand migration running on every boot (~80 lines)
+- Replaced 70-line `_migratePermissions` with 5-line version
+- Removed 16 redundant `ALTER TABLE` statements; complete column definitions now in `CREATE TABLE` schemas
+
+---
+
+## v2.3.0 — Client Records, Report Builder & Data Quality (2026-05-31)
+
+### Client profile — Discharge tab
+- **Discharge tab** added to client profile drawer (inactive clients only) — surfaces discharge date, reason, days in program, narrative, aftercare plan, and referrals made; previously collected but never displayed
+- **Print support** — 🖨 Print button in the Discharge tab generates a print-ready summary with all discharge records for the client
+
+### Clients tab — quality-of-life
+- **Sortable columns** — every column header (Rm, Name, Case Manager, Phone, Intake, Discharge, Status) is clickable; ▲/▼ indicator on active column, faint ⇅ on inactive; default sort by room
+- **Discharge immutability** — records lock 24 hours after the discharge date (`discharge_date < today`); locked rows show 🔒 Record locked instead of a Reactivate button; status column shows 🔒 Discharged
+- **Edit removed for discharged** — Edit button no longer appears on inactive client rows regardless of lock state
+- **Reactivate visibility** — Reactivate button is now green (`#15803d`) with white bold text to distinguish it from neutral actions
+
+### Shift report auto-entries
+- **Intake log entry** — admitting a new client (`POST /api/clients`) automatically inserts a log entry in the active shift report: `Resident admitted: Name, Rm. 101. Intake: May 18, 2026.`
+- **Discharge log entry** — filing a discharge record (`POST /api/discharge-records`) automatically inserts: `Resident discharged: Name, Rm. 101. Reason: Graduate.`
+- Both fire only when an active report is open; silently skipped if no report is active
+
+### Custom client report builder
+- **📊 Report button** in Clients tab header opens the report builder modal
+- **Client selection** — active only, all residents (incl. discharged), or hand-pick from a scrollable checklist
+- **Section toggles** — 8 sections with gold highlight when active: Basic Info, Emergency Contacts, UA Records, Med Log, Milestones, Incidents, Passes, Discharge Info
+- **Record limit** — configurable max records per time-sensitive section (UA/Meds/Incidents/Passes); defaults to 5
+- **Print output** — one card per client; teal header with room, name, case manager, day count; each section as a labeled sub-block; print-optimized with `break-inside: avoid`; HIPAA footer
+
+### Med Log — local time fix
+- `Log Witnessed Dose` modal now pre-fills the administered-at field with local system time instead of UTC (`getHours()`/`getMinutes()` instead of `toISOString()`)
+
+### Code quality — ESLint (106 → 66 warnings)
+- Removed unused imports (`useCallback`, `Link`, `LayoutDashboard`, `saveData`, `loadData`, etc.)
+- Dead initializations fixed (`let subtitle = ''`, `let bodyHtml = ''`, `let text = ''`)
+- `obj.hasOwnProperty(key)` → `Object.hasOwn(obj, key)` in AppShell and Mobile
+- `useMemo` deps `[data?.ui_visibility]` → `[data]` in AppShell, Dashboard, ReportTab
+- Empty `catch {}` → `catch { /* empty */ }` across all tabs and utilities
+- `([_, v]) =>` → `([, v]) =>` in UARequestsTab (standard skip pattern)
+- Removed dead state (`reports`/`setReports` in Mobile, `hasReminderAlert` in ReportTab, unused `key` in ChoresTab, dead `fmtDT` in ViolationsTab)
+
+---
+
 ## v2.2.0 — Jewel Teal Design System & UI Polish (2026-05-31)
 
 ### Design system — Jewel Teal + Warm Gold

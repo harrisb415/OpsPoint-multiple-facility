@@ -3,54 +3,91 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 
-// ── Top-level tabs ────────────────────────────────────────────────
-
-const MAIN_TABS = [
-  { id: 'users',    label: 'User Management',  icon: '👤', perms: ['admin.users'] },
-  { id: 'facility', label: 'Facility Setup',   icon: '🏠', perms: ['admin.settings', 'facility.manage'] },
-  { id: 'audit',    label: 'Audit Log',        icon: '📜', perms: ['admin.audit'] },
-  { id: 'system',   label: 'System',           icon: '⚙️',  perms: ['admin.system'] },
+// ── Admin sections (clinical-style left rail) ─────────────────────
+// Each item maps to a single content panel — no nested sub-tabs. Grouped and
+// permission-filtered exactly like the Clinical section's rail.
+const ADMIN_NAV = [
+  { group: 'Accounts', items: [
+    { key: 'users:staff',   label: 'Staff & Users',     icon: '👥', perm: 'admin.users' },
+    { key: 'users:add',     label: 'Add User',          icon: '➕', perm: 'admin.users' },
+    { key: 'users:reset',   label: 'Reset Password',    icon: '🔑', perm: 'admin.users' },
+    { key: 'users:groups',  label: 'Permission Groups', icon: '🛡️', perm: 'admin.users' },
+  ] },
+  { group: 'Facility', items: [
+    { key: 'fac:general',   label: 'General',          icon: '🏷️', perm: 'admin.settings' },
+    { key: 'fac:rooms',     label: 'Rooms',            icon: '🚪', perm: 'facility.manage' },
+    { key: 'fac:display',   label: 'Features',         icon: '🖥️', perm: 'admin.settings' },
+    { key: 'fac:walk',      label: 'Walk Areas',       icon: '🗺️', perm: 'admin.settings' },
+    { key: 'fac:ua',        label: 'UA Panel',         icon: '🧪', perm: 'admin.settings' },
+    { key: 'fac:ehr',       label: 'EHR / Compliance', icon: '📋', perm: 'admin.settings' },
+    { key: 'fac:resetfac',  label: 'Reset Facility',   icon: '⚠️', perm: 'facility.manage', danger: true },
+  ] },
+  { group: 'Records', items: [
+    { key: 'audit', label: 'Audit Log', icon: '📜', perm: 'admin.audit' },
+  ] },
+  { group: 'System', items: [
+    { key: 'system', label: 'System', icon: '⚙️', perm: 'admin.system' },
+  ] },
 ]
 
 export default function Admin() {
   const { hasPerm } = usePermission()
-  const visible = MAIN_TABS.filter(t => t.perms.some(p => hasPerm(p)))
-  const [active, setActive] = useState(visible[0]?.id || 'users')
+
+  // Permission-filter the rail; drop empty groups.
+  const groups = ADMIN_NAV
+    .map(g => ({ ...g, items: g.items.filter(i => hasPerm(i.perm)) }))
+    .filter(g => g.items.length > 0)
+  const [active, setActive] = useState(groups[0]?.items[0]?.key || 'users:staff')
+
+  function renderPanel() {
+    if (active.startsWith('users:')) return <UserManagementTab panel={active.slice(6)} />
+    if (active.startsWith('fac:'))   return <FacilitySetupTab panel={active.slice(4)} />
+    if (active === 'audit')          return <AuditLogTab />
+    if (active === 'system')         return <SystemTab />
+    return null
+  }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      {/* Top nav bar */}
-      <div style={{
-        background: '#fff', borderBottom: '2px solid var(--teal-200)',
-        padding: '0 24px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', gap: 16, flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex' }}>
-          {visible.map(t => (
-            <button key={t.id} onClick={() => setActive(t.id)} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              padding: '14px 18px', fontSize: '.78rem', fontWeight: 700,
-              letterSpacing: '.06em', textTransform: 'uppercase', fontFamily: 'var(--sans)',
-              color: active === t.id ? 'var(--teal-700)' : 'var(--text-muted)',
-              borderBottom: active === t.id ? '3px solid var(--teal-600)' : '3px solid transparent',
-              marginBottom: -2,
-              transition: 'color .15s',
-            }}>
-              {t.label}
-            </button>
-          ))}
+    <div style={{ display: 'flex', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+      {/* Rail */}
+      <aside style={{ width: 220, flexShrink: 0, background: '#fff', borderRight: '1px solid var(--line, #e2e8f0)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '16px 16px 10px' }}>
+          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--sidebar-bg, #0a4655)', letterSpacing: '-.01em' }}>⚙️ Administration</div>
+          <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 2 }}>System configuration</div>
         </div>
-        <Link to="/" style={{ color: 'var(--teal-600)', textDecoration: 'none', fontSize: '.78rem', fontWeight: 600 }}>
-          ← Back to Shift
-        </Link>
-      </div>
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
+          {groups.map(g => (
+            <div key={g.group}>
+              <div style={{ fontSize: '.62rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#94a3b8', padding: '10px 12px 4px' }}>{g.group}</div>
+              {g.items.map(it => {
+                const isActive = active === it.key
+                return (
+                  <button key={it.key} onClick={() => setActive(it.key)} style={{
+                    display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left',
+                    padding: '9px 12px', marginBottom: 2, borderRadius: 7, border: 'none', cursor: 'pointer',
+                    fontSize: '.85rem', fontWeight: 600, fontFamily: 'var(--sans)',
+                    color: isActive ? '#fff' : (it.danger ? 'var(--danger, #dc2626)' : '#334155'),
+                    background: isActive ? 'var(--teal-600, #106f88)' : 'transparent',
+                  }}>
+                    <span style={{ fontSize: '1rem' }}>{it.icon}</span>
+                    {it.label}
+                  </button>
+                )
+              })}
+            </div>
+          ))}
+        </nav>
+        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--line, #e2e8f0)' }}>
+          <Link to="/" style={{ display: 'block', width: '100%', textAlign: 'center', padding: '8px 0', borderRadius: 6, border: '1px solid var(--line, #cbd5e1)', background: '#f8fafc', fontSize: '.8rem', fontWeight: 700, color: '#475569', textDecoration: 'none' }}>
+            ← Back to Shift
+          </Link>
+        </div>
+      </aside>
 
-      <main className="container" style={{ flex: 1, overflowY: 'auto' }}>
-        {active === 'users'    && <UserManagementTab />}
-        {active === 'facility' && <FacilitySetupTab />}
-        {active === 'audit'    && <AuditLogTab />}
-        {active === 'system'   && <SystemTab />}
-      </main>
+      {/* Content */}
+      <div className="admin-shell" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '20px 24px', background: 'var(--bg, #f1f5f9)' }}>
+        {renderPanel()}
+      </div>
     </div>
   )
 }
@@ -61,48 +98,24 @@ function apiFetch(url, opts = {}) {
   return fetch(url, { credentials: 'include', ...opts })
 }
 
-function SubTabs({ tabs, active, onChange }) {
-  return (
-    <div style={{ display: 'flex', gap: 6, padding: '0 0 0', borderBottom: '2px solid var(--teal-200)', marginBottom: 20, flexWrap: 'wrap' }}>
-      {tabs.map(t => {
-        const isActive = active === t.id
-        return (
-          <button key={t.id} onClick={() => onChange(t.id)} style={{
-            padding: '8px 16px', borderRadius: '6px 6px 0 0', fontSize: '.8rem', fontWeight: 700,
-            fontFamily: 'var(--sans)', cursor: 'pointer',
-            border: '1.5px solid',
-            borderColor: isActive ? 'var(--teal-200)' : 'transparent',
-            borderBottom: isActive ? '2px solid var(--raised-bg)' : '2px solid transparent',
-            marginBottom: -2,
-            background: isActive ? 'var(--raised-bg)' : 'transparent',
-            color: isActive ? 'var(--teal-700)' : 'var(--text-muted)',
-            transition: 'color .12s, background .12s',
-          }}>
-            {t.label}
-            {t.danger && <span style={{ color: 'var(--danger)', marginLeft: 4 }}>⚠</span>}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 const PERM_CATEGORIES = [
   { label: 'Shift Reports',    perms: ['reports.create','reports.close','reports.delete'] },
   { label: 'Log Entries',      perms: ['log.add','log.delete','issues.edit'] },
   { label: 'Residents',        perms: ['status.edit','residents.edit'] },
   { label: 'Staff Directory',  perms: ['staff.edit'] },
-  { label: 'Chores',           perms: ['chores.edit'] },
+  { label: 'Chores',           perms: ['chores.assign', 'chores.log'] },
   { label: 'Weekend Passes',   perms: ['passes.edit','passes.status'] },
   { label: 'Reminders',        perms: ['reminders.view'] },
-  { label: 'UA System',        perms: ['ua.request','ua.acknowledge','ua.delete'] },
-  { label: 'Mail Management',  perms: ['mail.log','mail.approve','mail.delete'] },
+  { label: 'UA',               perms: ['ua.request','ua.acknowledge','ua.delete','ua.record','ua.draw'] },
+  { label: 'Mail Management',  perms: ['mail.log','mail.approve','mail.deliver','mail.delete'] },
   { label: 'Violations',      perms: ['violations.log','violations.review','violations.complete','violations.delete','violations.notify_review','violations.notify_consequence'] },
-  { label: 'UA Records (EHR)', perms: ['ua.record'] },
+  { label: 'Announcements',    perms: ['broadcast.send','broadcast.receive'] },
   { label: 'Med Witnessing',   perms: ['med.witness','med.delete'] },
   { label: 'Milestones',       perms: ['milestones.edit','milestones.signoff'] },
   { label: 'Incidents',        perms: ['incidents.log','incidents.review','incidents.delete'] },
   { label: '42 CFR Part 2',    perms: ['consent.manage','disclosures.view'] },
+  { label: 'Groups',           perms: ['groups.view','groups.log'] },
+  { label: 'Clinical Charting', perms: ['clinical.notes','clinical.treatment','clinical.assessments','clinical.groups','clinical.discharge'] },
   { label: 'Records Unlock',   perms: ['records.unlock'] },
   { label: 'Facility Manage',  perms: ['facility.manage'] },
   { label: 'Administration',   perms: ['admin.users','admin.settings','admin.audit','admin.system'] },
@@ -113,10 +126,11 @@ const PERM_LABELS = {
   'reports.create':'Create / save reports','reports.close':'Close a shift','reports.delete':'Delete reports',
   'log.add':'Add log entries','log.delete':'Delete log entries','issues.edit':'Issues & medical notes',
   'status.edit':'Change resident statuses','residents.edit':'Edit resident info','staff.edit':'Manage staff',
-  'chores.edit':'Assign chores / log completions','passes.edit':'Create / edit passes & notice','passes.status':'Check pass in / out',
+  'chores.assign':'Assign chores to residents',
+  'chores.log':'Log chore completions','passes.edit':'Create / edit passes & notice','passes.status':'Check pass in / out',
   'reminders.view':'Wellness & walkthrough reminders','ua.request':'Flag resident for UA','ua.acknowledge':'Acknowledge UA alert',
   'ua.delete':'Delete UA entries','mail.log':'Log incoming mail','mail.approve':'Approve mail for delivery',
-  'mail.delete':'Delete mail records','violations.log':'Log violation','violations.review':'Review / assign consequence',
+  'mail.deliver':'Mark mail as delivered to resident','mail.delete':'Delete mail records','violations.log':'Log violation','violations.review':'Review / assign consequence',
   'violations.complete':'Mark consequence completed','violations.delete':'Delete violation records',
   'violations.notify_review':'Banner — pending review','violations.notify_consequence':'Banner — consequence assigned',
   'facility.manage':'Room & roster management','admin.users':'User management','admin.settings':'Facility settings',
@@ -126,31 +140,119 @@ const PERM_LABELS = {
   'incidents.log':'Log a behavioral incident','incidents.review':'Supervisor review of incident','incidents.delete':'Delete incident reports',
   'consent.manage':'Manage 42 CFR Part 2 consent records','disclosures.view':'View disclosure audit',
   'records.unlock':'Supervisor override — unlock sealed records past 24h',
+  'groups.view':'View group sessions and attendance',
+  'groups.log':'Log group sessions and mark attendance',
+  'clinical.notes':'Create / edit clinical notes','clinical.treatment':'Create / edit treatment plans',
+  'clinical.assessments':'Create / edit assessments','clinical.groups':'Create / edit group notes',
+  'clinical.discharge':'Create / edit discharge summaries',
+  'ua.draw':'Run the random UA draw','broadcast.send':'Send announcements to all staff',
+  'broadcast.receive':'Receive announcements in the bell',
+}
+
+// Higher-level domains that group the fine-grained categories above into
+// collapsible sections in the permission editor.
+const PERM_DOMAINS = [
+  { label: 'Daily Operations',        cats: ['Shift Reports', 'Log Entries', 'Reminders', 'Chores', 'Weekend Passes', 'Mail Management'] },
+  { label: 'People',                  cats: ['Residents', 'Staff Directory'] },
+  { label: 'Health & UA',             cats: ['UA', 'Med Witnessing'] },
+  { label: 'Clinical & Compliance',   cats: ['Clinical Charting', 'Milestones', 'Incidents', 'Groups', '42 CFR Part 2', 'Records Unlock'] },
+  { label: 'Conduct & Communication', cats: ['Violations', 'Announcements'] },
+  { label: 'Administration & Access', cats: ['Facility Manage', 'Administration', 'Mobile Access'] },
+]
+const _CAT_BY_LABEL = Object.fromEntries(PERM_CATEGORIES.map(c => [c.label, c]))
+
+// Tri-state checkbox — checked / indeterminate (some) / empty.
+function TriCheck({ checked, indeterminate, disabled, onChange }) {
+  const ref = useRef(null)
+  useEffect(() => { if (ref.current) ref.current.indeterminate = !checked && indeterminate }, [checked, indeterminate])
+  return (
+    <input ref={ref} type="checkbox" checked={checked} disabled={disabled}
+      onClick={e => e.stopPropagation()} onChange={onChange}
+      style={{ width: 14, height: 14, flexShrink: 0, cursor: disabled ? 'default' : 'pointer' }} />
+  )
 }
 
 function PermEditor({ value, onChange, disabled }) {
+  const [search, setSearch] = useState('')
+  const [openDomains, setOpenDomains] = useState(() => new Set())
+  const q = search.trim().toLowerCase()
+  const searching = q.length > 0
+
+  const matches = p => !q || p.includes(q) || (PERM_LABELS[p] || '').toLowerCase().includes(q)
+  const domainPerms = d => d.cats.flatMap(cl => (_CAT_BY_LABEL[cl]?.perms) || [])
+
+  function toggle(p) {
+    if (disabled) return
+    onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p])
+  }
+  function setMany(perms, grant) {
+    if (disabled) return
+    const set = new Set(value)
+    perms.forEach(p => grant ? set.add(p) : set.delete(p))
+    onChange([...set])
+  }
+  const allOpen = openDomains.size >= PERM_DOMAINS.length
+  function toggleDomain(label) {
+    setOpenDomains(prev => { const n = new Set(prev); n.has(label) ? n.delete(label) : n.add(label); return n })
+  }
+
   return (
     <div style={{ border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-      {PERM_CATEGORIES.map(cat => (
-        <div key={cat.label} style={{ borderBottom: '1px solid var(--line)' }}>
-          <div style={{ padding: '4px 12px', background: '#f8fafc', fontSize: '.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.05em' }}>
-            {cat.label}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', background: '#f1f5f9', borderBottom: '1px solid var(--line)' }}>
+        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search permissions…"
+          style={{ flex: 1, padding: '4px 8px', fontSize: '.78rem', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'var(--sans)' }} />
+        <button type="button" onClick={() => setOpenDomains(allOpen ? new Set() : new Set(PERM_DOMAINS.map(d => d.label)))}
+          style={{ fontSize: '.72rem', fontWeight: 700, color: '#475569', background: '#fff', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {allOpen ? 'Collapse all' : 'Expand all'}
+        </button>
+      </div>
+
+      {PERM_DOMAINS.map(d => {
+        const all = domainPerms(d)
+        const visiblePerms = all.filter(matches)
+        if (searching && visiblePerms.length === 0) return null
+        const granted = all.filter(p => value.includes(p)).length
+        const allGranted = all.length > 0 && granted === all.length
+        const isOpen = searching || openDomains.has(d.label)
+
+        return (
+          <div key={d.label} style={{ borderBottom: '1px solid var(--line)' }}>
+            <div onClick={() => !searching && toggleDomain(d.label)}
+              style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px', background: '#eef2f6', cursor: searching ? 'default' : 'pointer' }}>
+              <span style={{ color: '#94a3b8', fontSize: '.8rem', width: 12, flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
+              <span style={{ fontWeight: 800, fontSize: '.8rem', flex: 1, color: '#334155' }}>{d.label}</span>
+              <span style={{ fontSize: '.7rem', fontWeight: 700, color: granted ? '#0f766e' : '#94a3b8', background: '#fff', border: '1px solid var(--line)', borderRadius: 20, padding: '1px 8px' }}>
+                {granted} / {all.length}
+              </span>
+              <TriCheck checked={allGranted} indeterminate={granted > 0 && !allGranted} disabled={disabled}
+                onChange={() => setMany(all, !allGranted)} />
+            </div>
+
+            {isOpen && d.cats.map(cl => {
+              const cat = _CAT_BY_LABEL[cl]; if (!cat) return null
+              const vp = cat.perms.filter(matches)
+              if (vp.length === 0) return null
+              return (
+                <div key={cl}>
+                  <div style={{ padding: '4px 12px 4px 30px', background: '#f8fafc', fontSize: '.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em' }}>{cl}</div>
+                  {vp.map(p => (
+                    <label key={p} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '5px 12px 5px 34px',
+                      borderTop: '1px solid #f1f5f9', cursor: disabled ? 'default' : 'pointer',
+                      background: value.includes(p) ? '#eff6ff' : 'transparent', opacity: disabled ? .6 : 1,
+                    }}>
+                      <input type="checkbox" checked={value.includes(p)} disabled={disabled}
+                        onChange={() => toggle(p)} style={{ width: 13, height: 13, flexShrink: 0 }} />
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: '.71rem', color: '#475569', minWidth: 190 }}>{p}</span>
+                      <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>{PERM_LABELS[p] || ''}</span>
+                    </label>
+                  ))}
+                </div>
+              )
+            })}
           </div>
-          {cat.perms.map(p => (
-            <label key={p} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '5px 12px 5px 18px',
-              borderTop: '1px solid #f1f5f9', cursor: disabled ? 'default' : 'pointer',
-              background: value.includes(p) ? '#eff6ff' : 'transparent', opacity: disabled ? .6 : 1,
-            }}>
-              <input type="checkbox" checked={value.includes(p)} disabled={disabled}
-                onChange={() => !disabled && onChange(value.includes(p) ? value.filter(x => x !== p) : [...value, p])}
-                style={{ width: 13, height: 13, flexShrink: 0 }} />
-              <span style={{ fontFamily: 'var(--mono)', fontSize: '.71rem', color: '#475569', minWidth: 190 }}>{p}</span>
-              <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>{PERM_LABELS[p] || ''}</span>
-            </label>
-          ))}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -159,15 +261,8 @@ function PermEditor({ value, onChange, disabled }) {
 // USER MANAGEMENT TAB
 // ══════════════════════════════════════════════════════════════════
 
-const UM_TABS = [
-  { id: 'staff',   label: 'Current Staff' },
-  { id: 'add',     label: 'Add Staff' },
-  { id: 'reset',   label: 'Reset Password' },
-  { id: 'groups',  label: 'Groups' },
-]
-
-function UserManagementTab() {
-  const [sub, setSub] = useState('staff')
+function UserManagementTab({ panel }) {
+  const sub = panel || 'staff'   // driven by the Admin rail
   const [users, setUsers] = useState([])
   const [groups, setGroups] = useState([])
 
@@ -181,9 +276,8 @@ function UserManagementTab() {
 
   return (
     <div>
-      <SubTabs tabs={UM_TABS} active={sub} onChange={setSub} />
       {sub === 'staff'  && <CurrentStaff users={users} groups={groups} reload={load} />}
-      {sub === 'add'    && <AddStaff groups={groups} reload={() => { load(); setSub('staff') }} />}
+      {sub === 'add'    && <AddStaff groups={groups} reload={load} />}
       {sub === 'reset'  && <ResetPassword users={users} />}
       {sub === 'groups' && <GroupsManager groups={groups} reload={load} />}
     </div>
@@ -373,24 +467,26 @@ function AddStaff({ groups, reload }) {
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div>
       <div className="section">
         <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Add Staff Member</span></div></div>
         <div className="section-body">
           {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
           {success && <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', padding: '9px 13px', borderRadius: 8, fontSize: '.84rem', marginBottom: 12 }}>{success}</div>}
           <form onSubmit={submit}>
-            <div className="field"><label>Username</label>
-              <input type="text" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="e.g. jsmith" />
-            </div>
-            <div className="field"><label>Display Name</label>
-              <input type="text" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="e.g. Jane Smith" />
-            </div>
-            <div className="field"><label>Password</label>
-              <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" />
-            </div>
-            <div className="field"><label>Confirm Password</label>
-              <input type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} placeholder="Repeat password" />
+            <div className="adm-row">
+              <div className="field"><label>Username</label>
+                <input type="text" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="e.g. jsmith" />
+              </div>
+              <div className="field"><label>Display Name</label>
+                <input type="text" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="e.g. Jane Smith" />
+              </div>
+              <div className="field"><label>Password</label>
+                <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" />
+              </div>
+              <div className="field"><label>Confirm Password</label>
+                <input type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} placeholder="Repeat password" />
+              </div>
             </div>
             {groups.length > 0 && (
               <div className="field">
@@ -423,7 +519,7 @@ function AddStaff({ groups, reload }) {
             <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: 6, padding: '10px 14px', fontSize: '.78rem', color: '#475569', marginBottom: 14 }}>
               <strong>Password requirements:</strong> 8+ characters · Uppercase · Lowercase · Number · Symbol (!@#$%^&amp;*)
             </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={saving}>{saving ? 'Creating…' : 'Create Account'}</button>
+            <button type="submit" className="btn btn-primary" style={{ maxWidth: 280, width: '100%' }} disabled={saving}>{saving ? 'Creating…' : 'Create Account'}</button>
           </form>
         </div>
       </div>
@@ -484,31 +580,33 @@ function ResetPassword({ users }) {
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div>
       <div className="section">
         <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Reset Staff Password</span></div></div>
         <div className="section-body">
           {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
           {success && <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', padding: '9px 13px', borderRadius: 8, fontSize: '.84rem', marginBottom: 12 }}>{success}</div>}
           <form onSubmit={resetOther}>
-            <div className="field"><label>Select Staff Member</label>
-              <select value={targetId} onChange={e => setTargetId(e.target.value)}>
-                <option value="">— Select staff member —</option>
-                {users.filter(u => u.id !== session?.id).map(u => (
-                  <option key={u.id} value={u.id}>{u.displayName || u.display_name} ({u.username})</option>
-                ))}
-              </select>
+            <div className="adm-row">
+              <div className="field"><label>Select Staff Member</label>
+                <select value={targetId} onChange={e => setTargetId(e.target.value)}>
+                  <option value="">— Select staff member —</option>
+                  {users.filter(u => u.id !== session?.id).map(u => (
+                    <option key={u.id} value={u.id}>{u.displayName || u.display_name} ({u.username})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="field"><label>New Password</label>
+                <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Min 8 chars" />
+              </div>
+              <div className="field"><label>Confirm Password</label>
+                <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="Repeat password" />
+              </div>
             </div>
-            <div className="field"><label>New Password</label>
-              <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Min 8 chars" />
-            </div>
-            <div className="field"><label>Confirm Password</label>
-              <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="Repeat password" />
-            </div>
-            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={saving}>{saving ? 'Saving…' : 'Set New Password'}</button>
+            <button type="submit" className="btn btn-primary" style={{ maxWidth: 280, width: '100%' }} disabled={saving}>{saving ? 'Saving…' : 'Set New Password'}</button>
           </form>
           <button onClick={() => setShowSelf(s => !s)} className="btn btn-sm"
-            style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', width: '100%', marginTop: 16 }}>
+            style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', maxWidth: 280, width: '100%', marginTop: 16 }}>
             {showSelf ? '▲ Hide' : '▼ Change My Own Password'}
           </button>
         </div>
@@ -527,7 +625,7 @@ function ResetPassword({ users }) {
                 <input type="password" value={selfPw} onChange={e => setSelfPw(e.target.value)} /></div>
               <div className="field"><label>Confirm New Password</label>
                 <input type="password" value={selfPw2} onChange={e => setSelfPw2(e.target.value)} /></div>
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Change My Password</button>
+              <button type="submit" className="btn btn-primary" style={{ maxWidth: 280, width: '100%' }}>Change My Password</button>
             </form>
           </div>
         </div>
@@ -556,10 +654,6 @@ function GroupCard({ g, onSave, onDelete }) {
     setMsg('Saved ✓'); onSave()
     setTimeout(() => setMsg(''), 2000)
   }
-
-  const categorised = PERM_CATEGORIES
-    .map(cat => ({ ...cat, active: cat.perms.filter(p => perms.includes(p)) }))
-    .filter(cat => cat.active.length > 0)
 
   return (
     <div style={{ border: '1.5px solid var(--line)', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
@@ -649,22 +743,9 @@ function GroupsManager({ groups, reload }) {
 // FACILITY SETUP TAB
 // ══════════════════════════════════════════════════════════════════
 
-const FAC_TABS = [
-  { id: 'name',     label: 'Facility Name',                            perm: 'admin.settings' },
-  { id: 'rooms',    label: 'Rooms',                                    perm: 'facility.manage' },
-  { id: 'reminders',label: 'Reminders',                                perm: 'admin.settings' },
-  { id: 'shifts',   label: 'Shift Times',                              perm: 'admin.settings' },
-  { id: 'display',  label: 'Display',                                  perm: 'admin.settings' },
-  { id: 'walk',     label: 'Walk Areas',                               perm: 'admin.settings' },
-  { id: 'ua',       label: 'UA Panel',                                 perm: 'admin.settings' },
-  { id: 'ehr',      label: 'EHR / Compliance',                         perm: 'admin.settings' },
-  { id: 'resetfac', label: 'Reset', danger: true,                      perm: 'facility.manage' },
-]
-
-function FacilitySetupTab() {
+function FacilitySetupTab({ panel }) {
   const { hasPerm } = usePermission()
-  const visibleFacTabs = FAC_TABS.filter(t => !t.perm || hasPerm(t.perm))
-  const [sub, setSub] = useState(visibleFacTabs[0]?.id || 'name')
+  const sub = panel || 'general'   // driven by the Admin rail
   const [settings, setSettings] = useState(null)
   const [settingSaving, setSettingSaving] = useState(false)
 
@@ -690,11 +771,12 @@ function FacilitySetupTab() {
 
   return (
     <div>
-      <SubTabs tabs={visibleFacTabs} active={sub} onChange={setSub} />
-      {sub === 'name'     && hasPerm('admin.settings')  && <FacilityName settings={settings} onSave={saveSettings} saving={settingSaving} />}
+      {sub === 'general'  && hasPerm('admin.settings')  && <>
+        <FacilityName settings={settings} onSave={saveSettings} saving={settingSaving} />
+        <ShiftTimes settings={settings} onSave={saveSettings} saving={settingSaving} />
+        <RemindersSettings settings={settings} onSave={saveSettings} saving={settingSaving} />
+      </>}
       {sub === 'rooms'    && hasPerm('facility.manage') && <RoomsManager />}
-      {sub === 'reminders'&& hasPerm('admin.settings')  && <RemindersSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
-      {sub === 'shifts'   && hasPerm('admin.settings')  && <ShiftTimes settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'display'  && hasPerm('admin.settings')  && <DisplaySettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'walk'     && hasPerm('admin.settings')  && <WalkAreas settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ua'       && hasPerm('admin.settings')  && <UAPanelSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
@@ -775,7 +857,7 @@ function EHRConfigSettings() {
   const SEVS = ['low','medium','high','critical']
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       {err && <div className="auth-error" style={{ marginBottom: 12 }}>{err}</div>}
 
       {/* Program tracks */}
@@ -896,7 +978,7 @@ function FacilityName({ settings, onSave, saving }) {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Facility Name</span></div>
@@ -1264,7 +1346,7 @@ function ShiftTimes({ settings, onSave, saving }) {
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div>
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Shift Times</span></div>
@@ -1302,15 +1384,14 @@ function DisplaySettings({ settings, onSave, saving }) {
     { key: 'caseloads',   label: 'Caseloads' },
     // Daily Ops (Report is core)
     { key: 'chores',      label: 'Chores' },
+    { key: 'groups',      label: 'Groups' },
     { key: 'passes',      label: 'Passes' },
     { key: 'mail',        label: 'Mail' },
     // Health & Compliance
     { key: 'ua',          label: 'UA' },
     { key: 'med_log',     label: 'Med Log' },
-    { key: 'milestones',  label: 'Milestones' },
-    // Records (Archive is core)
-    { key: 'incidents',   label: 'Incidents' },
-    { key: 'violations',  label: 'Violations' },
+    // Records (Archive is core; Incidents + Milestones live in Clinical section)
+    { key: 'violations',  label: 'Infractions' },
     { key: 'consent',     label: 'Consents' },
   ]
   const BTN_OPTS = [
@@ -1327,17 +1408,17 @@ function DisplaySettings({ settings, onSave, saving }) {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <div className="section">
         <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Display Settings</span></div>
+          <div className="sh-left"><span className="sh-dot" /><span>Feature Visibility</span></div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Display Settings'}</button>
+            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Feature Settings'}</button>
           </div>
         </div>
         <div className="section-body">
-          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 12 }}>Core tabs (Clients, Report, Archive) cannot be hidden.</p>
+          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 12 }}>Uncheck any feature your facility does not use — it will be hidden for all staff. Core tabs (Clients, Report, Archive) and Clinical section features are managed separately via permissions.</p>
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, fontSize: '.84rem', marginBottom: 8 }}>Navigation Tabs</div>
             {TAB_OPTS.map(t => (
@@ -1390,7 +1471,7 @@ function WalkAreas({ settings, onSave, saving }) {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>Walkthrough Areas</span></div>
@@ -1451,7 +1532,7 @@ function UAPanelSettings({ settings, onSave, saving }) {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <div className="section">
         <div className="section-head">
           <div className="sh-left"><span className="sh-dot" /><span>UA Panel</span></div>
@@ -1503,10 +1584,10 @@ function FacilityReset() {
   }
 
   return (
-    <div style={{ maxWidth: 480 }}>
+    <div>
       <div className="section" style={{ border: '2px solid #dc2626' }}>
         <div className="section-head" style={{ background: '#dc2626' }}>
-          <div className="sh-left" style={{ color: '#fff' }}><span className="sh-dot" style={{ background: '#fff' }} /><span>Reset Roster</span></div>
+          <div className="sh-left" style={{ color: '#fff' }}><span className="sh-dot" style={{ background: '#fff' }} /><span style={{ color: '#fff' }}>Reset Roster</span></div>
         </div>
         <div className="section-body">
           <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 12 }}>
@@ -1741,7 +1822,7 @@ function SystemTab() {
   }
 
   return (
-    <div style={{ maxWidth: 520 }}>
+    <div>
       <div className="section">
         <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Server Control</span></div></div>
         <div className="section-body">

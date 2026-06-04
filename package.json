@@ -1,10 +1,11 @@
 {
   "name": "opspoint",
-  "version": "2.1.0",
+  "version": "2.3.2",
   "description": "OpsPoint — Shift management platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
@@ -12,5 +13,13 @@
     "express-session": "^1.17.3",
     "selfsigned": "^5.5.0",
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"]
   }
 }

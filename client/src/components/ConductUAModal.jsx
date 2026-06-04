@@ -53,7 +53,14 @@ function fmtTime(d = new Date()) {
 function dateStamp() {
   return new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
 }
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+function todayStr() {
+  const d = new Date(), p = n => String(n).padStart(2,'0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
+}
+function nowLocalDT() {
+  const d = new Date(), p = n => String(n).padStart(2,'0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 // ── Result cycle colours ──────────────────────────────────────────────────
 function resultColor(r) {
@@ -159,7 +166,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           client_id:         parseInt(clientId),
           client_name:       c?.name  || '',
           room:              c?.room  || '',
-          tested_at:         new Date().toISOString().slice(0, 16),
+          tested_at:         nowLocalDT(),
           collection_method: collMethod,
           reason,
           result:            overall,

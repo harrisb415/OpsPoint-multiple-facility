@@ -23,7 +23,7 @@ const LOG_TYPE_STYLE = {
   Lunch:         { bg: '#f0fdf9', color: '#6b7280' },
   'Room Search': { bg: '#ede9fe', color: '#6d28d9' },
   Mail:          { bg: '#dbeafe', color: '#1d4ed8' },
-  Violation:     { bg: '#fee2e2', color: '#991b1b' },
+  Infraction:    { bg: '#fee2e2', color: '#991b1b' },
   Intake:        { bg: '#dcfce7', color: '#15803d' },
   Discharge:     { bg: '#f0fdf9', color: '#6b7280' },
   Note:          { bg: '#f1f5f9', color: '#475569' },
@@ -67,11 +67,6 @@ function parseLogTimeToDate(timeStr) {
   if (d.getTime() > Date.now() + 30 * 60000) d.setDate(d.getDate() - 1)
   return d
 }
-function fmtMinutes(ms) {
-  const min = Math.round(Math.abs(ms) / 60000)
-  if (min < 60) return `${min}m`
-  return `${Math.floor(min / 60)}h ${min % 60}m`
-}
 function stOpt(v) { return STATUS_OPTS.find(o => o.v === v) || { v, l: v, c: '' } }
 
 function dateStamp() {
@@ -79,6 +74,30 @@ function dateStamp() {
 }
 
 // ── Reminder helpers ─────────────────────────────────────────────────
+function fmtSchedTime(d) {
+  if (!d) return ''
+  const h = d.getHours(), m = d.getMinutes()
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`
+}
+
+function calcScheduledStatus(last, schedule) {
+  if (!Array.isArray(schedule) || schedule.length === 0) return null
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  const todayTimes = schedule
+    .map(t => { try { const d = new Date(`${todayStr}T${t}`); return isNaN(d) ? null : d } catch { return null } })
+    .filter(Boolean)
+    .sort((a, b) => a - b)
+  if (!todayTimes.length) return null
+  const pastTimes  = todayTimes.filter(t => t <= now)
+  const nextTime   = todayTimes.find(t => t > now) ?? null
+  if (!pastTimes.length) return { status: 'ok', nextTime, overdueAt: null }
+  const mostRecent = pastTimes[pastTimes.length - 1]
+  if (last && last >= mostRecent) return { status: 'ok', nextTime, overdueAt: null }
+  return { status: 'overdue', nextTime, overdueAt: mostRecent }
+}
+
 function getMostRecentLogTime(entries, keyword) {
   const kw = keyword.toLowerCase()
   let best = null
@@ -101,7 +120,7 @@ function calcReminderStatus(last, intervalMins) {
 }
 
 // ── Main component ────────────────────────────────────────────────────
-export default function ReportTab({ onNavigate }) {
+export default function ReportTab() {
   const { data, patchData, saveData, loadData } = useData()
   const { hasPerm } = usePermission()
 
@@ -122,9 +141,9 @@ export default function ReportTab({ onNavigate }) {
   const canMailLog    = hasPerm('mail.log')
 
   // Settings from data
-  const wellnessMins = Number(data?.wellness_interval_mins ?? 120)
-  const walkMins     = Number(data?.walk_interval_mins     ?? 240)
-  const walkAreas    = Array.isArray(data?.walk_areas) ? data.walk_areas : DEFAULT_WALK_AREAS
+  const wellnessSchedule = Array.isArray(data?.wellness_schedule) ? data.wellness_schedule : []
+  const walkSchedule     = Array.isArray(data?.walk_schedule)     ? data.walk_schedule     : []
+  const walkAreas        = Array.isArray(data?.walk_areas) ? data.walk_areas : DEFAULT_WALK_AREAS
   const uaPanel      = Array.isArray(data?.ua_panel) ? data.ua_panel : ['ETG','THC','FEN','AMP','MET','BZO','MTD','BUP','COC']
 
   // UI visibility
@@ -133,7 +152,7 @@ export default function ReportTab({ onNavigate }) {
     if (!data?.ui_visibility) return def
     try { return typeof data.ui_visibility === 'string' ? JSON.parse(data.ui_visibility) : data.ui_visibility }
     catch { return def }
-  }, [data?.ui_visibility])
+  }, [data])
   const showWellness    = uiVis.buttons?.wellness    !== false
   const showWalkthrough = uiVis.buttons?.walkthrough !== false
 
@@ -241,7 +260,7 @@ export default function ReportTab({ onNavigate }) {
   // Print modal state for Activity Log
   const [logPrintOpen, setLogPrintOpen] = useState(false)
 
-  // Reminders — separate the "last" timestamp from the status calc so we can key dismiss state to it
+  // Reminders — schedule-based. Fires when a scheduled time passes without a matching log entry.
   const wellnessLast = useMemo(
     () => getMostRecentLogTime(logEntriesRaw, 'wellness check'),
     [logEntriesRaw]
@@ -253,37 +272,32 @@ export default function ReportTab({ onNavigate }) {
 
   const wellnessReminder = useMemo(() => {
     if (!canReminders) return null
-    return calcReminderStatus(wellnessLast, wellnessMins)
-  // reminderTick forces recalc every 30s
+    return calcScheduledStatus(wellnessLast, wellnessSchedule)
+  // reminderTick forces recalc every 30s so schedule transitions are detected
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wellnessLast, wellnessMins, canReminders, reminderTick])
+  }, [wellnessLast, wellnessSchedule, canReminders, reminderTick])
 
   const walkReminder = useMemo(() => {
     if (!canReminders) return null
-    return calcReminderStatus(walkLast, walkMins)
+    return calcScheduledStatus(walkLast, walkSchedule)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walkLast, walkMins, canReminders, reminderTick])
+  }, [walkLast, walkSchedule, canReminders, reminderTick])
 
-  // Dismissed reminders — keyed by (reportId|type|lastLogTime). When a new log gets added, lastLogTime
-  // changes and the key no longer matches, so the reminder re-shows naturally.
+  // Dismissed reminders — keyed by (reportId|type|lastLogTime|overdueAt).
+  // Re-shows when a new log entry changes lastLogTime OR when the schedule advances to a new time.
   const [dismissedReminders, setDismissedReminders] = useState(() => new Set())
-  function reminderKey(type, last) {
-    return `${activeId}|${type}|${last ? last.getTime() : 'none'}`
+  function reminderKey(type, last, overdueAt) {
+    return `${activeId}|${type}|${last ? last.getTime() : 'none'}|${overdueAt ? overdueAt.getTime() : 'none'}`
   }
-  const wellnessDismissed = canReminders && dismissedReminders.has(reminderKey('wellness', wellnessLast))
-  const walkDismissed     = canReminders && dismissedReminders.has(reminderKey('walk',     walkLast))
-  function dismissReminder(type, last) {
+  const wellnessDismissed = canReminders && dismissedReminders.has(reminderKey('wellness', wellnessLast, wellnessReminder?.overdueAt))
+  const walkDismissed     = canReminders && dismissedReminders.has(reminderKey('walk',     walkLast,     walkReminder?.overdueAt))
+  function dismissReminder(type, last, overdueAt) {
     setDismissedReminders(prev => {
       const next = new Set(prev)
-      next.add(reminderKey(type, last))
+      next.add(reminderKey(type, last, overdueAt))
       return next
     })
   }
-
-  const hasReminderAlert = canReminders && (
-    (wellnessReminder?.status !== 'ok' && !wellnessDismissed) ||
-    (walkReminder?.status     !== 'ok' && !walkDismissed)
-  )
 
   // Debounced save
   const scheduleSave = useCallback(() => {
@@ -611,18 +625,18 @@ export default function ReportTab({ onNavigate }) {
             <ReminderCard
               label="Wellness Check"
               status={wellnessReminder.status}
-              remaining={wellnessReminder.remaining}
-              intervalMins={wellnessMins}
-              onDismiss={() => dismissReminder('wellness', wellnessLast)}
+              nextTime={wellnessReminder.nextTime}
+              overdueAt={wellnessReminder.overdueAt}
+              onDismiss={() => dismissReminder('wellness', wellnessLast, wellnessReminder.overdueAt)}
             />
           )}
           {showWalkthrough && walkReminder && !walkDismissed && (
             <ReminderCard
               label="Walkthrough"
               status={walkReminder.status}
-              remaining={walkReminder.remaining}
-              intervalMins={walkMins}
-              onDismiss={() => dismissReminder('walk', walkLast)}
+              nextTime={walkReminder.nextTime}
+              overdueAt={walkReminder.overdueAt}
+              onDismiss={() => dismissReminder('walk', walkLast, walkReminder.overdueAt)}
             />
           )}
         </div>
@@ -685,7 +699,7 @@ export default function ReportTab({ onNavigate }) {
               )}
               {canViolations && (
                 <button className="pill pill-red" onClick={() => setQuickModal('violation')}>
-                  ⚠ Violation
+                  ⚠ Infraction
                 </button>
               )}
             </div>
@@ -968,7 +982,7 @@ function printActivityLogReport({ facility, report, entries, rangeLabel, include
     ['Wellness',      entries.filter(e => /wellness check/i.test(e.text || '')).length],
     ['Walkthroughs',  entries.filter(e => /walkthrough/i.test(e.text || '')).length],
     ['UA records',    entries.filter(e => /\s—\sua:/i.test(e.text || '')).length],
-    ['Violations',   entries.filter(e => /violation/i.test(e.text || '')).length],
+    ['Infractions',  entries.filter(e => /violation|infraction/i.test(e.text || '')).length],
   ]
 
   const columns = [
@@ -1013,27 +1027,23 @@ function printActivityLogReport({ facility, report, entries, rangeLabel, include
 }
 
 // ── Reminder Card ─────────────────────────────────────────────────────
-function ReminderCard({ label, status, remaining, intervalMins, onDismiss }) {
-  let cls = 'reminder-card ok'
-  let text = ''
-  if (status === 'overdue') {
-    cls = 'reminder-card overdue'
-    text = `OVERDUE — ${label} past ${intervalMins}m interval`
-  } else if (status === 'warn') {
-    cls = 'reminder-card warn'
-    text = `${label} due in ${fmtMinutes(remaining)}`
-  } else {
-    text = `${label} — next in ${fmtMinutes(remaining)}`
-  }
+function ReminderCard({ label, status, nextTime, overdueAt, onDismiss }) {
+  const cls  = status === 'overdue' ? 'reminder-card overdue' : 'reminder-card ok'
+  const icon = status === 'overdue' ? '🔴' : '🟢'
+  const text = status === 'overdue'
+    ? `OVERDUE — ${label} missed at ${fmtSchedTime(overdueAt)}`
+    : nextTime
+      ? `${label} — next at ${fmtSchedTime(nextTime)}`
+      : `${label} — no more checks scheduled today`
   return (
     <div className={cls} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      <span>{status === 'overdue' ? '🔴' : status === 'warn' ? '🟡' : '🟢'}</span>
+      <span>{icon}</span>
       <span className="rtime">{text}</span>
       {onDismiss && (
         <button
           type="button"
           onClick={onDismiss}
-          title="Dismiss until next log entry"
+          title="Dismiss until next scheduled check"
           aria-label="Dismiss reminder"
           style={{
             marginLeft: 6, padding: '0 6px',
@@ -1460,7 +1470,7 @@ function MailQuickModal({ clients, onClose }) {
         credentials: 'include',
         body: JSON.stringify({ clients: clientsList, log_time: tsFromInput(time) }),
       })
-    } catch {}
+    } catch { /* empty */ }
     setSaving(false)
     onClose()
   }
@@ -1596,7 +1606,7 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
       if (!r.ok) { const j = await r.json(); setErr(j.error || 'Save failed'); return }
       // Log to activity log
       await onLogEntry(
-        `Violation filed — ${form.client_name} (Rm. ${form.room}): ${form.description.trim()}`,
+        `Infraction filed — ${form.client_name} (Rm. ${form.room}): ${form.description.trim()}`,
         fmtTime()
       )
       onClose()
@@ -1608,7 +1618,7 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
     <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: 480 }}>
         <div className="modal-head">
-          <h2>⚠ Log Violation</h2>
+          <h2>⚠ Log Infraction</h2>
           <button className="xbtn" onClick={onClose}>&times;</button>
         </div>
         <div className="modal-body">
@@ -1628,7 +1638,7 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
             <label>Description</label>
             <textarea rows={3} value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Describe the violation…"
+              placeholder="Describe the infraction…"
               style={{ resize: 'vertical', width: '100%', fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }} />
           </div>
           <div className="field">
@@ -1640,7 +1650,7 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
         <div className="modal-foot">
           <button className="btn-cancel" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Saving…' : 'Log Violation'}
+            {saving ? 'Saving…' : 'Log Infraction'}
           </button>
         </div>
       </div>
@@ -1741,7 +1751,7 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
         body: JSON.stringify({ photo: b64 }),
       })
       if (resp.ok) onPhotoSaved?.()
-    } catch {}
+    } catch { /* empty */ }
     setUploading(false)
     if (ev.target) ev.target.value = ''
   }
@@ -1754,7 +1764,7 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
         const j = await resp.json()
         if (j.photo) { setPhotoSrc(j.photo); setShowPhoto(true) }
       }
-    } catch {}
+    } catch { /* empty */ }
   }
 
   return (

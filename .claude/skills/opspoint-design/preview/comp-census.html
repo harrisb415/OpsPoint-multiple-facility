@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<link rel="stylesheet" href="../ui_kits/opspoint/opspoint.css">
+<style>
+  body { background: var(--page-bg); padding: 22px 24px; }
+  .census-grid { grid-template-columns: repeat(5, 1fr); }
+  .cap { margin-top: 16px; display: flex; align-items: baseline; gap: 10px; background:#fff; padding: 11px 14px; border-radius: var(--r-md); }
+  .cap b { font-size: 13px; font-weight: 700; }
+  .cap span { font-size: 12px; color: var(--ink-500); }
+</style>
+</head>
+<body>
+  <div class="census-grid">
+    <div class="census-card"><div class="count">38</div><div class="clabel">In Building</div></div>
+    <div class="census-card"><div class="count">3</div><div class="clabel">Work</div></div>
+    <div class="census-card"><div class="count">2</div><div class="clabel">Pass</div></div>
+    <div class="census-card"><div class="count">1</div><div class="clabel">Hospital</div></div>
+    <div class="census-card hi"><div class="count">44</div><div class="clabel">Total</div></div>
+  </div>
+  <div class="cap"><b>Census cards</b><span>Live headcount. Counts set in tabular mono; the total card gets the teal→navy gradient with a glowing gold number.</span></div>
+</body>
+</html>

@@ -358,7 +358,7 @@ export default function UARequestsTab() {
                 <tbody>
                   {filteredRecords.map(r => {
                     const pr = r.panel_results || {}
-                    const posSubs = Object.entries(pr).filter(([_, v]) => v === 'pos').map(([k]) => k)
+                    const posSubs = Object.entries(pr).filter(([, v]) => v === 'pos').map(([k]) => k)
                     return (
                       <tr key={r.id} style={{ background: r.result === 'fail' ? '#fff5f5' : 'transparent' }}>
                         <td className="date-cell">{fmtDT(r.tested_at)}</td>
@@ -480,7 +480,7 @@ function UAPhotoBtn({ logEntryId, hasPhoto, onSaved }) {
         body: JSON.stringify({ photo: b64 }),
       })
       if (resp.ok) onSaved?.()
-    } catch {}
+    } catch { /* empty */ }
     setUploading(false)
     if (ev.target) ev.target.value = ''
   }
@@ -493,7 +493,7 @@ function UAPhotoBtn({ logEntryId, hasPhoto, onSaved }) {
         const j = await resp.json()
         if (j.photo) { setPhotoSrc(j.photo); setShowPhoto(true) }
       }
-    } catch {}
+    } catch { /* empty */ }
   }
 
   return (

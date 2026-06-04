@@ -64,6 +64,28 @@ export function DataProvider({ children }) {
     setProfileClientId(null)
   }, [])
 
+  // ── Structured Clinical Lite fetch ─────────────────────────────────
+  // Parallel-fetches the 5 clinical endpoints. Endpoints the user lacks
+  // permission for return 403 → treated as []. Returns a slice object that
+  // merges into `data` (single source of truth, consistent with the rest of
+  // the app's load-and-refresh model).
+  const fetchClinical = useCallback(async () => {
+    const eps = [
+      ['clinical_notes',      '/api/clinical/notes'],
+      ['treatment_plans',     '/api/clinical/treatment-plans'],
+      ['assessments',         '/api/clinical/assessments'],
+      ['group_notes',         '/api/clinical/group-notes'],
+      ['discharge_summaries', '/api/clinical/discharge-summaries'],
+    ]
+    const results = await Promise.all(eps.map(async ([key, url]) => {
+      try {
+        const r = await fetch(url, { credentials: 'include' })
+        return [key, r.ok ? await r.json() : []]
+      } catch { return [key, []] }
+    }))
+    return Object.fromEntries(results)
+  }, [])
+
   // ── Data load ─────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
@@ -88,7 +110,8 @@ export function DataProvider({ children }) {
         incRes.ok    ? incRes.json()    : [],
         disRes.ok    ? disRes.json()    : [],
       ])
-      setData({ ...base, mail, ua_requests, ua_records, med_log, milestones, incidents, discharge_records })
+      const clinical = await fetchClinical()
+      setData({ ...base, mail, ua_requests, ua_records, med_log, milestones, incidents, discharge_records, ...clinical })
 
       // Seed seen UA IDs so we don't re-fire sounds for already-known requests
       seenUAIds.current = new Set((ua_requests || []).map(r => r.id))
@@ -98,7 +121,14 @@ export function DataProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [fetchClinical])
+
+  // Refresh only the clinical slices (used after a clinical mutation) without
+  // re-pulling the entire dataset.
+  const refreshClinical = useCallback(async () => {
+    const clinical = await fetchClinical()
+    setData(prev => prev ? { ...prev, ...clinical } : prev)
+  }, [fetchClinical])
 
   // Load notification-only data (draws + broadcasts) once on session start
   const loadNotifData = useCallback(async () => {
@@ -171,6 +201,17 @@ export function DataProvider({ children }) {
         case 'milestones_updated':
         case 'incidents_updated':
         case 'discharge_records_updated':
+        // ── Structured Clinical Lite (create/update/sign/delete × 5 entities) ──
+        case 'clinical_note_created':     case 'clinical_note_updated':
+        case 'clinical_note_signed':      case 'clinical_note_deleted':
+        case 'treatment_plan_created':    case 'treatment_plan_updated':
+        case 'treatment_plan_signed':     case 'treatment_plan_deleted':
+        case 'assessment_created':        case 'assessment_updated':
+        case 'assessment_signed':         case 'assessment_deleted':
+        case 'group_note_created':        case 'group_note_updated':
+        case 'group_note_signed':         case 'group_note_deleted':
+        case 'discharge_summary_created': case 'discharge_summary_updated':
+        case 'discharge_summary_signed':  case 'discharge_summary_deleted':
           loadData()
           break
 
@@ -346,6 +387,14 @@ export function DataProvider({ children }) {
       dismissBroadcast, dismissIncident,
       profileClientId, openProfile, closeProfile,
       sessionExpired,
+      // ── Structured Clinical Lite ──
+      clinicalNotes:      data?.clinical_notes      || [],
+      treatmentPlans:     data?.treatment_plans     || [],
+      assessments:        data?.assessments         || [],
+      groupNotes:         data?.group_notes         || [],
+      dischargeSummaries: data?.discharge_summaries || [],
+      refresh: loadData,
+      refreshClinical,
     }}>
       {children}
       {sessionExpired && (

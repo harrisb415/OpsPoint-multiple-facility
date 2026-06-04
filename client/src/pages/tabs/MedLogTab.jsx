@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 
-function nowDT() { return new Date().toISOString().slice(0, 16) }
+function nowDT() {
+  const d = new Date(), p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
 
 function fmtDT(s) {
   if (!s) return '—'

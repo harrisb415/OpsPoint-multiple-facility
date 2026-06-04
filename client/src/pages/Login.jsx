@@ -1,6 +1,8 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
+
+const VERSION = '2.3.2'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -32,6 +34,14 @@ export default function Login() {
           />
           <h1>OpsPoint</h1>
           <div className="auth-sub">Staff Login</div>
+          <div style={{ marginTop: 6 }}>
+            <span style={{
+              background: 'rgba(249,115,22,.15)', color: 'var(--orange)',
+              fontSize: '.65rem', fontWeight: 700, padding: '2px 8px',
+              borderRadius: 20, border: '1px solid rgba(249,115,22,.3)',
+              letterSpacing: '.06em',
+            }}>v{VERSION}</span>
+          </div>
         </div>
         <div className="auth-orange-bar" />
         <div className="auth-card-body">

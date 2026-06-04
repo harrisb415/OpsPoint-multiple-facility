@@ -8,6 +8,18 @@ function fmtDate(d) {
   try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
   catch { return d }
 }
+// created_at is stored as a UTC timestamp ('YYYY-MM-DD HH:MM:SS'); date-only
+// fields parse at local noon. Handles both.
+function fmtLogged(ts) {
+  if (!ts) return '—'
+  try {
+    const d = String(ts).includes(' ') ? new Date(ts.replace(' ', 'T') + 'Z') : new Date(ts + 'T12:00:00')
+    return isNaN(d.getTime()) ? ts : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  } catch { return ts }
+}
+function completedOn(m) {
+  return m.completion_date || (m.signed_off_at ? String(m.signed_off_at).slice(0, 10) : null)
+}
 
 function StatusBadge({ status }) {
   const cls = {
@@ -19,10 +31,10 @@ function StatusBadge({ status }) {
   return <span className={cls[status] || 'vbadge vbadge-pending'}>{labels[status] || status}</span>
 }
 
-const BLANK = { client_id: '', client_name: '', phase: '', objective: '', target_date: '', notes: '' }
+const BLANK = { client_id: '', client_name: '', phase: '', objective: '', target_date: '', notes: '', goal_ref: '' }
 
 export default function MilestonesTab() {
-  const { data, loadData } = useData()
+  const { data, loadData, treatmentPlans } = useData()
   const { hasPerm } = usePermission()
   const canEdit    = hasPerm('milestones.edit')
   const canSignoff = hasPerm('milestones.signoff')
@@ -45,6 +57,15 @@ export default function MilestonesTab() {
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
+  const [customObj, setCustomObj] = useState(false)  // "Custom…" objective mode
+
+  // True when an objective isn't one of the phase's predefined options.
+  function isCustomObjective(objective, phaseLabel) {
+    if (!objective) return false
+    const p = phases.find(p => p.label === phaseLabel)
+    const opts = p?.objectives || []
+    return opts.length > 0 && !opts.includes(objective)
+  }
 
   const [unlockModal, setUnlockModal] = useState(null)
   const [unlockReason, setUnlockReason] = useState('')
@@ -56,6 +77,7 @@ export default function MilestonesTab() {
       client_name: client?.name || '',
       phase: phases[0]?.label || '',
     })
+    setCustomObj(false)
     setErr(''); setModal('add')
   }
   function openEdit(m) {
@@ -63,17 +85,20 @@ export default function MilestonesTab() {
       client_id: String(m.client_id), client_name: m.client_name,
       phase: m.phase, objective: m.objective,
       target_date: m.target_date || '', notes: m.notes || '',
+      goal_ref: (m.treatment_plan_id && m.goal_id) ? `${m.treatment_plan_id}::${m.goal_id}` : '',
     })
+    setCustomObj(isCustomObjective(m.objective, m.phase))
     setErr(''); setModal({ record: m })
   }
   function handleClient(cid) {
     const c = clients.find(x => String(x.id) === String(cid))
-    setForm(f => ({ ...f, client_id: cid, client_name: c?.name || '' }))
+    setForm(f => ({ ...f, client_id: cid, client_name: c?.name || '', goal_ref: '' }))
   }
   function pickPhase(label) {
     const p = phases.find(p => p.label === label)
     const objList = p?.objectives || []
-    setForm(f => ({ ...f, phase: label, objective: f.objective || objList[0] || '' }))
+    setForm(f => ({ ...f, phase: label, objective: objList[0] || '' }))
+    setCustomObj(false)
   }
 
   async function save() {
@@ -84,6 +109,8 @@ export default function MilestonesTab() {
       const isEdit = modal && modal.record
       const url = isEdit ? `/api/milestones/${modal.record.id}` : '/api/milestones'
       const method = isEdit ? 'PUT' : 'POST'
+      let treatment_plan_id = null, goal_id = null
+      if (form.goal_ref) { const [pid, gid] = form.goal_ref.split('::'); treatment_plan_id = parseInt(pid) || null; goal_id = gid || null }
       const r = await fetch(url, {
         method, credentials:'include',
         headers:{'Content-Type':'application/json'},
@@ -93,6 +120,7 @@ export default function MilestonesTab() {
           phase: form.phase, objective: form.objective.trim(),
           target_date: form.target_date || null,
           notes: form.notes,
+          treatment_plan_id, goal_id,
         }),
       })
       const j = await r.json().catch(()=>({}))
@@ -182,7 +210,7 @@ export default function MilestonesTab() {
             : view === 'list' ? (
               <table className="table">
                 <thead><tr>
-                  <th>Resident</th><th>Phase</th><th>Objective</th><th>Target</th><th>Status</th><th>Signed off by</th><th></th>
+                  <th>Resident</th><th>Phase</th><th>Objective</th><th>Target</th><th>Completed</th><th>Status</th><th>Signed off by</th><th>Logged</th><th></th>
                 </tr></thead>
                 <tbody>
                   {filtered.map(m => (
@@ -191,8 +219,10 @@ export default function MilestonesTab() {
                       <td>{m.phase}</td>
                       <td>{m.objective}</td>
                       <td>{fmtDate(m.target_date)}</td>
+                      <td style={{ color: m.status === 'completed' ? '#15803d' : '#94a3b8' }}>{m.status === 'completed' ? fmtDate(completedOn(m)) : '—'}</td>
                       <td><StatusBadge status={m.status}/></td>
                       <td style={{ fontSize:'.85em' }}>{m.counselor_name || '—'}</td>
+                      <td style={{ fontSize:'.85em', color:'#94a3b8', whiteSpace:'nowrap' }}>{fmtLogged(m.created_at)}</td>
                       <td style={{ textAlign:'right', whiteSpace:'nowrap' }}>
                         {m.locked_at
                           ? (canUnlock ? <button className="btn btn-sm" onClick={()=>{setUnlockReason(''); setUnlockModal(m)}}>🔒</button> : <span>🔒</span>)
@@ -218,14 +248,19 @@ export default function MilestonesTab() {
                   <div style={{ fontWeight:700, marginBottom:4 }}>{g.name}</div>
                   <ul style={{ margin:0, paddingLeft:18 }}>
                     {g.items.map(m => (
-                      <li key={m.id} style={{ fontSize:'.9em', marginBottom:4 }}>
+                      <li key={m.id} style={{ fontSize:'.9em', marginBottom:8 }}>
                         <strong>{m.phase}</strong> — {m.objective}{' '}
                         <StatusBadge status={m.status}/>{' '}
                         {m.target_date && <span style={{ color:'#64748b' }}>target {fmtDate(m.target_date)}</span>}{' '}
+                        {m.status === 'completed' && completedOn(m) &&
+                          <span style={{ color:'#15803d', fontWeight:600 }}>· completed {fmtDate(completedOn(m))}</span>}{' '}
                         {!m.locked_at && m.status === 'in_progress' && canSignoff &&
                           <button className="btn btn-sm btn-primary" onClick={()=>signoff(m)}>✓ Complete</button>}
                         {!m.locked_at && canEdit &&
                           <button className="btn btn-sm" style={{ marginLeft:4 }} onClick={()=>openEdit(m)}>Edit</button>}
+                        <div style={{ fontSize:'.82em', color:'#94a3b8', marginTop:2 }}>
+                          Logged {fmtLogged(m.created_at)}{m.counselor_name ? ` · signed off by ${m.counselor_name}` : ''}
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -264,20 +299,30 @@ export default function MilestonesTab() {
                 {(() => {
                   const p = phases.find(p => p.label === form.phase)
                   const opts = p?.objectives || []
-                  return opts.length > 0 ? (
-                    <select value={form.objective} onChange={e=>setForm({...form, objective:e.target.value})}>
-                      <option value="">— select —</option>
-                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
-                      <option value="__custom__">Custom…</option>
-                    </select>
-                  ) : (
-                    <input value={form.objective} onChange={e=>setForm({...form, objective:e.target.value})}/>
+                  if (opts.length === 0) {
+                    return <input value={form.objective} onChange={e=>setForm({...form, objective:e.target.value})}/>
+                  }
+                  return (
+                    <>
+                      <select
+                        value={customObj ? '__custom__' : form.objective}
+                        onChange={e => {
+                          const v = e.target.value
+                          if (v === '__custom__') { setCustomObj(true); setForm(f => ({ ...f, objective: '' })) }
+                          else { setCustomObj(false); setForm(f => ({ ...f, objective: v })) }
+                        }}>
+                        <option value="">— select —</option>
+                        {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                        <option value="__custom__">Custom…</option>
+                      </select>
+                      {customObj && (
+                        <input autoFocus style={{ marginTop:6 }} placeholder="Custom objective"
+                          value={form.objective}
+                          onChange={e=>setForm(f => ({ ...f, objective: e.target.value }))}/>
+                      )}
+                    </>
                   )
                 })()}
-                {form.objective === '__custom__' && (
-                  <input style={{ marginTop:6 }} placeholder="Custom objective"
-                    onChange={e=>setForm({...form, objective:e.target.value})}/>
-                )}
               </div>
               <div className="field">
                 <label>Target date</label>
@@ -286,6 +331,22 @@ export default function MilestonesTab() {
               <div className="field">
                 <label>Notes</label>
                 <textarea rows={2} value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/>
+              </div>
+              <div className="field">
+                <label>Advances treatment-plan goal <span style={{ fontWeight:400, color:'#94a3b8' }}>(optional)</span></label>
+                {(() => {
+                  if (!form.client_id) return <div style={{ fontSize:'.8rem', color:'#94a3b8' }}>Select a resident first.</div>
+                  const plans = (treatmentPlans || []).filter(p => String(p.client_id) === String(form.client_id))
+                  const opts = []
+                  plans.forEach(p => (Array.isArray(p.goals) ? p.goals : []).forEach(g => { if (g && g.id) opts.push({ v: `${p.id}::${g.id}`, l: g.goal || '(untitled goal)' }) }))
+                  if (opts.length === 0) return <div style={{ fontSize:'.8rem', color:'#94a3b8' }}>No treatment-plan goals for this resident yet.</div>
+                  return (
+                    <select value={form.goal_ref} onChange={e=>setForm({...form, goal_ref:e.target.value})}>
+                      <option value="">— none —</option>
+                      {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                    </select>
+                  )
+                })()}
               </div>
             </div>
             <div className="modal-foot">

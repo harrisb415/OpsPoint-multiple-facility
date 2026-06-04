@@ -34,6 +34,15 @@ cd client && npm run lint
 
 **Windows scripts:** `run.bat` installs dependencies and starts the server in one step. `install_startup.bat` (run as administrator) registers a Windows Scheduled Task for boot-time autostart under `NetworkService`.
 
+**Rehash on every commit/push.** After *every* `git commit` + `git push`, recompute the repo content digest and record the new value as the integrity baseline (in the auto-memory baseline note). Run from the repo root after pushing:
+
+```bash
+git rev-parse HEAD && git rev-parse "HEAD^{tree}" && \
+git ls-files -z | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
+```
+
+The digest is a SHA-256 over all git-tracked files (sorted), independent of commit metadata — it changes whenever tracked content changes. The recorded baseline must always match the current pushed `HEAD`. This baseline feeds the Option B update mechanism's integrity checks.
+
 ---
 
 ## Architecture

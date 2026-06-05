@@ -2487,6 +2487,9 @@ app.get('/api/central/status', requireAuth, requirePermission('admin.system'), (
     insecure: !!db.getSetting('central_insecure_tls', false),
     last_checkin: db.getSetting('central_last_checkin', ''),
     last_status: db.getSetting('central_last_status', ''),
+    pending: db.outboxPending(),
+    last_sync: db.getSetting('central_last_sync', ''),
+    sync_error: db.getSetting('central_sync_error', ''),
   });
 });
 
@@ -2510,6 +2513,9 @@ app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admi
   db.setSetting('central_insecure_tls', insecure);
   db.setSetting('central_last_checkin', _centralTs());
   db.setSetting('central_last_status', 'connected');
+  db.setSetting('central_sync_error', '');
+  try { db.enqueueSyncBackfill(); } catch (e) {}        // queue a full snapshot for HQ
+  setImmediate(() => { syncTick().catch(() => {}); });   // start draining in the background
   audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
   res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
 });
@@ -2531,10 +2537,52 @@ app.post('/api/central/checkin', requireAuth, csrfCheck, requirePermission('admi
 });
 
 app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
-  ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls', 'central_last_checkin', 'central_last_status']
+  ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
+   'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error']
     .forEach(k => db.setSetting(k, ''));
   audit(req, 'central.disconnect', 'system', null, 'Disconnected from HQ', {});
+  try { db.clearOutbox(); } catch (e) {}   // clear LAST so the audit row above doesn't linger in the outbox
   res.json({ ok: true });
+});
+
+// Drain the outbox to HQ. Safe to call anytime; when no central is configured it
+// just keeps the outbox bounded (standalone facility). Runs on a timer, after a
+// successful connect, and on demand via /api/central/sync-now.
+let _syncing = false;
+async function syncTick() {
+  if (_syncing) return;
+  _syncing = true;
+  try {
+    const url = db.getSetting('central_url', ''), key = db.getSetting('central_api_key', '');
+    const insecure = !!db.getSetting('central_insecure_tls', false);
+    if (!url || !key) { db.clearOutbox(); return; }   // standalone: nothing to send
+    let batches = 0;
+    while (batches < 20) {
+      const batch = db.getSyncBatch(50);
+      if (!batch.length) break;
+      let r;
+      try { r = await _centralRequest('POST', url + '/sync/ingest', { headers: { 'x-facility-key': key }, body: { rows: batch, app_version: _appVersion }, insecure, timeout: 30000 }); }
+      catch (e) { db.setSetting('central_sync_error', (e && e.message) || 'network error'); db.setSetting('central_last_status', 'unreachable'); return; }
+      if (r.status !== 200 || !r.body || !r.body.ok) {
+        db.setSetting('central_sync_error', (r.body && r.body.error) || ('HTTP ' + r.status));
+        db.setSetting('central_last_status', r.status === 401 || r.status === 403 ? 'rejected' : 'error');
+        return;
+      }
+      db.markSynced(batch.map(b => b.id));
+      batches++;
+      db.setSetting('central_last_status', 'connected');
+      db.setSetting('central_sync_error', '');
+    }
+    db.pruneOutbox();
+    db.setSetting('central_last_sync', _centralTs());
+  } finally { _syncing = false; }
+}
+
+app.post('/api/central/sync-now', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
+  if (!db.getSetting('central_url', '') || !db.getSetting('central_api_key', ''))
+    return res.status(400).json({ error: 'Not connected to HQ' });
+  await syncTick();
+  res.json({ ok: true, pending: db.outboxPending(), last_sync: db.getSetting('central_last_sync', ''), last_status: db.getSetting('central_last_status', ''), error: db.getSetting('central_sync_error', '') });
 });
 
 // ── React SPA catch-all (MUST be last — after all API routes) ────
@@ -2607,4 +2655,9 @@ if (require.main === module) (()=>{
     const{exec}=require('child_process');
     setTimeout(()=>exec(`start ${proto}://localhost:${PORT}`),1200);
   });
+
+  // Multi-facility sync agent — drain the outbox to HQ shortly after boot, then
+  // every 20s. No-op (and keeps the outbox bounded) when no central is configured.
+  setTimeout(() => { syncTick().catch(() => {}); }, 5000);
+  setInterval(() => { syncTick().catch(() => {}); }, 20000);
 })();

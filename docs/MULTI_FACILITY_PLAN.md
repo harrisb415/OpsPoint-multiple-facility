@@ -194,4 +194,10 @@ Phase 1's sync then has a backbone to attach to, and nothing patient-facing has 
   - `central/scripts/smoke.mjs` — end-to-end check: login -> create facility -> node check-in -> verify `last_seen`.
   - First-run admin password: `CENTRAL_ADMIN_PW` env, else random (printed once).
 - **Node side (Connect to HQ) — DONE.** Settings keys seeded in `db.js`; `/api/central/connect|checkin|disconnect|status` added to `server.js` (outbound-only, self-signed-TLS opt-in, full key never returned to clients); "Central / HQ Connection" card added to Admin → System. Verified: `node --check` (all files), client build (847 KB), `npm test` (26 pass), and the Phase 0 E2E.
-- **Next: Phase 1 — one-way sync (offsite backup).** `sync_outbox` + triggers on synced tables, in-process sync agent draining to HQ, `/sync/ingest` on central into facility_id-tagged tables, initial backfill, photos inline. See §4.
+- **Phase 1 — COMPLETE & verified (E2E exit 0).** One-way sync = offsite backup, working end-to-end.
+  - Facility `db.js`: `sync_outbox` + AFTER INSERT/UPDATE/DELETE triggers on 21 operational/clinical tables (`SYNC_TABLES`); `recursive_triggers=ON` so FK cascade deletes propagate. Helpers: `enqueueSyncBackfill`, `getSyncBatch` (photos inlined to base64), `markSynced`, `outboxPending`, `pruneOutbox`, `clearOutbox`.
+  - Facility `server.js`: in-process sync agent (`syncTick`) on a 20s timer + after-connect + `/api/central/sync-now`; batches of 50, up to 20 batches/tick; standalone (no HQ) keeps the outbox bounded; identity/config/settings intentionally NOT synced.
+  - Central: generic `facility_data` JSON store keyed by `(facility_id, table_name, source_id)` — schema-agnostic; `POST /sync/ingest` (idempotent upsert/delete, advances `applied_through`); `GET /api/facilities/:id/stats` and `/rows` (admin; feed Phase 2 reporting).
+  - Admin → System card shows pending count + last-sync + a **Sync now** button.
+  - E2E verified: backfill, live insert/update/delete, multi-table, `applied_through` advance, disconnect clears outbox. Regression: `npm test` 26/26, build 848 KB.
+- **Next: Phase 2 — org console (cross-facility reporting + central users).** Read dashboards over `facility_data`; central becomes master for users/permission-profiles/pushed settings with a node pull-phase (§4.2) + local break-glass admin.

@@ -88,6 +88,19 @@ function _createSchema() {
     detail  TEXT DEFAULT '',
     ip      TEXT DEFAULT ''
   )`);
+
+  // Phase 1: synced facility rows, stored generically as JSON keyed by
+  // (facility_id, table_name, source_id). Schema-agnostic — new facility
+  // columns never break ingest; Phase 2 reporting can read via json_extract.
+  _db.exec(`CREATE TABLE IF NOT EXISTS facility_data (
+    facility_id TEXT NOT NULL,
+    table_name  TEXT NOT NULL,
+    source_id   INTEGER NOT NULL,
+    data        TEXT,
+    updated_at  TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (facility_id, table_name, source_id)
+  )`);
+  _db.exec('CREATE INDEX IF NOT EXISTS idx_fdata_fac_table ON facility_data(facility_id, table_name)');
 }
 
 // ── Low-level helpers (private) ──────────────────────────────────────────
@@ -224,6 +237,46 @@ function touchFacility(id, { ip = '', app_version = '' } = {}) {
     [nowLocal(), ip, app_version || '', id]);
 }
 
+// ── Sync ingest (Phase 1) ──────────────────────────────────────────────
+function getAppliedThrough(facilityId) {
+  const r = _q1('SELECT applied_through FROM sync_state WHERE facility_id=?', [facilityId]);
+  return r ? r.applied_through : 0;
+}
+
+// Apply a batch of facility rows. Idempotent: upserts and deletes can be safely
+// replayed, so a lost ACK that triggers a resend never corrupts state.
+function ingestRows(facilityId, rows) {
+  let stored = 0, deleted = 0, maxId = getAppliedThrough(facilityId);
+  const ts = nowLocal();
+  _db.transaction(() => {
+    const up  = _db.prepare('INSERT OR REPLACE INTO facility_data (facility_id,table_name,source_id,data,updated_at) VALUES (?,?,?,?,?)');
+    const del = _db.prepare('DELETE FROM facility_data WHERE facility_id=? AND table_name=? AND source_id=?');
+    for (const r of rows || []) {
+      if (!r || !r.table_name || r.row_id == null) continue;
+      if (r.op === 'delete') { del.run(facilityId, r.table_name, r.row_id); deleted++; }
+      else { up.run(facilityId, r.table_name, r.row_id, JSON.stringify(r.data || {}), ts); stored++; }
+      if (typeof r.id === 'number' && r.id > maxId) maxId = r.id;
+    }
+    _run(`INSERT INTO sync_state (facility_id,applied_through,updated_at) VALUES (?,?,?)
+          ON CONFLICT(facility_id) DO UPDATE SET applied_through=excluded.applied_through, updated_at=excluded.updated_at`,
+      [facilityId, maxId, ts]);
+  })();
+  return { stored, deleted, applied_through: maxId };
+}
+
+function facilityTableCounts(facilityId) {
+  const rows = _q('SELECT table_name, COUNT(*) AS c FROM facility_data WHERE facility_id=? GROUP BY table_name ORDER BY table_name', [facilityId]);
+  const tables = {}; let total = 0;
+  rows.forEach(r => { tables[r.table_name] = r.c; total += r.c; });
+  return { total, tables, applied_through: getAppliedThrough(facilityId) };
+}
+
+// Parsed rows for one facility table (feeds Phase 2 reporting + verification).
+function getFacilityRows(facilityId, table, limit = 1000) {
+  const rows = _q('SELECT source_id, data, updated_at FROM facility_data WHERE facility_id=? AND table_name=? ORDER BY source_id LIMIT ?', [facilityId, table, limit]);
+  return rows.map(r => { let d = null; try { d = JSON.parse(r.data); } catch (e) {} return { source_id: r.source_id, data: d, updated_at: r.updated_at }; });
+}
+
 module.exports = {
   init, nowLocal,
   getSetting, setSetting,
@@ -231,4 +284,6 @@ module.exports = {
   authUser, getUser, setUserPassword,
   listFacilities, getFacility, createFacility, rotateFacilityKey, setFacilityStatus,
   facilityByKey, touchFacility,
+  // Sync ingest (Phase 1)
+  getAppliedThrough, ingestRows, facilityTableCounts, getFacilityRows,
 };

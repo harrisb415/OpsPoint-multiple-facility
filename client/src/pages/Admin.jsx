@@ -1851,6 +1851,17 @@ function SystemTab() {
     } catch { setCErr('Network error reaching HQ.') }
     finally { setCBusy(false) }
   }
+  async function centralSyncNow() {
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/sync-now', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCErr(j.error || 'Sync failed'); loadCentral(); return }
+      setCMsg(j.pending > 0 ? ('Synced — ' + j.pending + ' change(s) still pending') : '✓ All changes backed up to HQ')
+      loadCentral()
+    } catch { setCErr('Network error reaching HQ.') }
+    finally { setCBusy(false) }
+  }
   async function centralDisconnect() {
     if (!window.confirm('Disconnect this facility from HQ? It will stop syncing until reconnected.')) return
     setCBusy(true); setCErr(''); setCMsg('')
@@ -1956,10 +1967,13 @@ function SystemTab() {
                 <div><strong>Facility ID:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.facility_id}</span></div>
                 <div><strong>Key:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.key_prefix}…</span></div>
                 <div><strong>Last check-in:</strong> {central.last_checkin || 'never'}</div>
+                <div><strong>Backup:</strong> {central.pending > 0 ? (central.pending + ' change(s) pending') : 'up to date'}{central.last_sync ? ' · last synced ' + central.last_sync : ''}</div>
+                {central.sync_error && <div style={{ color: '#b91c1c' }}>Sync error: {central.sync_error}</div>}
                 {central.insecure && <div style={{ color: '#b45309' }}>⚠ TLS verification disabled for HQ</div>}
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 <button className="btn btn-sm" onClick={centralCheckin} disabled={cBusy}>Check in now</button>
+                <button className="btn btn-sm btn-primary" onClick={centralSyncNow} disabled={cBusy}>Sync now</button>
                 <button className="btn btn-sm btn-red" onClick={centralDisconnect} disabled={cBusy}>Disconnect</button>
               </div>
             </div>

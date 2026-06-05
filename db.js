@@ -179,6 +179,7 @@ function init(dbPath) {
   _seedGroups();
   _migrateUserGroups();
   _migrateGroups(_bootNewPerms);
+  _createSyncLayer();              // sync_outbox + triggers (multi-facility Phase 1)
   pruneAuditLog(365);
   // Lock any clinical records past their 24h grace window (boot-time sweep)
   try { runLockSweep(); } catch(e) {}
@@ -1724,8 +1725,97 @@ const clinicalDb = {
   applyMigration: _applyClinicalLiteMigration,
 };
 
+// ── Multi-facility sync layer (Phase 1: one-way local → central) ───────
+// Operational/clinical tables backed up + reported at HQ. Identity (users,
+// groups), config (settings), and the outbox itself are intentionally excluded.
+const SYNC_TABLES = [
+  'clients','reports','log_entries','staff','passes','chore_log',
+  'ua_requests','mail_log','violations',
+  'ua_records','med_administration_log','milestones','incidents',
+  'discharge_records','consent_records','disclosures',
+  'group_sessions','group_attendance','ua_draws','broadcast_messages',
+  'audit_log',
+];
+// Columns holding photos as on-disk paths — inlined to base64 for transport.
+const SYNC_PHOTO_COLS = { clients:['photo'], ua_records:['photo'], log_entries:['ua_photo'] };
+
+// Build the outbox + AFTER INSERT/UPDATE/DELETE triggers on every synced table.
+// Triggers fire for ALL writes (incl. FK cascade deletes, with recursive_triggers
+// ON), so the outbox can never miss a change. Table names come from the hardcoded
+// whitelist above — never user input — so the string interpolation is safe.
+function _createSyncLayer() {
+  _db.pragma('recursive_triggers = ON');  // so ON DELETE CASCADE fires delete triggers
+  _db.exec(`CREATE TABLE IF NOT EXISTS sync_outbox (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_name TEXT NOT NULL,
+    row_id     INTEGER NOT NULL,
+    op         TEXT NOT NULL,                 -- 'upsert' | 'delete'
+    created_at TEXT DEFAULT (datetime('now')),
+    synced_at  TEXT DEFAULT NULL
+  )`);
+  _db.exec('CREATE INDEX IF NOT EXISTS idx_outbox_unsynced ON sync_outbox(synced_at, id)');
+  for (const t of SYNC_TABLES) {
+    if (!_q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
+    _db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_sync_${t}_ai AFTER INSERT ON ${t}
+        BEGIN INSERT INTO sync_outbox(table_name,row_id,op) VALUES('${t}',NEW.id,'upsert'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_sync_${t}_au AFTER UPDATE ON ${t}
+        BEGIN INSERT INTO sync_outbox(table_name,row_id,op) VALUES('${t}',NEW.id,'upsert'); END;
+      CREATE TRIGGER IF NOT EXISTS trg_sync_${t}_ad AFTER DELETE ON ${t}
+        BEGIN INSERT INTO sync_outbox(table_name,row_id,op) VALUES('${t}',OLD.id,'delete'); END;
+    `);
+  }
+}
+
+// Enqueue every existing row of every synced table — the new sync baseline.
+// Run on enrollment so HQ receives a full snapshot, then live triggers take over.
+function enqueueSyncBackfill() {
+  _db.transaction(() => {
+    _run('DELETE FROM sync_outbox');
+    for (const t of SYNC_TABLES) {
+      if (!_q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
+      _run(`INSERT INTO sync_outbox(table_name,row_id,op) SELECT '${t}', id, 'upsert' FROM ${t}`);
+    }
+  })();
+  return outboxPending();
+}
+
+function outboxPending() {
+  const r = _q1('SELECT COUNT(*) AS c FROM sync_outbox WHERE synced_at IS NULL');
+  return r ? r.c : 0;
+}
+
+// Oldest-first batch of unsynced changes, with row data resolved + photos inlined.
+function getSyncBatch(limit = 50) {
+  const rows = _q('SELECT id, table_name, row_id, op FROM sync_outbox WHERE synced_at IS NULL ORDER BY id LIMIT ?', [limit]);
+  return rows.map(o => {
+    if (o.op !== 'upsert') return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'delete', data: null };
+    const row = _q1(`SELECT * FROM ${o.table_name} WHERE id=?`, [o.row_id]);
+    if (!row) return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'delete', data: null }; // gone → delete
+    const cols = SYNC_PHOTO_COLS[o.table_name];
+    if (cols) cols.forEach(c => {
+      if (row[c] && typeof row[c] === 'string' && !row[c].startsWith('data:')) { const b = getPhotoB64(row[c]); if (b) row[c] = b; }
+    });
+    return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'upsert', data: row };
+  });
+}
+
+function markSynced(ids) {
+  if (!ids || !ids.length) return;
+  const ts = nowLocal();
+  _db.transaction(() => {
+    const stmt = _db.prepare('UPDATE sync_outbox SET synced_at=? WHERE id=?');
+    for (const id of ids) stmt.run(ts, id);
+  })();
+}
+
+function pruneOutbox() { _run('DELETE FROM sync_outbox WHERE synced_at IS NOT NULL'); }
+function clearOutbox() { _run('DELETE FROM sync_outbox'); }  // standalone: keep bounded
+
 module.exports = {
   init, save, query, query1, run, runAndSave,
+  // Multi-facility sync (Phase 1)
+  SYNC_TABLES, enqueueSyncBackfill, outboxPending, getSyncBatch, markSynced, pruneOutbox, clearOutbox,
   clinicalDb,
   getSetting, setSetting, setSettingAndSave,
   getAllData, upsertReport, savePhoto, getPhotoB64,

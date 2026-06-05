@@ -172,6 +172,34 @@ app.post('/enroll/checkin', requireFacilityKey, (req, res) => {
   });
 });
 
+// ── Node-facing: sync ingest (API-key auth, no session) ──────────────────
+app.post('/sync/ingest', requireFacilityKey, (req, res) => {
+  const ip = clientIp(req);
+  const rows = (req.body && req.body.rows) || [];
+  if (!Array.isArray(rows)) return res.status(400).json({ error: 'rows must be an array' });
+  let result;
+  try { result = db.ingestRows(req.facility.id, rows); }
+  catch (e) { return res.status(500).json({ error: 'ingest failed: ' + ((e && e.message) || 'error') }); }
+  db.touchFacility(req.facility.id, { ip, app_version: String((req.body && req.body.app_version) || req.facility.app_version || '') });
+  res.json({ ok: true, ...result });
+});
+
+// ── Per-facility backup stats (admin) ────────────────────────────────────
+app.get('/api/facilities/:id/stats', requireAdmin, (req, res) => {
+  const fac = db.getFacility(req.params.id);
+  if (!fac) return res.status(404).json({ error: 'not found' });
+  res.json({ facility: { id: fac.id, name: fac.name, last_seen_at: fac.last_seen_at }, ...db.facilityTableCounts(fac.id) });
+});
+
+// ── Per-facility synced rows for one table (admin; feeds Phase 2 reporting) ─
+app.get('/api/facilities/:id/rows', requireAdmin, (req, res) => {
+  const fac = db.getFacility(req.params.id);
+  if (!fac) return res.status(404).json({ error: 'not found' });
+  const table = String(req.query.table || '');
+  if (!table) return res.status(400).json({ error: 'table query param required' });
+  res.json({ table, rows: db.getFacilityRows(fac.id, table) });
+});
+
 // ── Console (static SPA-ish single page) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

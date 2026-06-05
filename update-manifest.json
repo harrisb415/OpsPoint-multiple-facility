@@ -4,7 +4,7 @@
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/OpsPoint-FULL-HIPAA/releases/download/v2.3.2/opspoint-2.3.2.zip",
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.2/opspoint-2.3.2.zip",
   "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "size": 0,
   "changelog": [

@@ -10,9 +10,10 @@
  *   release/opspoint-<ver>.zip   — prebuilt runtime bundle (server + dist, no node_modules/data)
  *   update-manifest.json         — rewritten with the new version, sha256, size, url
  *
- * Then publish:
- *   gh release create v<ver> release/opspoint-<ver>.zip --title "v<ver>" --notes "..."
- *   git add update-manifest.json && git commit -m "release: v<ver>" && git push
+ * Then publish to the PUBLIC releases repo — attach BOTH the zip and the manifest.
+ * The app reads it tokenlessly via .../releases/latest/download/update-manifest.json:
+ *   gh release create v<ver> release/opspoint-<ver>.zip update-manifest.json \
+ *     -R harrisb415/opspoint-releases --title "v<ver>" --notes-file CHANGELOG.md
  *
  * The bundle is what the in-app updater downloads, checksum-verifies, and swaps
  * into place. It deliberately excludes node_modules/ and data/.
@@ -26,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const VER = pkg.version;
-const REPO = 'harrisb415/OpsPoint-FULL-HIPAA';
+const REPO = 'harrisb415/opspoint-releases'; // PUBLIC releases repo (source repo is private)
 
 // Runtime payload — must match RUNTIME_FILES / RUNTIME_DIRS in updater.js.
 const FILES = ['server.js', 'updater.js', 'db.js', 'package.json', 'package-lock.json', 'generate_cert.js'];
@@ -89,6 +90,7 @@ console.log(`\n✓ ${path.relative(ROOT, ZIP)}  (${(size / 1048576).toFixed(2)} 
 console.log(`✓ sha256 ${sha256}`);
 console.log(`✓ update-manifest.json rewritten for v${VER}`);
 console.log(`\nNext:`);
-console.log(`  1. Edit update-manifest.json "changelog" for this release`);
-console.log(`  2. gh release create v${VER} "${path.relative(ROOT, ZIP)}" --title "v${VER}" --notes-file CHANGELOG.md`);
-console.log(`  3. git add update-manifest.json && git commit -m "release: v${VER}" && git push origin master\n`);
+console.log(`  1. Edit update-manifest.json "changelog" for this release if needed`);
+console.log(`  2. Publish to the PUBLIC releases repo (attach BOTH zip + manifest):`);
+console.log(`       gh release create v${VER} "${path.relative(ROOT, ZIP)}" update-manifest.json -R ${REPO} --title "v${VER}" --notes-file CHANGELOG.md`);
+console.log(`  3. (optional) keep manifest history in source: git add update-manifest.json && git commit -m "release: v${VER}" && git push origin master\n`);

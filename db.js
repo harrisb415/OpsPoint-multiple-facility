@@ -601,12 +601,20 @@ function _seedDefaults() {
       critical: ['supervisor','case_manager','licensing','guardian'],
     }),
     session_idle_mins:      '30',  // HIPAA technical safeguard — minutes of inactivity before forced logout
-    update_manifest_url:    'https://raw.githubusercontent.com/harrisb415/OpsPoint-FULL-HIPAA/master/update-manifest.json',
+    update_manifest_url:    'https://github.com/harrisb415/opspoint-releases/releases/latest/download/update-manifest.json',
     update_auto_check:      'true', // check for updates on boot + daily; never auto-APPLY
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))
       _run('INSERT INTO settings (key,value) VALUES (?,?)', [k, v]);
+  }
+  // Self-correct an early default that pointed at the PRIVATE source repo — the
+  // updater fetches with no token, so the manifest must live on the public
+  // releases repo. Safe/idempotent; only rewrites the known-bad value.
+  {
+    const _mu = _q1('SELECT value FROM settings WHERE key=?', ['update_manifest_url']);
+    if (_mu && /OpsPoint-FULL-HIPAA/.test(_mu.value))
+      _run('UPDATE settings SET value=? WHERE key=?', [defs.update_manifest_url, 'update_manifest_url']);
   }
   // Seed permission profiles if not yet stored
   if (!_q1('SELECT key FROM settings WHERE key=?', ['permission_profiles']))

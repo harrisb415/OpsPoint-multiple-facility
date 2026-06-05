@@ -2445,6 +2445,98 @@ app.post('/api/update/rollback', requireAuth, csrfCheck, requirePermission('admi
   catch(e){ res.status(400).json({error:(e&&e.message)||'Rollback failed'}); }
 });
 
+// ── Central / HQ link (Phase 0: connect + check-in) ───────────────
+// Facility node → central HQ server. OUTBOUND only; the facility keeps operating
+// normally if HQ is unreachable. Phase 0 is enrollment + liveness; sync is Phase 1.
+const _httpsMod = require('https');
+const _httpMod  = require('http');
+function _centralRequest(method, urlStr, { headers = {}, body = null, insecure = false, timeout = 10000 } = {}) {
+  return new Promise((resolve, reject) => {
+    let u; try { u = new URL(urlStr); } catch (e) { return reject(new Error('Invalid HQ URL')); }
+    const mod = u.protocol === 'https:' ? _httpsMod : _httpMod;
+    const data = body == null ? null : Buffer.from(typeof body === 'string' ? body : JSON.stringify(body));
+    const opts = {
+      method, hostname: u.hostname,
+      port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: { 'content-type': 'application/json', ...(data ? { 'content-length': data.length } : {}), ...headers },
+      timeout,
+    };
+    if (u.protocol === 'https:' && insecure) opts.rejectUnauthorized = false; // scoped to this call only
+    const r = mod.request(opts, resp => {
+      let buf = ''; resp.on('data', d => buf += d);
+      resp.on('end', () => { let parsed = null; try { parsed = JSON.parse(buf); } catch (e) {} resolve({ status: resp.statusCode, body: parsed }); });
+    });
+    r.on('error', reject);
+    r.on('timeout', () => r.destroy(new Error('HQ connection timed out')));
+    if (data) r.write(data);
+    r.end();
+  });
+}
+function _centralTs() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
+const _appVersion = (() => { try { return require('./package.json').version; } catch (e) { return ''; } })();
+
+app.get('/api/central/status', requireAuth, requirePermission('admin.system'), (req, res) => {
+  const url = db.getSetting('central_url', '');
+  const facility_id = db.getSetting('central_facility_id', '');
+  const api_key = db.getSetting('central_api_key', '');
+  res.json({
+    connected: !!(url && facility_id && api_key),
+    url, facility_id,
+    key_prefix: api_key ? String(api_key).slice(0, 8) : '', // never return the full key
+    insecure: !!db.getSetting('central_insecure_tls', false),
+    last_checkin: db.getSetting('central_last_checkin', ''),
+    last_status: db.getSetting('central_last_status', ''),
+  });
+});
+
+app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
+  const url = String((req.body && req.body.url) || '').trim().replace(/\/+$/, '');
+  const facility_id = String((req.body && req.body.facility_id) || '').trim();
+  const api_key = String((req.body && req.body.api_key) || '').trim();
+  const insecure = !!(req.body && req.body.insecure);
+  if (!url || !facility_id || !api_key) return res.status(400).json({ error: 'HQ URL, Facility ID and enrollment key are all required' });
+  if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'HQ URL must start with http:// or https://' });
+  let r;
+  try { r = await _centralRequest('POST', url + '/enroll/checkin', { headers: { 'x-facility-key': api_key }, body: { app_version: _appVersion }, insecure }); }
+  catch (e) { return res.status(502).json({ error: 'Could not reach HQ: ' + ((e && e.message) || 'network error') }); }
+  if (r.status !== 200 || !r.body || !r.body.ok)
+    return res.status(r.status === 401 || r.status === 403 ? r.status : 502).json({ error: (r.body && r.body.error) || ('HQ rejected check-in (HTTP ' + r.status + ')') });
+  if (r.body.facility && r.body.facility.id && r.body.facility.id !== facility_id)
+    return res.status(400).json({ error: 'This key belongs to a different facility — check the Facility ID' });
+  db.setSetting('central_url', url);
+  db.setSetting('central_facility_id', facility_id);
+  db.setSetting('central_api_key', api_key);
+  db.setSetting('central_insecure_tls', insecure);
+  db.setSetting('central_last_checkin', _centralTs());
+  db.setSetting('central_last_status', 'connected');
+  audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
+  res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
+});
+
+app.post('/api/central/checkin', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
+  const url = db.getSetting('central_url', ''), api_key = db.getSetting('central_api_key', '');
+  const insecure = !!db.getSetting('central_insecure_tls', false);
+  if (!url || !api_key) return res.status(400).json({ error: 'Not connected to HQ' });
+  let r;
+  try { r = await _centralRequest('POST', url + '/enroll/checkin', { headers: { 'x-facility-key': api_key }, body: { app_version: _appVersion }, insecure }); }
+  catch (e) { db.setSetting('central_last_status', 'unreachable'); return res.status(502).json({ error: 'Could not reach HQ: ' + ((e && e.message) || 'network error') }); }
+  if (r.status !== 200 || !r.body || !r.body.ok) {
+    db.setSetting('central_last_status', 'rejected');
+    return res.status(502).json({ error: (r.body && r.body.error) || ('HQ rejected check-in (HTTP ' + r.status + ')') });
+  }
+  db.setSetting('central_last_checkin', _centralTs());
+  db.setSetting('central_last_status', 'connected');
+  res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
+});
+
+app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
+  ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls', 'central_last_checkin', 'central_last_status']
+    .forEach(k => db.setSetting(k, ''));
+  audit(req, 'central.disconnect', 'system', null, 'Disconnected from HQ', {});
+  res.json({ ok: true });
+});
+
 // ── React SPA catch-all (MUST be last — after all API routes) ────
 app.get('*',(req,res)=>{
   if (!req.path.startsWith('/api/')) res.sendFile(path.join(REACT_DIST,'index.html'));

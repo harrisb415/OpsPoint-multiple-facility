@@ -1,0 +1,15 @@
+{
+  "name": "opspoint-central",
+  "version": "0.1.0",
+  "description": "OpsPoint Central / HQ server — facility registry, sync ingest, org console",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.10.0",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3"
+  }
+}

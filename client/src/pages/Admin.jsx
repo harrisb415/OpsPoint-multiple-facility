@@ -1817,6 +1817,51 @@ function SystemTab() {
   const pollRef = useRef(null)
   const targetRef = useRef(null)
 
+  // ── Central / HQ connection ───────────────────────────────────────
+  const [central, setCentral] = useState(null)         // /api/central/status payload
+  const [cForm, setCForm] = useState({ url: '', facility_id: '', api_key: '', insecure: false })
+  const [cBusy, setCBusy] = useState(false)
+  const [cErr, setCErr] = useState('')
+  const [cMsg, setCMsg] = useState('')
+  const loadCentral = useCallback(async () => {
+    try { const r = await apiFetch('/api/central/status'); if (r.ok) setCentral(await r.json()) } catch { /* ignore */ }
+  }, [])
+  useEffect(() => { loadCentral() }, [loadCentral])
+
+  async function centralConnect() {
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cForm) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCErr(j.error || 'Connection failed'); return }
+      setCMsg('✓ Connected to ' + (j.central?.name || 'HQ'))
+      setCForm(f => ({ ...f, api_key: '' }))
+      loadCentral()
+    } catch { setCErr('Network error reaching HQ.') }
+    finally { setCBusy(false) }
+  }
+  async function centralCheckin() {
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/checkin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCErr(j.error || 'Check-in failed'); loadCentral(); return }
+      setCMsg('✓ Checked in with ' + (j.central?.name || 'HQ'))
+      loadCentral()
+    } catch { setCErr('Network error reaching HQ.') }
+    finally { setCBusy(false) }
+  }
+  async function centralDisconnect() {
+    if (!window.confirm('Disconnect this facility from HQ? It will stop syncing until reconnected.')) return
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      if (!r.ok) { const j = await r.json().catch(() => ({})); setCErr(j.error || 'Failed'); return }
+      setCMsg('Disconnected from HQ.'); loadCentral()
+    } catch { setCErr('Network error.') }
+    finally { setCBusy(false) }
+  }
+
   const loadStatus = useCallback(async () => {
     try {
       const r = await apiFetch('/api/update/status')
@@ -1887,6 +1932,55 @@ function SystemTab() {
 
   return (
     <div>
+      {/* Central / HQ Connection */}
+      <div className="section">
+        <div className="section-head">
+          <div className="sh-left"><span className="sh-dot" /><span>Central / HQ Connection</span></div>
+          {central?.connected && !cBusy && <button className="btn btn-sm" onClick={centralCheckin}>Check in now</button>}
+        </div>
+        <div className="section-body">
+          <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 14 }}>
+            Link this facility to your central OpsPoint (HQ) server for off-site backup and org-wide reporting. The facility keeps running normally if HQ is unreachable.
+          </p>
+          {cErr && <div className="auth-error" style={{ marginBottom: 12 }}>{cErr}</div>}
+          {cMsg && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: '.82rem', marginBottom: 12, background: '#dcfce7', color: '#15803d' }}>{cMsg}</div>}
+
+          {central?.connected ? (
+            <div style={{ padding: '12px 14px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <span style={{ fontWeight: 800, color: '#065f46' }}>Connected to HQ</span>
+                <Chip2 bg={central.last_status === 'connected' ? '#dcfce7' : '#fee2e2'} fg={central.last_status === 'connected' ? '#15803d' : '#991b1b'}>{central.last_status || 'unknown'}</Chip2>
+              </div>
+              <div style={{ fontSize: '.82rem', color: '#334155', lineHeight: 1.9 }}>
+                <div><strong>HQ URL:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.url}</span></div>
+                <div><strong>Facility ID:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.facility_id}</span></div>
+                <div><strong>Key:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.key_prefix}…</span></div>
+                <div><strong>Last check-in:</strong> {central.last_checkin || 'never'}</div>
+                {central.insecure && <div style={{ color: '#b45309' }}>⚠ TLS verification disabled for HQ</div>}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button className="btn btn-sm" onClick={centralCheckin} disabled={cBusy}>Check in now</button>
+                <button className="btn btn-sm btn-red" onClick={centralDisconnect} disabled={cBusy}>Disconnect</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ maxWidth: 460 }}>
+              <div className="field"><label>HQ server URL</label>
+                <input placeholder="https://hq.example.org:4000" value={cForm.url} onChange={e => setCForm(f => ({ ...f, url: e.target.value }))} /></div>
+              <div className="field"><label>Facility ID</label>
+                <input placeholder="from the HQ console" value={cForm.facility_id} onChange={e => setCForm(f => ({ ...f, facility_id: e.target.value }))} /></div>
+              <div className="field"><label>Enrollment key</label>
+                <input type="password" placeholder="one-time key from HQ" value={cForm.api_key} onChange={e => setCForm(f => ({ ...f, api_key: e.target.value }))} /></div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.82rem', color: '#475569', margin: '4px 0 12px' }}>
+                <input type="checkbox" checked={cForm.insecure} onChange={e => setCForm(f => ({ ...f, insecure: e.target.checked }))} style={{ width: 'auto' }} />
+                Allow self-signed TLS cert on HQ (trusted networks only)
+              </label>
+              <button className="btn btn-sm btn-primary" onClick={centralConnect} disabled={cBusy}>{cBusy ? 'Connecting…' : 'Connect to HQ'}</button>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Software Updates */}
       <div className="section">
         <div className="section-head">

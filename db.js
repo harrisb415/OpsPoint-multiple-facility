@@ -603,6 +603,13 @@ function _seedDefaults() {
     session_idle_mins:      '30',  // HIPAA technical safeguard — minutes of inactivity before forced logout
     update_manifest_url:    'https://github.com/harrisb415/opspoint-releases/releases/latest/download/update-manifest.json',
     update_auto_check:      'true', // check for updates on boot + daily; never auto-APPLY
+    // ── Central / HQ link (multi-facility, Phase 0) ───────────────────
+    central_url:            '',      // HQ server base URL (empty = standalone)
+    central_facility_id:    '',      // this facility's UUID, issued by HQ at enrollment
+    central_api_key:        '',      // per-facility enrollment key (server-only; never sent to clients)
+    central_insecure_tls:   'false', // allow self-signed HQ cert (trusted networks only)
+    central_last_checkin:   '',      // local timestamp of last successful HQ check-in
+    central_last_status:    '',      // connected | unreachable | rejected
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))

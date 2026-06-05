@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OpsPoint Central</title>
+<style>
+  :root{
+    --teal-800:#0a4655; --teal-600:#106f88; --gold-600:#c9780c; --gold-300:#fcc858;
+    --raised:#eaf3f6; --ink:#0f2933; --muted:#5b7480; --line:#cfe0e6;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,sans-serif;color:var(--ink);
+    background:linear-gradient(135deg,#e9f3f6,#dbeaf0);min-height:100vh}
+  header{background:linear-gradient(135deg,var(--teal-600),var(--teal-800));color:#fff;
+    padding:14px 22px;display:flex;align-items:center;gap:12px}
+  header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.3px}
+  header .sp{flex:1}
+  header button{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.25)}
+  main{max-width:980px;margin:28px auto;padding:0 18px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:22px;
+    box-shadow:0 1px 3px rgba(10,70,85,.08);margin-bottom:18px}
+  h2{font-size:15px;margin:0 0 14px;color:var(--teal-800)}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit}
+  input:focus{outline:none;border-color:var(--gold-600);box-shadow:0 0 0 3px rgba(252,200,88,.35)}
+  button{background:var(--teal-600);color:#fff;border:0;border-radius:8px;padding:9px 16px;
+    font:inherit;font-weight:600;cursor:pointer}
+  button.gold{background:var(--gold-600)}
+  button.ghost{background:transparent;color:var(--teal-600);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:default}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+  .pill.active{background:#dff3e6;color:#1d7a45}
+  .pill.disabled{background:#fde8e8;color:#b22}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:13px}
+  .muted{color:var(--muted)}
+  .row{display:flex;gap:10px;align-items:flex-end}
+  .row > div{flex:1}
+  .err{color:#b22;font-size:13px;margin-top:8px;min-height:18px}
+  .keybox{background:#fff7e6;border:1px solid var(--gold-300);border-radius:8px;padding:14px;margin-top:12px}
+  .keybox .mono{word-break:break-all;display:block;margin:8px 0;font-size:14px}
+  .hidden{display:none}
+  .dim{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>OpsPoint&nbsp;·&nbsp;Central</h1>
+  <span class="sp"></span>
+  <span id="who" class="dim" style="color:#cfe7ee"></span>
+  <button id="logoutBtn" class="hidden" onclick="logout()">Sign out</button>
+</header>
+
+<main>
+  <!-- LOGIN -->
+  <section id="loginView" class="card hidden" style="max-width:380px;margin:48px auto">
+    <h2>HQ sign in</h2>
+    <label>Username</label>
+    <input id="u" autocomplete="username" />
+    <label>Password</label>
+    <input id="p" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()" />
+    <div style="margin-top:14px"><button onclick="login()">Sign in</button></div>
+    <div id="loginErr" class="err"></div>
+  </section>
+
+  <!-- APP -->
+  <section id="appView" class="hidden">
+    <div class="card">
+      <h2>Enroll a facility</h2>
+      <div class="row">
+        <div>
+          <label>Facility name</label>
+          <input id="facName" placeholder="e.g. Maple House" onkeydown="if(event.key==='Enter')createFacility()" />
+        </div>
+        <button class="gold" onclick="createFacility()">Create &amp; generate key</button>
+      </div>
+      <div id="createErr" class="err"></div>
+      <div id="keyReveal" class="keybox hidden">
+        <strong>Enrollment key for <span id="keyFacName"></span></strong>
+        <span class="mono" id="keyValue"></span>
+        <div class="dim">Copy this now — it is shown <b>once</b> and cannot be retrieved. Paste it into the
+        facility's <em>Admin → System → Connect to HQ</em> screen along with the Facility ID and this server's URL.</div>
+        <div style="margin-top:10px">
+          <button class="ghost" onclick="copyKey()">Copy key</button>
+          <button class="ghost" onclick="hideKey()">Done</button>
+        </div>
+        <div class="dim" style="margin-top:8px">Facility ID: <span class="mono" id="keyFacId"></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Facilities</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Facility ID</th><th>Status</th><th>App</th><th>Last check-in</th><th></th></tr></thead>
+        <tbody id="facRows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+async function api(path, opts={}) {
+  const r = await fetch(path, {
+    credentials:'same-origin',
+    headers:{'content-type':'application/json', ...(opts.headers||{})},
+    ...opts,
+  });
+  let body=null; try { body = await r.json(); } catch(e){}
+  return { ok:r.ok, status:r.status, body };
+}
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function boot() {
+  const me = await api('/api/me');
+  if (me.ok) showApp(me.body); else showLogin();
+}
+function showLogin(){ $('loginView').classList.remove('hidden'); $('appView').classList.add('hidden');
+  $('logoutBtn').classList.add('hidden'); $('who').textContent=''; $('u').focus(); }
+function showApp(user){ $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
+  $('logoutBtn').classList.remove('hidden'); $('who').textContent = user.display_name || user.username; loadFacilities(); }
+
+async function login(){
+  $('loginErr').textContent='';
+  const r = await api('/login',{method:'POST',body:JSON.stringify({username:$('u').value,password:$('p').value})});
+  if (r.ok) { $('p').value=''; showApp(r.body.user); }
+  else $('loginErr').textContent = (r.body && r.body.error) || 'Sign in failed';
+}
+async function logout(){ await api('/logout',{method:'POST'}); showLogin(); }
+
+async function loadFacilities(){
+  const r = await api('/api/facilities');
+  if (!r.ok) { if (r.status===401) showLogin(); return; }
+  const rows = r.body.facilities || [];
+  $('facRows').innerHTML = rows.length ? rows.map(f => `
+    <tr>
+      <td>${esc(f.name)}</td>
+      <td class="mono">${esc(f.id).slice(0,8)}…</td>
+      <td><span class="pill ${f.status==='active'?'active':'disabled'}">${esc(f.status)}</span></td>
+      <td>${esc(f.app_version)||'<span class="muted">—</span>'}</td>
+      <td>${f.last_seen_at?esc(f.last_seen_at):'<span class="muted">never</span>'}</td>
+      <td style="text-align:right">
+        <button class="ghost" onclick="toggleStatus('${f.id}','${f.status}')">${f.status==='active'?'Disable':'Enable'}</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="6" class="muted">No facilities yet. Enroll one above.</td></tr>`;
+}
+
+let _lastKey='';
+async function createFacility(){
+  $('createErr').textContent=''; hideKey();
+  const name = $('facName').value.trim();
+  if (!name) { $('createErr').textContent='Enter a facility name'; return; }
+  const r = await api('/api/facilities',{method:'POST',body:JSON.stringify({name})});
+  if (!r.ok) { $('createErr').textContent=(r.body&&r.body.error)||'Failed'; return; }
+  $('facName').value='';
+  _lastKey = r.body.apiKey;
+  $('keyFacName').textContent = r.body.facility.name;
+  $('keyFacId').textContent = r.body.facility.id;
+  $('keyValue').textContent = r.body.apiKey;
+  $('keyReveal').classList.remove('hidden');
+  loadFacilities();
+}
+function copyKey(){ navigator.clipboard && navigator.clipboard.writeText(_lastKey); }
+function hideKey(){ $('keyReveal').classList.add('hidden'); _lastKey=''; }
+
+async function toggleStatus(id, cur){
+  const status = cur==='active' ? 'disabled' : 'active';
+  await api('/api/facilities/'+id+'/status',{method:'POST',body:JSON.stringify({status})});
+  loadFacilities();
+}
+
+boot();
+</script>
+</body>
+</html>

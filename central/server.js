@@ -1,0 +1,193 @@
+/**
+ * central/server.js — OpsPoint Central / HQ server (Phase 0).
+ *
+ * Responsibilities (Phase 0):
+ *   • Org-admin login / session (PBKDF2, mirrors the facility app posture).
+ *   • Facility registry CRUD via a small JSON API + a minimal web console.
+ *   • Node-facing  POST /enroll/checkin  authenticated by per-facility API key.
+ *
+ * Facilities make OUTBOUND connections only; this server exposes one ingress.
+ * TLS: drop data/cert.pem + data/key.pem to auto-switch to HTTPS. In production
+ * the API key travels over the network, so TLS (or a VPN) is mandatory.
+ */
+'use strict';
+const express = require('express');
+const session = require('express-session');
+const path    = require('path');
+const fs      = require('fs');
+const http    = require('http');
+const https   = require('https');
+const db      = require('./db');
+
+const PORT     = parseInt(process.env.PORT || '4000', 10);
+const DATA_DIR = process.env.CENTRAL_DATA || path.join(__dirname, 'data');
+
+db.init(path.join(DATA_DIR, 'central.db'));
+
+const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use(express.json({ limit: '25mb' }));
+
+app.use(session({
+  name: 'opscentral.sid',
+  secret: db.getSetting('session_secret') || 'insecure-dev-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: fs.existsSync(path.join(DATA_DIR, 'cert.pem')),
+    maxAge: 1000 * 60 * 60 * 8, // 8h
+  },
+}));
+
+// ── CSRF: validate Origin host on state-changing requests ────────────────
+app.use((req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origin = req.get('origin');
+  if (origin) {
+    try {
+      if (new URL(origin).host !== req.get('host'))
+        return res.status(403).json({ error: 'bad origin' });
+    } catch (e) {
+      return res.status(403).json({ error: 'bad origin' });
+    }
+  }
+  next();
+});
+
+// ── Tiny in-memory login rate limiter (10 / 15 min / IP) ─────────────────
+const loginHits = new Map();
+function loginLimited(ip) {
+  const now = Date.now(), win = 15 * 60 * 1000;
+  const e = loginHits.get(ip) || { n: 0, t: now };
+  if (now - e.t > win) { e.n = 0; e.t = now; }
+  e.n += 1; loginHits.set(ip, e);
+  return e.n > 10;
+}
+
+function clientIp(req) {
+  return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
+}
+
+// ── Middleware ───────────────────────────────────────────────────────────
+function requireAdmin(req, res, next) {
+  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'auth required' });
+  next();
+}
+function requireFacilityKey(req, res, next) {
+  const key = req.get('x-facility-key') || '';
+  const fac = key && db.facilityByKey(key);
+  if (!fac) return res.status(401).json({ error: 'invalid facility key' });
+  if (fac.status !== 'active') return res.status(403).json({ error: 'facility disabled' });
+  req.facility = fac;
+  next();
+}
+
+// ── Auth routes ──────────────────────────────────────────────────────────
+app.post('/login', (req, res) => {
+  const ip = clientIp(req);
+  if (loginLimited(ip)) return res.status(429).json({ error: 'too many attempts, try later' });
+  const { username, password } = req.body || {};
+  const u = db.authUser(username, password);
+  if (!u) {
+    db.audit({ action: 'login.fail', target: String(username || ''), ip });
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
+  req.session.userId = u.id;
+  db.audit({ actor: u.username, action: 'login.ok', ip });
+  res.json({ ok: true, user: u });
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => res.json({ ok: true }));
+});
+
+app.get('/api/me', (req, res) => {
+  if (!req.session || !req.session.userId) return res.status(401).json({ error: 'auth required' });
+  const u = db.getUser(req.session.userId);
+  if (!u) return res.status(401).json({ error: 'auth required' });
+  res.json(u);
+});
+
+app.post('/api/me/password', requireAdmin, (req, res) => {
+  const { password } = req.body || {};
+  if (!password || String(password).length < 10)
+    return res.status(400).json({ error: 'password must be at least 10 characters' });
+  db.setUserPassword(req.session.userId, String(password));
+  const u = db.getUser(req.session.userId);
+  db.audit({ actor: u.username, action: 'password.change', ip: clientIp(req) });
+  res.json({ ok: true });
+});
+
+// ── Facility registry (admin) ────────────────────────────────────────────
+app.get('/api/facilities', requireAdmin, (req, res) => {
+  res.json({ facilities: db.listFacilities() });
+});
+
+app.post('/api/facilities', requireAdmin, (req, res) => {
+  const name = String((req.body && req.body.name) || '').trim();
+  if (!name) return res.status(400).json({ error: 'name required' });
+  const created = db.createFacility(name);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'facility.create', target: created.id, detail: name, ip: clientIp(req) });
+  // apiKey returned ONCE — never retrievable again.
+  res.json({ ok: true, facility: { id: created.id, name: created.name }, apiKey: created.apiKey });
+});
+
+app.post('/api/facilities/:id/rotate-key', requireAdmin, (req, res) => {
+  const fac = db.getFacility(req.params.id);
+  if (!fac) return res.status(404).json({ error: 'not found' });
+  const apiKey = db.rotateFacilityKey(fac.id);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'facility.rotate_key', target: fac.id, ip: clientIp(req) });
+  res.json({ ok: true, apiKey });
+});
+
+app.post('/api/facilities/:id/status', requireAdmin, (req, res) => {
+  const fac = db.getFacility(req.params.id);
+  if (!fac) return res.status(404).json({ error: 'not found' });
+  const status = (req.body && req.body.status) === 'disabled' ? 'disabled' : 'active';
+  db.setFacilityStatus(fac.id, status);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'facility.status', target: fac.id, detail: status, ip: clientIp(req) });
+  res.json({ ok: true, status });
+});
+
+app.get('/api/audit', requireAdmin, (req, res) => {
+  res.json({ audit: db.getAudit(200) });
+});
+
+// ── Node-facing: check-in (API-key auth, no session) ─────────────────────
+app.post('/enroll/checkin', requireFacilityKey, (req, res) => {
+  const ip = clientIp(req);
+  const appVersion = String((req.body && req.body.app_version) || '');
+  db.touchFacility(req.facility.id, { ip, app_version: appVersion });
+  db.audit({ actor: req.facility.name, action: 'facility.checkin', target: req.facility.id, detail: appVersion, ip });
+  res.json({
+    ok: true,
+    server_time: db.nowLocal(),
+    facility: { id: req.facility.id, name: req.facility.name },
+  });
+});
+
+// ── Console (static SPA-ish single page) ─────────────────────────────────
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+// ── Boot (HTTP, or HTTPS if certs present) ───────────────────────────────
+const certPath = path.join(DATA_DIR, 'cert.pem');
+const keyPath  = path.join(DATA_DIR, 'key.pem');
+let server, scheme;
+if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
+  server = https.createServer({ cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }, app);
+  scheme = 'https';
+} else {
+  server = http.createServer(app);
+  scheme = 'http';
+  console.log('  ⚠  No TLS certs in', DATA_DIR, '— running plain HTTP (dev only).');
+}
+server.listen(PORT, () => {
+  console.log(`  OpsPoint Central listening on ${scheme}://localhost:${PORT}`);
+});

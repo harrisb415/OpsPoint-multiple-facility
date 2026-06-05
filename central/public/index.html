@@ -82,6 +82,7 @@
     <div class="nav">
       <button id="navOverview" class="navbtn active" onclick="showView('overview')">Overview</button>
       <button id="navFacilities" class="navbtn" onclick="showView('facilities')">Facilities</button>
+      <button id="navUsers" class="navbtn" onclick="showView('users')">Users</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -133,6 +134,36 @@
         </table>
       </div>
     </div>
+
+    <!-- USERS -->
+    <div id="viewUsers" class="hidden">
+      <div class="card">
+        <h2>Add a managed user</h2>
+        <div class="dim" style="margin-bottom:12px">Created with an initial password and <b>must-change-on-first-login</b>. The user can sign in at any assigned facility that has opted into HQ user management; each facility owns the password after the first change. Role maps to that facility's own permission preset.</div>
+        <div class="row" style="flex-wrap:wrap">
+          <div><label>Username</label><input id="muUser" placeholder="jdoe" /></div>
+          <div><label>Display name</label><input id="muName" placeholder="Jane Doe" /></div>
+          <div><label>Role</label>
+            <select id="muRole" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit">
+              <option value="pa">Program Assistant</option><option value="supervisor">Supervisor</option>
+              <option value="case_manager">Case Manager</option><option value="admin">Administrator</option>
+            </select>
+          </div>
+          <div><label>Initial password</label><input id="muPw" type="text" placeholder="min 8 chars" /></div>
+        </div>
+        <label style="margin-top:10px">Assign to facilities</label>
+        <div id="muFacs" class="dim">Loading…</div>
+        <div style="margin-top:12px"><button class="gold" onclick="createMUser()">Create user</button></div>
+        <div id="muErr" class="err"></div>
+      </div>
+      <div class="card">
+        <h2>Managed users</h2>
+        <table>
+          <thead><tr><th>Username</th><th>Name</th><th>Role</th><th>Status</th><th>Assigned facilities</th><th></th></tr></thead>
+          <tbody id="muRows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -160,12 +191,61 @@ function showApp(user){ $('loginView').classList.add('hidden'); $('appView').cla
   showView('overview'); loadFacilities(); }
 
 function showView(v){
-  const ov = v === 'overview';
-  $('viewOverview').classList.toggle('hidden', !ov);
-  $('viewFacilities').classList.toggle('hidden', ov);
-  $('navOverview').classList.toggle('active', ov);
-  $('navFacilities').classList.toggle('active', !ov);
-  if (ov) loadOverview(); else loadFacilities();
+  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers' };
+  Object.entries(views).forEach(([k,id])=> $(id).classList.toggle('hidden', k!==v));
+  $('navOverview').classList.toggle('active', v==='overview');
+  $('navFacilities').classList.toggle('active', v==='facilities');
+  $('navUsers').classList.toggle('active', v==='users');
+  if (v==='overview') loadOverview(); else if (v==='users') loadUsers(); else loadFacilities();
+}
+
+// ── Managed users (Phase 2b) ──
+let _facCache = [];
+async function loadUsers(){
+  const r = await api('/api/managed-users');
+  if (!r.ok) { if (r.status===401) showLogin(); return; }
+  _facCache = r.body.facilities || [];
+  $('muFacs').innerHTML = _facCache.length
+    ? _facCache.map(f=>`<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;font-size:13px;color:var(--ink)"><input type="checkbox" class="muFacCb" value="${esc(f.id)}" style="width:auto"/> ${esc(f.name)}</label>`).join('')
+    : '<span class="muted">Enroll a facility first.</span>';
+  const users = r.body.users || [];
+  $('muRows').innerHTML = users.length ? users.map(u=>{
+    const checks = _facCache.length ? _facCache.map(f=>`<label style="display:inline-flex;align-items:center;gap:5px;margin:2px 10px 2px 0;font-size:12px"><input type="checkbox" ${u.facilities.includes(f.id)?'checked':''} onchange="assignMUser('${u.id}')" data-fac="${esc(f.id)}" class="asg-${u.id}" style="width:auto"/>${esc(f.name)}</label>`).join('') : '<span class="muted">no facilities</span>';
+    return `<tr>
+      <td class="mono">${esc(u.username)}</td>
+      <td>${esc(u.display_name)||'—'}</td>
+      <td>${esc(u.role)}</td>
+      <td><span class="pill ${u.status==='active'?'active':'disabled'}">${esc(u.status)}</span></td>
+      <td>${checks}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="ghost" onclick="setMUserStatus('${u.id}','${esc(u.status)}')">${u.status==='active'?'Disable':'Enable'}</button>
+        <button class="ghost" onclick="delMUser('${u.id}','${esc(u.username)}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" class="muted">No managed users yet.</td></tr>`;
+}
+async function createMUser(){
+  $('muErr').textContent='';
+  const facilities = Array.from(document.querySelectorAll('.muFacCb')).filter(c=>c.checked).map(c=>c.value);
+  const body = { username:$('muUser').value.trim(), display_name:$('muName').value.trim(), role:$('muRole').value, password:$('muPw').value, facilities };
+  if (!body.username || !body.password) { $('muErr').textContent='Username and initial password are required'; return; }
+  const r = await api('/api/managed-users',{method:'POST',body:JSON.stringify(body)});
+  if (!r.ok) { $('muErr').textContent=(r.body&&r.body.error)||'Failed'; return; }
+  $('muUser').value=''; $('muName').value=''; $('muPw').value='';
+  loadUsers();
+}
+async function assignMUser(id){
+  const facs = Array.from(document.querySelectorAll('.asg-'+id)).filter(c=>c.checked).map(c=>c.getAttribute('data-fac'));
+  await api('/api/managed-users/'+id+'/facilities',{method:'PUT',body:JSON.stringify({facilities:facs})});
+}
+async function setMUserStatus(id,cur){
+  await api('/api/managed-users/'+id,{method:'PUT',body:JSON.stringify({status:cur==='active'?'disabled':'active'})});
+  loadUsers();
+}
+async function delMUser(id,uname){
+  if (!confirm('Delete managed user '+uname+'? They will be removed from all assigned facilities on next sync.')) return;
+  await api('/api/managed-users/'+id,{method:'DELETE'});
+  loadUsers();
 }
 
 async function loadOverview(){

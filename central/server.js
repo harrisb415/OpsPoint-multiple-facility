@@ -205,6 +205,43 @@ app.get('/api/report/overview', requireAdmin, (req, res) => {
   res.json(db.reportOverview());
 });
 
+// ── Managed users (Phase 2b) — admin CRUD ────────────────────────────────
+app.get('/api/managed-users', requireAdmin, (req, res) => {
+  res.json({ users: db.listManagedUsers(), facilities: db.listFacilities().map(f => ({ id: f.id, name: f.name })) });
+});
+app.post('/api/managed-users', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  try {
+    const u = db.createManagedUser({ username: b.username, display_name: b.display_name, role: b.role, password: b.password, facilities: b.facilities });
+    const actor = db.getUser(req.session.userId);
+    db.audit({ actor: actor && actor.username, action: 'managed_user.create', target: u.id, detail: u.username, ip: clientIp(req) });
+    res.json({ ok: true, user: u });
+  } catch (e) { res.status(400).json({ error: (e && e.message) || 'create failed' }); }
+});
+app.put('/api/managed-users/:id', requireAdmin, (req, res) => {
+  try { res.json({ ok: true, user: db.updateManagedUser(req.params.id, req.body || {}) }); }
+  catch (e) { res.status(400).json({ error: (e && e.message) || 'update failed' }); }
+});
+app.post('/api/managed-users/:id/password', requireAdmin, (req, res) => {
+  try { db.setManagedUserPassword(req.params.id, (req.body || {}).password); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: (e && e.message) || 'failed' }); }
+});
+app.put('/api/managed-users/:id/facilities', requireAdmin, (req, res) => {
+  try { res.json({ ok: true, user: db.setManagedUserFacilities(req.params.id, (req.body || {}).facilities || []) }); }
+  catch (e) { res.status(400).json({ error: (e && e.message) || 'failed' }); }
+});
+app.delete('/api/managed-users/:id', requireAdmin, (req, res) => {
+  db.deleteManagedUser(req.params.id);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'managed_user.delete', target: req.params.id, ip: clientIp(req) });
+  res.json({ ok: true });
+});
+
+// ── Node-facing: pull this facility's managed users (API-key auth) ────────
+app.get('/sync/users', requireFacilityKey, (req, res) => {
+  res.json({ ok: true, users: db.getManagedUsersForFacility(req.facility.id) });
+});
+
 // ── Console (static SPA-ish single page) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

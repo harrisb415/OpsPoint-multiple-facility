@@ -170,6 +170,9 @@ function init(dbPath) {
     // milestones — optional link to a treatment-plan goal (Structured Clinical Lite)
     "ALTER TABLE milestones ADD COLUMN treatment_plan_id INTEGER DEFAULT NULL",
     "ALTER TABLE milestones ADD COLUMN goal_id TEXT DEFAULT NULL",
+    // Central-managed users (multi-facility Phase 2b)
+    "ALTER TABLE users ADD COLUMN central_managed INTEGER DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN central_uid TEXT DEFAULT NULL",
   ];
   migrations.forEach(sql => { try { _db.exec(sql); } catch(e) {} });
   _seedDefaults();
@@ -611,6 +614,9 @@ function _seedDefaults() {
     central_insecure_tls:   'false', // allow self-signed HQ cert (trusted networks only)
     central_last_checkin:   '',      // local timestamp of last successful HQ check-in
     central_last_status:    '',      // connected | unreachable | rejected
+    central_manages_users:  'false', // opt-in: accept HQ-managed user accounts (Phase 2b)
+    central_users_last_pull:'',      // local timestamp of last managed-user pull
+    central_users_count:    '0',     // how many managed users currently provisioned
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))
@@ -1812,10 +1818,62 @@ function markSynced(ids) {
 function pruneOutbox() { _run('DELETE FROM sync_outbox WHERE synced_at IS NOT NULL'); }
 function clearOutbox() { _run('DELETE FROM sync_outbox'); }  // standalone: keep bounded
 
+// ── Central-managed users (Phase 2b) ───────────────────────────────────
+// Apply HQ-mastered users to the local users table. Caller checks the opt-in
+// flag first. Safety rails: NEVER modifies/deletes a local (central_managed=0)
+// account, and never removes the last admin. HQ is master for identity + role;
+// the facility owns the password after the user's first local change.
+function applyManagedUsers(list) {
+  list = Array.isArray(list) ? list : [];
+  let created = 0, updated = 0, removed = 0, skipped = 0;
+  const incomingUids = new Set();
+  _db.transaction(() => {
+    for (const m of list) {
+      const uid = String(m.uid || '');
+      const uname = String(m.username || '').toLowerCase().trim();
+      if (!uid || !uname) { skipped++; continue; }
+      incomingUids.add(uid);
+      const perms = (Array.isArray(m.permissions) && m.permissions.length)
+        ? m.permissions.filter(p => PERMISSIONS.includes(p))
+        : (ROLE_PRESETS[m.role] || ROLE_PRESETS.pa).slice();
+      const permsJson = JSON.stringify(perms);
+      const row = _q1('SELECT * FROM users WHERE central_uid=?', [uid])
+               || _q1('SELECT * FROM users WHERE LOWER(username)=?', [uname]);
+      if (!row) {
+        _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,central_managed,central_uid)
+              VALUES (?,?,?,?,?,?,?,1,?)`,
+          [uname, String(m.display_name || ''), String(m.role || 'pa'), m.hash || '', m.salt || '', m.must_change_pw ? 1 : 0, permsJson, uid]);
+        created++;
+      } else if (row.central_managed) {
+        // HQ master for identity/permissions; do NOT touch the password.
+        _run('UPDATE users SET display_name=?, role=?, permissions=?, central_uid=? WHERE id=?',
+          [String(m.display_name || ''), String(m.role || 'pa'), permsJson, uid, row.id]);
+        updated++;
+      } else {
+        skipped++; // a LOCAL account owns this username — never hijack it
+      }
+    }
+    // Remove managed users HQ no longer assigns (guard: never drop below 1 admin)
+    _q('SELECT id, central_uid FROM users WHERE central_managed=1').forEach(u => {
+      if (incomingUids.has(u.central_uid)) return;
+      const otherAdmins = _q('SELECT id,permissions FROM users WHERE id<>?', [u.id])
+        .filter(x => { try { return JSON.parse(x.permissions || '[]').includes('admin.users'); } catch (e) { return false; } }).length;
+      if (otherAdmins < 1) { skipped++; return; }
+      _run('DELETE FROM users WHERE id=?', [u.id]);
+      removed++;
+    });
+  })();
+  const total = _q1('SELECT COUNT(*) AS c FROM users WHERE central_managed=1');
+  setSetting('central_users_count', String(total ? total.c : 0));
+  return { created, updated, removed, skipped, total: total ? total.c : 0 };
+}
+
 module.exports = {
   init, save, query, query1, run, runAndSave,
   // Multi-facility sync (Phase 1)
   SYNC_TABLES, enqueueSyncBackfill, outboxPending, getSyncBatch, markSynced, pruneOutbox, clearOutbox,
+  // Central-managed users (Phase 2b)
+  applyManagedUsers,
   clinicalDb,
   getSetting, setSetting, setSettingAndSave,
   getAllData, upsertReport, savePhoto, getPhotoB64,

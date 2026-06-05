@@ -2490,6 +2490,9 @@ app.get('/api/central/status', requireAuth, requirePermission('admin.system'), (
     pending: db.outboxPending(),
     last_sync: db.getSetting('central_last_sync', ''),
     sync_error: db.getSetting('central_sync_error', ''),
+    manages_users: !!db.getSetting('central_manages_users', false),
+    users_last_pull: db.getSetting('central_users_last_pull', ''),
+    users_count: parseInt(db.getSetting('central_users_count', '0')) || 0,
   });
 });
 
@@ -2538,8 +2541,11 @@ app.post('/api/central/checkin', requireAuth, csrfCheck, requirePermission('admi
 
 app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
   ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
-   'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error']
+   'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error',
+   'central_manages_users', 'central_users_last_pull', 'central_users_count']
     .forEach(k => db.setSetting(k, ''));
+  // Previously-provisioned managed users are LEFT in place (real accounts with
+  // their own passwords) so disconnecting never locks staff out.
   audit(req, 'central.disconnect', 'system', null, 'Disconnected from HQ', {});
   try { db.clearOutbox(); } catch (e) {}   // clear LAST so the audit row above doesn't linger in the outbox
   res.json({ ok: true });
@@ -2575,7 +2581,22 @@ async function syncTick() {
     }
     db.pruneOutbox();
     db.setSetting('central_last_sync', _centralTs());
+    await pullManagedUsers();
   } finally { _syncing = false; }
+}
+
+// Pull HQ-managed users down and apply locally (Phase 2b; opt-in). No-op unless
+// connected AND central_manages_users is enabled for this facility.
+async function pullManagedUsers() {
+  const url = db.getSetting('central_url', ''), key = db.getSetting('central_api_key', '');
+  const insecure = !!db.getSetting('central_insecure_tls', false);
+  if (!url || !key || !db.getSetting('central_manages_users', false)) return;
+  let r;
+  try { r = await _centralRequest('GET', url + '/sync/users', { headers: { 'x-facility-key': key }, insecure, timeout: 20000 }); }
+  catch (e) { db.setSetting('central_sync_error', 'users: ' + ((e && e.message) || 'network error')); return; }
+  if (r.status !== 200 || !r.body || !r.body.ok) { db.setSetting('central_sync_error', 'users: ' + ((r.body && r.body.error) || ('HTTP ' + r.status))); return; }
+  try { db.applyManagedUsers(r.body.users || []); db.setSetting('central_users_last_pull', _centralTs()); }
+  catch (e) { db.setSetting('central_sync_error', 'users-apply: ' + ((e && e.message) || 'error')); }
 }
 
 app.post('/api/central/sync-now', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
@@ -2583,6 +2604,26 @@ app.post('/api/central/sync-now', requireAuth, csrfCheck, requirePermission('adm
     return res.status(400).json({ error: 'Not connected to HQ' });
   await syncTick();
   res.json({ ok: true, pending: db.outboxPending(), last_sync: db.getSetting('central_last_sync', ''), last_status: db.getSetting('central_last_status', ''), error: db.getSetting('central_sync_error', '') });
+});
+
+// Toggle opt-in HQ user management for this facility (default off → no change to
+// current behavior). Enabling triggers an immediate pull.
+app.post('/api/central/manage-users', requireAuth, csrfCheck, requirePermission('admin.users'), async (req, res) => {
+  if (!db.getSetting('central_url', '') || !db.getSetting('central_api_key', ''))
+    return res.status(400).json({ error: 'Not connected to HQ' });
+  const enabled = !!(req.body && req.body.enabled);
+  db.setSetting('central_manages_users', enabled);
+  audit(req, 'central.manage_users', 'system', null, enabled ? 'Enabled HQ user management' : 'Disabled HQ user management', {});
+  if (enabled) await pullManagedUsers();
+  res.json({ ok: true, enabled, count: parseInt(db.getSetting('central_users_count', '0')) || 0, last_pull: db.getSetting('central_users_last_pull', '') });
+});
+
+app.post('/api/central/pull-users', requireAuth, csrfCheck, requirePermission('admin.users'), async (req, res) => {
+  if (!db.getSetting('central_url', '') || !db.getSetting('central_api_key', ''))
+    return res.status(400).json({ error: 'Not connected to HQ' });
+  if (!db.getSetting('central_manages_users', false)) return res.status(400).json({ error: 'HQ user management is off' });
+  await pullManagedUsers();
+  res.json({ ok: true, count: parseInt(db.getSetting('central_users_count', '0')) || 0, last_pull: db.getSetting('central_users_last_pull', ''), error: db.getSetting('central_sync_error', '') });
 });
 
 // ── React SPA catch-all (MUST be last — after all API routes) ────

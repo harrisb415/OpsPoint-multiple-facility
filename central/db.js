@@ -101,6 +101,26 @@ function _createSchema() {
     PRIMARY KEY (facility_id, table_name, source_id)
   )`);
   _db.exec('CREATE INDEX IF NOT EXISTS idx_fdata_fac_table ON facility_data(facility_id, table_name)');
+
+  // Phase 2b: HQ-mastered user directory, pushed DOWN to assigned facilities.
+  // Stores an INITIAL credential (PBKDF2); the facility owns the password after
+  // first change. role drives permissions via the facility's own ROLE_PRESETS.
+  _db.exec(`CREATE TABLE IF NOT EXISTS managed_users (
+    id             TEXT PRIMARY KEY,
+    username       TEXT NOT NULL UNIQUE,
+    display_name   TEXT DEFAULT '',
+    role           TEXT DEFAULT 'pa',
+    permissions    TEXT DEFAULT '[]',
+    hash           TEXT, salt TEXT,
+    must_change_pw INTEGER DEFAULT 1,
+    status         TEXT DEFAULT 'active',   -- active | disabled
+    created_at     TEXT DEFAULT (datetime('now'))
+  )`);
+  _db.exec(`CREATE TABLE IF NOT EXISTS managed_user_facilities (
+    user_id     TEXT NOT NULL,
+    facility_id TEXT NOT NULL,
+    PRIMARY KEY (user_id, facility_id)
+  )`);
 }
 
 // ── Low-level helpers (private) ──────────────────────────────────────────
@@ -320,6 +340,78 @@ function reportOverview() {
   };
 }
 
+// ── Managed users (Phase 2b) — HQ-mastered directory, pushed to facilities ──
+function _publicManagedUser(u) {
+  if (!u) return null;
+  return {
+    id: u.id, username: u.username, display_name: u.display_name, role: u.role,
+    permissions: _j(u.permissions, []), status: u.status, created_at: u.created_at,
+    facilities: _q('SELECT facility_id FROM managed_user_facilities WHERE user_id=?', [u.id]).map(r => r.facility_id),
+  };
+}
+
+function listManagedUsers() {
+  return _q('SELECT * FROM managed_users ORDER BY username').map(_publicManagedUser);
+}
+function getManagedUser(id) { return _publicManagedUser(_q1('SELECT * FROM managed_users WHERE id=?', [id])); }
+
+function createManagedUser({ username, display_name, role, password, facilities }) {
+  username = String(username || '').toLowerCase().trim();
+  if (!username) throw new Error('username required');
+  if (_q1('SELECT id FROM managed_users WHERE username=?', [username])) throw new Error('username already exists');
+  if (!password || String(password).length < 8) throw new Error('initial password must be at least 8 characters');
+  const id = crypto.randomUUID();
+  const { hash, salt } = _hashPw(String(password));
+  _run(`INSERT INTO managed_users (id,username,display_name,role,hash,salt,must_change_pw,status,created_at)
+        VALUES (?,?,?,?,?,?,1,'active',?)`,
+    [id, username, String(display_name || '').trim(), String(role || 'pa'), hash, salt, nowLocal()]);
+  setManagedUserFacilities(id, facilities || []);
+  return getManagedUser(id);
+}
+
+function updateManagedUser(id, { display_name, role, status }) {
+  const u = _q1('SELECT id FROM managed_users WHERE id=?', [id]);
+  if (!u) throw new Error('not found');
+  if (display_name !== undefined) _run('UPDATE managed_users SET display_name=? WHERE id=?', [String(display_name).trim(), id]);
+  if (role !== undefined)         _run('UPDATE managed_users SET role=? WHERE id=?', [String(role), id]);
+  if (status !== undefined)       _run('UPDATE managed_users SET status=? WHERE id=?', [status === 'disabled' ? 'disabled' : 'active', id]);
+  return getManagedUser(id);
+}
+
+function setManagedUserPassword(id, password) {
+  if (!password || String(password).length < 8) throw new Error('password must be at least 8 characters');
+  const { hash, salt } = _hashPw(String(password));
+  _run('UPDATE managed_users SET hash=?,salt=?,must_change_pw=1 WHERE id=?', [hash, salt, id]);
+}
+
+function setManagedUserFacilities(id, facilityIds) {
+  _db.transaction(() => {
+    _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
+    for (const fid of facilityIds || []) {
+      if (_q1('SELECT id FROM facilities WHERE id=?', [fid]))
+        _run('INSERT OR IGNORE INTO managed_user_facilities (user_id,facility_id) VALUES (?,?)', [id, fid]);
+    }
+  })();
+  return getManagedUser(id);
+}
+
+function deleteManagedUser(id) {
+  _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
+  _run('DELETE FROM managed_users WHERE id=?', [id]);
+}
+
+// The pull payload for one facility: active managed users with their INITIAL
+// credential (hash/salt) + role. Travels over TLS to the facility node.
+function getManagedUsersForFacility(facilityId) {
+  return _q(`SELECT mu.* FROM managed_users mu
+             JOIN managed_user_facilities f ON f.user_id=mu.id
+             WHERE f.facility_id=? AND mu.status='active' ORDER BY mu.username`, [facilityId])
+    .map(u => ({
+      uid: u.id, username: u.username, display_name: u.display_name, role: u.role,
+      permissions: _j(u.permissions, []), hash: u.hash, salt: u.salt, must_change_pw: !!u.must_change_pw,
+    }));
+}
+
 module.exports = {
   init, nowLocal,
   getSetting, setSetting,
@@ -331,4 +423,8 @@ module.exports = {
   getAppliedThrough, ingestRows, facilityTableCounts, getFacilityRows,
   // Reporting (Phase 2a)
   reportOverview,
+  // Managed users (Phase 2b)
+  listManagedUsers, getManagedUser, createManagedUser, updateManagedUser,
+  setManagedUserPassword, setManagedUserFacilities, deleteManagedUser,
+  getManagedUsersForFacility,
 };

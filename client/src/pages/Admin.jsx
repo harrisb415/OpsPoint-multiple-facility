@@ -1862,6 +1862,26 @@ function SystemTab() {
     } catch { setCErr('Network error reaching HQ.') }
     finally { setCBusy(false) }
   }
+  async function centralToggleUsers(enabled) {
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/manage-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCErr(j.error || 'Failed'); loadCentral(); return }
+      setCMsg(enabled ? ('✓ HQ user management ON — ' + (j.count || 0) + ' account(s) provisioned') : 'HQ user management turned off')
+      loadCentral()
+    } catch { setCErr('Network error reaching HQ.') } finally { setCBusy(false) }
+  }
+  async function centralPullUsers() {
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/pull-users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCErr(j.error || 'Failed'); return }
+      setCMsg('✓ Pulled HQ users — ' + (j.count || 0) + ' provisioned')
+      loadCentral()
+    } catch { setCErr('Network error reaching HQ.') } finally { setCBusy(false) }
+  }
   async function centralDisconnect() {
     if (!window.confirm('Disconnect this facility from HQ? It will stop syncing until reconnected.')) return
     setCBusy(true); setCErr(''); setCMsg('')
@@ -1975,6 +1995,18 @@ function SystemTab() {
                 <button className="btn btn-sm" onClick={centralCheckin} disabled={cBusy}>Check in now</button>
                 <button className="btn btn-sm btn-primary" onClick={centralSyncNow} disabled={cBusy}>Sync now</button>
                 <button className="btn btn-sm btn-red" onClick={centralDisconnect} disabled={cBusy}>Disconnect</button>
+              </div>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #a7f3d0' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.86rem', fontWeight: 600, color: '#334155' }}>
+                  <input type="checkbox" checked={!!central.manages_users} disabled={cBusy} onChange={e => centralToggleUsers(e.target.checked)} style={{ width: 'auto' }} />
+                  Let HQ manage user accounts for this facility
+                </label>
+                <div className="dim" style={{ margin: '6px 0 0 24px' }}>
+                  {central.manages_users
+                    ? <>HQ-provisioned accounts: <strong>{central.users_count || 0}</strong>{central.users_last_pull ? ' · last pulled ' + central.users_last_pull : ''}
+                        <div style={{ marginTop: 8 }}><button className="btn btn-sm" onClick={centralPullUsers} disabled={cBusy}>Pull users now</button></div></>
+                    : 'Off — this facility manages its own accounts. Your local admin always stays in control.'}
+                </div>
               </div>
             </div>
           ) : (

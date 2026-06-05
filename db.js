@@ -617,6 +617,7 @@ function _seedDefaults() {
     central_manages_users:  'false', // opt-in: accept HQ-managed user accounts (Phase 2b)
     central_users_last_pull:'',      // local timestamp of last managed-user pull
     central_users_count:    '0',     // how many managed users currently provisioned
+    central_target_version: '',      // version HQ recommends the fleet run (Phase 3)
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))

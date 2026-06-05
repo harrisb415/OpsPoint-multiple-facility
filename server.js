@@ -2493,6 +2493,9 @@ app.get('/api/central/status', requireAuth, requirePermission('admin.system'), (
     manages_users: !!db.getSetting('central_manages_users', false),
     users_last_pull: db.getSetting('central_users_last_pull', ''),
     users_count: parseInt(db.getSetting('central_users_count', '0')) || 0,
+    target_version: db.getSetting('central_target_version', ''),
+    current_version: _appVersion,
+    update_available: !!(db.getSetting('central_target_version', '') && db.getSetting('central_target_version', '') !== _appVersion),
   });
 });
 
@@ -2517,6 +2520,7 @@ app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admi
   db.setSetting('central_last_checkin', _centralTs());
   db.setSetting('central_last_status', 'connected');
   db.setSetting('central_sync_error', '');
+  db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
   try { db.enqueueSyncBackfill(); } catch (e) {}        // queue a full snapshot for HQ
   setImmediate(() => { syncTick().catch(() => {}); });   // start draining in the background
   audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
@@ -2536,13 +2540,14 @@ app.post('/api/central/checkin', requireAuth, csrfCheck, requirePermission('admi
   }
   db.setSetting('central_last_checkin', _centralTs());
   db.setSetting('central_last_status', 'connected');
+  db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
   res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
 });
 
 app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
   ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
    'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error',
-   'central_manages_users', 'central_users_last_pull', 'central_users_count']
+   'central_manages_users', 'central_users_last_pull', 'central_users_count', 'central_target_version']
     .forEach(k => db.setSetting(k, ''));
   // Previously-provisioned managed users are LEFT in place (real accounts with
   // their own passwords) so disconnecting never locks staff out.
@@ -2563,9 +2568,8 @@ async function syncTick() {
     const insecure = !!db.getSetting('central_insecure_tls', false);
     if (!url || !key) { db.clearOutbox(); return; }   // standalone: nothing to send
     let batches = 0;
-    while (batches < 20) {
-      const batch = db.getSyncBatch(50);
-      if (!batch.length) break;
+    do {
+      const batch = db.getSyncBatch(50);   // may be empty → still send as a heartbeat (refreshes liveness + target)
       let r;
       try { r = await _centralRequest('POST', url + '/sync/ingest', { headers: { 'x-facility-key': key }, body: { rows: batch, app_version: _appVersion }, insecure, timeout: 30000 }); }
       catch (e) { db.setSetting('central_sync_error', (e && e.message) || 'network error'); db.setSetting('central_last_status', 'unreachable'); return; }
@@ -2574,11 +2578,12 @@ async function syncTick() {
         db.setSetting('central_last_status', r.status === 401 || r.status === 403 ? 'rejected' : 'error');
         return;
       }
-      db.markSynced(batch.map(b => b.id));
-      batches++;
+      if (batch.length) db.markSynced(batch.map(b => b.id));
       db.setSetting('central_last_status', 'connected');
       db.setSetting('central_sync_error', '');
-    }
+      if (r.body.target_version !== undefined) db.setSetting('central_target_version', r.body.target_version || '');
+      batches++;
+    } while (db.outboxPending() > 0 && batches < 20);
     db.pruneOutbox();
     db.setSetting('central_last_sync', _centralTs());
     await pullManagedUsers();

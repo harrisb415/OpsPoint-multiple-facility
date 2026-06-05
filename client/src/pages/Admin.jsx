@@ -1988,6 +1988,11 @@ function SystemTab() {
                 <div><strong>Key:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.key_prefix}…</span></div>
                 <div><strong>Last check-in:</strong> {central.last_checkin || 'never'}</div>
                 <div><strong>Backup:</strong> {central.pending > 0 ? (central.pending + ' change(s) pending') : 'up to date'}{central.last_sync ? ' · last synced ' + central.last_sync : ''}</div>
+                {central.target_version
+                  ? <div><strong>HQ target version:</strong> v{central.target_version}{central.update_available
+                      ? <span style={{ color: '#b45309' }}> — you're on v{central.current_version}; use Software Updates above</span>
+                      : <span style={{ color: '#15803d' }}> ✓ up to date</span>}</div>
+                  : null}
                 {central.sync_error && <div style={{ color: '#b91c1c' }}>Sync error: {central.sync_error}</div>}
                 {central.insecure && <div style={{ color: '#b45309' }}>⚠ TLS verification disabled for HQ</div>}
               </div>

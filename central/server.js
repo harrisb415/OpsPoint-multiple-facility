@@ -169,6 +169,7 @@ app.post('/enroll/checkin', requireFacilityKey, (req, res) => {
     ok: true,
     server_time: db.nowLocal(),
     facility: { id: req.facility.id, name: req.facility.name },
+    target_version: db.getFleetTarget().version,
   });
 });
 
@@ -181,7 +182,7 @@ app.post('/sync/ingest', requireFacilityKey, (req, res) => {
   try { result = db.ingestRows(req.facility.id, rows); }
   catch (e) { return res.status(500).json({ error: 'ingest failed: ' + ((e && e.message) || 'error') }); }
   db.touchFacility(req.facility.id, { ip, app_version: String((req.body && req.body.app_version) || req.facility.app_version || '') });
-  res.json({ ok: true, ...result });
+  res.json({ ok: true, ...result, target_version: db.getFleetTarget().version });
 });
 
 // ── Per-facility backup stats (admin) ────────────────────────────────────
@@ -203,6 +204,16 @@ app.get('/api/facilities/:id/rows', requireAdmin, (req, res) => {
 // ── Cross-facility reporting (admin; aggregate counts only, no PHI) ───────
 app.get('/api/report/overview', requireAdmin, (req, res) => {
   res.json(db.reportOverview());
+});
+
+// ── Fleet update coordination (Phase 3; admin) ───────────────────────────
+app.get('/api/fleet/target', requireAdmin, (req, res) => res.json(db.getFleetTarget()));
+app.post('/api/fleet/target', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const t = db.setFleetTarget(b.version, b.notes);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'fleet.set_target', detail: t.version, ip: clientIp(req) });
+  res.json({ ok: true, ...t });
 });
 
 // ── Managed users (Phase 2b) — admin CRUD ────────────────────────────────

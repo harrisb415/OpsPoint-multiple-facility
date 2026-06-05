@@ -308,13 +308,16 @@ function _count(facilityId, table, cond) {
 function reportOverview() {
   const facs = _q('SELECT id,name,status,last_seen_at,app_version FROM facilities ORDER BY name');
   const now = Date.now();
+  const target = getSetting('fleet_target_version', '') || '';
   const per = facs.map(f => {
-    let online = false;
-    if (f.last_seen_at) { const t = new Date(f.last_seen_at.replace(' ', 'T')).getTime(); online = isFinite(t) && (now - t) < 120000; }
+    let online = false, dark = false;
+    if (f.last_seen_at) { const t = new Date(f.last_seen_at.replace(' ', 'T')).getTime(); if (isFinite(t)) { const age = now - t; online = age < 120000; dark = age > 900000; } }
     const ct = facilityTableCounts(f.id);
+    const version = f.app_version || '';
     return {
-      id: f.id, name: f.name, status: f.status, app_version: f.app_version,
-      last_seen_at: f.last_seen_at, online,
+      id: f.id, name: f.name, status: f.status, app_version: version, version,
+      last_seen_at: f.last_seen_at, online, dark,
+      behind: !!(target && version && version !== target),
       residents:       _count(f.id, 'clients', "json_extract(data,'$.is_active')=1 AND json_extract(data,'$.is_special')=0 AND json_extract(data,'$.name')<>'VACANT'"),
       vacant:          _count(f.id, 'clients', "json_extract(data,'$.name')='VACANT'"),
       incidents_open:  _count(f.id, 'incidents', "json_extract(data,'$.status')='open'"),
@@ -329,15 +332,30 @@ function reportOverview() {
   const sum = k => per.reduce((a, b) => a + (b[k] || 0), 0);
   return {
     facilities: per,
+    target_version: target,
     totals: {
       facilities: per.length,
       online: per.filter(p => p.online).length,
+      dark: per.filter(p => p.dark).length,
+      on_target: target ? per.filter(p => p.version === target).length : 0,
       residents: sum('residents'), vacant: sum('vacant'),
       incidents_open: sum('incidents_open'), incidents_total: sum('incidents_total'),
       ua_total: sum('ua_total'), ua_positive: sum('ua_positive'),
       med_logs: sum('med_logs'), rows_total: sum('rows_total'),
     },
   };
+}
+
+// ── Fleet update coordination (Phase 3) ────────────────────────────────
+// HQ records a recommended target version; nodes display it next to their own
+// (proven) update flow. HQ does NOT push binaries — updater.js is untouched.
+function getFleetTarget() {
+  return { version: getSetting('fleet_target_version', '') || '', notes: getSetting('fleet_target_notes', '') || '' };
+}
+function setFleetTarget(version, notes) {
+  setSetting('fleet_target_version', String(version || '').trim());
+  setSetting('fleet_target_notes', String(notes || ''));
+  return getFleetTarget();
 }
 
 // ── Managed users (Phase 2b) — HQ-mastered directory, pushed to facilities ──
@@ -423,6 +441,8 @@ module.exports = {
   getAppliedThrough, ingestRows, facilityTableCounts, getFacilityRows,
   // Reporting (Phase 2a)
   reportOverview,
+  // Fleet update coordination (Phase 3)
+  getFleetTarget, setFleetTarget,
   // Managed users (Phase 2b)
   listManagedUsers, getManagedUser, createManagedUser, updateManagedUser,
   setManagedUserPassword, setManagedUserFacilities, deleteManagedUser,

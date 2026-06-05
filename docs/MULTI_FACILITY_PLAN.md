@@ -205,5 +205,15 @@ Phase 1's sync then has a backbone to attach to, and nothing patient-facing has 
   - HQ: `managed_users` + `managed_user_facilities`; admin CRUD + assignment; `GET /sync/users` (facility-key) returns assigned active users with initial PBKDF2 credential. Console "Users" tab.
   - Facility: opt-in pull (on toggle / connect / 20s tick / on-demand) → `applyManagedUsers()` provisions into local `users` with `central_managed`/`central_uid`. **Safety rails:** never touches local (non-managed) accounts, never removes the last admin, HQ master for identity+role (role→local `ROLE_PRESETS`), **facility owns the password after first change** (pull never overwrites hash). Disconnect keeps real accounts (no lockout).
   - Decision recorded: central-master + local break-glass + offline-usable; true shared-password SSO deferred (future opt-in).
-- **Next: Phase 3 — fleet updates + hardening.** Point each node's updater at HQ ("release to fleet"); per-facility online/health + node-gone-dark visibility; optional mTLS / blob endpoint.
+- **Phase 3 — COMPLETE & verified (E2E exit 0, 17 assertions).** Fleet health + update coordination. `updater.js` deliberately untouched (it live-swaps the running server — too risky to rework here).
+  - HQ: `fleet_target_version` + `GET/POST /api/fleet/target`; target served in checkin + ingest responses. `reportOverview` gained per-facility `version` / `online` / `dark` (>15 min) / `behind`, and org totals `online` / `dark` / `on_target`.
+  - Facility: heartbeat — `syncTick` now always sends ≥1 ingest (even empty) so liveness + target refresh even with nothing pending; stores `central_target_version`; status exposes `target_version` / `current_version` / `update_available`.
+  - HQ console Overview: version column, gone-dark highlighting, "On target" / "Gone dark" tiles, fleet-target control. Facility Admin shows "HQ target version" + behind hint beside the existing Software Updates flow.
+  - **Deferred (documented):** HQ-hosted binary distribution (needs careful work on the security-critical updater allowlist + signed bundles) and Phase 4 two-way editing (§6 — pending a concrete need).
+
+---
+
+## 11. Status: Phases 0–3 COMPLETE
+
+All planned phases are built, verified (per-phase E2E + `npm test` 26/26 + client build), committed, and pushed to `origin/master`. The fleet now: runs offline-first per facility, continuously backs up to an on-prem HQ, reports cross-facility aggregates (no PHI), optionally accepts HQ-managed user accounts (opt-in, with local break-glass), and coordinates a target version. **Phase 4 (two-way / central editing) remains deferred** until a concrete need exists, since it's the only part requiring real conflict resolution.
 - **Lint note:** repo carries ~63 pre-existing eslint errors (`react-hooks/*`) in untouched tab files; new code matches existing in-file conventions. `node --check`, `npm test` (26), client build, and per-phase E2Es are the enforced gates.

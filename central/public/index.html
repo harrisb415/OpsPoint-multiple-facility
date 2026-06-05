@@ -88,14 +88,24 @@
     <!-- OVERVIEW -->
     <div id="viewOverview">
       <div class="tiles" id="orgTiles"></div>
+      <div class="card" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div>
+          <strong>Fleet target version</strong>
+          <div class="dim">The version you want all facilities running. Shown on each node next to its own updater — HQ does not push binaries.</div>
+        </div>
+        <span style="flex:1"></span>
+        <input id="fleetTarget" placeholder="e.g. 2.3.4" style="max-width:150px" />
+        <button class="gold" onclick="setFleetTarget()">Set target</button>
+        <span id="fleetMsg" class="dim"></span>
+      </div>
       <div class="card">
         <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <h2 style="margin:0">Facilities at a glance</h2>
           <button class="ghost" onclick="loadOverview()">Refresh</button>
         </div>
         <table>
-          <thead><tr><th>Facility</th><th>Status</th><th>Residents</th><th>Vacant</th><th>Open incidents</th><th>UA pos/total</th><th>Backed-up rows</th><th>Last check-in</th></tr></thead>
-          <tbody id="ovRows"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+          <thead><tr><th>Facility</th><th>Status</th><th>Version</th><th>Residents</th><th>Vacant</th><th>Open incidents</th><th>UA pos/total</th><th>Backed-up rows</th><th>Last check-in</th></tr></thead>
+          <tbody id="ovRows"><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
         </table>
         <div class="dim" style="margin-top:10px">Aggregate counts only — no resident names or clinical details are shown here (HIPAA minimum-necessary).</div>
       </div>
@@ -251,25 +261,39 @@ async function delMUser(id,uname){
 async function loadOverview(){
   const r = await api('/api/report/overview');
   if (!r.ok) { if (r.status===401) showLogin(); return; }
-  const t = r.body.totals || {}, facs = r.body.facilities || [];
+  const t = r.body.totals || {}, facs = r.body.facilities || [], target = r.body.target_version || '';
+  if (document.activeElement !== $('fleetTarget')) $('fleetTarget').value = target;
   $('orgTiles').innerHTML = [
     ['hi','Facilities', (t.online||0)+' / '+(t.facilities||0)+' online'],
     ['','Residents', t.residents||0],
     ['','Open incidents', t.incidents_open||0],
-    ['','UA positive', (t.ua_positive||0)+' / '+(t.ua_total||0)],
-    ['','Backed-up rows', (t.rows_total||0).toLocaleString()],
+    ['','On target', target ? ((t.on_target||0)+' / '+(t.facilities||0)) : '—'],
+    ['','Gone dark', t.dark||0],
   ].map(([cls,l,n])=>`<div class="tile ${cls}"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join('');
-  $('ovRows').innerHTML = facs.length ? facs.map(f=>`
-    <tr>
-      <td>${esc(f.name)}</td>
-      <td><span class="dot ${f.online?'on':'off'}"></span>${f.online?'online':'offline'}${f.status!=='active'?' · <span style="color:#b22">disabled</span>':''}</td>
+  $('ovRows').innerHTML = facs.length ? facs.map(f=>{
+    const stat = f.dark ? '<span class="dot off"></span><span style="color:#b22">gone dark</span>'
+      : (f.online ? '<span class="dot on"></span>online' : '<span class="dot off"></span>offline');
+    const ver = f.version ? esc(f.version) : '<span class="muted">—</span>';
+    return `<tr>
+      <td>${esc(f.name)}${f.status!=='active'?' · <span style="color:#b22">disabled</span>':''}</td>
+      <td>${stat}</td>
+      <td>${ver}${f.behind?' <span class="pill disabled">behind</span>':''}</td>
       <td>${f.residents}</td>
       <td>${f.vacant}</td>
       <td>${f.incidents_open}</td>
       <td>${f.ua_positive} / ${f.ua_total}</td>
       <td>${(f.rows_total||0).toLocaleString()}</td>
       <td>${f.last_seen_at?esc(f.last_seen_at):'<span class="muted">never</span>'}</td>
-    </tr>`).join('') : `<tr><td colspan="8" class="muted">No facilities enrolled yet.</td></tr>`;
+    </tr>`;
+  }).join('') : `<tr><td colspan="9" class="muted">No facilities enrolled yet.</td></tr>`;
+}
+async function setFleetTarget(){
+  $('fleetMsg').textContent='';
+  const version = $('fleetTarget').value.trim();
+  const r = await api('/api/fleet/target',{method:'POST',body:JSON.stringify({version})});
+  if (!r.ok) { $('fleetMsg').textContent='Failed'; return; }
+  $('fleetMsg').textContent = version ? ('✓ Target set to v'+version) : '✓ Target cleared';
+  loadOverview();
 }
 
 async function login(){

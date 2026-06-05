@@ -200,6 +200,11 @@ app.get('/api/facilities/:id/rows', requireAdmin, (req, res) => {
   res.json({ table, rows: db.getFacilityRows(fac.id, table) });
 });
 
+// ── Cross-facility reporting (admin; aggregate counts only, no PHI) ───────
+app.get('/api/report/overview', requireAdmin, (req, res) => {
+  res.json(db.reportOverview());
+});
+
 // ── Console (static SPA-ish single page) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

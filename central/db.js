@@ -277,6 +277,49 @@ function getFacilityRows(facilityId, table, limit = 1000) {
   return rows.map(r => { let d = null; try { d = JSON.parse(r.data); } catch (e) {} return { source_id: r.source_id, data: d, updated_at: r.updated_at }; });
 }
 
+// ── Cross-facility reporting (Phase 2a) ────────────────────────────────
+// HIPAA minimum-necessary: aggregate COUNTS only — never names/narratives/PHI.
+// `cond` fragments are constant strings (no user input) → safe to interpolate.
+function _count(facilityId, table, cond) {
+  const r = _q1(`SELECT COUNT(*) AS c FROM facility_data WHERE facility_id=? AND table_name=?${cond ? ' AND ' + cond : ''}`, [facilityId, table]);
+  return r ? r.c : 0;
+}
+
+function reportOverview() {
+  const facs = _q('SELECT id,name,status,last_seen_at,app_version FROM facilities ORDER BY name');
+  const now = Date.now();
+  const per = facs.map(f => {
+    let online = false;
+    if (f.last_seen_at) { const t = new Date(f.last_seen_at.replace(' ', 'T')).getTime(); online = isFinite(t) && (now - t) < 120000; }
+    const ct = facilityTableCounts(f.id);
+    return {
+      id: f.id, name: f.name, status: f.status, app_version: f.app_version,
+      last_seen_at: f.last_seen_at, online,
+      residents:       _count(f.id, 'clients', "json_extract(data,'$.is_active')=1 AND json_extract(data,'$.is_special')=0 AND json_extract(data,'$.name')<>'VACANT'"),
+      vacant:          _count(f.id, 'clients', "json_extract(data,'$.name')='VACANT'"),
+      incidents_open:  _count(f.id, 'incidents', "json_extract(data,'$.status')='open'"),
+      incidents_total: _count(f.id, 'incidents'),
+      ua_total:        _count(f.id, 'ua_records'),
+      ua_positive:     _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='positive'"),
+      med_logs:        _count(f.id, 'med_administration_log'),
+      rows_total:      ct.total,
+      applied_through: ct.applied_through,
+    };
+  });
+  const sum = k => per.reduce((a, b) => a + (b[k] || 0), 0);
+  return {
+    facilities: per,
+    totals: {
+      facilities: per.length,
+      online: per.filter(p => p.online).length,
+      residents: sum('residents'), vacant: sum('vacant'),
+      incidents_open: sum('incidents_open'), incidents_total: sum('incidents_total'),
+      ua_total: sum('ua_total'), ua_positive: sum('ua_positive'),
+      med_logs: sum('med_logs'), rows_total: sum('rows_total'),
+    },
+  };
+}
+
 module.exports = {
   init, nowLocal,
   getSetting, setSetting,
@@ -286,4 +329,6 @@ module.exports = {
   facilityByKey, touchFacility,
   // Sync ingest (Phase 1)
   getAppliedThrough, ingestRows, facilityTableCounts, getFacilityRows,
+  // Reporting (Phase 2a)
+  reportOverview,
 };

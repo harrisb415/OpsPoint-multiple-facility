@@ -44,6 +44,17 @@
   .keybox .mono{word-break:break-all;display:block;margin:8px 0;font-size:14px}
   .hidden{display:none}
   .dim{font-size:13px;color:var(--muted)}
+  .nav{display:flex;gap:6px;margin-bottom:18px}
+  .navbtn{background:#fff;color:var(--teal-800);border:1px solid var(--line);border-radius:8px;padding:8px 16px;font-weight:600}
+  .navbtn.active{background:var(--teal-600);color:#fff;border-color:var(--teal-600)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+  .tile{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(10,70,85,.08)}
+  .tile .n{font-size:26px;font-weight:800;color:var(--teal-800);line-height:1.1}
+  .tile.hi{background:linear-gradient(135deg,var(--teal-600),var(--teal-800));border:0}
+  .tile.hi .n{color:var(--gold-300)} .tile.hi .l{color:#cfe7ee}
+  .tile .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:6px}
+  .dot.on{background:#16a34a}.dot.off{background:#cbd5e1}
 </style>
 </head>
 <body>
@@ -68,35 +79,59 @@
 
   <!-- APP -->
   <section id="appView" class="hidden">
-    <div class="card">
-      <h2>Enroll a facility</h2>
-      <div class="row">
-        <div>
-          <label>Facility name</label>
-          <input id="facName" placeholder="e.g. Maple House" onkeydown="if(event.key==='Enter')createFacility()" />
+    <div class="nav">
+      <button id="navOverview" class="navbtn active" onclick="showView('overview')">Overview</button>
+      <button id="navFacilities" class="navbtn" onclick="showView('facilities')">Facilities</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div id="viewOverview">
+      <div class="tiles" id="orgTiles"></div>
+      <div class="card">
+        <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h2 style="margin:0">Facilities at a glance</h2>
+          <button class="ghost" onclick="loadOverview()">Refresh</button>
         </div>
-        <button class="gold" onclick="createFacility()">Create &amp; generate key</button>
-      </div>
-      <div id="createErr" class="err"></div>
-      <div id="keyReveal" class="keybox hidden">
-        <strong>Enrollment key for <span id="keyFacName"></span></strong>
-        <span class="mono" id="keyValue"></span>
-        <div class="dim">Copy this now — it is shown <b>once</b> and cannot be retrieved. Paste it into the
-        facility's <em>Admin → System → Connect to HQ</em> screen along with the Facility ID and this server's URL.</div>
-        <div style="margin-top:10px">
-          <button class="ghost" onclick="copyKey()">Copy key</button>
-          <button class="ghost" onclick="hideKey()">Done</button>
-        </div>
-        <div class="dim" style="margin-top:8px">Facility ID: <span class="mono" id="keyFacId"></span></div>
+        <table>
+          <thead><tr><th>Facility</th><th>Status</th><th>Residents</th><th>Vacant</th><th>Open incidents</th><th>UA pos/total</th><th>Backed-up rows</th><th>Last check-in</th></tr></thead>
+          <tbody id="ovRows"><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+        </table>
+        <div class="dim" style="margin-top:10px">Aggregate counts only — no resident names or clinical details are shown here (HIPAA minimum-necessary).</div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>Facilities</h2>
-      <table>
-        <thead><tr><th>Name</th><th>Facility ID</th><th>Status</th><th>App</th><th>Last check-in</th><th></th></tr></thead>
-        <tbody id="facRows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
-      </table>
+    <!-- FACILITIES -->
+    <div id="viewFacilities" class="hidden">
+      <div class="card">
+        <h2>Enroll a facility</h2>
+        <div class="row">
+          <div>
+            <label>Facility name</label>
+            <input id="facName" placeholder="e.g. Maple House" onkeydown="if(event.key==='Enter')createFacility()" />
+          </div>
+          <button class="gold" onclick="createFacility()">Create &amp; generate key</button>
+        </div>
+        <div id="createErr" class="err"></div>
+        <div id="keyReveal" class="keybox hidden">
+          <strong>Enrollment key for <span id="keyFacName"></span></strong>
+          <span class="mono" id="keyValue"></span>
+          <div class="dim">Copy this now — it is shown <b>once</b> and cannot be retrieved. Paste it into the
+          facility's <em>Admin → System → Connect to HQ</em> screen along with the Facility ID and this server's URL.</div>
+          <div style="margin-top:10px">
+            <button class="ghost" onclick="copyKey()">Copy key</button>
+            <button class="ghost" onclick="hideKey()">Done</button>
+          </div>
+          <div class="dim" style="margin-top:8px">Facility ID: <span class="mono" id="keyFacId"></span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Facilities</h2>
+        <table>
+          <thead><tr><th>Name</th><th>Facility ID</th><th>Status</th><th>App</th><th>Last check-in</th><th></th></tr></thead>
+          <tbody id="facRows"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
     </div>
   </section>
 </main>
@@ -121,7 +156,41 @@ async function boot() {
 function showLogin(){ $('loginView').classList.remove('hidden'); $('appView').classList.add('hidden');
   $('logoutBtn').classList.add('hidden'); $('who').textContent=''; $('u').focus(); }
 function showApp(user){ $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
-  $('logoutBtn').classList.remove('hidden'); $('who').textContent = user.display_name || user.username; loadFacilities(); }
+  $('logoutBtn').classList.remove('hidden'); $('who').textContent = user.display_name || user.username;
+  showView('overview'); loadFacilities(); }
+
+function showView(v){
+  const ov = v === 'overview';
+  $('viewOverview').classList.toggle('hidden', !ov);
+  $('viewFacilities').classList.toggle('hidden', ov);
+  $('navOverview').classList.toggle('active', ov);
+  $('navFacilities').classList.toggle('active', !ov);
+  if (ov) loadOverview(); else loadFacilities();
+}
+
+async function loadOverview(){
+  const r = await api('/api/report/overview');
+  if (!r.ok) { if (r.status===401) showLogin(); return; }
+  const t = r.body.totals || {}, facs = r.body.facilities || [];
+  $('orgTiles').innerHTML = [
+    ['hi','Facilities', (t.online||0)+' / '+(t.facilities||0)+' online'],
+    ['','Residents', t.residents||0],
+    ['','Open incidents', t.incidents_open||0],
+    ['','UA positive', (t.ua_positive||0)+' / '+(t.ua_total||0)],
+    ['','Backed-up rows', (t.rows_total||0).toLocaleString()],
+  ].map(([cls,l,n])=>`<div class="tile ${cls}"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`).join('');
+  $('ovRows').innerHTML = facs.length ? facs.map(f=>`
+    <tr>
+      <td>${esc(f.name)}</td>
+      <td><span class="dot ${f.online?'on':'off'}"></span>${f.online?'online':'offline'}${f.status!=='active'?' · <span style="color:#b22">disabled</span>':''}</td>
+      <td>${f.residents}</td>
+      <td>${f.vacant}</td>
+      <td>${f.incidents_open}</td>
+      <td>${f.ua_positive} / ${f.ua_total}</td>
+      <td>${(f.rows_total||0).toLocaleString()}</td>
+      <td>${f.last_seen_at?esc(f.last_seen_at):'<span class="muted">never</span>'}</td>
+    </tr>`).join('') : `<tr><td colspan="8" class="muted">No facilities enrolled yet.</td></tr>`;
+}
 
 async function login(){
   $('loginErr').textContent='';

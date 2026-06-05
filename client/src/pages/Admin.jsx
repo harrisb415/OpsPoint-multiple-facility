@@ -1808,6 +1808,66 @@ function SystemTab() {
   const [restarting, setRestarting] = useState(false)
   const [msg, setMsg] = useState('')
 
+  // ── Software updates ──────────────────────────────────────────────
+  const [upd, setUpd] = useState(null)            // /api/update/status payload
+  const [checking, setChecking] = useState(false)
+  const [checkErr, setCheckErr] = useState('')
+  const [progress, setProgress] = useState(null)  // {phase,pct,message,error,applying}
+  const [confirming, setConfirming] = useState(false)
+  const pollRef = useRef(null)
+  const targetRef = useRef(null)
+
+  const loadStatus = useCallback(async () => {
+    try {
+      const r = await apiFetch('/api/update/status')
+      if (r.ok) { const j = await r.json(); setUpd(j); if (j.progress && j.progress.phase !== 'idle') setProgress(j.progress) }
+    } catch { /* ignore */ }
+  }, [])
+  useEffect(() => { loadStatus(); return () => { if (pollRef.current) clearInterval(pollRef.current) } }, [loadStatus])
+
+  async function check() {
+    setChecking(true); setCheckErr('')
+    try {
+      const r = await apiFetch('/api/update/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const j = await r.json()
+      if (!r.ok) { setCheckErr(j.error || 'Check failed'); return }
+      setUpd(u => ({ ...(u || {}), ...j }))
+    } catch { setCheckErr('Could not reach the update server.') }
+    finally { setChecking(false) }
+  }
+
+  function startPolling() {
+    if (pollRef.current) clearInterval(pollRef.current)
+    pollRef.current = setInterval(async () => {
+      try {
+        const r = await fetch('/api/update/status', { credentials: 'include' })
+        if (!r.ok) return
+        const j = await r.json()
+        if (j.progress) setProgress(j.progress)
+        // Success: the respawned server is now serving the target version
+        if (targetRef.current && j.current && cmpVer(j.current, targetRef.current) >= 0 && (!j.progress || !j.progress.applying)) {
+          clearInterval(pollRef.current); pollRef.current = null
+          setProgress({ phase: 'done', pct: 100, message: 'Updated to v' + j.current + '. Reloading…', applying: false })
+          setTimeout(() => window.location.reload(), 1500)
+        } else if (j.progress && j.progress.phase === 'error') {
+          clearInterval(pollRef.current); pollRef.current = null
+        }
+      } catch { /* server restarting — keep polling */ }
+    }, 1500)
+  }
+
+  async function install() {
+    setConfirming(false)
+    targetRef.current = upd?.latest || null
+    setProgress({ phase: 'preflight', pct: 1, message: 'Starting…', applying: true })
+    try {
+      const r = await apiFetch('/api/update/apply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setProgress({ phase: 'error', error: j.error || 'Failed to start update', applying: false }); return }
+      startPolling()
+    } catch { setProgress({ phase: 'error', error: 'Network error', applying: false }) }
+  }
+
   async function restart() {
     if (!window.confirm('Restart the server? All active sessions will briefly disconnect.')) return
     setRestarting(true); setMsg('⏱ Restarting…')
@@ -1821,8 +1881,78 @@ function SystemTab() {
     }, 2000)
   }
 
+  const cur = upd?.current || '—'
+  const available = !!upd?.available
+  const busy = !!(progress && progress.applying)
+
   return (
     <div>
+      {/* Software Updates */}
+      <div className="section">
+        <div className="section-head">
+          <div className="sh-left"><span className="sh-dot" /><span>Software Updates</span></div>
+          {!busy && <button className="btn btn-sm" onClick={check} disabled={checking}>{checking ? 'Checking…' : 'Check for Updates'}</button>}
+        </div>
+        <div className="section-body">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '.82rem', color: '#64748b' }}>Current version</span>
+            <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>v{cur}</span>
+            {upd?.lastChecked && <span style={{ fontSize: '.72rem', color: '#94a3b8' }}>· checked {new Date(upd.lastChecked).toLocaleString()}</span>}
+          </div>
+
+          {checkErr && <div className="auth-error" style={{ marginBottom: 12 }}>{checkErr}</div>}
+
+          {progress && progress.phase !== 'idle' ? (
+            <div style={{ marginBottom: 4 }}>
+              {progress.phase === 'error' ? (
+                <div style={{ padding: '10px 13px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '.83rem' }}>
+                  <strong>Update failed.</strong> {progress.error}
+                  <div style={{ marginTop: 8 }}><button className="btn btn-sm" onClick={() => setProgress(null)}>Dismiss</button></div>
+                </div>
+              ) : (
+                <div style={{ padding: '12px 14px', borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', color: '#075985', marginBottom: 7 }}>
+                    <span>{progress.message || progress.phase}</span><span>{progress.pct || 0}%</span>
+                  </div>
+                  <div style={{ height: 7, background: '#e0f2fe', borderRadius: 99, overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: (progress.pct || 0) + '%', background: '#0ea5e9', transition: 'width .4s' }} />
+                  </div>
+                  {busy && <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 7 }}>Do not close this window. The server will restart automatically.</div>}
+                </div>
+              )}
+            </div>
+          ) : available ? (
+            <div style={{ padding: '12px 14px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontWeight: 800, color: '#065f46' }}>Update available — v{upd.latest}</span>
+                {upd.mandatory && <Chip2 bg="#fee2e2" fg="#991b1b">Required</Chip2>}
+              </div>
+              {Array.isArray(upd.changelog) && upd.changelog.length > 0 && (
+                <ul style={{ margin: '6px 0 10px', paddingLeft: 18, fontSize: '.82rem', color: '#334155' }}>
+                  {upd.changelog.slice(0, 8).map((c, i) => <li key={i} style={{ marginBottom: 2 }}>{c}</li>)}
+                </ul>
+              )}
+              {!confirming
+                ? <button className="btn btn-sm btn-primary" onClick={() => setConfirming(true)}>Download &amp; Install</button>
+                : (
+                  <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: '.83rem', color: '#334155', marginBottom: 10 }}>
+                      This downloads and verifies v{upd.latest}, backs up the database, then <strong>restarts the server</strong> — everyone is disconnected for ~30&nbsp;seconds. Make sure no one is mid-report. Continue?
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button className="btn btn-sm btn-primary" onClick={install}>Yes, install v{upd.latest}</button>
+                      <button className="btn btn-sm" onClick={() => setConfirming(false)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+            </div>
+          ) : (
+            upd && <div style={{ fontSize: '.84rem', color: '#15803d' }}>✓ You’re on the latest version.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Server Control */}
       <div className="section">
         <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Server Control</span></div></div>
         <div className="section-body">
@@ -1834,16 +1964,17 @@ function SystemTab() {
               {msg}
             </div>
           )}
-          <button className="btn btn-sm btn-red" onClick={restart} disabled={restarting}>⚠ Restart Server</button>
+          <button className="btn btn-sm btn-red" onClick={restart} disabled={restarting || busy}>⚠ Restart Server</button>
         </div>
       </div>
 
+      {/* Version Info */}
       <div className="section">
         <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Version Info</span></div></div>
         <div className="section-body">
           <table style={{ fontSize: '.84rem', borderCollapse: 'collapse' }}>
             <tbody>
-              {[['App', 'OpsPoint'], ['Version', 'v2.0'], ['Server', window.location.host], ['Protocol', window.location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP']].map(([k, v]) => (
+              {[['App', 'OpsPoint'], ['Version', 'v' + cur], ['Server', window.location.host], ['Protocol', window.location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP']].map(([k, v]) => (
                 <tr key={k}>
                   <td style={{ padding: '4px 16px 4px 0', fontWeight: 700, color: '#475569' }}>{k}</td>
                   <td style={{ fontFamily: 'var(--mono)', fontSize: '.82rem' }}>{v}</td>
@@ -1855,4 +1986,16 @@ function SystemTab() {
       </div>
     </div>
   )
+}
+
+// Tiny semver compare for the updater UI (numeric core only).
+function cmpVer(a, b) {
+  const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0)
+  const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0)
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) > (pb[i] || 0)) return 1; if ((pa[i] || 0) < (pb[i] || 0)) return -1 }
+  return 0
+}
+
+function Chip2({ bg, fg, children }) {
+  return <span style={{ background: bg, color: fg, fontSize: '.68rem', fontWeight: 800, padding: '1px 7px', borderRadius: 999 }}>{children}</span>
 }

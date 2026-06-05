@@ -13,8 +13,15 @@ data/photos/
 data/cert.pem
 data/key.pem
 
+# Updater runtime — staged downloads, code backups, DB backups
+data/updates/
+data/backups/
+
 # Keep the data directory itself (server needs it)
 !data/.gitkeep
+
+# Release builder output (scripts/release.mjs)
+release/
 
 # Claude Code local settings
 .claude/settings.local.json

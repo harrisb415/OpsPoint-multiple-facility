@@ -601,6 +601,8 @@ function _seedDefaults() {
       critical: ['supervisor','case_manager','licensing','guardian'],
     }),
     session_idle_mins:      '30',  // HIPAA technical safeguard — minutes of inactivity before forced logout
+    update_manifest_url:    'https://raw.githubusercontent.com/harrisb415/OpsPoint-FULL-HIPAA/master/update-manifest.json',
+    update_auto_check:      'true', // check for updates on boot + daily; never auto-APPLY
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))

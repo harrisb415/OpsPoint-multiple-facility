@@ -101,6 +101,15 @@ function broadcast(msg) {
   wss.clients.forEach(c=>{ if(c.readyState===WebSocket.OPEN) c.send(s); });
 }
 
+// Respawn the server process (detached) and exit — used by the restart
+// endpoint and the auto-updater after a successful apply/rollback.
+function restartServer() {
+  const { spawn } = require('child_process');
+  const child = spawn(process.execPath, [path.join(BASE, 'server.js')], { detached: true, stdio: 'ignore', cwd: BASE });
+  child.unref();
+  process.exit(0);
+}
+
 // ── Middleware ───────────────────────────────────────────────────
 
 // ── Security headers ─────────────────────────────────────────
@@ -1786,14 +1795,7 @@ app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.
   audit(req,'server.restart','server',null,'Server Restart',{by:req.session.displayName||req.session.username});
   broadcast({type:'server_restarting',user:req.session.displayName||req.session.username});
   res.json({ok:true});
-  setTimeout(()=>{
-    const{spawn}=require('child_process');
-    const child=spawn(process.execPath,[path.join(BASE,'server.js')],{
-      detached:true, stdio:'ignore', cwd:BASE
-    });
-    child.unref();
-    process.exit(0);
-  }, 600);
+  setTimeout(()=>restartServer(), 600);
 });
 
 // ════════════════════════════════════════════════════════════════════
@@ -2410,6 +2412,37 @@ app.delete('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPe
   audit(req, 'group_note.delete', 'group_notes', id, '');
   broadcast({ type: 'group_note_deleted', id });
   res.json({ ok: true });
+});
+
+// ── Auto-update (Option B — manifest + signed bundle) ─────────────
+const { createUpdater } = require('./updater');
+const updater = createUpdater({
+  baseDir: BASE, dataDir: DATA, dbPath: DB_PATH, db,
+  broadcast, restart: restartServer, log: (...a) => console.log('[updater]', ...a),
+});
+
+app.get('/api/update/status', requireAuth, requirePermission('admin.system'), (req,res)=>{
+  res.json(updater.status());
+});
+app.post('/api/update/check', requireAuth, csrfCheck, requirePermission('admin.system'), async (req,res)=>{
+  try { const r = await updater.check(); res.json(r); }
+  catch(e){ res.status(502).json({error:(e&&e.message)||'Check failed'}); }
+});
+app.post('/api/update/apply', requireAuth, csrfCheck, requirePermission('admin.system'), (req,res)=>{
+  const st = updater.status();
+  if (st.progress && st.progress.applying) return res.status(409).json({error:'An update is already in progress'});
+  const actor = req.session.displayName || req.session.username || 'admin';
+  audit(req,'update.apply.start','system',null,'Software update started',{by:actor});
+  updater.apply(actor).catch(()=>{}); // runs in background; client polls /status
+  res.json({ ok:true, started:true });
+});
+app.get('/api/update/backups', requireAuth, requirePermission('admin.system'), (req,res)=>{
+  res.json(updater.backups());
+});
+app.post('/api/update/rollback', requireAuth, csrfCheck, requirePermission('admin.system'), async (req,res)=>{
+  const actor = req.session.displayName || req.session.username || 'admin';
+  try { const r = await updater.rollback(actor); res.json(r); }
+  catch(e){ res.status(400).json({error:(e&&e.message)||'Rollback failed'}); }
 });
 
 // ── React SPA catch-all (MUST be last — after all API routes) ────

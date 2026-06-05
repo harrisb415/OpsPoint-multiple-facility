@@ -1,14 +1,15 @@
 {
-  "version": "2.3.2",
-  "released": "2026-06-04T00:00:00Z",
+  "version": "2.3.3",
+  "released": "2026-06-05T04:25:52.002Z",
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.2/opspoint-2.3.2.zip",
-  "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-  "size": 0,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.3/opspoint-2.3.3.zip",
+  "sha256": "7c97c2ba0bb805b549b6f29ad807b010a7e0976d94e9aa07d7792f40f1a7ed6b",
+  "size": 334220,
   "changelog": [
-    "Structured Clinical Lite, group-note workflow, and admin rebuild",
-    "One-click software updater (Admin -> System -> Software Updates)"
+    "One-click software updater in Admin -> System -> Software Updates",
+    "Checksum-verified release bundles; database + code backup before applying",
+    "Manual rollback via restore-last-backup.bat"
   ]
 }

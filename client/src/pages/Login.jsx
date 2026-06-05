@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
-const VERSION = '2.3.2'
+const VERSION = '2.3.3'
 
 export default function Login() {
   const [username, setUsername] = useState('')

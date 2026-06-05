@@ -2,6 +2,22 @@
 
 ---
 
+## v2.3.3 — One-Click Auto-Updater (2026-06-04)
+
+### Software updates (Admin → System → Software Updates)
+- **Check for updates** against a signed release manifest, view the changelog, and **Download & Install** in one click — with a restart confirmation and a live progress bar
+- Pull-based and integrity-checked: manifest + bundle fetched over HTTPS from a host-allowlisted source, **sha256 + size verified** before anything is applied
+- Apply sequence: download → verify → **back up database + current code** → swap runtime files → `npm install` only if the lockfile changed → restart
+- Manual rollback via `restore-last-backup.bat`; pre-update database copies retained under `data/backups/`
+- `scripts/release.mjs` builds the versioned bundle (prebuilt client), checksums it, and rewrites the manifest
+
+### Notes
+- Release bundles are hosted on a separate **public** repo (`opspoint-releases`) so the tokenless updater can reach them; the application source stays private
+- Fixed the System tab showing a stale hardcoded version; it now reports the live running version
+- Auto-rollback launcher (failed-boot auto-revert) is planned for a future release
+
+---
+
 ## v2.3.2 — Structured Clinical Lite & Admin Rebuild (2026-06-04)
 
 ### Structured Clinical Lite — new Clinical section

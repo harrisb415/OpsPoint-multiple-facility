@@ -84,7 +84,7 @@
 - Version badge added to login page
 
 ### DB migration cleanup
-- Removed ShiftPoint → OpsPoint rebrand migration running on every boot (~80 lines)
+- Removed legacy rebrand migration running on every boot (~80 lines)
 - Replaced 70-line `_migratePermissions` with 5-line version
 - Removed 16 redundant `ALTER TABLE` statements; complete column definitions now in `CREATE TABLE` schemas
 

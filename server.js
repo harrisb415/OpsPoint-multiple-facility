@@ -34,7 +34,7 @@ const DATA = path.join(BASE, 'data');
 const DB_PATH      = process.env.OPSPOINT_DB || path.join(DATA, 'opspoint.db');
 const LEGACY_DB_PATH = path.join(DATA, 'shift.db');
 
-// One-time rename: data/shift.db → data/opspoint.db (from the ShiftPoint era)
+// One-time rename: data/shift.db → data/opspoint.db (legacy DB filename)
 try {
   if (fs.existsSync(LEGACY_DB_PATH) && !fs.existsSync(DB_PATH)) {
     fs.renameSync(LEGACY_DB_PATH, DB_PATH);

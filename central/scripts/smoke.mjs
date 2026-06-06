@@ -47,6 +47,13 @@ function assert(cond, msg) { if (!cond) { console.error('  ✗ FAIL:', msg); don
   let r = await jf('/login', { method: 'POST', body: JSON.stringify({ username: 'admin', password: ADMIN_PW }) });
   assert(r.ok, `admin login (status ${r.status})`);
 
+  // First-run admin is flagged must-change; clear it (set back to same pw) so the
+  // rest of the admin API is reachable. Idempotent across re-runs.
+  if (r.body.user && r.body.user.must_change_pw) {
+    r = await jf('/api/me/password', { method: 'POST', body: JSON.stringify({ password: ADMIN_PW }) });
+    assert(r.ok, 'forced password change on first login');
+  }
+
   const name = 'Smoke House ' + Date.now();
   r = await jf('/api/facilities', { method: 'POST', body: JSON.stringify({ name }) });
   assert(r.ok && r.body.apiKey, 'create facility + receive one-time key');

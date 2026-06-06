@@ -208,9 +208,44 @@ function getUser(id) {
   if (!u) return null;
   return { id: u.id, username: u.username, display_name: u.display_name, role: u.role, must_change_pw: !!u.must_change_pw };
 }
+// Self-service: the signed-in admin sets their OWN password → clears the
+// must-change flag (they've now chosen it).
 function setUserPassword(id, newPw) {
   const { hash, salt } = _hashPw(newPw);
   _run('UPDATE central_users SET hash=?,salt=?,must_change_pw=0 WHERE id=?', [hash, salt, id]);
+}
+
+// ── HQ admin accounts (central_users) — the fleet operators ───────────────
+// These accounts log into this console only; they never sync down to any
+// facility. Distinct from managed_users (which DO push down to facilities).
+function listCentralUsers() {
+  return _q('SELECT id,username,display_name,role,must_change_pw,created_at FROM central_users ORDER BY username')
+    .map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, must_change_pw: !!u.must_change_pw, created_at: u.created_at }));
+}
+function countCentralUsers() {
+  const r = _q1('SELECT COUNT(*) AS c FROM central_users');
+  return r ? r.c : 0;
+}
+function createCentralUser({ username, display_name, password }) {
+  username = String(username || '').toLowerCase().trim();
+  if (!username) throw new Error('username required');
+  if (!/^[a-z0-9._-]+$/.test(username)) throw new Error('username may contain only letters, numbers, dot, dash, underscore');
+  if (_q1('SELECT id FROM central_users WHERE username=?', [username])) throw new Error('username already exists');
+  if (!password || String(password).length < 10) throw new Error('password must be at least 10 characters');
+  const { hash, salt } = _hashPw(String(password));
+  const info = _run(`INSERT INTO central_users (username,display_name,role,hash,salt,must_change_pw,created_at)
+        VALUES (?,?,'admin',?,?,1,?)`, [username, String(display_name || '').trim(), hash, salt, nowLocal()]);
+  return getUser(info.lastInsertRowid);
+}
+// Reset ANOTHER admin's password → sets must-change so they pick a new one
+// on their next sign-in. (Self-service uses setUserPassword above.)
+function resetCentralUserPassword(id, newPw) {
+  if (!newPw || String(newPw).length < 10) throw new Error('password must be at least 10 characters');
+  const { hash, salt } = _hashPw(String(newPw));
+  _run('UPDATE central_users SET hash=?,salt=?,must_change_pw=1 WHERE id=?', [hash, salt, id]);
+}
+function deleteCentralUser(id) {
+  _run('DELETE FROM central_users WHERE id=?', [id]);
 }
 
 // ── Facilities ───────────────────────────────────────────────────────────
@@ -435,6 +470,7 @@ module.exports = {
   getSetting, setSetting,
   audit, getAudit,
   authUser, getUser, setUserPassword,
+  listCentralUsers, countCentralUsers, createCentralUser, resetCentralUserPassword, deleteCentralUser,
   listFacilities, getFacility, createFacility, rotateFacilityKey, setFacilityStatus,
   facilityByKey, touchFacility,
   // Sync ingest (Phase 1)

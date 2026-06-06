@@ -62,6 +62,7 @@
   <h1>OpsPoint&nbsp;·&nbsp;Central</h1>
   <span class="sp"></span>
   <span id="who" class="dim" style="color:#cfe7ee"></span>
+  <button id="pwBtn" class="hidden" onclick="showPwView(false)">Change password</button>
   <button id="logoutBtn" class="hidden" onclick="logout()">Sign out</button>
 </header>
 
@@ -77,12 +78,30 @@
     <div id="loginErr" class="err"></div>
   </section>
 
+  <!-- CHANGE PASSWORD -->
+  <section id="pwView" class="card hidden" style="max-width:420px;margin:48px auto">
+    <h2>Change password</h2>
+    <div id="pwForced" class="keybox hidden" style="margin:0 0 14px">
+      You must set a new password before continuing.
+    </div>
+    <label>New password <span class="dim">(min 10 characters)</span></label>
+    <input id="pwNew" type="password" autocomplete="new-password" />
+    <label>Confirm new password</label>
+    <input id="pwConfirm" type="password" autocomplete="new-password" onkeydown="if(event.key==='Enter')savePw()" />
+    <div style="margin-top:14px;display:flex;gap:10px">
+      <button onclick="savePw()">Save password</button>
+      <button id="pwCancel" class="ghost" onclick="boot()">Cancel</button>
+    </div>
+    <div id="pwErr" class="err"></div>
+  </section>
+
   <!-- APP -->
   <section id="appView" class="hidden">
     <div class="nav">
       <button id="navOverview" class="navbtn active" onclick="showView('overview')">Overview</button>
       <button id="navFacilities" class="navbtn" onclick="showView('facilities')">Facilities</button>
       <button id="navUsers" class="navbtn" onclick="showView('users')">Users</button>
+      <button id="navAdmins" class="navbtn" onclick="showView('admins')">HQ Admins</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -174,6 +193,29 @@
         </table>
       </div>
     </div>
+
+    <!-- HQ ADMINS -->
+    <div id="viewAdmins" class="hidden">
+      <div class="card">
+        <h2>Add an HQ administrator</h2>
+        <div class="dim" style="margin-bottom:12px">HQ admins sign in to <b>this console only</b> — they manage the fleet and never sync down to any facility. New admins are created with a temporary password and <b>must change it on first sign-in</b>.</div>
+        <div class="row" style="flex-wrap:wrap">
+          <div><label>Username</label><input id="cuUser" placeholder="jsmith" /></div>
+          <div><label>Display name</label><input id="cuName" placeholder="Jordan Smith" /></div>
+          <div><label>Temporary password</label><input id="cuPw" type="text" placeholder="min 10 chars" /></div>
+        </div>
+        <div style="margin-top:12px"><button class="gold" onclick="createCU()">Create administrator</button></div>
+        <div id="cuErr" class="err"></div>
+      </div>
+      <div class="card">
+        <h2>HQ administrators</h2>
+        <table>
+          <thead><tr><th>Username</th><th>Name</th><th>Password</th><th>Created</th><th></th></tr></thead>
+          <tbody id="cuRows"><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
+        </table>
+        <div class="dim" style="margin-top:10px">You cannot delete your own account or the last remaining administrator.</div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -192,21 +234,45 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;',
 
 async function boot() {
   const me = await api('/api/me');
-  if (me.ok) showApp(me.body); else showLogin();
+  if (!me.ok) { showLogin(); return; }
+  if (me.body.must_change_pw) showPwView(true); else showApp(me.body);
 }
-function showLogin(){ $('loginView').classList.remove('hidden'); $('appView').classList.add('hidden');
-  $('logoutBtn').classList.add('hidden'); $('who').textContent=''; $('u').focus(); }
-function showApp(user){ $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden');
-  $('logoutBtn').classList.remove('hidden'); $('who').textContent = user.display_name || user.username;
+function showLogin(){ $('loginView').classList.remove('hidden'); $('appView').classList.add('hidden'); $('pwView').classList.add('hidden');
+  $('logoutBtn').classList.add('hidden'); $('pwBtn').classList.add('hidden'); $('who').textContent=''; $('u').focus(); }
+function showApp(user){ $('loginView').classList.add('hidden'); $('appView').classList.remove('hidden'); $('pwView').classList.add('hidden');
+  $('logoutBtn').classList.remove('hidden'); $('pwBtn').classList.remove('hidden'); $('who').textContent = user.display_name || user.username;
   showView('overview'); loadFacilities(); }
 
+// Change-password view — forced (must_change_pw, no Cancel) or voluntary.
+function showPwView(forced){
+  $('loginView').classList.add('hidden'); $('appView').classList.add('hidden'); $('pwView').classList.remove('hidden');
+  $('logoutBtn').classList.remove('hidden'); $('pwBtn').classList.add('hidden');
+  $('pwForced').classList.toggle('hidden', !forced);
+  $('pwCancel').classList.toggle('hidden', !!forced);
+  $('pwNew').value=''; $('pwConfirm').value=''; $('pwErr').textContent='';
+  $('pwNew').focus();
+}
+async function savePw(){
+  $('pwErr').textContent='';
+  const a=$('pwNew').value, b=$('pwConfirm').value;
+  if (a.length<10){ $('pwErr').textContent='Password must be at least 10 characters'; return; }
+  if (a!==b){ $('pwErr').textContent='Passwords do not match'; return; }
+  const r=await api('/api/me/password',{method:'POST',body:JSON.stringify({password:a})});
+  if(!r.ok){ $('pwErr').textContent=(r.body&&r.body.error)||'Failed'; return; }
+  boot();
+}
+
 function showView(v){
-  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers' };
+  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins' };
   Object.entries(views).forEach(([k,id])=> $(id).classList.toggle('hidden', k!==v));
-  $('navOverview').classList.toggle('active', v==='overview');
-  $('navFacilities').classList.toggle('active', v==='facilities');
-  $('navUsers').classList.toggle('active', v==='users');
-  if (v==='overview') loadOverview(); else if (v==='users') loadUsers(); else loadFacilities();
+  ['overview','facilities','users','admins'].forEach(k=>{
+    const btn = $('nav'+k.charAt(0).toUpperCase()+k.slice(1));
+    if (btn) btn.classList.toggle('active', k===v);
+  });
+  if (v==='overview') loadOverview();
+  else if (v==='users') loadUsers();
+  else if (v==='admins') loadAdmins();
+  else loadFacilities();
 }
 
 // ── Managed users (Phase 2b) ──
@@ -299,10 +365,57 @@ async function setFleetTarget(){
 async function login(){
   $('loginErr').textContent='';
   const r = await api('/login',{method:'POST',body:JSON.stringify({username:$('u').value,password:$('p').value})});
-  if (r.ok) { $('p').value=''; showApp(r.body.user); }
+  if (r.ok) { $('p').value=''; if (r.body.user && r.body.user.must_change_pw) showPwView(true); else showApp(r.body.user); }
   else $('loginErr').textContent = (r.body && r.body.error) || 'Sign in failed';
 }
 async function logout(){ await api('/logout',{method:'POST'}); showLogin(); }
+
+// ── HQ admins (central_users) ──
+let _meId = null;
+async function loadAdmins(){
+  const r = await api('/api/central-users');
+  if(!r.ok){ if(r.status===401) showLogin(); return; }
+  _meId = r.body.me;
+  const users = r.body.users || [];
+  $('cuRows').innerHTML = users.length ? users.map(u=>{
+    const isMe = u.id===_meId, canDelete = !isMe && users.length>1;
+    const pw = u.must_change_pw ? '<span class="pill disabled">must change</span>' : '<span class="muted">set</span>';
+    return `<tr>
+      <td class="mono">${esc(u.username)}${isMe?' <span class="pill active">you</span>':''}</td>
+      <td>${esc(u.display_name)||'—'}</td>
+      <td>${pw}</td>
+      <td class="muted">${esc(u.created_at)||'—'}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="ghost" onclick="resetCU('${u.id}','${esc(u.username)}')">Reset password</button>
+        <button class="ghost" onclick="delCU('${u.id}','${esc(u.username)}')" ${canDelete?'':'disabled'}>Delete</button>
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="5" class="muted">No administrators.</td></tr>`;
+}
+async function createCU(){
+  $('cuErr').textContent='';
+  const body={ username:$('cuUser').value.trim(), display_name:$('cuName').value.trim(), password:$('cuPw').value };
+  if(!body.username||!body.password){ $('cuErr').textContent='Username and temporary password are required'; return; }
+  const r=await api('/api/central-users',{method:'POST',body:JSON.stringify(body)});
+  if(!r.ok){ $('cuErr').textContent=(r.body&&r.body.error)||'Failed'; return; }
+  $('cuUser').value=''; $('cuName').value=''; $('cuPw').value='';
+  loadAdmins();
+}
+async function resetCU(id,uname){
+  const pw=prompt('New password for '+uname+' (min 10 chars). They must change it on next sign-in:');
+  if(pw==null) return;
+  if(pw.length<10){ alert('Password must be at least 10 characters'); return; }
+  const r=await api('/api/central-users/'+id+'/password',{method:'POST',body:JSON.stringify({password:pw})});
+  if(!r.ok){ alert((r.body&&r.body.error)||'Failed'); return; }
+  alert('Password reset. '+uname+' must change it on next sign-in.');
+  loadAdmins();
+}
+async function delCU(id,uname){
+  if(!confirm('Delete HQ administrator '+uname+'? This cannot be undone.')) return;
+  const r=await api('/api/central-users/'+id,{method:'DELETE'});
+  if(!r.ok){ alert((r.body&&r.body.error)||'Failed'); return; }
+  loadAdmins();
+}
 
 async function loadFacilities(){
   const r = await api('/api/facilities');

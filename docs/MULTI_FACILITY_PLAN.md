@@ -210,6 +210,9 @@ Phase 1's sync then has a backbone to attach to, and nothing patient-facing has 
   - Facility: heartbeat — `syncTick` now always sends ≥1 ingest (even empty) so liveness + target refresh even with nothing pending; stores `central_target_version`; status exposes `target_version` / `current_version` / `update_available`.
   - HQ console Overview: version column, gone-dark highlighting, "On target" / "Gone dark" tiles, fleet-target control. Facility Admin shows "HQ target version" + behind hint beside the existing Software Updates flow.
   - **Deferred (documented):** HQ-hosted binary distribution (needs careful work on the security-critical updater allowlist + signed bundles) and Phase 4 two-way editing (§6 — pending a concrete need).
+- **HQ admin accounts — COMPLETE & verified (E2E exit 0, 26 assertions).** Self-service password change, forced change-on-first-login (seeded admin is flagged `must_change_pw`), and multi-admin management on the HQ console.
+  - HQ: `central_users` CRUD — `GET/POST /api/central-users`, `POST /api/central-users/:id/password` (admin reset → re-flags must-change), `DELETE /api/central-users/:id`. **Lock-out rails:** cannot delete yourself or the last remaining admin. **Server-side teeth:** `requireAdmin` blocks every admin API except the password change itself while `must_change_pw` is set (not just UI-gated).
+  - Console: header "Change password" action, forced change-password view (no Cancel until done), new "HQ Admins" tab (add admin / reset password / delete). HQ admins log into the console only — they never sync to any facility (distinct from managed_users).
 
 ---
 

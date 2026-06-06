@@ -74,6 +74,13 @@ function clientIp(req) {
 // ── Middleware ───────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
   if (!req.session || !req.session.userId) return res.status(401).json({ error: 'auth required' });
+  const u = db.getUser(req.session.userId);
+  if (!u) return res.status(401).json({ error: 'auth required' });
+  // Server-side teeth for must-change-pw: until the admin sets a new password,
+  // the ONLY admin action allowed is the password change itself.
+  if (u.must_change_pw && !(req.method === 'POST' && req.path === '/api/me/password'))
+    return res.status(403).json({ error: 'password change required', must_change_pw: true });
+  req.adminUser = u;
   next();
 }
 function requireFacilityKey(req, res, next) {
@@ -118,6 +125,42 @@ app.post('/api/me/password', requireAdmin, (req, res) => {
   db.setUserPassword(req.session.userId, String(password));
   const u = db.getUser(req.session.userId);
   db.audit({ actor: u.username, action: 'password.change', ip: clientIp(req) });
+  res.json({ ok: true });
+});
+
+// ── HQ admin accounts (central_users; admin-only) ─────────────────────────
+app.get('/api/central-users', requireAdmin, (req, res) => {
+  res.json({ users: db.listCentralUsers(), me: req.session.userId });
+});
+app.post('/api/central-users', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  try {
+    const u = db.createCentralUser({ username: b.username, display_name: b.display_name, password: b.password });
+    const actor = db.getUser(req.session.userId);
+    db.audit({ actor: actor && actor.username, action: 'central_user.create', target: String(u.id), detail: u.username, ip: clientIp(req) });
+    res.json({ ok: true, user: u });
+  } catch (e) { res.status(400).json({ error: (e && e.message) || 'create failed' }); }
+});
+app.post('/api/central-users/:id/password', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!db.getUser(id)) return res.status(404).json({ error: 'not found' });
+  try {
+    db.resetCentralUserPassword(id, (req.body || {}).password);
+    const actor = db.getUser(req.session.userId);
+    db.audit({ actor: actor && actor.username, action: 'central_user.reset_pw', target: String(id), ip: clientIp(req) });
+    res.json({ ok: true });
+  } catch (e) { res.status(400).json({ error: (e && e.message) || 'failed' }); }
+});
+app.delete('/api/central-users/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  // Lock-out rails: never delete yourself or the last remaining admin.
+  if (id === req.session.userId) return res.status(400).json({ error: 'you cannot delete your own account' });
+  if (db.countCentralUsers() <= 1) return res.status(400).json({ error: 'cannot delete the last HQ administrator' });
+  const target = db.getUser(id);
+  if (!target) return res.status(404).json({ error: 'not found' });
+  db.deleteCentralUser(id);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'central_user.delete', target: String(id), detail: target.username, ip: clientIp(req) });
   res.json({ ok: true });
 });
 

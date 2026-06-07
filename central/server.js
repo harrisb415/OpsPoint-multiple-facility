@@ -235,13 +235,20 @@ app.get('/api/facilities/:id/stats', requireAdmin, (req, res) => {
   res.json({ facility: { id: fac.id, name: fac.name, last_seen_at: fac.last_seen_at }, ...db.facilityTableCounts(fac.id) });
 });
 
-// ── Per-facility synced rows for one table (admin; feeds Phase 2 reporting) ─
+// ── Per-facility synced rows for one table (admin) ───────────────────────
+// ⚠ Returns the raw backed-up records, which INCLUDE PHI (names, narratives,
+// photos). Every access is written to the HQ audit trail.
 app.get('/api/facilities/:id/rows', requireAdmin, (req, res) => {
   const fac = db.getFacility(req.params.id);
   if (!fac) return res.status(404).json({ error: 'not found' });
   const table = String(req.query.table || '');
   if (!table) return res.status(400).json({ error: 'table query param required' });
-  res.json({ table, rows: db.getFacilityRows(fac.id, table) });
+  let limit = parseInt(req.query.limit, 10);
+  if (!Number.isFinite(limit) || limit <= 0) limit = 500;
+  if (limit > 2000) limit = 2000;
+  const rows = db.getFacilityRows(fac.id, table, limit);
+  db.audit({ actor: req.adminUser && req.adminUser.username, action: 'phi.view', target: fac.id, detail: table + ' ×' + rows.length, ip: clientIp(req) });
+  res.json({ table, rows });
 });
 
 // ── Cross-facility reporting (admin; aggregate counts only, no PHI) ───────

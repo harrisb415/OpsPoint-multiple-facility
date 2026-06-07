@@ -55,6 +55,12 @@
   .tile .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
   .dot{display:inline-block;width:8px;height:8px;border-radius:99px;margin-right:6px}
   .dot.on{background:#16a34a}.dot.off{background:#cbd5e1}
+  .phi-warn{background:#fdeeee;border:1px solid #f0b8b8;color:#7a1f1f;border-radius:10px;padding:12px 14px;margin-bottom:18px;font-size:13px}
+  .faclink{background:none;border:0;padding:0;margin:0;font:inherit;color:var(--teal-600);font-weight:600;text-decoration:none;cursor:pointer}
+  .faclink:hover{text-decoration:underline}
+  #fdGrid td .mono{font-size:12px}
+  .det-box{background:#f6fafb;border:1px solid var(--line);border-radius:8px;padding:12px;margin:2px 0}
+  .det-box b{color:var(--teal-800)}
 </style>
 </head>
 <body>
@@ -216,6 +222,32 @@
         <div class="dim" style="margin-top:10px">You cannot delete your own account or the last remaining administrator.</div>
       </div>
     </div>
+
+    <!-- FACILITY DETAIL (row-level data browser) -->
+    <div id="viewFacility" class="hidden">
+      <div class="card" style="display:flex;align-items:center;gap:14px">
+        <button class="ghost" onclick="closeFacility()">← Back</button>
+        <h2 id="fdName" style="margin:0">Facility</h2>
+        <span style="flex:1"></span>
+        <span id="fdMeta" class="dim"></span>
+      </div>
+      <div class="phi-warn">⚠ <b>Protected health information.</b> The records below are the backed-up facility data and include resident names, narratives, and photos. Every table you open is recorded in the HQ audit trail.</div>
+      <div class="card">
+        <h2>Backed-up tables</h2>
+        <div id="fdTables" class="dim">Loading…</div>
+      </div>
+      <div id="fdRowsCard" class="card hidden">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <h2 id="fdTableName" style="margin:0"></h2>
+          <span id="fdRowCount" class="dim"></span>
+          <span style="flex:1"></span>
+          <button class="ghost" onclick="reloadTable()">Refresh</button>
+        </div>
+        <div style="overflow:auto;max-width:100%">
+          <table id="fdGrid"><thead id="fdHead"></thead><tbody id="fdBody"></tbody></table>
+        </div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -265,6 +297,7 @@ async function savePw(){
 function showView(v){
   const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins' };
   Object.entries(views).forEach(([k,id])=> $(id).classList.toggle('hidden', k!==v));
+  $('viewFacility').classList.add('hidden'); // leave any open drill-down
   ['overview','facilities','users','admins'].forEach(k=>{
     const btn = $('nav'+k.charAt(0).toUpperCase()+k.slice(1));
     if (btn) btn.classList.toggle('active', k===v);
@@ -341,7 +374,7 @@ async function loadOverview(){
       : (f.online ? '<span class="dot on"></span>online' : '<span class="dot off"></span>offline');
     const ver = f.version ? esc(f.version) : '<span class="muted">—</span>';
     return `<tr>
-      <td>${esc(f.name)}${f.status!=='active'?' · <span style="color:#b22">disabled</span>':''}</td>
+      <td><button type="button" class="faclink" onclick="openFacility('${f.id}','overview')">${esc(f.name)}</button>${f.status!=='active'?' · <span style="color:#b22">disabled</span>':''}</td>
       <td>${stat}</td>
       <td>${ver}${f.behind?' <span class="pill disabled">behind</span>':''}</td>
       <td>${f.residents}</td>
@@ -423,7 +456,7 @@ async function loadFacilities(){
   const rows = r.body.facilities || [];
   $('facRows').innerHTML = rows.length ? rows.map(f => `
     <tr>
-      <td>${esc(f.name)}</td>
+      <td><button type="button" class="faclink" onclick="openFacility('${f.id}','facilities')">${esc(f.name)}</button></td>
       <td class="mono">${esc(f.id).slice(0,8)}…</td>
       <td><span class="pill ${f.status==='active'?'active':'disabled'}">${esc(f.status)}</span></td>
       <td>${esc(f.app_version)||'<span class="muted">—</span>'}</td>
@@ -456,6 +489,79 @@ async function toggleStatus(id, cur){
   const status = cur==='active' ? 'disabled' : 'active';
   await api('/api/facilities/'+id+'/status',{method:'POST',body:JSON.stringify({status})});
   loadFacilities();
+}
+
+// ── Facility detail (row-level data browser; PHI, audit-logged) ──
+let _fd = { id:null, name:'', table:null, rows:[], back:'overview' };
+const PHOTO_KEYS = ['photo','ua_photo'];
+
+async function openFacility(id, back){
+  _fd = { id, name:'', table:null, rows:[], back: back||'overview' };
+  ['viewOverview','viewFacilities','viewUsers','viewAdmins'].forEach(v=>$(v).classList.add('hidden'));
+  ['overview','facilities','users','admins'].forEach(k=>{ const b=$('nav'+k.charAt(0).toUpperCase()+k.slice(1)); if(b) b.classList.remove('active'); });
+  $('viewFacility').classList.remove('hidden');
+  $('fdRowsCard').classList.add('hidden');
+  $('fdName').textContent='Loading…'; $('fdMeta').textContent=''; $('fdTables').innerHTML='Loading…';
+  await loadFacilityTables();
+}
+function closeFacility(){ $('viewFacility').classList.add('hidden'); showView(_fd.back||'overview'); }
+
+async function loadFacilityTables(){
+  const r = await api('/api/facilities/'+_fd.id+'/stats');
+  if(!r.ok){ if(r.status===401) showLogin(); $('fdTables').innerHTML='<span class="muted">Failed to load.</span>'; return; }
+  _fd.name = (r.body.facility && r.body.facility.name) || 'Facility';
+  $('fdName').textContent = _fd.name;
+  const last = (r.body.facility && r.body.facility.last_seen_at) || 'never';
+  $('fdMeta').textContent = (r.body.total||0).toLocaleString()+' backed-up rows · last check-in '+last;
+  const tables = r.body.tables || {}, keys = Object.keys(tables);
+  $('fdTables').innerHTML = keys.length
+    ? keys.map(t=>`<button class="navbtn" style="margin:3px" onclick="openTable('${esc(t)}')">${esc(t)} <span class="dim">(${tables[t]})</span></button>`).join('')
+    : '<span class="muted">No backed-up data yet for this facility.</span>';
+}
+
+async function openTable(t){
+  _fd.table = t;
+  $('fdRowsCard').classList.remove('hidden');
+  $('fdTableName').textContent = t; $('fdRowCount').textContent='Loading…';
+  $('fdHead').innerHTML=''; $('fdBody').innerHTML='';
+  const r = await api('/api/facilities/'+_fd.id+'/rows?table='+encodeURIComponent(t)+'&limit=500');
+  if(!r.ok){ if(r.status===401) showLogin(); $('fdRowCount').textContent='Failed'; return; }
+  _fd.rows = r.body.rows || [];
+  const n = _fd.rows.length;
+  $('fdRowCount').textContent = n+' row'+(n===1?'':'s')+(n>=500?' (first 500)':'');
+  renderGrid();
+  $('fdRowsCard').scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+function reloadTable(){ if(_fd.table) openTable(_fd.table); }
+
+function trunc(v){ if(v==null) return ''; let s = (typeof v==='object') ? JSON.stringify(v) : String(v); return s.length>60 ? s.slice(0,57)+'…' : s; }
+
+function renderGrid(){
+  const rows = _fd.rows;
+  if(!rows.length){ $('fdHead').innerHTML=''; $('fdBody').innerHTML='<tr><td class="muted">No rows in this table.</td></tr>'; return; }
+  const seen=[]; rows.slice(0,50).forEach(r=>{ const d=r.data||{}; Object.keys(d).forEach(k=>{ if(!seen.includes(k)) seen.push(k); }); });
+  const cols = seen.filter(k=>!PHOTO_KEYS.includes(k)).slice(0,9);
+  $('fdHead').innerHTML = '<tr><th>id</th>'+cols.map(c=>`<th>${esc(c)}</th>`).join('')+'<th></th></tr>';
+  $('fdBody').innerHTML = rows.map((r,i)=>{
+    const d = r.data || {};
+    const cells = cols.map(c=>`<td>${esc(trunc(d[c]))}</td>`).join('');
+    return `<tr>
+        <td class="mono">${esc(r.source_id)}</td>${cells}
+        <td style="text-align:right"><button class="ghost" onclick="toggleRow(${i})">Details</button></td>
+      </tr>
+      <tr id="det-${i}" class="hidden"><td colspan="${cols.length+2}">${rowDetail(d)}</td></tr>`;
+  }).join('');
+}
+function toggleRow(i){ const el=$('det-'+i); if(el) el.classList.toggle('hidden'); }
+function rowDetail(d){
+  const parts = Object.keys(d).map(k=>{
+    const v = d[k];
+    if(PHOTO_KEYS.includes(k) && typeof v==='string' && v.startsWith('data:'))
+      return `<div style="margin:8px 0"><b>${esc(k)}</b><br><img src="${esc(v)}" alt="${esc(k)}" style="max-height:200px;max-width:100%;border-radius:8px;border:1px solid var(--line);margin-top:4px"/></div>`;
+    const s = (v && typeof v==='object') ? JSON.stringify(v,null,2) : String(v==null?'':v);
+    return `<div style="margin:4px 0"><b>${esc(k)}:</b> <span class="mono" style="white-space:pre-wrap;word-break:break-word">${esc(s)}</span></div>`;
+  }).join('');
+  return `<div class="det-box">${parts||'<span class="muted">empty row</span>'}</div>`;
 }
 
 boot();

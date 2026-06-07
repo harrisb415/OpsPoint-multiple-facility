@@ -213,6 +213,10 @@ Phase 1's sync then has a backbone to attach to, and nothing patient-facing has 
 - **HQ admin accounts — COMPLETE & verified (E2E exit 0, 26 assertions).** Self-service password change, forced change-on-first-login (seeded admin is flagged `must_change_pw`), and multi-admin management on the HQ console.
   - HQ: `central_users` CRUD — `GET/POST /api/central-users`, `POST /api/central-users/:id/password` (admin reset → re-flags must-change), `DELETE /api/central-users/:id`. **Lock-out rails:** cannot delete yourself or the last remaining admin. **Server-side teeth:** `requireAdmin` blocks every admin API except the password change itself while `must_change_pw` is set (not just UI-gated).
   - Console: header "Change password" action, forced change-password view (no Cancel until done), new "HQ Admins" tab (add admin / reset password / delete). HQ admins log into the console only — they never sync to any facility (distinct from managed_users).
+- **Per-facility row-level data browser (PHI) — COMPLETE & verified (E2E exit 0, 17 assertions; visual check via preview).** Click any facility in the console → drill-down page that browses the backed-up mirror.
+  - HQ: reuses `/api/facilities/:id/stats` (per-table counts) + `/api/facilities/:id/rows?table=&limit=` (the raw records). The rows endpoint now caps `limit` (≤2000) and writes a `phi.view` **audit entry** (actor + facility + table + count) on every access — `/stats` does NOT (counts aren't PHI).
+  - Console: drill-down view with a red PHI banner, per-table buttons, a generic JSON grid (union-of-keys columns, expandable per-row detail), and inline photo rendering (synced photos are `data:` URIs). Facility names are buttons → `openFacility`.
+  - **PHI boundary made explicit:** the Overview stays counts-only (minimum-necessary); this browser is the deliberate place where the full mirror — incl. names, narratives, photos — is viewable, and every view is logged. Future hardening noted: a per-admin PHI-view permission + an in-console audit viewer.
 
 ---
 

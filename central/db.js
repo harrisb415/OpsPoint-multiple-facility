@@ -358,7 +358,8 @@ function reportOverview() {
       incidents_open:  _count(f.id, 'incidents', "json_extract(data,'$.status')='open'"),
       incidents_total: _count(f.id, 'incidents'),
       ua_total:        _count(f.id, 'ua_records'),
-      ua_positive:     _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='positive'"),
+      // Facility stores UA outcome as pass/fail (fail = positive), NOT positive/negative.
+      ua_positive:     _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='fail'"),
       med_logs:        _count(f.id, 'med_administration_log'),
       rows_total:      ct.total,
       applied_through: ct.applied_through,

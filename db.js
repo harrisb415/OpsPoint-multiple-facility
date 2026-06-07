@@ -1406,8 +1406,9 @@ function upsertReport(r) {
 function auditLog(actorId, actorName, ip, action, targetType, targetId, targetLabel, detail) {
   try {
     _run(
-      `INSERT INTO audit_log (actor_id,actor_name,ip,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?)`,
+      `INSERT INTO audit_log (ts,actor_id,actor_name,ip,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)`,
       [
+        nowLocal(),                 // local time, not UTC datetime('now')
         actorId || null,
         String(actorName || '').slice(0, 100),
         String(ip || '').slice(0, 60),
@@ -1449,7 +1450,9 @@ function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} 
 function pruneAuditLog(days) {
   days = days || 365;
   try {
-    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+    // Local-time cutoff to match the local-time ts written by auditLog().
+    const d = new Date(Date.now() - days * 24 * 60 * 60 * 1000), p = n => String(n).padStart(2, '0');
+    const cutoff = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     _run('DELETE FROM audit_log WHERE ts < ?', [cutoff]);
   } catch(e) {}
 }
@@ -1541,10 +1544,10 @@ function _clinicalAudit(db, userId, action, table, recordId, detail) {
       if (u) name = u.display_name || u.username || '';
     } catch (e) { /* users table may be absent in isolated test dbs */ }
     db.prepare(
-      `INSERT INTO audit_log (actor_id,actor_name,ip,action,target_type,target_id,target_label,detail)
-       VALUES (?,?,?,?,?,?,?,?)`
+      `INSERT INTO audit_log (ts,actor_id,actor_name,ip,action,target_type,target_id,target_label,detail)
+       VALUES (?,?,?,?,?,?,?,?,?)`
     ).run(
-      userId || null, String(name).slice(0, 100), '',
+      nowLocal(), userId || null, String(name).slice(0, 100), '',
       String(action), String(table).slice(0, 50),
       recordId != null ? String(recordId) : '', '',
       (detail && typeof detail === 'object') ? JSON.stringify(detail).slice(0, 2000) : String(detail || '').slice(0, 2000)

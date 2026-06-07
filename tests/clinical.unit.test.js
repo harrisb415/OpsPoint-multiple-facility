@@ -48,6 +48,22 @@ describe('migration', () => {
   });
 });
 
+describe('audit timestamps', () => {
+  // Regression: audit rows must be written in LOCAL time, not UTC. The client
+  // renders ts with `new Date(ts)`, which parses "YYYY-MM-DD HH:MM:SS" as local;
+  // if a row were stored as UTC (datetime('now')) it would display hours off.
+  test('clinical audit ts is local wall-clock, matching the current instant', () => {
+    const before = Date.now();
+    clinicalDb.notes.create(db, { client_id: 1, author_id: 1, note_type: 'progress', note_date: '2026-06-02', content: 'tz' });
+    const row = db.prepare('SELECT ts FROM audit_log ORDER BY id DESC LIMIT 1').get();
+    expect(row && row.ts).toBeTruthy();
+    expect(row.ts).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    // Interpreted as local (as the UI does), it equals ~now. A UTC-stored value
+    // would be off by the timezone offset on any non-UTC host.
+    expect(Math.abs(new Date(row.ts).getTime() - before)).toBeLessThan(60000);
+  });
+});
+
 describe('clinical_notes', () => {
   test('create / getById / getByClient / getAll', () => {
     const n = clinicalDb.notes.create(db, { client_id: 1, author_id: 1, note_type: 'progress', note_date: '2026-06-02', content: 'x' });

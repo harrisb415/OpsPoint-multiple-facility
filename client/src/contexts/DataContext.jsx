@@ -40,7 +40,7 @@ export function DataProvider({ children }) {
 
   const saveDismissed = useCallback(() => {
     try { localStorage.setItem(bcKey(), JSON.stringify(Array.from(dismissedBCIds.current))) }
-    catch {}
+    catch { /* localStorage unavailable — ignore */ }
   }, [bcKey])
 
   const dismissBroadcast = useCallback((id) => {
@@ -169,7 +169,7 @@ export function DataProvider({ children }) {
         setWsConnected(true)
       }
       ws.onmessage = (evt) => {
-        try { handleMessage(JSON.parse(evt.data)) } catch {}
+        try { handleMessage(JSON.parse(evt.data)) } catch { /* ignore malformed message */ }
       }
       ws.onclose = () => {
         setWsConnected(false)
@@ -201,7 +201,7 @@ export function DataProvider({ children }) {
         case 'milestones_updated':
         case 'incidents_updated':
         case 'discharge_records_updated':
-        // ── Structured Clinical Lite (create/update/sign/delete × 5 entities) ──
+        // ── Structured Clinical Lite (create/update/sign/delete × 5 entities); all fall through to loadData() ──
         case 'clinical_note_created':     case 'clinical_note_updated':
         case 'clinical_note_signed':      case 'clinical_note_deleted':
         case 'treatment_plan_created':    case 'treatment_plan_updated':
@@ -335,7 +335,7 @@ export function DataProvider({ children }) {
       try {
         const r = await fetch('/api/heartbeat', { credentials:'include' })
         if (r.status === 401 && !cancelled) setSessionExpired(true)
-      } catch {}
+      } catch { /* heartbeat network error — retry next tick */ }
     }
     const id = setInterval(check, 60_000)
     return () => { cancelled = true; clearInterval(id) }
@@ -434,7 +434,7 @@ export function useData() {
 let _audioCtx = null
 function _getAudioCtx() {
   if (_audioCtx) return _audioCtx
-  try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)() } catch {}
+  try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)() } catch { /* Web Audio unsupported */ }
   return _audioCtx
 }
 // Warm up on first interaction
@@ -454,7 +454,7 @@ function _beep(ctx, freq, delay, dur, wave, vol) {
     g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + dur)
     o.start(ctx.currentTime + delay)
     o.stop(ctx.currentTime + delay + dur + 0.05)
-  } catch {}
+  } catch { /* audio node failure — ignore */ }
 }
 
 export function playSound(type) {
@@ -474,5 +474,5 @@ export function playSound(type) {
       _beep(ctx, 523, 0,  .15, 'sine', .22)
       _beep(ctx, 659, .2, .25, 'sine', .22)
     }
-  } catch {}
+  } catch { /* audio playback failure — ignore */ }
 }

@@ -1334,12 +1334,6 @@ function ShiftTimes({ settings, onSave, saving }) {
   const [grave, setGrave] = useState(settings.shift_grave_start || '23:00')
   const [saved, setSaved] = useState(false)
 
-  function fmtShift(start, end) {
-    const fmt = t => { const [h, m] = t.split(':'); const hr = parseInt(h); return `${hr % 12 || 12}:${m} ${hr < 12 ? 'AM' : 'PM'}` }
-    const endTime = end.split(':').map((v, i) => i === 1 ? String((parseInt(v) - 30 + 60) % 60).padStart(2, '0') : String((parseInt(v) + (parseInt(end.split(':')[1]) < 30 ? -1 : 0) + 24) % 24).padStart(2, '0')).join(':')
-    return `${fmt(start)} – ${fmt(endTime)}`
-  }
-
   async function save() {
     const ok = await onSave({ shift_day_start: day, shift_swing_start: swing, shift_grave_start: grave })
     if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }

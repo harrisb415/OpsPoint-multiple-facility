@@ -109,16 +109,6 @@ function getMostRecentLogTime(entries, keyword) {
   return best
 }
 
-function calcReminderStatus(last, intervalMins) {
-  const intervalMs = intervalMins * 60000
-  if (!last) return { status: 'overdue', elapsed: null, remaining: 0 }
-  const elapsed = Date.now() - last.getTime()
-  const remaining = intervalMs - elapsed
-  if (remaining <= 0) return { status: 'overdue', elapsed, remaining }
-  if (remaining <= 15 * 60000) return { status: 'warn', elapsed, remaining }
-  return { status: 'ok', elapsed, remaining }
-}
-
 // ── Main component ────────────────────────────────────────────────────
 export default function ReportTab() {
   const { data, patchData, saveData, loadData } = useData()
@@ -958,7 +948,7 @@ export default function ReportTab() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
-function sortBtnStyle(active, dir) {
+function sortBtnStyle(active) {
   return {
     padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
     fontSize: '.7rem', fontWeight: 600,

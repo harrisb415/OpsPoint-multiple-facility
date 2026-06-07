@@ -32,6 +32,8 @@ cd client && npm run lint
 
 **Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `https://localhost:3000` — the backend **must** be running with TLS (`data/cert.pem` + `data/key.pem` must exist) or the proxy will fail with SSL errors. Run `node generate_cert.js` first if certs don't exist.
 
+**Always lint code changes.** When adding or modifying code, lint before considering the work done — never leave a change unlinted. Frontend: `cd client && npm run lint`. Server-side JS (no eslint config): `node --check <file>` to catch syntax errors. Do not introduce new lint errors; the repo already carries pre-existing debt in untouched files, so any new error you add is yours to fix.
+
 **Windows scripts:** `run.bat` installs dependencies and starts the server in one step. `install_startup.bat` (run as administrator) registers a Windows Scheduled Task for boot-time autostart under `NetworkService`.
 
 **Rehash on every commit/push.** After *every* `git commit` + `git push`, recompute the repo content digest and record the new value as the integrity baseline (in the auto-memory baseline note). Run from the repo root after pushing:

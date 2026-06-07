@@ -23,6 +23,12 @@ data/backups/
 # Release builder output (scripts/release.mjs)
 release/
 
+# Release SIGNING private key — NEVER commit. Back this up securely; if lost,
+# generate a new keypair and re-pin the public key in updater.js + central/updater.js.
+release-private.pem
+central/data/
+central/data_*/
+
 # Claude Code local settings
 .claude/settings.local.json
 

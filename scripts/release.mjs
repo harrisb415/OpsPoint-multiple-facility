@@ -19,7 +19,7 @@
  * into place. It deliberately excludes node_modules/ and data/.
  */
 import { execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, createPrivateKey, sign as edSign } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -69,6 +69,20 @@ const buf = fs.readFileSync(ZIP);
 const sha256 = createHash('sha256').update(buf).digest('hex');
 const size = buf.length;
 
+// 4b. Sign "version\nsize\nsha256" with the Ed25519 release private key. The
+// in-app updater refuses any bundle whose signature does not verify against the
+// pinned public key, so this step is mandatory.
+const KEY_PATH = process.env.OPSPOINT_RELEASE_KEY_FILE || path.join(ROOT, 'release-private.pem');
+let privPem = process.env.OPSPOINT_RELEASE_KEY || '';
+if (!privPem) {
+  if (!fs.existsSync(KEY_PATH)) {
+    console.error(`\n✗ Release signing key not found.\n  Set OPSPOINT_RELEASE_KEY (PEM contents) or OPSPOINT_RELEASE_KEY_FILE, or place the key at ${path.relative(ROOT, KEY_PATH)}.\n  Generate one with: node scripts/gen-release-key.mjs\n`);
+    process.exit(1);
+  }
+  privPem = fs.readFileSync(KEY_PATH, 'utf8');
+}
+const signature = edSign(null, Buffer.from(`${VER}\n${size}\n${sha256}`, 'utf8'), createPrivateKey(privPem)).toString('base64');
+
 // 5. Rewrite manifest (preserve changelog/min_* if already present)
 const manifestPath = path.join(ROOT, 'update-manifest.json');
 let prev = {};
@@ -82,6 +96,8 @@ const manifest = {
   url: `https://github.com/${REPO}/releases/download/v${VER}/opspoint-${VER}.zip`,
   sha256,
   size,
+  sig_alg: 'ed25519',
+  signature,
   changelog: Array.isArray(prev.changelog) ? prev.changelog : [],
 };
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');

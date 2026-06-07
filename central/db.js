@@ -170,6 +170,13 @@ function _seedDefaults() {
   if (!getSetting('session_secret'))
     setSetting('session_secret', crypto.randomBytes(32).toString('hex'));
 
+  // HQ self-update manifest (central tier). Points at the public releases repo's
+  // latest central manifest; editable from the console. apply() still requires a
+  // valid Ed25519 signature regardless of source.
+  if (getSetting('central_update_manifest_url') === null)
+    setSetting('central_update_manifest_url',
+      'https://github.com/harrisb415/opspoint-releases/releases/latest/download/central-manifest.json');
+
   const cnt = _q1('SELECT COUNT(*) AS c FROM central_users');
   if (!cnt || cnt.c === 0) {
     const pw = process.env.CENTRAL_ADMIN_PW || _randPw();

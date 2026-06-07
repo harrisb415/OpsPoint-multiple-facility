@@ -1,23 +1,23 @@
 'use strict';
 /**
- * OpsPoint — Option B updater.
+ * OpsPoint Central — self-updater (HQ tier).
  *
- * Pull-based, integrity-checked, on-prem update mechanism:
- *   check()  — fetch the manifest, compare versions
- *   apply()  — download -> verify sha256 -> extract -> backup (db + code)
- *              -> swap runtime files -> (optional npm install) -> restart
+ * Same model as the facility updater.js, scoped to the central server:
+ *   check()  — fetch the central manifest, compare versions
+ *   apply()  — download -> verify sha256 + Ed25519 signature -> extract
+ *              -> backup (central.db + code) -> swap runtime files
+ *              -> (optional npm install) -> restart
  *   rollback() — restore code from the most recent backup, then restart
  *
- * Windows-only deployment: zip extraction uses the built-in `tar` (bsdtar)
- * with a PowerShell `Expand-Archive` fallback — no runtime npm dependency.
+ * Differences from the facility updater:
+ *   - runtime payload is server.js/db.js/updater.js/package*.json + public/
+ *     (no client/dist, no migrations dir)
+ *   - bundle is sanity-checked for server.js + public/index.html
+ *   - no WebSocket: progress is read by the console polling status()
  *
- * Security:
- *   - manifest + download hosts are allow-listed (github.com / *.githubusercontent.com
- *     plus the configured manifest host); redirects only follow to allowed hosts
- *   - the downloaded bundle's sha256 (and size) MUST match the manifest or apply aborts
- *   - the extracted bundle is sanity-checked (server.js + client/dist/index.html present)
- *
- * No side effects on require — call createUpdater(ctx) to get an instance.
+ * Security: download hosts are allow-listed; the bundle's sha256 AND a vendor
+ * Ed25519 signature over "version\nsize\nsha256" MUST verify against the pinned
+ * key below, or apply() aborts. The pinned key is identical to the facility's.
  */
 const fs = require('fs');
 const path = require('path');
@@ -26,23 +26,18 @@ const https = require('https');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 
-// Host families always trusted for manifest + bundle downloads.
 const ALLOWED_HOST_SUFFIXES = ['github.com', 'githubusercontent.com'];
 
-// Pinned Ed25519 release public key. Bundles are signed at release time with the
-// matching PRIVATE key, held offline by the vendor (scripts/release.mjs). apply()
-// refuses any manifest without a valid signature over "version\nsize\nsha256", so
-// a compromised manifest host or HQ relay cannot push code this node will install.
+// Pinned Ed25519 release public key (same key the facility updater pins).
 const RELEASE_PUBKEY_PEM = `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAFtGFXRfmB1goFWdp+CGmv+LqC6LsQOdmCZe79038Y0U=
 -----END PUBLIC KEY-----`;
 
-// Runtime files/dirs that an update bundle may replace. `data/` and
-// `node_modules/` are NEVER touched.
-const RUNTIME_FILES = ['server.js', 'updater.js', 'db.js', 'package.json', 'package-lock.json'];
-const RUNTIME_DIRS = ['migrations', path.join('client', 'dist')];
+// Central runtime files/dirs an update bundle may replace. data/ and
+// node_modules/ are NEVER touched.
+const RUNTIME_FILES = ['server.js', 'db.js', 'updater.js', 'package.json', 'package-lock.json'];
+const RUNTIME_DIRS = ['public'];
 
-// ── semver compare (numeric core only; ignores pre-release tags) ──────
 function cmpSemver(a, b) {
   const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
   const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
@@ -60,13 +55,12 @@ function hostAllowed(urlStr, extra = []) {
   return suffixes.some(s => h === s || h.endsWith('.' + s));
 }
 
-// Stream a GET, following redirects only to allow-listed hosts.
 function _get(urlStr, allowHosts, redirectsLeft, cb) {
   let u;
   try { u = new URL(urlStr); } catch (e) { return cb(e); }
   if (!hostAllowed(urlStr, allowHosts)) return cb(new Error('Host not allowed: ' + u.host));
   const lib = u.protocol === 'http:' ? http : https;
-  const req = lib.get(urlStr, { headers: { 'User-Agent': 'OpsPoint-Updater' } }, (res) => {
+  const req = lib.get(urlStr, { headers: { 'User-Agent': 'OpsPoint-Central-Updater' } }, (res) => {
     if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
       res.resume();
       if (redirectsLeft <= 0) return cb(new Error('Too many redirects'));
@@ -80,24 +74,18 @@ function _get(urlStr, allowHosts, redirectsLeft, cb) {
   req.setTimeout(30000, () => req.destroy(new Error('Request timed out')));
 }
 
-// Fetch a small resource (manifest) into memory, capped.
 function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     _get(urlStr, allowHosts, 5, (err, res) => {
       if (err) return reject(err);
       const chunks = []; let len = 0;
-      res.on('data', d => {
-        len += d.length;
-        if (len > maxBytes) { res.destroy(); return reject(new Error('Response too large')); }
-        chunks.push(d);
-      });
+      res.on('data', d => { len += d.length; if (len > maxBytes) { res.destroy(); return reject(new Error('Response too large')); } chunks.push(d); });
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
     });
   });
 }
 
-// Download a (potentially large) resource to disk, with progress callback.
 function downloadToFile(urlStr, dest, allowHosts, onProgress) {
   return new Promise((resolve, reject) => {
     _get(urlStr, allowHosts, 5, (err, res) => {
@@ -124,9 +112,6 @@ function sha256File(p) {
   });
 }
 
-// Verify the manifest's Ed25519 signature over "version\nsize\nsha256" against the
-// pinned public key. Returns true only on a valid signature. Because the signed
-// payload includes the bundle sha256, a valid signature authenticates the bundle.
 function verifyManifestSignature(m) {
   if (!m || !m.signature || !m.sha256 || !m.version) return false;
   try {
@@ -136,8 +121,6 @@ function verifyManifestSignature(m) {
   } catch (e) { return false; }
 }
 
-// Extract a .zip on Windows: try bsdtar (built in since Win10 1803), then
-// fall back to PowerShell Expand-Archive.
 function extractZip(zipPath, destDir) {
   return new Promise((resolve, reject) => {
     fs.mkdirSync(destDir, { recursive: true });
@@ -162,16 +145,16 @@ function tsStamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
 
 /**
  * @param {object} ctx
- * @param {string} ctx.baseDir   app root (server.js lives here)
- * @param {string} ctx.dataDir   writable data dir
- * @param {string} ctx.dbPath    path to opspoint.db
- * @param {object} ctx.db        db module (getSetting, query, run, auditLog)
- * @param {function} ctx.broadcast  WS broadcast(msg)
- * @param {function} ctx.restart    performs the spawn-detached + exit restart
+ * @param {string} ctx.baseDir    central app root (this file lives here)
+ * @param {string} ctx.dataDir    central data dir
+ * @param {string} ctx.dbPath     path to central.db
+ * @param {function} ctx.getSetting (key, def) => value
+ * @param {function} ctx.audit     ({actor,action,target,detail}) => void
+ * @param {function} ctx.restart   spawn-detached + exit restart
  * @param {function} [ctx.log]
  */
 function createUpdater(ctx) {
-  const { baseDir, dataDir, dbPath, db, broadcast, restart } = ctx;
+  const { baseDir, dataDir, dbPath, getSetting, audit, restart } = ctx;
   const log = ctx.log || (() => {});
 
   const UP_DIR = path.join(dataDir, 'updates');
@@ -183,10 +166,7 @@ function createUpdater(ctx) {
   let lastManifest = null;
   let lastChecked = null;
 
-  function setState(patch) {
-    state = Object.assign({}, state, patch);
-    try { broadcast({ type: 'update_progress', state: publicState() }); } catch (e) {}
-  }
+  function setState(patch) { state = Object.assign({}, state, patch); }
   function publicState() {
     return { phase: state.phase, pct: state.pct, message: state.message, error: state.error, applying: state.applying, target: state.target };
   }
@@ -194,12 +174,13 @@ function createUpdater(ctx) {
     try { return require(path.join(baseDir, 'package.json')).version || '0.0.0'; }
     catch (e) { return '0.0.0'; }
   }
-  function manifestUrl() { return (db.getSetting('update_manifest_url', '') || '').trim(); }
+  function _audit(action, detail) { try { audit && audit({ actor: 'system', action, target: 'central', detail: detail || '' }); } catch (e) {} }
+  function manifestUrl() { return String(getSetting('central_update_manifest_url', '') || '').trim(); }
   function manifestHost() { try { return new URL(manifestUrl()).host; } catch (e) { return ''; } }
 
   async function fetchManifest() {
     const url = manifestUrl();
-    if (!url) throw new Error('No update manifest URL configured');
+    if (!url) throw new Error('No central update manifest URL configured');
     if (!hostAllowed(url, [manifestHost()])) throw new Error('Manifest host is not allow-listed');
     const buf = await fetchBuffer(url, [manifestHost()]);
     let m;
@@ -212,13 +193,11 @@ function createUpdater(ctx) {
   function summarize(m) {
     const cur = currentVersion();
     return {
-      current: cur,
-      latest: m.version,
+      current: cur, latest: m.version,
       available: cmpSemver(m.version, cur) > 0,
       mandatory: !!m.mandatory,
       changelog: Array.isArray(m.changelog) ? m.changelog : [],
-      released: m.released || null,
-      size: m.size || null,
+      released: m.released || null, size: m.size || null,
       min_node: m.min_node || null,
       signed: verifyManifestSignature(m),
     };
@@ -226,7 +205,7 @@ function createUpdater(ctx) {
 
   async function check() {
     const m = await fetchManifest();
-    try { db.auditLog(null, 'system', '127.0.0.1', 'update.check', 'system', null, m.version, { current: currentVersion() }); } catch (e) {}
+    _audit('update.check', currentVersion() + ' -> ' + m.version);
     return summarize(m);
   }
 
@@ -243,12 +222,9 @@ function createUpdater(ctx) {
     };
   }
 
-  // Background apply: drives state, ends in a restart. Throws are captured
-  // into state so the polling client can surface them.
   async function apply(actorName) {
     if (state.applying) throw new Error('An update is already in progress');
     state = { phase: 'preflight', pct: 3, message: 'Preparing…', error: null, applying: true, target: null };
-    setState({});
     let backupPath = null;
     try {
       const cur = currentVersion();
@@ -269,32 +245,30 @@ function createUpdater(ctx) {
 
       // 1. Download
       setState({ phase: 'download', pct: 12, message: 'Downloading v' + ver + '…' });
-      const zipPath = path.join(STAGING, 'opspoint-' + ver + '.zip');
+      const zipPath = path.join(STAGING, 'opscentral-' + ver + '.zip');
       rmrf(zipPath);
       await downloadToFile(m.url, zipPath, [manifestHost()], (got, total) => {
         if (total > 0) setState({ phase: 'download', pct: 12 + Math.round((got / total) * 28), message: 'Downloading v' + ver + '… ' + Math.round((got / total) * 100) + '%' });
       });
 
-      // 2. Verify
+      // 2. Verify checksum + signature
       setState({ phase: 'verify', pct: 44, message: 'Verifying checksum…' });
       if (m.size && fs.statSync(zipPath).size !== m.size) throw new Error('Downloaded size does not match manifest');
       const digest = await sha256File(zipPath);
       if (digest.toLowerCase() !== String(m.sha256).toLowerCase())
         throw new Error('Checksum mismatch — refusing to install (expected ' + m.sha256 + ', got ' + digest + ')');
-
-      // Authenticity: the signed payload binds version+size+sha256, so a valid
-      // signature over the verified hash proves the bundle came from the vendor.
+      setState({ phase: 'verify', pct: 48, message: 'Verifying signature…' });
       if (!verifyManifestSignature(m))
         throw new Error('Release signature missing or invalid — refusing to install. Bundle must be signed with the OpsPoint release key.');
 
-      // 3. Extract + sanity-check the bundle
+      // 3. Extract + sanity-check
       setState({ phase: 'extract', pct: 54, message: 'Extracting…' });
       const stageDir = path.join(STAGING, ver);
       rmrf(stageDir);
       await extractZip(zipPath, stageDir);
       const root = _bundleRoot(stageDir);
-      if (!fs.existsSync(path.join(root, 'server.js')) || !fs.existsSync(path.join(root, 'client', 'dist', 'index.html')))
-        throw new Error('Bundle is missing server.js or client/dist — aborting');
+      if (!fs.existsSync(path.join(root, 'server.js')) || !fs.existsSync(path.join(root, 'public', 'index.html')))
+        throw new Error('Bundle is missing server.js or public/index.html — aborting');
 
       // 4. Backup current code + database
       setState({ phase: 'backup', pct: 68, message: 'Backing up current install…' });
@@ -306,39 +280,31 @@ function createUpdater(ctx) {
       fs.writeFileSync(path.join(UP_DIR, 'last-backup.txt'), backupPath);
       _backupDatabase(ver);
 
-      // 5. Swap runtime files into place
+      // 5. Swap runtime files
       setState({ phase: 'swap', pct: 82, message: 'Applying files…' });
       for (const f of RUNTIME_FILES) { const s = path.join(root, f); if (fs.existsSync(s)) copyAny(s, path.join(baseDir, f)); }
       for (const d of RUNTIME_DIRS) { const s = path.join(root, d); if (fs.existsSync(s)) { rmrf(path.join(baseDir, d)); copyAny(s, path.join(baseDir, d)); } }
 
       // 6. Dependencies — only if the lockfile changed
-      const oldLock = path.join(backupPath, 'package-lock.json');
-      const newLock = path.join(baseDir, 'package-lock.json');
-      if (_changed(oldLock, newLock)) {
+      if (_changed(path.join(backupPath, 'package-lock.json'), path.join(baseDir, 'package-lock.json'))) {
         setState({ phase: 'deps', pct: 90, message: 'Updating dependencies…' });
         await _npmInstall();
       }
 
       // 7. Done — record + restart
       fs.writeFileSync(path.join(UP_DIR, 'last-applied.json'), JSON.stringify({ from: cur, to: ver, ts: new Date().toISOString(), by: actorName || 'system' }, null, 2));
-      try { db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.apply', 'system', null, cur + ' -> ' + ver, { backup: backupPath }); db.save && db.save(); } catch (e) {}
+      _audit('update.apply', cur + ' -> ' + ver);
       setState({ phase: 'done', pct: 100, message: 'Updated to v' + ver + ' — restarting…', applying: false });
-      try { broadcast({ type: 'update_done', from: cur, to: ver }); } catch (e) {}
-      try { broadcast({ type: 'server_restarting', user: actorName || 'updater' }); } catch (e) {}
       setTimeout(() => { try { restart && restart(); } catch (e) {} }, 800);
       return { ok: true, from: cur, to: ver };
     } catch (e) {
-      log('update apply failed:', e && e.message);
+      log('central update apply failed:', e && e.message);
       setState({ phase: 'error', message: 'Update failed', error: (e && e.message) || String(e), applying: false });
-      try { broadcast({ type: 'update_error', error: (e && e.message) || String(e) }); } catch (er) {}
-      try { db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.error', 'system', null, (e && e.message) || '', {}); } catch (er) {}
+      _audit('update.error', (e && e.message) || '');
       throw e;
     }
   }
 
-  // Restore code from the most recent backup, then restart. DB is left as-is
-  // (migrations are additive/idempotent); the pre-update DB copy remains in
-  // data/backups/ for manual restore if ever needed.
   async function rollback(actorName) {
     const ptrFile = path.join(UP_DIR, 'last-backup.txt');
     if (!fs.existsSync(ptrFile)) throw new Error('No backup recorded to roll back to');
@@ -348,9 +314,8 @@ function createUpdater(ctx) {
     for (const f of RUNTIME_FILES) { const s = path.join(backupPath, f); if (fs.existsSync(s)) copyAny(s, path.join(baseDir, f)); }
     for (const d of RUNTIME_DIRS) { const s = path.join(backupPath, d); if (fs.existsSync(s)) { rmrf(path.join(baseDir, d)); copyAny(s, path.join(baseDir, d)); } }
     let meta = {}; try { meta = JSON.parse(fs.readFileSync(path.join(backupPath, 'BACKUP.json'), 'utf8')); } catch (e) {}
-    try { db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.rollback', 'system', null, (meta.to || '?') + ' -> ' + (meta.from || '?'), {}); db.save && db.save(); } catch (e) {}
+    _audit('update.rollback', (meta.to || '?') + ' -> ' + (meta.from || '?'));
     setState({ phase: 'done', pct: 100, message: 'Rolled back — restarting…', applying: false });
-    try { broadcast({ type: 'server_restarting', user: actorName || 'updater' }); } catch (e) {}
     setTimeout(() => { try { restart && restart(); } catch (e) {} }, 800);
     return { ok: true, restored: meta.from || null };
   }
@@ -363,15 +328,10 @@ function createUpdater(ctx) {
     } catch (e) { return []; }
   }
 
-  // ── internals ──────────────────────────────────────────────────────
-  // Some zips wrap everything in a top-level folder; detect it.
   function _bundleRoot(dir) {
     if (fs.existsSync(path.join(dir, 'server.js'))) return dir;
     const entries = fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory());
-    for (const e of entries) {
-      const sub = path.join(dir, e.name);
-      if (fs.existsSync(path.join(sub, 'server.js'))) return sub;
-    }
+    for (const e of entries) { const sub = path.join(dir, e.name); if (fs.existsSync(path.join(sub, 'server.js'))) return sub; }
     return dir;
   }
   function _changed(a, b) {
@@ -383,12 +343,11 @@ function createUpdater(ctx) {
   }
   function _backupDatabase(ver) {
     try {
-      try { db.run && db.run('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) {}
       if (fs.existsSync(dbPath)) {
-        const out = path.join(DB_BACKUP_DIR, 'opspoint-' + tsStamp() + '-pre-' + ver + '.db');
+        const out = path.join(DB_BACKUP_DIR, 'central-' + tsStamp() + '-pre-' + ver + '.db');
         fs.copyFileSync(dbPath, out);
       }
-    } catch (e) { log('db backup failed:', e && e.message); }
+    } catch (e) { log('central db backup failed:', e && e.message); }
   }
   function _npmInstall() {
     return new Promise((resolve, reject) => {

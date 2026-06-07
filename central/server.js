@@ -303,6 +303,46 @@ app.get('/sync/users', requireFacilityKey, (req, res) => {
   res.json({ ok: true, users: db.getManagedUsersForFacility(req.facility.id) });
 });
 
+// ── HQ self-update (Option B updater for the central tier; admin) ─────────
+// Respawn this process detached, then exit — used after a successful apply/rollback.
+function restartServer() {
+  const { spawn } = require('child_process');
+  const child = spawn(process.execPath, [path.join(__dirname, 'server.js')],
+    { detached: true, stdio: 'ignore', cwd: __dirname, env: process.env });
+  child.unref();
+  setTimeout(() => process.exit(0), 200);
+}
+const { createUpdater } = require('./updater');
+const updater = createUpdater({
+  baseDir: __dirname,
+  dataDir: DATA_DIR,
+  dbPath: path.join(DATA_DIR, 'central.db'),
+  getSetting: db.getSetting,
+  audit: db.audit,
+  restart: restartServer,
+  log: (...a) => console.log('[central-updater]', ...a),
+});
+
+app.get('/api/update/status', requireAdmin, (req, res) => res.json(updater.status()));
+app.post('/api/update/check', requireAdmin, async (req, res) => {
+  try { res.json(await updater.check()); }
+  catch (e) { res.status(502).json({ error: (e && e.message) || 'Check failed' }); }
+});
+app.post('/api/update/apply', requireAdmin, (req, res) => {
+  const st = updater.status();
+  if (st.progress && st.progress.applying) return res.status(409).json({ error: 'An update is already in progress' });
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'update.apply.start', target: 'central', detail: 'HQ software update started', ip: clientIp(req) });
+  updater.apply(actor && actor.username).catch(() => {}); // background; console polls /status
+  res.json({ ok: true, started: true });
+});
+app.get('/api/update/backups', requireAdmin, (req, res) => res.json(updater.backups()));
+app.post('/api/update/rollback', requireAdmin, async (req, res) => {
+  const actor = db.getUser(req.session.userId);
+  try { res.json(await updater.rollback(actor && actor.username)); }
+  catch (e) { res.status(400).json({ error: (e && e.message) || 'Rollback failed' }); }
+});
+
 // ── Console (static SPA-ish single page) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

@@ -108,6 +108,7 @@
       <button id="navFacilities" class="navbtn" onclick="showView('facilities')">Facilities</button>
       <button id="navUsers" class="navbtn" onclick="showView('users')">Users</button>
       <button id="navAdmins" class="navbtn" onclick="showView('admins')">HQ Admins</button>
+      <button id="navSystem" class="navbtn" onclick="showView('system')">System</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -248,6 +249,42 @@
         </div>
       </div>
     </div>
+
+    <!-- SYSTEM (HQ self-update) -->
+    <div id="viewSystem" class="hidden">
+      <div class="card">
+        <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h2 style="margin:0">HQ software updates</h2>
+          <button class="ghost" onclick="checkUpdate()">Check for updates</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <div>Current version: <b id="updCurrent">…</b></div>
+          <span id="updLatest" class="dim"></span>
+          <span id="updSigned"></span>
+          <span style="flex:1"></span>
+          <button id="updInstall" class="gold hidden" onclick="applyUpdate()">Download &amp; install</button>
+        </div>
+        <div id="updProgress" class="hidden" style="margin-top:14px">
+          <div style="height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden">
+            <div id="updBar" style="height:100%;width:0;background:var(--teal-600);transition:width .3s"></div>
+          </div>
+          <div id="updMsg" class="dim" style="margin-top:6px"></div>
+        </div>
+        <div id="updErr" class="err"></div>
+        <div id="updChangelog" class="dim" style="margin-top:10px"></div>
+        <div class="dim" style="margin-top:10px">Updates must be signed with the OpsPoint release key — the server refuses anything unsigned, tampered, or from a non-allow-listed host. A full backup (code + central.db) is taken before applying; roll back below if needed. The HQ server restarts to finish.</div>
+      </div>
+      <div class="card">
+        <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h2 style="margin:0">Backups</h2>
+          <button class="ghost" onclick="rollbackUpdate()">Roll back to previous</button>
+        </div>
+        <table>
+          <thead><tr><th>From</th><th>To</th><th>When</th></tr></thead>
+          <tbody id="updBackups"><tr><td colspan="3" class="muted">None yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -295,16 +332,17 @@ async function savePw(){
 }
 
 function showView(v){
-  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins' };
+  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins', system:'viewSystem' };
   Object.entries(views).forEach(([k,id])=> $(id).classList.toggle('hidden', k!==v));
   $('viewFacility').classList.add('hidden'); // leave any open drill-down
-  ['overview','facilities','users','admins'].forEach(k=>{
+  ['overview','facilities','users','admins','system'].forEach(k=>{
     const btn = $('nav'+k.charAt(0).toUpperCase()+k.slice(1));
     if (btn) btn.classList.toggle('active', k===v);
   });
   if (v==='overview') loadOverview();
   else if (v==='users') loadUsers();
   else if (v==='admins') loadAdmins();
+  else if (v==='system') loadSystem();
   else loadFacilities();
 }
 
@@ -497,7 +535,7 @@ const PHOTO_KEYS = ['photo','ua_photo'];
 
 async function openFacility(id, back){
   _fd = { id, name:'', table:null, rows:[], back: back||'overview' };
-  ['viewOverview','viewFacilities','viewUsers','viewAdmins'].forEach(v=>$(v).classList.add('hidden'));
+  ['viewOverview','viewFacilities','viewUsers','viewAdmins','viewSystem'].forEach(v=>$(v).classList.add('hidden'));
   ['overview','facilities','users','admins'].forEach(k=>{ const b=$('nav'+k.charAt(0).toUpperCase()+k.slice(1)); if(b) b.classList.remove('active'); });
   $('viewFacility').classList.remove('hidden');
   $('fdRowsCard').classList.add('hidden');
@@ -562,6 +600,77 @@ function rowDetail(d){
     return `<div style="margin:4px 0"><b>${esc(k)}:</b> <span class="mono" style="white-space:pre-wrap;word-break:break-word">${esc(s)}</span></div>`;
   }).join('');
   return `<div class="det-box">${parts||'<span class="muted">empty row</span>'}</div>`;
+}
+
+// ── System / HQ self-update ──
+let _updPoll = null;
+async function loadSystem(){
+  const r = await api('/api/update/status');
+  if(!r.ok){ if(r.status===401) showLogin(); return; }
+  renderUpd(r.body);
+  loadBackups();
+  const p = r.body.progress || {};
+  if (p.applying) startUpdPoll();   // resume polling if an apply is mid-flight
+}
+function renderUpd(s){
+  $('updCurrent').textContent = s.current || '—';
+  const avail = !!(s.available && s.latest);
+  $('updLatest').textContent = s.latest ? (avail ? ('→ v'+s.latest+' available') : '· up to date') : '';
+  $('updSigned').innerHTML = (s.latest && avail) ? (s.signed ? '<span class="pill active">signed</span>' : '<span class="pill disabled">unsigned — will be refused</span>') : '';
+  $('updInstall').classList.toggle('hidden', !(avail && s.signed));
+  $('updChangelog').innerHTML = (s.changelog && s.changelog.length) ? ('<b>Changelog</b><br>'+s.changelog.map(c=>'• '+esc(c)).join('<br>')) : '';
+  const p = s.progress || {};
+  const ph = p.phase || 'idle';
+  const active = !!p.applying || !['idle','done','error'].includes(ph);
+  $('updProgress').classList.toggle('hidden', !active);
+  $('updBar').style.width = (p.pct||0)+'%';
+  $('updMsg').textContent = p.message || '';
+  $('updErr').textContent = (ph==='error' && p.error) ? p.error : '';
+}
+async function checkUpdate(){
+  $('updErr').textContent='Checking…';
+  const r = await api('/api/update/check',{method:'POST'});
+  if(!r.ok){ $('updErr').textContent=(r.body&&r.body.error)||'Check failed'; return; }
+  $('updErr').textContent='';
+  renderUpd({ current:r.body.current, latest:r.body.latest, available:r.body.available, signed:r.body.signed, changelog:r.body.changelog, progress:{phase:'idle'} });
+  loadBackups();
+}
+async function applyUpdate(){
+  if(!confirm('Download, verify, and install this update? The HQ server will restart.')) return;
+  const r = await api('/api/update/apply',{method:'POST'});
+  if(!r.ok){ $('updErr').textContent=(r.body&&r.body.error)||'Install failed to start'; return; }
+  $('updInstall').classList.add('hidden');
+  startUpdPoll();
+}
+async function rollbackUpdate(){
+  if(!confirm('Roll back to the previous HQ version? The server will restart.')) return;
+  const r = await api('/api/update/rollback',{method:'POST'});
+  if(!r.ok){ $('updErr').textContent=(r.body&&r.body.error)||'Rollback failed'; return; }
+  startUpdPoll();
+}
+function startUpdPoll(){
+  if(_updPoll) clearInterval(_updPoll);
+  _updPoll = setInterval(async ()=>{
+    try{
+      const r = await api('/api/update/status');
+      if(r.ok){
+        renderUpd(r.body);
+        const p = r.body.progress || {};
+        if(!p.applying && ['done','idle','error'].includes(p.phase||'idle')){
+          clearInterval(_updPoll); _updPoll=null;
+          if((p.phase||'')!=='error') setTimeout(loadSystem, 1500);
+        }
+      }
+    }catch(e){ /* server restarting — keep polling until it returns */ }
+  }, 1200);
+}
+async function loadBackups(){
+  const r = await api('/api/update/backups');
+  if(!r.ok) return;
+  const b = r.body || [];
+  $('updBackups').innerHTML = b.length
+    ? b.map(x=>`<tr><td>${esc(x.from)||'—'}</td><td>${esc(x.to)||'—'}</td><td class="dim">${esc(x.ts)||''}</td></tr>`).join('')
+    : `<tr><td colspan="3" class="muted">None yet.</td></tr>`;
 }
 
 boot();

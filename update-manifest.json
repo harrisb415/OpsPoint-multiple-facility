@@ -1,15 +1,17 @@
 {
-  "version": "2.3.3",
-  "released": "2026-06-05T04:25:52.002Z",
+  "version": "2.3.4",
+  "released": "2026-06-08T05:31:21.726Z",
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.3/opspoint-2.3.3.zip",
-  "sha256": "7c97c2ba0bb805b549b6f29ad807b010a7e0976d94e9aa07d7792f40f1a7ed6b",
-  "size": 334220,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.4/opspoint-2.3.4.zip",
+  "sha256": "8f8117709c42291db5f032ed68fffbb367c1e599bcc581d3c04055c16da6d18d",
+  "size": 347038,
+  "sig_alg": "ed25519",
+  "signature": "Chhflo+Uw6Ou5zdjySgv0Fzz3KBPNDhMa8ye/tEw5OY2b71Fi8mXvo+Ct5sCpGxfwpvHPQ8UkJmbwJ3a43oHCQ==",
   "changelog": [
-    "One-click software updater in Admin -> System -> Software Updates",
-    "Checksum-verified release bundles; database + code backup before applying",
-    "Manual rollback via restore-last-backup.bat"
+    "Signed releases (Ed25519) — verified before install",
+    "Updates can be served from your HQ on the LAN (no internet needed)",
+    "Failed updates auto-roll-back; HQ can stage rollouts canary -> fleet"
   ]
 }

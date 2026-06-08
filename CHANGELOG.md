@@ -2,6 +2,16 @@
 
 ---
 
+## v2.3.4 — Fleet update system (2026-06-07)
+
+### Multi-facility fleet updates
+- **Signed releases** — Ed25519-signed manifests; the in-app updater verifies signature + sha256 + size before applying anything
+- **HQ self-update** and **on-prem bundle relay** — facilities pull updates from HQ over the LAN; no internet needed at the buildings
+- **Auto-rollback launcher** — a bootstrap supervisor health-checks each update and reverts a failed boot automatically
+- **Staged rollouts** — canary → fleet with health-gated auto-advance and auto-pause on a rollback; opt-in auto-apply with a maintenance window
+
+---
+
 ## v2.3.3 — One-Click Auto-Updater (2026-06-04)
 
 ### Software updates (Admin → System → Software Updates)

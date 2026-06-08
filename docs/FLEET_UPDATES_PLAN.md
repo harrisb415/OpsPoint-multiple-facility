@@ -49,15 +49,40 @@ command and each node applies it to itself with its own `updater.js`.
 - `central/scripts/updater_e2e.cjs`: serves a signed manifest over a local
   allow-listed host; asserts check()/signed + tamper rejection + status() shape.
 
+### Phase 3 — HQ as on-prem bundle host — **BUILT & verified** (fleet_e2e 14/14)
+- `releases` table + on-disk store (`central/data/releases/<channel>/`); `POST
+  /api/releases/import` fetches a manifest from an allow-listed host, verifies
+  signature+sha256+size, downloads + stores the bundle; `GET /api/releases` +
+  publish/yank.
+- Facility-facing `GET /fleet/manifest` + `GET /fleet/bundle/:version` (API-key
+  auth): latest published facility release with the bundle URL rewritten to HQ;
+  the vendor signature is relayed (HQ still can't forge it).
+- Facility `updater.js` threads optional auth headers (`authFor`); `server.js`
+  sends `x-facility-key` to the central host, so pointing `update_manifest_url` at
+  `<hq>/fleet/manifest` pulls updates from HQ on the LAN — no internet at buildings.
+- `release.mjs` also builds + signs the central bundle/manifest. Console "Releases" tab.
+
+### Phase 4 — Bootstrap health-check + auto-rollback — **BUILT & verified** (bootstrap_e2e 10/10)
+- `bootstrap.js` + `central/bootstrap.js`: long-lived supervisor (run.bat runs it).
+  Launches the server with `OPSPOINT_BOOTSTRAP=1`; relaunches it whenever it exits
+  (an in-app restart/update just exits the child); crash-loop give-up.
+- After an update, `updater.apply()` writes `data/updates/pending-verify.json`
+  (backup path + versions). On the next boot the supervisor health-checks
+  `/api/health`; if the new build doesn't come up it **restores the backup and
+  relaunches** the previous version. Manual rollback clears the marker.
+- `restartServer()` (both tiers) is bootstrap-aware: under the supervisor it exits;
+  launched directly (dev) it self-respawns as before. `bootstrap.js` is NOT in the
+  update swap set, so the supervisor stays stable across updates (like run.bat).
+- Verified both directions: broken build → rollback; healthy build → commit (no
+  false rollback).
+- **Known limitation:** rollback restores code (incl. the old lockfile); if a failed
+  update had changed dependencies, a manual `npm install` may be needed. Most
+  updates don't touch the lockfile.
+
 ### Deferred (not built)
-3. **HQ as bundle host** — store/serve `facility-X.zip` to nodes over the authed
-   channel so facilities never touch the internet; facility updater gains an "HQ
-   source".
-4. **Bootstrap health-check + auto-rollback launcher** — `run.bat → bootstrap.js`
-   boots the new build, health-checks, auto-reverts on failed boot. **Prerequisite
-   for safe unattended fleet apply.**
 5. **Rollout orchestration** — cohorts, canary → fleet with health gating,
-   pause/yank kill switch, maintenance windows, per-facility status in the console.
+   pause/yank kill switch (release yank exists; staged cohorts do not),
+   maintenance windows, per-facility update status in the console.
 
 ## Procedures
 

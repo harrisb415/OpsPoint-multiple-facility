@@ -101,9 +101,11 @@ function broadcast(msg) {
   wss.clients.forEach(c=>{ if(c.readyState===WebSocket.OPEN) c.send(s); });
 }
 
-// Respawn the server process (detached) and exit — used by the restart
-// endpoint and the auto-updater after a successful apply/rollback.
+// Restart the server. Under the bootstrap supervisor (run.bat → bootstrap.js,
+// sets OPSPOINT_BOOTSTRAP=1) we simply exit and let bootstrap relaunch +
+// health-check + auto-rollback. Launched directly (dev), self-respawn detached.
 function restartServer() {
+  if (process.env.OPSPOINT_BOOTSTRAP === '1') { setTimeout(() => process.exit(0), 200); return; }
   const { spawn } = require('child_process');
   const child = spawn(process.execPath, [path.join(BASE, 'server.js')], { detached: true, stdio: 'ignore', cwd: BASE });
   child.unref();
@@ -2454,6 +2456,9 @@ app.post('/api/update/rollback', requireAuth, csrfCheck, requirePermission('admi
   try { const r = await updater.rollback(actor); res.json(r); }
   catch(e){ res.status(400).json({error:(e&&e.message)||'Rollback failed'}); }
 });
+
+// Liveness probe for the bootstrap supervisor (unauthenticated — no PHI).
+app.get('/api/health', (req,res)=>{ let v='0.0.0'; try { v=require('./package.json').version; } catch(e){} res.json({ ok:true, version:v }); });
 
 // ── Central / HQ link (Phase 0: connect + check-in) ───────────────
 // Facility node → central HQ server. OUTBOUND only; the facility keeps operating

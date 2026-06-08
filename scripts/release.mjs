@@ -30,7 +30,7 @@ const VER = pkg.version;
 const REPO = 'harrisb415/opspoint-releases'; // PUBLIC releases repo (source repo is private)
 
 // Runtime payload — must match RUNTIME_FILES / RUNTIME_DIRS in updater.js.
-const FILES = ['server.js', 'updater.js', 'db.js', 'package.json', 'package-lock.json', 'generate_cert.js'];
+const FILES = ['server.js', 'updater.js', 'db.js', 'bootstrap.js', 'package.json', 'package-lock.json', 'generate_cert.js'];
 const DIRS = ['migrations', path.join('client', 'dist')];
 
 const REL = path.join(ROOT, 'release');
@@ -109,7 +109,7 @@ const cpkgPath = path.join(ROOT, 'central', 'package.json');
 if (fs.existsSync(cpkgPath)) {
   CVER = JSON.parse(fs.readFileSync(cpkgPath, 'utf8')).version;
   console.log(`\n• building central v${CVER}…`);
-  const C_FILES = ['server.js', 'db.js', 'updater.js', 'package.json', 'package-lock.json'];
+  const C_FILES = ['server.js', 'db.js', 'updater.js', 'bootstrap.js', 'package.json', 'package-lock.json'];
   const C_DIRS = ['public'];
   const CSTAGE = path.join(REL, `central-${CVER}`);
   CZIP = path.join(REL, `central-${CVER}.zip`);

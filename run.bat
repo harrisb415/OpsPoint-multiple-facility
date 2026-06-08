@@ -64,7 +64,9 @@ set "_ticker=%TEMP%\sp_ticker_%RANDOM%.stop"
 del "%_ticker%" 2>nul
 start /b powershell -NoProfile -Command "& { $s=Get-Date; $f='%_ticker%'; while (-not (Test-Path $f)) { $e=(Get-Date)-$s; [Console]::Title='OpsPoint v2.3.3   Up: '+$e.ToString('hh\:mm\:ss'); Start-Sleep 1 } }"
 
-node server.js
+:: bootstrap.js supervises server.js — health-checks updates and auto-rolls-back
+:: a failed boot. It stays running across in-app restarts/updates.
+node bootstrap.js
 if %ERRORLEVEL% neq 0 (
   echo.
   echo  Server stopped unexpectedly. See error above.

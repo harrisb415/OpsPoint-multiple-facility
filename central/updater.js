@@ -293,6 +293,8 @@ function createUpdater(ctx) {
 
       // 7. Done — record + restart
       fs.writeFileSync(path.join(UP_DIR, 'last-applied.json'), JSON.stringify({ from: cur, to: ver, ts: new Date().toISOString(), by: actorName || 'system' }, null, 2));
+      // Tell the bootstrap supervisor to health-check this boot and auto-roll-back on failure.
+      fs.writeFileSync(path.join(UP_DIR, 'pending-verify.json'), JSON.stringify({ backupPath, from: cur, to: ver, ts: new Date().toISOString() }, null, 2));
       _audit('update.apply', cur + ' -> ' + ver);
       setState({ phase: 'done', pct: 100, message: 'Updated to v' + ver + ' — restarting…', applying: false });
       setTimeout(() => { try { restart && restart(); } catch (e) {} }, 800);
@@ -314,6 +316,7 @@ function createUpdater(ctx) {
     for (const f of RUNTIME_FILES) { const s = path.join(backupPath, f); if (fs.existsSync(s)) copyAny(s, path.join(baseDir, f)); }
     for (const d of RUNTIME_DIRS) { const s = path.join(backupPath, d); if (fs.existsSync(s)) { rmrf(path.join(baseDir, d)); copyAny(s, path.join(baseDir, d)); } }
     let meta = {}; try { meta = JSON.parse(fs.readFileSync(path.join(backupPath, 'BACKUP.json'), 'utf8')); } catch (e) {}
+    try { fs.rmSync(path.join(UP_DIR, 'pending-verify.json'), { force: true }); } catch (e) {} // manual rollback: don't re-verify
     _audit('update.rollback', (meta.to || '?') + ' -> ' + (meta.from || '?'));
     setState({ phase: 'done', pct: 100, message: 'Rolled back — restarting…', applying: false });
     setTimeout(() => { try { restart && restart(); } catch (e) {} }, 800);

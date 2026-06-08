@@ -306,6 +306,9 @@ app.get('/sync/users', requireFacilityKey, (req, res) => {
 // ── HQ self-update (Option B updater for the central tier; admin) ─────────
 // Respawn this process detached, then exit — used after a successful apply/rollback.
 function restartServer() {
+  // Under the bootstrap supervisor (run.bat → bootstrap.js), just exit and let
+  // bootstrap relaunch + health-check + auto-rollback. Direct launch: self-respawn.
+  if (process.env.OPSPOINT_BOOTSTRAP === '1') { setTimeout(() => process.exit(0), 200); return; }
   const { spawn } = require('child_process');
   const child = spawn(process.execPath, [path.join(__dirname, 'server.js')],
     { detached: true, stdio: 'ignore', cwd: __dirname, env: process.env });
@@ -337,6 +340,8 @@ app.post('/api/update/apply', requireAdmin, (req, res) => {
   res.json({ ok: true, started: true });
 });
 app.get('/api/update/backups', requireAdmin, (req, res) => res.json(updater.backups()));
+// Liveness probe for the bootstrap supervisor (unauthenticated).
+app.get('/api/health', (req, res) => { let v = '0.0.0'; try { v = require('./package.json').version; } catch (e) {} res.json({ ok: true, version: v }); });
 app.post('/api/update/rollback', requireAdmin, async (req, res) => {
   const actor = db.getUser(req.session.userId);
   try { res.json(await updater.rollback(actor && actor.username)); }

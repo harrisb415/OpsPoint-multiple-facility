@@ -343,6 +343,80 @@ app.post('/api/update/rollback', requireAdmin, async (req, res) => {
   catch (e) { res.status(400).json({ error: (e && e.message) || 'Rollback failed' }); }
 });
 
+// ── Release store (Phase 3) — HQ imports a signed release, relays to the fleet ──
+const upd = require('./updater');
+const RELEASES_DIR = path.join(DATA_DIR, 'releases');
+
+function _host(u) { try { return new URL(u).host; } catch (e) { return ''; } }
+
+// Admin: import a signed release (manifest URL → fetch, verify, download, store).
+app.post('/api/releases/import', requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const manifestUrl = String(b.manifest_url || '').trim();
+  const channel = b.channel === 'central' ? 'central' : 'facility';
+  if (!manifestUrl) return res.status(400).json({ error: 'manifest_url required' });
+  try {
+    const mh = _host(manifestUrl);
+    if (!upd.hostAllowed(manifestUrl, [mh])) return res.status(400).json({ error: 'manifest host not allow-listed' });
+    const buf = await upd.fetchBuffer(manifestUrl, [mh]);
+    let m; try { m = JSON.parse(buf.toString('utf8')); } catch (e) { return res.status(400).json({ error: 'manifest is not valid JSON' }); }
+    if (!m.version || !m.url || !m.sha256) return res.status(400).json({ error: 'manifest missing version/url/sha256' });
+    if (!upd.verifyManifestSignature(m)) return res.status(400).json({ error: 'manifest signature missing or invalid — refusing to import' });
+    const bh = _host(m.url);
+    if (!upd.hostAllowed(m.url, [mh, bh])) return res.status(400).json({ error: 'bundle host not allow-listed' });
+    const dir = path.join(RELEASES_DIR, channel); fs.mkdirSync(dir, { recursive: true });
+    const filename = channel + '-' + m.version + '.zip';
+    const dest = path.join(dir, filename);
+    await upd.downloadToFile(m.url, dest, [mh, bh]);
+    if (m.size && fs.statSync(dest).size !== m.size) { fs.rmSync(dest, { force: true }); return res.status(400).json({ error: 'downloaded size does not match manifest' }); }
+    const digest = await upd.sha256File(dest);
+    if (digest.toLowerCase() !== String(m.sha256).toLowerCase()) { fs.rmSync(dest, { force: true }); return res.status(400).json({ error: 'sha256 mismatch — refusing to store' }); }
+    const rel = db.recordRelease({
+      channel, version: m.version, filename, size: m.size || fs.statSync(dest).size, sha256: String(m.sha256).toLowerCase(),
+      signature: m.signature, sig_alg: m.sig_alg || 'ed25519', min_node: m.min_node, min_from: m.min_from,
+      changelog: m.changelog, released: m.released, status: 'published',
+    });
+    const actor = db.getUser(req.session.userId);
+    db.audit({ actor: actor && actor.username, action: 'release.import', target: channel + '/' + m.version, detail: filename, ip: clientIp(req) });
+    res.json({ ok: true, release: rel });
+  } catch (e) { res.status(502).json({ error: (e && e.message) || 'import failed' }); }
+});
+
+app.get('/api/releases', requireAdmin, (req, res) => res.json({ releases: db.listReleases() }));
+app.post('/api/releases/:channel/:version/status', requireAdmin, (req, res) => {
+  if (!db.getRelease(req.params.channel, req.params.version)) return res.status(404).json({ error: 'not found' });
+  const status = (req.body && req.body.status) === 'yanked' ? 'yanked' : 'published';
+  db.setReleaseStatus(req.params.channel, req.params.version, status);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'release.status', target: req.params.channel + '/' + req.params.version, detail: status, ip: clientIp(req) });
+  res.json({ ok: true, status });
+});
+
+// Facility-facing: latest published facility release as a manifest, bundle URL → HQ.
+app.get('/fleet/manifest', requireFacilityKey, (req, res) => {
+  const rel = db.getLatestPublishedRelease('facility');
+  if (!rel) return res.status(404).json({ error: 'no published facility release' });
+  db.touchFacility(req.facility.id, { ip: clientIp(req), app_version: req.facility.app_version || '' });
+  const base = (req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host');
+  res.json({
+    version: rel.version, released: rel.released, min_node: rel.min_node, min_from: rel.min_from,
+    url: base + '/fleet/bundle/' + rel.version, sha256: rel.sha256, size: rel.size,
+    sig_alg: rel.sig_alg, signature: rel.signature, changelog: rel.changelog,
+  });
+});
+
+// Facility-facing: stream the stored bundle (API-key auth).
+app.get('/fleet/bundle/:version', requireFacilityKey, (req, res) => {
+  const rel = db.getRelease('facility', req.params.version);
+  if (!rel || rel.status !== 'published') return res.status(404).json({ error: 'not found' });
+  const file = path.join(RELEASES_DIR, 'facility', rel.filename);
+  if (!fs.existsSync(file)) return res.status(404).json({ error: 'bundle missing on disk' });
+  db.audit({ actor: req.facility.name, action: 'release.download', target: 'facility/' + rel.version, ip: clientIp(req) });
+  res.setHeader('content-type', 'application/zip');
+  res.setHeader('content-length', String(fs.statSync(file).size));
+  fs.createReadStream(file).pipe(res);
+});
+
 // ── Console (static SPA-ish single page) ─────────────────────────────────
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));

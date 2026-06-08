@@ -121,6 +121,27 @@ function _createSchema() {
     facility_id TEXT NOT NULL,
     PRIMARY KEY (user_id, facility_id)
   )`);
+
+  // Phase 3: release store. HQ imports a signed release once (from GitHub), then
+  // relays the bundle to enrolled facilities over the authenticated channel so
+  // facilities never need internet. Bundles live on disk in data/releases/.
+  _db.exec(`CREATE TABLE IF NOT EXISTS releases (
+    channel    TEXT NOT NULL,             -- 'facility' | 'central'
+    version    TEXT NOT NULL,
+    filename   TEXT NOT NULL,
+    size       INTEGER NOT NULL,
+    sha256     TEXT NOT NULL,
+    signature  TEXT,
+    sig_alg    TEXT DEFAULT 'ed25519',
+    min_node   TEXT,
+    min_from   TEXT,
+    changelog  TEXT DEFAULT '[]',
+    released   TEXT,
+    notes      TEXT DEFAULT '',
+    status     TEXT DEFAULT 'published',  -- published | yanked
+    created_at TEXT,
+    PRIMARY KEY (channel, version)
+  )`);
 }
 
 // ── Low-level helpers (private) ──────────────────────────────────────────
@@ -253,6 +274,43 @@ function resetCentralUserPassword(id, newPw) {
 }
 function deleteCentralUser(id) {
   _run('DELETE FROM central_users WHERE id=?', [id]);
+}
+
+// ── Release store (Phase 3) — HQ relays signed bundles to the fleet ───────
+function _cmpSemver(a, b) {
+  const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
+  const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) > (pb[i] || 0)) return 1; if ((pa[i] || 0) < (pb[i] || 0)) return -1; }
+  return 0;
+}
+function _pubRelease(r) { if (!r) return null; return Object.assign({}, r, { changelog: _j(r.changelog, []) }); }
+function getRelease(channel, version) {
+  return _pubRelease(_q1('SELECT * FROM releases WHERE channel=? AND version=?', [channel, version]));
+}
+function recordRelease(rec) {
+  _run(`INSERT OR REPLACE INTO releases
+        (channel,version,filename,size,sha256,signature,sig_alg,min_node,min_from,changelog,released,notes,status,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [rec.channel, rec.version, rec.filename, rec.size, rec.sha256, rec.signature || null, rec.sig_alg || 'ed25519',
+     rec.min_node || null, rec.min_from || null, JSON.stringify(rec.changelog || []), rec.released || null,
+     rec.notes || '', rec.status || 'published', nowLocal()]);
+  return getRelease(rec.channel, rec.version);
+}
+function listReleases(channel) {
+  const rows = channel
+    ? _q('SELECT * FROM releases WHERE channel=? ORDER BY created_at DESC', [channel])
+    : _q('SELECT * FROM releases ORDER BY channel, created_at DESC');
+  return rows.map(_pubRelease);
+}
+function getLatestPublishedRelease(channel) {
+  const rows = _q("SELECT * FROM releases WHERE channel=? AND status='published'", [channel]).map(_pubRelease);
+  if (!rows.length) return null;
+  rows.sort((a, b) => _cmpSemver(b.version, a.version));
+  return rows[0];
+}
+function setReleaseStatus(channel, version, status) {
+  _run('UPDATE releases SET status=? WHERE channel=? AND version=?', [status === 'yanked' ? 'yanked' : 'published', channel, version]);
+  return getRelease(channel, version);
 }
 
 // ── Facilities ───────────────────────────────────────────────────────────
@@ -479,6 +537,7 @@ module.exports = {
   audit, getAudit,
   authUser, getUser, setUserPassword,
   listCentralUsers, countCentralUsers, createCentralUser, resetCentralUserPassword, deleteCentralUser,
+  recordRelease, getRelease, listReleases, getLatestPublishedRelease, setReleaseStatus,
   listFacilities, getFacility, createFacility, rotateFacilityKey, setFacilityStatus,
   facilityByKey, touchFacility,
   // Sync ingest (Phase 1)

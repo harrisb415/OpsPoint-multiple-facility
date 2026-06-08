@@ -362,4 +362,4 @@ function createUpdater(ctx) {
   return { check, apply, rollback, status, backups, currentVersion };
 }
 
-module.exports = { createUpdater, cmpSemver, hostAllowed, verifyManifestSignature, RELEASE_PUBKEY_PEM };
+module.exports = { createUpdater, cmpSemver, hostAllowed, verifyManifestSignature, RELEASE_PUBKEY_PEM, fetchBuffer, downloadToFile, sha256File };

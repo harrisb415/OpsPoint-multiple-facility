@@ -102,11 +102,46 @@ const manifest = {
 };
 fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
 
+// 6. Central (HQ) bundle + signed manifest. Published alongside the facility
+// release (same tag) so latest/download/central-manifest.json always resolves.
+let CVER = null, CZIP = null;
+const cpkgPath = path.join(ROOT, 'central', 'package.json');
+if (fs.existsSync(cpkgPath)) {
+  CVER = JSON.parse(fs.readFileSync(cpkgPath, 'utf8')).version;
+  console.log(`\n• building central v${CVER}…`);
+  const C_FILES = ['server.js', 'db.js', 'updater.js', 'package.json', 'package-lock.json'];
+  const C_DIRS = ['public'];
+  const CSTAGE = path.join(REL, `central-${CVER}`);
+  CZIP = path.join(REL, `central-${CVER}.zip`);
+  fs.rmSync(CSTAGE, { recursive: true, force: true });
+  fs.mkdirSync(CSTAGE, { recursive: true });
+  for (const f of C_FILES) { const s = path.join(ROOT, 'central', f); if (fs.existsSync(s)) fs.copyFileSync(s, path.join(CSTAGE, f)); }
+  for (const d of C_DIRS) { const s = path.join(ROOT, 'central', d); if (fs.existsSync(s)) fs.cpSync(s, path.join(CSTAGE, d), { recursive: true }); }
+  fs.rmSync(CZIP, { force: true });
+  ps(`Compress-Archive -Path '${CSTAGE.replace(/'/g, "''")}\\*' -DestinationPath '${CZIP.replace(/'/g, "''")}' -Force`);
+  const cbuf = fs.readFileSync(CZIP);
+  const csha = createHash('sha256').update(cbuf).digest('hex');
+  const csize = cbuf.length;
+  const csig = edSign(null, Buffer.from(`${CVER}\n${csize}\n${csha}`, 'utf8'), createPrivateKey(privPem)).toString('base64');
+  const cManifestPath = path.join(ROOT, 'central-manifest.json');
+  let cprev = {}; try { cprev = JSON.parse(fs.readFileSync(cManifestPath, 'utf8')); } catch {}
+  const cManifest = {
+    version: CVER, released: new Date().toISOString(),
+    min_node: cprev.min_node || '20.0.0', min_from: cprev.min_from || '0.1.0',
+    mandatory: !!cprev.mandatory,
+    url: `https://github.com/${REPO}/releases/download/v${VER}/central-${CVER}.zip`,
+    sha256: csha, size: csize, sig_alg: 'ed25519', signature: csig,
+    changelog: Array.isArray(cprev.changelog) ? cprev.changelog : [],
+  };
+  fs.writeFileSync(cManifestPath, JSON.stringify(cManifest, null, 2) + '\n');
+  console.log(`✓ ${path.relative(ROOT, CZIP)}  (${(csize / 1048576).toFixed(2)} MB)  + central-manifest.json`);
+}
+
 console.log(`\n✓ ${path.relative(ROOT, ZIP)}  (${(size / 1048576).toFixed(2)} MB)`);
 console.log(`✓ sha256 ${sha256}`);
 console.log(`✓ update-manifest.json rewritten for v${VER}`);
 console.log(`\nNext:`);
 console.log(`  1. Edit update-manifest.json "changelog" for this release if needed`);
-console.log(`  2. Publish to the PUBLIC releases repo (attach BOTH zip + manifest):`);
-console.log(`       gh release create v${VER} "${path.relative(ROOT, ZIP)}" update-manifest.json -R ${REPO} --title "v${VER}" --notes-file CHANGELOG.md`);
+console.log(`  2. Publish to the PUBLIC releases repo (attach all bundles + manifests):`);
+console.log(`       gh release create v${VER} "${path.relative(ROOT, ZIP)}" update-manifest.json${CZIP ? ` "${path.relative(ROOT, CZIP)}" central-manifest.json` : ''} -R ${REPO} --title "v${VER}" --notes-file CHANGELOG.md`);
 console.log(`  3. (optional) keep manifest history in source: git add update-manifest.json && git commit -m "release: v${VER}" && git push origin master\n`);

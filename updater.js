@@ -60,18 +60,20 @@ function hostAllowed(urlStr, extra = []) {
   return suffixes.some(s => h === s || h.endsWith('.' + s));
 }
 
-// Stream a GET, following redirects only to allow-listed hosts.
-function _get(urlStr, allowHosts, redirectsLeft, cb) {
+// Stream a GET, following redirects only to allow-listed hosts. `extraHeaders`
+// lets callers attach auth (e.g. x-facility-key) when pulling from an HQ relay.
+function _get(urlStr, allowHosts, redirectsLeft, cb, extraHeaders) {
   let u;
   try { u = new URL(urlStr); } catch (e) { return cb(e); }
   if (!hostAllowed(urlStr, allowHosts)) return cb(new Error('Host not allowed: ' + u.host));
   const lib = u.protocol === 'http:' ? http : https;
-  const req = lib.get(urlStr, { headers: { 'User-Agent': 'OpsPoint-Updater' } }, (res) => {
+  const headers = Object.assign({ 'User-Agent': 'OpsPoint-Updater' }, extraHeaders || {});
+  const req = lib.get(urlStr, { headers }, (res) => {
     if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
       res.resume();
       if (redirectsLeft <= 0) return cb(new Error('Too many redirects'));
       const next = new URL(res.headers.location, urlStr).toString();
-      return _get(next, allowHosts, redirectsLeft - 1, cb);
+      return _get(next, allowHosts, redirectsLeft - 1, cb, extraHeaders);
     }
     if (res.statusCode !== 200) { res.resume(); return cb(new Error('HTTP ' + res.statusCode + ' for ' + u.host)); }
     cb(null, res);
@@ -81,7 +83,7 @@ function _get(urlStr, allowHosts, redirectsLeft, cb) {
 }
 
 // Fetch a small resource (manifest) into memory, capped.
-function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024) {
+function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024, extraHeaders) {
   return new Promise((resolve, reject) => {
     _get(urlStr, allowHosts, 5, (err, res) => {
       if (err) return reject(err);
@@ -93,12 +95,12 @@ function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024) {
       });
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
-    });
+    }, extraHeaders);
   });
 }
 
 // Download a (potentially large) resource to disk, with progress callback.
-function downloadToFile(urlStr, dest, allowHosts, onProgress) {
+function downloadToFile(urlStr, dest, allowHosts, onProgress, extraHeaders) {
   return new Promise((resolve, reject) => {
     _get(urlStr, allowHosts, 5, (err, res) => {
       if (err) return reject(err);
@@ -110,7 +112,7 @@ function downloadToFile(urlStr, dest, allowHosts, onProgress) {
       out.on('error', reject);
       out.on('finish', () => resolve({ bytes: got }));
       res.pipe(out);
-    });
+    }, extraHeaders);
   });
 }
 
@@ -173,6 +175,9 @@ function tsStamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
 function createUpdater(ctx) {
   const { baseDir, dataDir, dbPath, db, broadcast, restart } = ctx;
   const log = ctx.log || (() => {});
+  // Optional: returns auth headers for a URL (e.g. x-facility-key when the
+  // manifest/bundle is served by the HQ relay rather than a public host).
+  const authFor = ctx.authFor || (() => ({}));
 
   const UP_DIR = path.join(dataDir, 'updates');
   const STAGING = path.join(UP_DIR, 'staging');
@@ -201,7 +206,7 @@ function createUpdater(ctx) {
     const url = manifestUrl();
     if (!url) throw new Error('No update manifest URL configured');
     if (!hostAllowed(url, [manifestHost()])) throw new Error('Manifest host is not allow-listed');
-    const buf = await fetchBuffer(url, [manifestHost()]);
+    const buf = await fetchBuffer(url, [manifestHost()], 1024 * 1024, authFor(url));
     let m;
     try { m = JSON.parse(buf.toString('utf8')); } catch (e) { throw new Error('Manifest is not valid JSON'); }
     if (!m || !m.version || !m.url || !m.sha256) throw new Error('Manifest missing version/url/sha256');
@@ -273,7 +278,7 @@ function createUpdater(ctx) {
       rmrf(zipPath);
       await downloadToFile(m.url, zipPath, [manifestHost()], (got, total) => {
         if (total > 0) setState({ phase: 'download', pct: 12 + Math.round((got / total) * 28), message: 'Downloading v' + ver + '… ' + Math.round((got / total) * 100) + '%' });
-      });
+      }, authFor(m.url));
 
       // 2. Verify
       setState({ phase: 'verify', pct: 44, message: 'Verifying checksum…' });

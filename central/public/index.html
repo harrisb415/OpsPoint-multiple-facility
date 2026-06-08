@@ -109,6 +109,7 @@
       <button id="navUsers" class="navbtn" onclick="showView('users')">Users</button>
       <button id="navAdmins" class="navbtn" onclick="showView('admins')">HQ Admins</button>
       <button id="navSystem" class="navbtn" onclick="showView('system')">System</button>
+      <button id="navReleases" class="navbtn" onclick="showView('releases')">Releases</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -285,6 +286,33 @@
         </table>
       </div>
     </div>
+
+    <!-- RELEASES (HQ bundle store) -->
+    <div id="viewReleases" class="hidden">
+      <div class="card">
+        <h2>Import a release</h2>
+        <div class="dim" style="margin-bottom:12px">Fetches a <b>signed</b> manifest, verifies its signature + checksum, downloads the bundle, and stores it here so facilities pull from HQ — no internet needed at the buildings. Unsigned or tampered releases are refused.</div>
+        <div class="row" style="flex-wrap:wrap">
+          <div style="flex:2"><label>Manifest URL</label><input id="relUrl" placeholder="https://github.com/…/releases/latest/download/update-manifest.json" /></div>
+          <div><label>Channel</label>
+            <select id="relChannel" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit">
+              <option value="facility">facility</option><option value="central">central</option>
+            </select>
+          </div>
+          <button class="gold" onclick="importRelease()">Import</button>
+        </div>
+        <div id="relErr" class="err"></div>
+        <div id="relMsg" class="dim"></div>
+      </div>
+      <div class="card">
+        <h2>Stored releases</h2>
+        <table>
+          <thead><tr><th>Channel</th><th>Version</th><th>Size</th><th>Signed</th><th>Status</th><th>Imported</th><th></th></tr></thead>
+          <tbody id="relRows"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+        </table>
+        <div class="dim" style="margin-top:10px">Facilities pull the latest <b>published facility</b> release from <span class="mono">/fleet/manifest</span> (API-key authed). Yank to stop serving a version.</div>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -332,10 +360,10 @@ async function savePw(){
 }
 
 function showView(v){
-  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins', system:'viewSystem' };
+  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins', system:'viewSystem', releases:'viewReleases' };
   Object.entries(views).forEach(([k,id])=> $(id).classList.toggle('hidden', k!==v));
   $('viewFacility').classList.add('hidden'); // leave any open drill-down
-  ['overview','facilities','users','admins','system'].forEach(k=>{
+  ['overview','facilities','users','admins','system','releases'].forEach(k=>{
     const btn = $('nav'+k.charAt(0).toUpperCase()+k.slice(1));
     if (btn) btn.classList.toggle('active', k===v);
   });
@@ -343,6 +371,7 @@ function showView(v){
   else if (v==='users') loadUsers();
   else if (v==='admins') loadAdmins();
   else if (v==='system') loadSystem();
+  else if (v==='releases') loadReleases();
   else loadFacilities();
 }
 
@@ -535,7 +564,7 @@ const PHOTO_KEYS = ['photo','ua_photo'];
 
 async function openFacility(id, back){
   _fd = { id, name:'', table:null, rows:[], back: back||'overview' };
-  ['viewOverview','viewFacilities','viewUsers','viewAdmins','viewSystem'].forEach(v=>$(v).classList.add('hidden'));
+  ['viewOverview','viewFacilities','viewUsers','viewAdmins','viewSystem','viewReleases'].forEach(v=>$(v).classList.add('hidden'));
   ['overview','facilities','users','admins'].forEach(k=>{ const b=$('nav'+k.charAt(0).toUpperCase()+k.slice(1)); if(b) b.classList.remove('active'); });
   $('viewFacility').classList.remove('hidden');
   $('fdRowsCard').classList.add('hidden');
@@ -671,6 +700,35 @@ async function loadBackups(){
   $('updBackups').innerHTML = b.length
     ? b.map(x=>`<tr><td>${esc(x.from)||'—'}</td><td>${esc(x.to)||'—'}</td><td class="dim">${esc(x.ts)||''}</td></tr>`).join('')
     : `<tr><td colspan="3" class="muted">None yet.</td></tr>`;
+}
+
+// ── Releases (HQ bundle store) ──
+async function loadReleases(){
+  const r = await api('/api/releases');
+  if(!r.ok){ if(r.status===401) showLogin(); return; }
+  const rows = r.body.releases || [];
+  $('relRows').innerHTML = rows.length ? rows.map(x=>{
+    const mb = x.size ? (x.size/1048576).toFixed(2)+' MB' : '—';
+    const signed = x.signature ? '<span class="pill active">signed</span>' : '<span class="pill disabled">unsigned</span>';
+    const st = x.status==='published' ? '<span class="pill active">published</span>' : '<span class="pill disabled">yanked</span>';
+    const next = x.status==='published' ? 'yanked' : 'published';
+    return `<tr><td>${esc(x.channel)}</td><td class="mono">${esc(x.version)}</td><td>${mb}</td><td>${signed}</td><td>${st}</td><td class="dim">${esc(x.created_at)||''}</td>
+      <td style="text-align:right"><button class="ghost" onclick="setRelStatus('${esc(x.channel)}','${esc(x.version)}','${next}')">${next==='yanked'?'Yank':'Publish'}</button></td></tr>`;
+  }).join('') : `<tr><td colspan="7" class="muted">No releases imported yet.</td></tr>`;
+}
+async function importRelease(){
+  $('relErr').textContent=''; $('relMsg').textContent='Importing… (downloads + verifies the bundle)';
+  const body = { manifest_url:$('relUrl').value.trim(), channel:$('relChannel').value };
+  if(!body.manifest_url){ $('relErr').textContent='Manifest URL required'; $('relMsg').textContent=''; return; }
+  const r = await api('/api/releases/import',{method:'POST',body:JSON.stringify(body)});
+  if(!r.ok){ $('relErr').textContent=(r.body&&r.body.error)||'Import failed'; $('relMsg').textContent=''; return; }
+  $('relMsg').textContent='✓ Imported '+r.body.release.channel+' v'+r.body.release.version; $('relUrl').value='';
+  loadReleases();
+}
+async function setRelStatus(channel,version,status){
+  const r = await api('/api/releases/'+encodeURIComponent(channel)+'/'+encodeURIComponent(version)+'/status',{method:'POST',body:JSON.stringify({status})});
+  if(!r.ok){ alert((r.body&&r.body.error)||'Failed'); return; }
+  loadReleases();
 }
 
 boot();

@@ -2419,6 +2419,16 @@ const { createUpdater } = require('./updater');
 const updater = createUpdater({
   baseDir: BASE, dataDir: DATA, dbPath: DB_PATH, db,
   broadcast, restart: restartServer, log: (...a) => console.log('[updater]', ...a),
+  // When the manifest/bundle is served by our HQ relay, authenticate with the
+  // facility API key so HQ can serve on-prem (facilities never touch the internet).
+  authFor: (urlStr) => {
+    try {
+      const cu = db.getSetting('central_url', '') || '';
+      const key = db.getSetting('central_api_key', '') || '';
+      if (cu && key && new URL(urlStr).host === new URL(cu).host) return { 'x-facility-key': key };
+    } catch (e) {}
+    return {};
+  },
 });
 
 app.get('/api/update/status', requireAuth, requirePermission('admin.system'), (req,res)=>{

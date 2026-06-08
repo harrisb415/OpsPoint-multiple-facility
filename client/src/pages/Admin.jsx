@@ -1814,11 +1814,12 @@ function SystemTab() {
   // ── Central / HQ connection ───────────────────────────────────────
   const [central, setCentral] = useState(null)         // /api/central/status payload
   const [cForm, setCForm] = useState({ url: '', facility_id: '', api_key: '', insecure: false })
+  const [cWindow, setCWindow] = useState('')           // maintenance window 'HH:MM-HH:MM'
   const [cBusy, setCBusy] = useState(false)
   const [cErr, setCErr] = useState('')
   const [cMsg, setCMsg] = useState('')
   const loadCentral = useCallback(async () => {
-    try { const r = await apiFetch('/api/central/status'); if (r.ok) setCentral(await r.json()) } catch { /* ignore */ }
+    try { const r = await apiFetch('/api/central/status'); if (r.ok) { const j = await r.json(); setCentral(j); setCWindow(j.update_window || '') } } catch { /* ignore */ }
   }, [])
   useEffect(() => { loadCentral() }, [loadCentral])
 
@@ -1873,6 +1874,16 @@ function SystemTab() {
       const j = await r.json().catch(() => ({}))
       if (!r.ok) { setCErr(j.error || 'Failed'); return }
       setCMsg('✓ Pulled HQ users — ' + (j.count || 0) + ' provisioned')
+      loadCentral()
+    } catch { setCErr('Network error reaching HQ.') } finally { setCBusy(false) }
+  }
+  async function centralSetAuto(auto_update, window) {
+    setCBusy(true); setCErr(''); setCMsg('')
+    try {
+      const r = await apiFetch('/api/central/auto-update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto_update, window }) })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setCErr(j.error || 'Failed'); return }
+      setCMsg(auto_update ? '✓ Auto-update ON' + (j.update_window ? (' (window ' + j.update_window + ')') : ' (anytime)') : 'Auto-update turned off')
       loadCentral()
     } catch { setCErr('Network error reaching HQ.') } finally { setCBusy(false) }
   }
@@ -2005,6 +2016,23 @@ function SystemTab() {
                     ? <>HQ-provisioned accounts: <strong>{central.users_count || 0}</strong>{central.users_last_pull ? ' · last pulled ' + central.users_last_pull : ''}
                         <div style={{ marginTop: 8 }}><button className="btn btn-sm" onClick={centralPullUsers} disabled={cBusy}>Pull users now</button></div></>
                     : 'Off — this facility manages its own accounts. Your local admin always stays in control.'}
+                </div>
+              </div>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #a7f3d0' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.86rem', fontWeight: 600, color: '#334155' }}>
+                  <input type="checkbox" checked={!!central.auto_update} disabled={cBusy} onChange={e => centralSetAuto(e.target.checked, cWindow)} style={{ width: 'auto' }} />
+                  Auto-apply HQ rollout updates
+                </label>
+                <div className="dim" style={{ margin: '6px 0 0 24px' }}>
+                  {central.auto_update
+                    ? <>This facility installs HQ-staged updates automatically (verified + signed), then auto-rolls-back a failed boot.
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          <span>Maintenance window:</span>
+                          <input value={cWindow} onChange={e => setCWindow(e.target.value)} placeholder="HH:MM-HH:MM (empty = anytime)" style={{ width: 200 }} />
+                          <button className="btn btn-sm" onClick={() => centralSetAuto(true, cWindow)} disabled={cBusy}>Save window</button>
+                        </div>
+                        <div style={{ marginTop: 4 }}>{central.update_window ? ('Applies only between ' + central.update_window) : 'Applies anytime HQ releases to this facility.'}</div></>
+                    : 'Off — updates wait for an admin to click Install above. Turn on for hands-off HQ rollouts.'}
                 </div>
               </div>
             </div>

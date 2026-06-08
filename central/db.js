@@ -34,7 +34,19 @@ function init(dbPath) {
   _db.pragma('foreign_keys = ON');
   console.log('  Central DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
   _createSchema();
+  _migrate();
   _seedDefaults();
+}
+
+// Additive column migrations (try/catch — harmless if the column already exists).
+function _migrate() {
+  const cols = [
+    "upd_state TEXT DEFAULT ''",        // facility self-reported: ''|updating|updated|failed|rolled_back
+    "upd_attempted TEXT DEFAULT ''",    // version it last tried
+    "upd_error TEXT DEFAULT ''",
+    "upd_reported_at TEXT",
+  ];
+  for (const c of cols) { try { _db.exec('ALTER TABLE facilities ADD COLUMN ' + c); } catch (e) {} }
 }
 
 function _createSchema() {
@@ -141,6 +153,19 @@ function _createSchema() {
     status     TEXT DEFAULT 'published',  -- published | yanked
     created_at TEXT,
     PRIMARY KEY (channel, version)
+  )`);
+
+  // Phase 5: one active rollout per channel. The engine issues per-facility update
+  // directives based on state + canary membership, and auto-advances/-pauses on
+  // facilities' self-reported health.
+  _db.exec(`CREATE TABLE IF NOT EXISTS rollouts (
+    channel    TEXT PRIMARY KEY,           -- 'facility'
+    version    TEXT NOT NULL,
+    state      TEXT NOT NULL DEFAULT 'paused', -- paused | canary | active | complete
+    canary_ids TEXT DEFAULT '[]',          -- JSON array of facility ids
+    notes      TEXT DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT
   )`);
 }
 
@@ -313,12 +338,94 @@ function setReleaseStatus(channel, version, status) {
   return getRelease(channel, version);
 }
 
+// ── Rollout engine (Phase 5) — staged, health-gated fleet rollout ─────────
+function getRollout(channel) {
+  const r = _q1('SELECT * FROM rollouts WHERE channel=?', [channel]);
+  if (!r) return null;
+  return Object.assign({}, r, { canary_ids: _j(r.canary_ids, []) });
+}
+function startRollout(channel, version, canaryIds, notes) {
+  const ids = Array.isArray(canaryIds) ? canaryIds.filter(Boolean) : [];
+  const state = ids.length ? 'canary' : 'active';
+  _run(`INSERT INTO rollouts (channel,version,state,canary_ids,notes,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(channel) DO UPDATE SET version=excluded.version, state=excluded.state,
+          canary_ids=excluded.canary_ids, notes=excluded.notes, updated_at=excluded.updated_at`,
+    [channel, version, state, JSON.stringify(ids), notes || '', nowLocal(), nowLocal()]);
+  return getRollout(channel);
+}
+function setRolloutState(channel, state) {
+  _run('UPDATE rollouts SET state=?, updated_at=? WHERE channel=?', [state, nowLocal(), channel]);
+  return getRollout(channel);
+}
+function recordFacilityUpdateStatus(facilityId, s) {
+  s = s || {};
+  _run('UPDATE facilities SET upd_state=?, upd_attempted=?, upd_error=?, upd_reported_at=? WHERE id=?',
+    [String(s.state || ''), String(s.attempted || ''), String(s.error || '').slice(0, 300), nowLocal(), facilityId]);
+}
+
+// What (if anything) an eligible facility should be told to install right now.
+function rolloutEligible(facility) {
+  const ro = getRollout('facility');
+  if (!ro || ro.state === 'paused' || ro.state === 'complete') return null;
+  if (!facility || facility.status !== 'active') return null;
+  if ((facility.app_version || '') === ro.version) return null;               // already on target
+  const eligible = ro.state === 'active' || (ro.state === 'canary' && ro.canary_ids.includes(facility.id));
+  if (!eligible) return null;
+  const rel = getRelease('facility', ro.version);
+  if (!rel || rel.status !== 'published') return null;                        // version not (or no longer) served
+  return { version: ro.version, release: rel };
+}
+function updateDirectiveFor(facility, baseUrl) {
+  const e = rolloutEligible(facility);
+  if (!e) return null;
+  return {
+    version: e.version, apply: 'auto', url: baseUrl + '/fleet/bundle/' + e.version,
+    sha256: e.release.sha256, size: e.release.size, sig_alg: e.release.sig_alg, signature: e.release.signature,
+  };
+}
+
+// Which release /fleet/manifest should serve THIS facility — enforces rollout
+// gating at the serve layer so canary cohorts can't be bypassed:
+//   canary/active → the rollout version, but only if this facility is eligible
+//   paused        → nothing (kill switch)
+//   none/complete → latest published (open, Phase-3 behavior)
+function manifestReleaseFor(facility) {
+  const ro = getRollout('facility');
+  if (ro && (ro.state === 'canary' || ro.state === 'active')) {
+    const e = rolloutEligible(facility);
+    return e ? e.release : null;
+  }
+  if (ro && ro.state === 'paused') return null;
+  return getLatestPublishedRelease('facility');
+}
+
+// Auto-advance (canary→active→complete) / auto-pause from self-reported health.
+function evaluateRollout(channel) {
+  const ro = getRollout(channel);
+  if (!ro || ro.state === 'paused' || ro.state === 'complete') return ro;
+  const facs = _q("SELECT id,app_version,upd_state,upd_attempted FROM facilities WHERE status='active'");
+  const atTarget = f => (f.app_version || '') === ro.version;
+  const failed = f => (f.upd_state === 'rolled_back' || f.upd_state === 'failed') && f.upd_attempted === ro.version;
+  if (ro.state === 'canary') {
+    const canary = facs.filter(f => ro.canary_ids.includes(f.id));
+    if (canary.some(failed)) return setRolloutState(channel, 'paused');       // canary failed → halt
+    if (canary.length && canary.every(atTarget)) return setRolloutState(channel, 'active'); // canary healthy → expand
+    return ro;
+  }
+  // active
+  if (facs.some(failed)) return setRolloutState(channel, 'paused');           // any failure → halt
+  if (facs.length && facs.every(atTarget)) return setRolloutState(channel, 'complete');
+  return ro;
+}
+
 // ── Facilities ───────────────────────────────────────────────────────────
+const _FAC_COLS = 'id,name,api_key_prefix,status,app_version,last_seen_at,last_seen_ip,created_at,upd_state,upd_attempted,upd_error,upd_reported_at';
 function listFacilities() {
-  return _q('SELECT id,name,api_key_prefix,status,app_version,last_seen_at,last_seen_ip,created_at FROM facilities ORDER BY name');
+  return _q('SELECT ' + _FAC_COLS + ' FROM facilities ORDER BY name');
 }
 function getFacility(id) {
-  return _q1('SELECT id,name,api_key_prefix,status,app_version,last_seen_at,last_seen_ip,created_at FROM facilities WHERE id=?', [id]);
+  return _q1('SELECT ' + _FAC_COLS + ' FROM facilities WHERE id=?', [id]);
 }
 
 // Returns { id, name, apiKey } — apiKey is plaintext and shown ONLY here, once.
@@ -538,6 +645,7 @@ module.exports = {
   authUser, getUser, setUserPassword,
   listCentralUsers, countCentralUsers, createCentralUser, resetCentralUserPassword, deleteCentralUser,
   recordRelease, getRelease, listReleases, getLatestPublishedRelease, setReleaseStatus,
+  getRollout, startRollout, setRolloutState, recordFacilityUpdateStatus, updateDirectiveFor, evaluateRollout, manifestReleaseFor,
   listFacilities, getFacility, createFacility, rotateFacilityKey, setFacilityStatus,
   facilityByKey, touchFacility,
   // Sync ingest (Phase 1)

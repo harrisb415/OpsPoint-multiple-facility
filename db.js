@@ -618,6 +618,8 @@ function _seedDefaults() {
     central_users_last_pull:'',      // local timestamp of last managed-user pull
     central_users_count:    '0',     // how many managed users currently provisioned
     central_target_version: '',      // version HQ recommends the fleet run (Phase 3)
+    central_auto_update:    'false', // opt-in: auto-apply HQ rollout directives (Phase 5)
+    central_update_window:  '',      // 'HH:MM-HH:MM' local; empty = anytime (Phase 5)
   };
   for (const [k, v] of Object.entries(defs)) {
     if (!_q1('SELECT key FROM settings WHERE key=?', [k]))

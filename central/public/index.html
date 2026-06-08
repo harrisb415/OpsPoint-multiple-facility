@@ -110,6 +110,7 @@
       <button id="navAdmins" class="navbtn" onclick="showView('admins')">HQ Admins</button>
       <button id="navSystem" class="navbtn" onclick="showView('system')">System</button>
       <button id="navReleases" class="navbtn" onclick="showView('releases')">Releases</button>
+      <button id="navRollout" class="navbtn" onclick="showView('rollout')">Rollout</button>
     </div>
 
     <!-- OVERVIEW -->
@@ -313,6 +314,38 @@
         <div class="dim" style="margin-top:10px">Facilities pull the latest <b>published facility</b> release from <span class="mono">/fleet/manifest</span> (API-key authed). Yank to stop serving a version.</div>
       </div>
     </div>
+
+    <!-- ROLLOUT (staged fleet update) -->
+    <div id="viewRollout" class="hidden">
+      <div class="card">
+        <div class="section-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <h2 style="margin:0">Fleet rollout</h2>
+          <button class="ghost" onclick="loadRollout()">Refresh</button>
+        </div>
+        <div id="roStatus" class="dim">Loading…</div>
+        <div id="roActions" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"></div>
+      </div>
+      <div class="card">
+        <h2>Start a rollout</h2>
+        <div class="dim" style="margin-bottom:12px">Pick a stored, published facility version. <b>Canary</b> facilities update first; when they report healthy on the new version the rollout auto-advances to the rest. A canary that rolls back auto-pauses it. Facilities apply only if they've opted into auto-update (and within their maintenance window).</div>
+        <div class="row" style="flex-wrap:wrap">
+          <div><label>Version</label>
+            <select id="roVersion" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit"></select>
+          </div>
+          <button class="gold" onclick="startRolloutUI()">Start rollout</button>
+        </div>
+        <label style="margin-top:10px">Canary facilities (update first; select none = all-at-once)</label>
+        <div id="roCanary" class="dim">Loading…</div>
+        <div id="roErr" class="err"></div>
+      </div>
+      <div class="card">
+        <h2>Per-facility progress</h2>
+        <table>
+          <thead><tr><th>Facility</th><th>Running</th><th>Update state</th><th>Reported</th></tr></thead>
+          <tbody id="roRows"><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -360,10 +393,10 @@ async function savePw(){
 }
 
 function showView(v){
-  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins', system:'viewSystem', releases:'viewReleases' };
+  const views = { overview:'viewOverview', facilities:'viewFacilities', users:'viewUsers', admins:'viewAdmins', system:'viewSystem', releases:'viewReleases', rollout:'viewRollout' };
   Object.entries(views).forEach(([k,id])=> $(id).classList.toggle('hidden', k!==v));
   $('viewFacility').classList.add('hidden'); // leave any open drill-down
-  ['overview','facilities','users','admins','system','releases'].forEach(k=>{
+  ['overview','facilities','users','admins','system','releases','rollout'].forEach(k=>{
     const btn = $('nav'+k.charAt(0).toUpperCase()+k.slice(1));
     if (btn) btn.classList.toggle('active', k===v);
   });
@@ -372,6 +405,7 @@ function showView(v){
   else if (v==='admins') loadAdmins();
   else if (v==='system') loadSystem();
   else if (v==='releases') loadReleases();
+  else if (v==='rollout') loadRollout();
   else loadFacilities();
 }
 
@@ -564,7 +598,7 @@ const PHOTO_KEYS = ['photo','ua_photo'];
 
 async function openFacility(id, back){
   _fd = { id, name:'', table:null, rows:[], back: back||'overview' };
-  ['viewOverview','viewFacilities','viewUsers','viewAdmins','viewSystem','viewReleases'].forEach(v=>$(v).classList.add('hidden'));
+  ['viewOverview','viewFacilities','viewUsers','viewAdmins','viewSystem','viewReleases','viewRollout'].forEach(v=>$(v).classList.add('hidden'));
   ['overview','facilities','users','admins'].forEach(k=>{ const b=$('nav'+k.charAt(0).toUpperCase()+k.slice(1)); if(b) b.classList.remove('active'); });
   $('viewFacility').classList.remove('hidden');
   $('fdRowsCard').classList.add('hidden');
@@ -729,6 +763,47 @@ async function setRelStatus(channel,version,status){
   const r = await api('/api/releases/'+encodeURIComponent(channel)+'/'+encodeURIComponent(version)+'/status',{method:'POST',body:JSON.stringify({status})});
   if(!r.ok){ alert((r.body&&r.body.error)||'Failed'); return; }
   loadReleases();
+}
+
+// ── Rollout (staged fleet update) ──
+async function loadRollout(){
+  const r = await api('/api/rollout');
+  if(!r.ok){ if(r.status===401) showLogin(); return; }
+  const ro = r.body.rollout, facs = r.body.facilities||[], rels = (r.body.releases||[]).filter(x=>x.status==='published');
+  if (ro){
+    const onT = facs.filter(f=>(f.app_version||'')===ro.version).length;
+    const cls = ro.state==='paused' ? 'disabled' : 'active';
+    $('roStatus').innerHTML = 'Target <b>v'+esc(ro.version)+'</b> · <span class="pill '+cls+'">'+esc(ro.state)+'</span> · '+onT+' / '+facs.length+' on target'+((ro.canary_ids&&ro.canary_ids.length)?(' · canary '+ro.canary_ids.length):'');
+    const btns=[];
+    if (ro.state==='canary'||ro.state==='active') btns.push('<button class="ghost" onclick="rolloutAction(\'pause\')">Pause</button>');
+    if (ro.state==='paused') btns.push('<button class="gold" onclick="rolloutAction(\'resume\')">Resume</button>');
+    if (ro.state==='canary') btns.push('<button class="ghost" onclick="rolloutAction(\'advance\')">Advance to all</button>');
+    $('roActions').innerHTML = btns.join('');
+  } else { $('roStatus').textContent='No active rollout.'; $('roActions').innerHTML=''; }
+  $('roVersion').innerHTML = rels.length ? rels.map(x=>`<option value="${esc(x.version)}">${esc(x.version)}</option>`).join('') : '<option value="">(import a facility release first)</option>';
+  $('roCanary').innerHTML = facs.length ? facs.map(f=>`<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;font-size:13px;color:var(--ink)"><input type="checkbox" class="roCanaryCb" value="${esc(f.id)}" style="width:auto"/> ${esc(f.name)} <span class="dim">(${esc(f.app_version||'?')})</span></label>`).join('') : '<span class="muted">No facilities enrolled.</span>';
+  $('roRows').innerHTML = facs.length ? facs.map(f=>{
+    const onT = ro && (f.app_version||'')===ro.version;
+    const st = onT ? '<span class="pill active">on target</span>'
+      : (f.upd_state ? `<span class="pill ${(f.upd_state==='rolled_back'||f.upd_state==='failed')?'disabled':''}">${esc(f.upd_state)}${f.upd_attempted?(' → '+esc(f.upd_attempted)):''}</span>` : '<span class="muted">—</span>');
+    return `<tr><td>${esc(f.name)}</td><td>${esc(f.app_version)||'—'}</td><td>${st}</td><td class="dim">${esc(f.upd_reported_at)||esc(f.last_seen_at)||''}</td></tr>`;
+  }).join('') : `<tr><td colspan="4" class="muted">No facilities.</td></tr>`;
+}
+async function startRolloutUI(){
+  $('roErr').textContent='';
+  const version = $('roVersion').value;
+  if(!version){ $('roErr').textContent='Import a facility release first'; return; }
+  const canary_ids = Array.from(document.querySelectorAll('.roCanaryCb')).filter(c=>c.checked).map(c=>c.value);
+  if(!confirm('Start rollout of v'+version+(canary_ids.length?(' to '+canary_ids.length+' canary facility(ies) first'):' to ALL facilities'))) return;
+  const r = await api('/api/rollout',{method:'POST',body:JSON.stringify({version, canary_ids})});
+  if(!r.ok){ $('roErr').textContent=(r.body&&r.body.error)||'Failed'; return; }
+  loadRollout();
+}
+async function rolloutAction(a){
+  if(a==='advance' && !confirm('Advance to ALL facilities now?')) return;
+  const r = await api('/api/rollout/'+a,{method:'POST'});
+  if(!r.ok){ alert((r.body&&r.body.error)||'Failed'); return; }
+  loadRollout();
 }
 
 boot();

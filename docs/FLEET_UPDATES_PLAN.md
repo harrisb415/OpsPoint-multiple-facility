@@ -79,10 +79,38 @@ command and each node applies it to itself with its own `updater.js`.
   update had changed dependencies, a manual `npm install` may be needed. Most
   updates don't touch the lockfile.
 
-### Deferred (not built)
-5. **Rollout orchestration** — cohorts, canary → fleet with health gating,
-   pause/yank kill switch (release yank exists; staged cohorts do not),
-   maintenance windows, per-facility update status in the console.
+### Phase 5 — Rollout orchestration — **BUILT & verified** (rollout_e2e 15/15)
+- HQ `rollouts` table (one per channel) + engine: per-facility update **directive**
+  on each checkin/ingest, **serve-layer gating** (`/fleet/manifest` only serves a
+  facility the version it's eligible for), **canary → active → complete**
+  auto-advance, and **auto-pause** if a canary (or any active node) reports a
+  rollback. Routes: `GET/POST /api/rollout`, `POST /api/rollout/{pause|resume|advance}`.
+  Console "Rollout" tab: start (version + canary pick), pause/resume/advance,
+  per-facility progress.
+- Facilities self-report update outcome (`updated|rolled_back|idle`, derived from
+  updater/bootstrap markers) in checkin/ingest; HQ stores it on the facility row
+  and the engine reacts to it.
+- Facility **auto-apply agent** (`syncTick`): on a directive, if the facility has
+  **opted in** (`central_auto_update`) and is within its **maintenance window**
+  (`central_update_window`), it runs the updater (pull from HQ → verify signature →
+  apply → bootstrap health-check/rollback). Opt-in toggle + window in Admin → System.
+- On **connect**, the facility auto-points `update_manifest_url` at
+  `<hq>/fleet/manifest` (restored on disconnect); the updater sends the API key and
+  tolerates the HQ's self-signed cert (`authFor`/`insecureFor`).
+- bootstrap writes `last-rollback.json` so a rolled-back node reports `rolled_back`
+  → HQ auto-pauses.
+
+## Status: all phases (1–5) complete.
+The fleet now: signs releases (vendor key), self-updates HQ, relays bundles on-prem,
+auto-rolls-back failed boots, and runs **staged, health-gated, opt-in** rollouts with
+a canary→fleet cascade and an auto-pause kill switch.
+
+### Possible follow-ups (not built)
+- Per-admin PHI/rollout permissions (currently any HQ admin can drive rollouts).
+- Rollback of dependency changes (a failed update that altered the lockfile may need
+  a manual `npm install` after rollback — rare).
+- Time-boxed canary auto-advance (advance after N healthy minutes, not just "all
+  canaries reported"). Today advancing early is a manual "Advance to all".
 
 ## Procedures
 

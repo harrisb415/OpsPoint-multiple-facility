@@ -75,6 +75,7 @@ async function supervise() {
           try { restoreBackup(pending.backupPath); log('restored backup'); }
           catch (e) { log('rollback failed:', e && e.message); }
         }
+        try { fs.writeFileSync(path.join(UP_DIR, 'last-rollback.json'), JSON.stringify({ from: pending.from, to: pending.to, ts: new Date().toISOString() })); } catch (e) {}
         clearPending();
         continue;
       }

@@ -103,6 +103,8 @@ async function supervise() {
           try { restoreBackup(pending.backupPath); log('restored backup'); }
           catch (e) { log('rollback failed:', e && e.message); }
         }
+        // Record the rollback so the app can report 'rolled_back' to HQ (Phase 5).
+        try { fs.writeFileSync(path.join(UP_DIR, 'last-rollback.json'), JSON.stringify({ from: pending.from, to: pending.to, ts: new Date().toISOString() })); } catch (e) {}
         clearPending();
         continue; // relaunch the restored build
       }

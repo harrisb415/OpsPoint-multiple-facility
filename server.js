@@ -2431,6 +2431,13 @@ const updater = createUpdater({
     } catch (e) {}
     return {};
   },
+  insecureFor: (urlStr) => {
+    try {
+      const cu = db.getSetting('central_url', '') || '';
+      if (cu && db.getSetting('central_insecure_tls', false) && new URL(urlStr).host === new URL(cu).host) return true;
+    } catch (e) {}
+    return false;
+  },
 });
 
 app.get('/api/update/status', requireAuth, requirePermission('admin.system'), (req,res)=>{
@@ -2511,7 +2518,22 @@ app.get('/api/central/status', requireAuth, requirePermission('admin.system'), (
     target_version: db.getSetting('central_target_version', ''),
     current_version: _appVersion,
     update_available: !!(db.getSetting('central_target_version', '') && db.getSetting('central_target_version', '') !== _appVersion),
+    auto_update: !!db.getSetting('central_auto_update', false),
+    update_window: db.getSetting('central_update_window', ''),
   });
+});
+
+// Opt-in to HQ-driven rollouts (auto-apply within an optional maintenance window).
+app.post('/api/central/auto-update', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
+  const b = req.body || {};
+  db.setSetting('central_auto_update', !!b.auto_update);
+  if (b.window !== undefined) {
+    const w = String(b.window || '').trim();
+    if (w && !/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/.test(w)) return res.status(400).json({ error: 'window must be "HH:MM-HH:MM" or empty' });
+    db.setSetting('central_update_window', w);
+  }
+  audit(req, 'central.auto_update', 'system', null, 'Auto-update ' + (b.auto_update ? 'enabled' : 'disabled'), { window: db.getSetting('central_update_window', '') });
+  res.json({ ok: true, auto_update: !!db.getSetting('central_auto_update', false), update_window: db.getSetting('central_update_window', '') });
 });
 
 app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
@@ -2536,6 +2558,10 @@ app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admi
   db.setSetting('central_last_status', 'connected');
   db.setSetting('central_sync_error', '');
   db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
+  // Phase 5: pull updates from HQ on the LAN. Preserve the original (GitHub)
+  // manifest URL so disconnect can restore it.
+  if (!db.getSetting('update_manifest_url_origin', '')) db.setSetting('update_manifest_url_origin', db.getSetting('update_manifest_url', ''));
+  db.setSetting('update_manifest_url', url + '/fleet/manifest');
   try { db.enqueueSyncBackfill(); } catch (e) {}        // queue a full snapshot for HQ
   setImmediate(() => { syncTick().catch(() => {}); });   // start draining in the background
   audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
@@ -2560,9 +2586,13 @@ app.post('/api/central/checkin', requireAuth, csrfCheck, requirePermission('admi
 });
 
 app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
+  // Restore the original (GitHub) update source before clearing central settings.
+  const origin = db.getSetting('update_manifest_url_origin', '');
+  if (origin) { db.setSetting('update_manifest_url', origin); db.setSetting('update_manifest_url_origin', ''); }
   ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
    'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error',
-   'central_manages_users', 'central_users_last_pull', 'central_users_count', 'central_target_version']
+   'central_manages_users', 'central_users_last_pull', 'central_users_count', 'central_target_version',
+   'central_auto_update', 'central_update_window']
     .forEach(k => db.setSetting(k, ''));
   // Previously-provisioned managed users are LEFT in place (real accounts with
   // their own passwords) so disconnecting never locks staff out.
@@ -2582,11 +2612,11 @@ async function syncTick() {
     const url = db.getSetting('central_url', ''), key = db.getSetting('central_api_key', '');
     const insecure = !!db.getSetting('central_insecure_tls', false);
     if (!url || !key) { db.clearOutbox(); return; }   // standalone: nothing to send
-    let batches = 0;
+    let batches = 0, lastUpdate = null;
     do {
       const batch = db.getSyncBatch(50);   // may be empty → still send as a heartbeat (refreshes liveness + target)
       let r;
-      try { r = await _centralRequest('POST', url + '/sync/ingest', { headers: { 'x-facility-key': key }, body: { rows: batch, app_version: _appVersion }, insecure, timeout: 30000 }); }
+      try { r = await _centralRequest('POST', url + '/sync/ingest', { headers: { 'x-facility-key': key }, body: { rows: batch, app_version: _appVersion, update_status: _localUpdateStatus() }, insecure, timeout: 30000 }); }
       catch (e) { db.setSetting('central_sync_error', (e && e.message) || 'network error'); db.setSetting('central_last_status', 'unreachable'); return; }
       if (r.status !== 200 || !r.body || !r.body.ok) {
         db.setSetting('central_sync_error', (r.body && r.body.error) || ('HTTP ' + r.status));
@@ -2597,12 +2627,54 @@ async function syncTick() {
       db.setSetting('central_last_status', 'connected');
       db.setSetting('central_sync_error', '');
       if (r.body.target_version !== undefined) db.setSetting('central_target_version', r.body.target_version || '');
+      lastUpdate = r.body.update || null;
       batches++;
     } while (db.outboxPending() > 0 && batches < 20);
     db.pruneOutbox();
     db.setSetting('central_last_sync', _centralTs());
     await pullManagedUsers();
+    await _maybeAutoUpdate(lastUpdate);   // Phase 5: act on a rollout directive (opt-in + window-gated)
   } finally { _syncing = false; }
+}
+
+// ── Phase 5: rollout auto-apply agent ─────────────────────────────────────
+// Report this node's update outcome to HQ, derived from updater/bootstrap markers.
+function _localUpdateStatus() {
+  try {
+    const upDir = path.join(DATA, 'updates');
+    const rd = (f) => { try { return JSON.parse(fs.readFileSync(path.join(upDir, f), 'utf8')); } catch (e) { return null; } };
+    const applied = rd('last-applied.json');     // updater wrote on apply {to, ts}
+    const rolled = rd('last-rollback.json');      // bootstrap wrote on auto-rollback {from, to, ts}
+    if (rolled && (!applied || String(rolled.ts) >= String(applied.ts)))
+      return { state: 'rolled_back', version: _appVersion, attempted: rolled.to || '' };
+    if (applied && applied.to === _appVersion)
+      return { state: 'updated', version: _appVersion, attempted: applied.to };
+    return { state: 'idle', version: _appVersion };
+  } catch (e) { return { state: 'idle', version: _appVersion }; }
+}
+// "HH:MM-HH:MM" local window; empty = anytime. Handles windows crossing midnight.
+function _inUpdateWindow() {
+  const w = String(db.getSetting('central_update_window', '') || '').trim();
+  if (!w) return true;
+  const m = w.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
+  if (!m) return true;
+  const now = new Date(), cur = now.getHours() * 60 + now.getMinutes();
+  const a = parseInt(m[1]) * 60 + parseInt(m[2]), b = parseInt(m[3]) * 60 + parseInt(m[4]);
+  return a <= b ? (cur >= a && cur <= b) : (cur >= a || cur <= b);
+}
+const _autoTried = new Set();   // versions attempted this process (avoid tight retry loops)
+async function _maybeAutoUpdate(d) {
+  if (!d || !d.version || d.apply !== 'auto') return;
+  if (!db.getSetting('central_auto_update', false)) return;       // opt-in per facility
+  if (d.version === _appVersion || _autoTried.has(d.version)) return;
+  if (!_inUpdateWindow()) return;                                 // outside maintenance window
+  const st = updater.status();
+  if (st && st.progress && st.progress.applying) return;          // already applying
+  _autoTried.add(d.version);
+  try {
+    db.auditLog(null, 'central-rollout', '127.0.0.1', 'update.auto', 'system', null, _appVersion + ' -> ' + d.version, {});
+    await updater.apply('central-rollout');   // pulls HQ fleet manifest (update_manifest_url), verifies signature, applies, restarts
+  } catch (e) { db.setSetting('central_sync_error', 'auto-update: ' + ((e && e.message) || 'error')); }
 }
 
 // Pull HQ-managed users down and apply locally (Phase 2b; opt-in). No-op unless

@@ -70,6 +70,11 @@ function loginLimited(ip) {
 function clientIp(req) {
   return (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '';
 }
+// Public base URL of this HQ as the facility reached it — used to point fleet
+// manifest/bundle/update-directive URLs back at HQ.
+function baseUrl(req) {
+  return (req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host');
+}
 
 // ── Middleware ───────────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
@@ -205,14 +210,17 @@ app.get('/api/audit', requireAdmin, (req, res) => {
 // ── Node-facing: check-in (API-key auth, no session) ─────────────────────
 app.post('/enroll/checkin', requireFacilityKey, (req, res) => {
   const ip = clientIp(req);
-  const appVersion = String((req.body && req.body.app_version) || '');
-  db.touchFacility(req.facility.id, { ip, app_version: appVersion });
-  db.audit({ actor: req.facility.name, action: 'facility.checkin', target: req.facility.id, detail: appVersion, ip });
+  const b = req.body || {};
+  db.touchFacility(req.facility.id, { ip, app_version: String(b.app_version || '') });
+  if (b.update_status) db.recordFacilityUpdateStatus(req.facility.id, b.update_status);
+  db.evaluateRollout('facility');
+  db.audit({ actor: req.facility.name, action: 'facility.checkin', target: req.facility.id, detail: String(b.app_version || ''), ip });
   res.json({
     ok: true,
     server_time: db.nowLocal(),
     facility: { id: req.facility.id, name: req.facility.name },
     target_version: db.getFleetTarget().version,
+    update: db.updateDirectiveFor(db.getFacility(req.facility.id), baseUrl(req)),
   });
 });
 
@@ -225,7 +233,9 @@ app.post('/sync/ingest', requireFacilityKey, (req, res) => {
   try { result = db.ingestRows(req.facility.id, rows); }
   catch (e) { return res.status(500).json({ error: 'ingest failed: ' + ((e && e.message) || 'error') }); }
   db.touchFacility(req.facility.id, { ip, app_version: String((req.body && req.body.app_version) || req.facility.app_version || '') });
-  res.json({ ok: true, ...result, target_version: db.getFleetTarget().version });
+  if (req.body && req.body.update_status) db.recordFacilityUpdateStatus(req.facility.id, req.body.update_status);
+  db.evaluateRollout('facility');
+  res.json({ ok: true, ...result, target_version: db.getFleetTarget().version, update: db.updateDirectiveFor(db.getFacility(req.facility.id), baseUrl(req)) });
 });
 
 // ── Per-facility backup stats (admin) ────────────────────────────────────
@@ -399,10 +409,10 @@ app.post('/api/releases/:channel/:version/status', requireAdmin, (req, res) => {
 
 // Facility-facing: latest published facility release as a manifest, bundle URL → HQ.
 app.get('/fleet/manifest', requireFacilityKey, (req, res) => {
-  const rel = db.getLatestPublishedRelease('facility');
-  if (!rel) return res.status(404).json({ error: 'no published facility release' });
+  const rel = db.manifestReleaseFor(db.getFacility(req.facility.id)); // rollout-gated
+  if (!rel) return res.status(404).json({ error: 'no update available for this facility' });
   db.touchFacility(req.facility.id, { ip: clientIp(req), app_version: req.facility.app_version || '' });
-  const base = (req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host');
+  const base = baseUrl(req);
   res.json({
     version: rel.version, released: rel.released, min_node: rel.min_node, min_from: rel.min_from,
     url: base + '/fleet/bundle/' + rel.version, sha256: rel.sha256, size: rel.size,
@@ -420,6 +430,35 @@ app.get('/fleet/bundle/:version', requireFacilityKey, (req, res) => {
   res.setHeader('content-type', 'application/zip');
   res.setHeader('content-length', String(fs.statSync(file).size));
   fs.createReadStream(file).pipe(res);
+});
+
+// ── Rollout orchestration (Phase 5; admin) ───────────────────────────────
+app.get('/api/rollout', requireAdmin, (req, res) => {
+  res.json({ rollout: db.getRollout('facility'), facilities: db.listFacilities(), releases: db.listReleases('facility') });
+});
+app.post('/api/rollout', requireAdmin, (req, res) => {
+  const b = req.body || {};
+  const version = String(b.version || '').trim();
+  if (!version) return res.status(400).json({ error: 'version required' });
+  const rel = db.getRelease('facility', version);
+  if (!rel || rel.status !== 'published') return res.status(400).json({ error: 'no published facility release for ' + version });
+  const ro = db.startRollout('facility', version, Array.isArray(b.canary_ids) ? b.canary_ids : [], b.notes);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'rollout.start', target: 'facility/' + version, detail: ro.state + (ro.canary_ids.length ? ' canary=' + ro.canary_ids.length : ''), ip: clientIp(req) });
+  res.json({ ok: true, rollout: ro });
+});
+app.post('/api/rollout/:action', requireAdmin, (req, res) => {
+  const ro = db.getRollout('facility');
+  if (!ro) return res.status(404).json({ error: 'no active rollout' });
+  let next;
+  if (req.params.action === 'pause') next = 'paused';
+  else if (req.params.action === 'resume') next = ro.canary_ids.length ? 'canary' : 'active';
+  else if (req.params.action === 'advance') next = 'active';
+  else return res.status(400).json({ error: 'unknown action' });
+  const updated = db.setRolloutState('facility', next);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'rollout.' + req.params.action, target: 'facility/' + ro.version, detail: next, ip: clientIp(req) });
+  res.json({ ok: true, rollout: updated });
 });
 
 // ── Console (static SPA-ish single page) ─────────────────────────────────

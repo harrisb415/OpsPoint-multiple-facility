@@ -62,18 +62,20 @@ function hostAllowed(urlStr, extra = []) {
 
 // Stream a GET, following redirects only to allow-listed hosts. `extraHeaders`
 // lets callers attach auth (e.g. x-facility-key) when pulling from an HQ relay.
-function _get(urlStr, allowHosts, redirectsLeft, cb, extraHeaders) {
+function _get(urlStr, allowHosts, redirectsLeft, cb, extraHeaders, insecure) {
   let u;
   try { u = new URL(urlStr); } catch (e) { return cb(e); }
   if (!hostAllowed(urlStr, allowHosts)) return cb(new Error('Host not allowed: ' + u.host));
   const lib = u.protocol === 'http:' ? http : https;
   const headers = Object.assign({ 'User-Agent': 'OpsPoint-Updater' }, extraHeaders || {});
-  const req = lib.get(urlStr, { headers }, (res) => {
+  const opts = { headers };
+  if (insecure && u.protocol === 'https:') opts.rejectUnauthorized = false; // self-signed HQ on a trusted LAN
+  const req = lib.get(urlStr, opts, (res) => {
     if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
       res.resume();
       if (redirectsLeft <= 0) return cb(new Error('Too many redirects'));
       const next = new URL(res.headers.location, urlStr).toString();
-      return _get(next, allowHosts, redirectsLeft - 1, cb, extraHeaders);
+      return _get(next, allowHosts, redirectsLeft - 1, cb, extraHeaders, insecure);
     }
     if (res.statusCode !== 200) { res.resume(); return cb(new Error('HTTP ' + res.statusCode + ' for ' + u.host)); }
     cb(null, res);
@@ -83,7 +85,7 @@ function _get(urlStr, allowHosts, redirectsLeft, cb, extraHeaders) {
 }
 
 // Fetch a small resource (manifest) into memory, capped.
-function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024, extraHeaders) {
+function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024, extraHeaders, insecure) {
   return new Promise((resolve, reject) => {
     _get(urlStr, allowHosts, 5, (err, res) => {
       if (err) return reject(err);
@@ -95,12 +97,12 @@ function fetchBuffer(urlStr, allowHosts, maxBytes = 1024 * 1024, extraHeaders) {
       });
       res.on('end', () => resolve(Buffer.concat(chunks)));
       res.on('error', reject);
-    }, extraHeaders);
+    }, extraHeaders, insecure);
   });
 }
 
 // Download a (potentially large) resource to disk, with progress callback.
-function downloadToFile(urlStr, dest, allowHosts, onProgress, extraHeaders) {
+function downloadToFile(urlStr, dest, allowHosts, onProgress, extraHeaders, insecure) {
   return new Promise((resolve, reject) => {
     _get(urlStr, allowHosts, 5, (err, res) => {
       if (err) return reject(err);
@@ -112,7 +114,7 @@ function downloadToFile(urlStr, dest, allowHosts, onProgress, extraHeaders) {
       out.on('error', reject);
       out.on('finish', () => resolve({ bytes: got }));
       res.pipe(out);
-    }, extraHeaders);
+    }, extraHeaders, insecure);
   });
 }
 
@@ -178,6 +180,8 @@ function createUpdater(ctx) {
   // Optional: returns auth headers for a URL (e.g. x-facility-key when the
   // manifest/bundle is served by the HQ relay rather than a public host).
   const authFor = ctx.authFor || (() => ({}));
+  // Optional: allow a self-signed cert for a URL (HQ relay on a trusted LAN).
+  const insecureFor = ctx.insecureFor || (() => false);
 
   const UP_DIR = path.join(dataDir, 'updates');
   const STAGING = path.join(UP_DIR, 'staging');
@@ -206,7 +210,7 @@ function createUpdater(ctx) {
     const url = manifestUrl();
     if (!url) throw new Error('No update manifest URL configured');
     if (!hostAllowed(url, [manifestHost()])) throw new Error('Manifest host is not allow-listed');
-    const buf = await fetchBuffer(url, [manifestHost()], 1024 * 1024, authFor(url));
+    const buf = await fetchBuffer(url, [manifestHost()], 1024 * 1024, authFor(url), insecureFor(url));
     let m;
     try { m = JSON.parse(buf.toString('utf8')); } catch (e) { throw new Error('Manifest is not valid JSON'); }
     if (!m || !m.version || !m.url || !m.sha256) throw new Error('Manifest missing version/url/sha256');
@@ -278,7 +282,7 @@ function createUpdater(ctx) {
       rmrf(zipPath);
       await downloadToFile(m.url, zipPath, [manifestHost()], (got, total) => {
         if (total > 0) setState({ phase: 'download', pct: 12 + Math.round((got / total) * 28), message: 'Downloading v' + ver + '… ' + Math.round((got / total) * 100) + '%' });
-      }, authFor(m.url));
+      }, authFor(m.url), insecureFor(m.url));
 
       // 2. Verify
       setState({ phase: 'verify', pct: 44, message: 'Verifying checksum…' });

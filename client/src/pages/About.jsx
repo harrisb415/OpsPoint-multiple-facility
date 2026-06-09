@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const VERSION = '2.3.5'
+const VERSION = '2.3.6'
 
 const STACK = [
   'React 19', 'React Router v7', 'Vite', 'Node.js',
@@ -8,16 +8,16 @@ const STACK = [
 ]
 
 const FEATURES = [
-  { icon: '📋', title: 'Shift Reports',    desc: 'Resident statuses, log entries, issues, medical notes.' },
-  { icon: '📡', title: 'Real-time Sync',   desc: 'WebSocket broadcast — desktop and mobile stay in sync.' },
-  { icon: '📱', title: 'Mobile Interface', desc: 'Responsive mobile UI for phones on the local network.' },
-  { icon: '👥', title: 'Staff Directory',  desc: 'Categorized contacts with phone numbers and notes.' },
-  { icon: '🧹', title: 'Chore Tracking',   desc: 'Assign and log daily chore completions per resident.' },
-  { icon: '🚪', title: 'Weekend Passes',   desc: 'Departure/return tracking with UA notes.' },
-  { icon: '📬', title: 'Mail Log',         desc: 'Incoming mail with approve and deliver workflow.' },
-  { icon: '🧪', title: 'UA Module',        desc: 'Random draw, request system, witnessed results, photo COC.' },
-  { icon: '🏥', title: 'HIPAA Clinical',   desc: 'UA records, milestones, incidents, discharge, 42 CFR Part 2.' },
-  { icon: '🔒', title: 'Secure',           desc: 'CSRF, rate limiting, session fixation prevention, audit log.' },
+  { icon: 'ðŸ“‹', title: 'Shift Reports',    desc: 'Resident statuses, log entries, issues, medical notes.' },
+  { icon: 'ðŸ“¡', title: 'Real-time Sync',   desc: 'WebSocket broadcast â€” desktop and mobile stay in sync.' },
+  { icon: 'ðŸ“±', title: 'Mobile Interface', desc: 'Responsive mobile UI for phones on the local network.' },
+  { icon: 'ðŸ‘¥', title: 'Staff Directory',  desc: 'Categorized contacts with phone numbers and notes.' },
+  { icon: 'ðŸ§¹', title: 'Chore Tracking',   desc: 'Assign and log daily chore completions per resident.' },
+  { icon: 'ðŸšª', title: 'Weekend Passes',   desc: 'Departure/return tracking with UA notes.' },
+  { icon: 'ðŸ“¬', title: 'Mail Log',         desc: 'Incoming mail with approve and deliver workflow.' },
+  { icon: 'ðŸ§ª', title: 'UA Module',        desc: 'Random draw, request system, witnessed results, photo COC.' },
+  { icon: 'ðŸ¥', title: 'HIPAA Clinical',   desc: 'UA records, milestones, incidents, discharge, 42 CFR Part 2.' },
+  { icon: 'ðŸ”’', title: 'Secure',           desc: 'CSRF, rate limiting, session fixation prevention, audit log.' },
 ]
 
 export default function About() {
@@ -64,7 +64,7 @@ export default function About() {
           </p>
           <p style={{ fontSize: '.84rem', color: '#475569', lineHeight: 1.65, margin: '10px 0 0' }}>
             Staff log shift activity, track resident statuses, manage passes and mail, conduct and record UA tests,
-            and document behavioral incidents — all in real time. Supervisors and case managers have role-based access
+            and document behavioral incidents â€” all in real time. Supervisors and case managers have role-based access
             to clinical records, milestone tracking, 42 CFR Part 2 consent management, and a full audit trail.
             Permissions are fully configurable per user and group.
           </p>
@@ -132,7 +132,7 @@ export default function About() {
             textDecoration: 'none', padding: '6px 16px',
             border: '1.5px solid var(--crimson)', borderRadius: 6,
             display: 'inline-block',
-          }}>← Back to Shift Report</Link>
+          }}>â† Back to Shift Report</Link>
         </div>
       </div>
     </div>

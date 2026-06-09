@@ -2,6 +2,13 @@
 
 ---
 
+## v2.3.6 — Facility removal, HQ central v0.1.3 (2026-06-08)
+
+### HQ Central
+- **Remove facility** — HQ admins can permanently remove a facility record, its API key, and all backed-up data; a two-step confirm dialog prevents accidental deletion
+
+---
+
 ## v2.3.5 — Fleet update system, cross-platform (2026-06-08)
 
 ### Multi-facility fleet updates

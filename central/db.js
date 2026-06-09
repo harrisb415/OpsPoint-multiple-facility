@@ -452,6 +452,14 @@ function setFacilityStatus(id, status) {
   _run('UPDATE facilities SET status=? WHERE id=?', [status === 'disabled' ? 'disabled' : 'active', id]);
 }
 
+function deleteFacility(id) {
+  // Remove all backed-up rows, managed-user assignments, and the facility record
+  // (sync_state has ON DELETE CASCADE so it's handled automatically).
+  _run('DELETE FROM facility_data WHERE facility_id=?', [id]);
+  _run('DELETE FROM managed_user_facilities WHERE facility_id=?', [id]);
+  _run('DELETE FROM facilities WHERE id=?', [id]);
+}
+
 // Look up a facility by its plaintext API key (constant-ish via unique hash index).
 function facilityByKey(apiKey) {
   if (!apiKey) return null;
@@ -646,7 +654,7 @@ module.exports = {
   listCentralUsers, countCentralUsers, createCentralUser, resetCentralUserPassword, deleteCentralUser,
   recordRelease, getRelease, listReleases, getLatestPublishedRelease, setReleaseStatus,
   getRollout, startRollout, setRolloutState, recordFacilityUpdateStatus, updateDirectiveFor, evaluateRollout, manifestReleaseFor,
-  listFacilities, getFacility, createFacility, rotateFacilityKey, setFacilityStatus,
+  listFacilities, getFacility, createFacility, rotateFacilityKey, setFacilityStatus, deleteFacility,
   facilityByKey, touchFacility,
   // Sync ingest (Phase 1)
   getAppliedThrough, ingestRows, facilityTableCounts, getFacilityRows,

@@ -1,5 +1,5 @@
 @echo off
-title OpsPoint v2.3.5
+title OpsPoint v2.3.6
 cd /d "%~dp0"
 
 echo.
@@ -30,7 +30,7 @@ if not exist node_modules\ (
 if not exist data\ mkdir data
 if not exist data\photos\ mkdir data\photos
 
-:: ── Detect TLS ────────────────────────────────────────────────────
+:: â”€â”€ Detect TLS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 set "_proto=http"
 set "_ws=ws"
 if exist data\cert.pem if exist data\key.pem (
@@ -38,17 +38,17 @@ if exist data\cert.pem if exist data\key.pem (
   set "_ws=wss"
 )
 
-:: ── Get LAN IP ────────────────────────────────────────────────────
+:: â”€â”€ Get LAN IP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 for /f %%a in ('powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notmatch '^127\.' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -First 1 -ExpandProperty IPAddress)"') do set "_ip=%%a"
 if "%_ip%"=="" set "_ip=[YOUR-IP]"
 
-:: ── Record start time ─────────────────────────────────────────────
+:: â”€â”€ Record start time â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 for /f "usebackq delims=" %%a in (`powershell -NoProfile -Command "Get-Date -Format 'MM/dd/yyyy  HH:mm:ss'"`) do set "_startStr=%%a"
 for /f %%a in ('powershell -NoProfile -Command "([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"') do set "_t0=%%a"
 
 echo.
 echo  ================================================
-echo   OpsPoint v2.3.5
+echo   OpsPoint v2.3.6
 echo  ================================================
 echo   Desktop : %_proto%://localhost:3000
 echo   Mobile  : %_proto%://%_ip%:3000
@@ -59,12 +59,12 @@ echo  ================================================
 
 echo.
 
-:: ── Live uptime ticker in the window title bar ────────────────────
+:: â”€â”€ Live uptime ticker in the window title bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 set "_ticker=%TEMP%\sp_ticker_%RANDOM%.stop"
 del "%_ticker%" 2>nul
-start /b powershell -NoProfile -Command "& { $s=Get-Date; $f='%_ticker%'; while (-not (Test-Path $f)) { $e=(Get-Date)-$s; [Console]::Title='OpsPoint v2.3.5   Up: '+$e.ToString('hh\:mm\:ss'); Start-Sleep 1 } }"
+start /b powershell -NoProfile -Command "& { $s=Get-Date; $f='%_ticker%'; while (-not (Test-Path $f)) { $e=(Get-Date)-$s; [Console]::Title='OpsPoint v2.3.6   Up: '+$e.ToString('hh\:mm\:ss'); Start-Sleep 1 } }"
 
-:: bootstrap.js supervises server.js — health-checks updates and auto-rolls-back
+:: bootstrap.js supervises server.js â€” health-checks updates and auto-rolls-back
 :: a failed boot. It stays running across in-app restarts/updates.
 node bootstrap.js
 if %ERRORLEVEL% neq 0 (
@@ -72,7 +72,7 @@ if %ERRORLEVEL% neq 0 (
   echo  Server stopped unexpectedly. See error above.
 )
 
-:: ── Stop the ticker and show final uptime ─────────────────────────
+:: â”€â”€ Stop the ticker and show final uptime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo.>"%_ticker%"
 for /f %%a in ('powershell -NoProfile -Command "([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"') do set "_t1=%%a"
 set /a "_sec=%_t1% - %_t0%"
@@ -80,7 +80,7 @@ set /a "_upH=%_sec% / 3600"
 set /a "_upM=%_sec% / 60 - %_upH% * 60"
 set /a "_upS=%_sec% - %_upH% * 3600 - %_upM% * 60"
 del "%_ticker%" 2>nul
-title OpsPoint v2.3.5  ^|  Stopped
+title OpsPoint v2.3.6  ^|  Stopped
 echo.
 echo  ================================================
 echo   Server offline.

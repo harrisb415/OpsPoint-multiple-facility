@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
-const VERSION = '2.3.5'
+const VERSION = '2.3.6'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -75,7 +75,7 @@ export default function Login() {
               />
             </div>
             <button type="submit" className="auth-btn" disabled={busy}>
-              {busy ? 'Signing In…' : 'Sign In →'}
+              {busy ? 'Signing Inâ€¦' : 'Sign In â†’'}
             </button>
           </form>
         </div>

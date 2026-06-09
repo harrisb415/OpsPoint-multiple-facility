@@ -562,8 +562,9 @@ async function loadFacilities(){
       <td><span class="pill ${f.status==='active'?'active':'disabled'}">${esc(f.status)}</span></td>
       <td>${esc(f.app_version)||'<span class="muted">—</span>'}</td>
       <td>${f.last_seen_at?esc(f.last_seen_at):'<span class="muted">never</span>'}</td>
-      <td style="text-align:right">
+      <td style="text-align:right;white-space:nowrap">
         <button class="ghost" onclick="toggleStatus('${f.id}','${f.status}')">${f.status==='active'?'Disable':'Enable'}</button>
+        <button class="ghost" style="color:#b22;border-color:#f0b8b8" onclick="removeFacility('${f.id}','${esc(f.name)}')">Remove</button>
       </td>
     </tr>`).join('') : `<tr><td colspan="6" class="muted">No facilities yet. Enroll one above.</td></tr>`;
 }
@@ -589,6 +590,13 @@ function hideKey(){ $('keyReveal').classList.add('hidden'); _lastKey=''; }
 async function toggleStatus(id, cur){
   const status = cur==='active' ? 'disabled' : 'active';
   await api('/api/facilities/'+id+'/status',{method:'POST',body:JSON.stringify({status})});
+  loadFacilities();
+}
+
+async function removeFacility(id, name){
+  if (!confirm('Permanently remove "'+name+'"?\n\nThis deletes the facility record, its API key, and all backed-up data from HQ. The facility\'s own database is not affected.\n\nThis cannot be undone.')) return;
+  const r = await api('/api/facilities/'+id, {method:'DELETE'});
+  if (!r.ok) { alert((r.body&&r.body.error)||'Remove failed'); return; }
   loadFacilities();
 }
 

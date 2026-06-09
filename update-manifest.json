@@ -1,18 +1,15 @@
 {
-  "version": "2.3.5",
-  "released": "2026-06-09T04:32:05.791Z",
+  "version": "2.3.6",
+  "released": "2026-06-09T05:18:53.872Z",
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.5/opspoint-2.3.5.tar.gz",
-  "sha256": "ef1a1d515c04fd879bc844f85ab49f0ddbfeb80ae37367bdcd0ca01b8b57acd4",
-  "size": 345629,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.6/opspoint-2.3.6.tar.gz",
+  "sha256": "f965a24b00cacf616e20f476bddb5a166c50cb375a5922526548142e2040611c",
+  "size": 345723,
   "sig_alg": "ed25519",
-  "signature": "ZZYh1z9NRx4HJYnu4fagWY8JIT+a4v8b9DtoM6hbcjhezGOoeDpBKS+RqmmNghVZ/NTe85oVTRJam/jwqkinAA==",
+  "signature": "6VtUK/6LQPN3sK9fXxPvia7bcVwj39IiIaSqdhHkLqyf5OnsG+qNEvQccNQgXkxrUc5Y7QhyZnupToMq+4f7DQ==",
   "changelog": [
-    "Cross-platform updates (Linux/macOS/Windows) via .tar.gz bundles",
-    "Signed releases (Ed25519) — verified before install",
-    "Updates can be served from your HQ on the LAN (no internet needed)",
-    "Failed updates auto-roll-back; HQ can stage rollouts canary -> fleet"
+    "HQ: remove a facility (deletes record, API key, and all backed-up data from HQ)"
   ]
 }

@@ -1,7 +1,7 @@
 {
   "name": "opspoint-central",
-  "version": "0.1.2",
-  "description": "OpsPoint Central / HQ server — facility registry, sync ingest, org console",
+  "version": "0.1.3",
+  "description": "OpsPoint Central / HQ server â€” facility registry, sync ingest, org console",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

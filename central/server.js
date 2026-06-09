@@ -203,6 +203,15 @@ app.post('/api/facilities/:id/status', requireAdmin, (req, res) => {
   res.json({ ok: true, status });
 });
 
+app.delete('/api/facilities/:id', requireAdmin, (req, res) => {
+  const fac = db.getFacility(req.params.id);
+  if (!fac) return res.status(404).json({ error: 'not found' });
+  db.deleteFacility(fac.id);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'facility.delete', target: fac.id, detail: fac.name, ip: clientIp(req) });
+  res.json({ ok: true });
+});
+
 app.get('/api/audit', requireAdmin, (req, res) => {
   res.json({ audit: db.getAudit(200) });
 });

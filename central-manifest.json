@@ -1,13 +1,13 @@
 {
-  "version": "0.1.1",
-  "released": "2026-06-08T05:31:23.646Z",
+  "version": "0.1.2",
+  "released": "2026-06-09T04:32:06.111Z",
   "min_node": "20.0.0",
   "min_from": "0.1.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.4/central-0.1.1.zip",
-  "sha256": "67fc4e60d79f25c03a7a23ce32893b65481b192ed416d51c4b55be59d0067545",
-  "size": 48553,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.5/central-0.1.2.tar.gz",
+  "sha256": "697e892f1176932110032dd016019e1496f563a5f321e145292fe084a01af1d9",
+  "size": 47258,
   "sig_alg": "ed25519",
-  "signature": "i7KwAb8YRKUSdOItBArqSEF0rv7t9/Xy2VtP4Y+CRqS9BPmJoX3fdLWhv1iJ6VT9yegUGHiXZO7yrvehYtD4BQ==",
+  "signature": "en4VEmee0fJ5XMBHRjx8KdCJLevgqxX29jc0sMUePpnrXbsjPsa9oroz0Dq3r4S4Jwt6ki/Q8v01bKtdk9yFDQ==",
   "changelog": []
 }

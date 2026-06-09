@@ -1,4 +1,4 @@
-# OpsPoint · v2.3.4
+# OpsPoint · v2.3.5
 
 Shift management platform for residential facilities. React 19 + Vite SPA frontend, Node.js + Express + SQLite backend, real-time WebSocket sync. Runs entirely on-premise — no cloud dependency.
 

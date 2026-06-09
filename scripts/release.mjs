@@ -18,7 +18,7 @@
  * The bundle is what the in-app updater downloads, checksum-verifies, and swaps
  * into place. It deliberately excludes node_modules/ and data/.
  */
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { createHash, createPrivateKey, sign as edSign } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,10 +35,17 @@ const DIRS = ['migrations', path.join('client', 'dist')];
 
 const REL = path.join(ROOT, 'release');
 const STAGE = path.join(REL, `opspoint-${VER}`);
-const ZIP = path.join(REL, `opspoint-${VER}.zip`);
+const ZIP = path.join(REL, `opspoint-${VER}.tar.gz`);
 
 function sh(cmd, cwd = ROOT) { execSync(cmd, { cwd, stdio: 'inherit' }); }
-function ps(cmd) { execSync(`powershell -NoProfile -NonInteractive -Command "${cmd.replace(/"/g, '\\"')}"`, { stdio: 'inherit' }); }
+// Cross-platform gzip-tar with contents at archive root. `tar` is bsdtar on
+// Windows/macOS and GNU tar on Linux; both create + read .tar.gz interoperably,
+// and `tar -xf` extracts it on every platform (no PowerShell/unzip needed).
+// Use paths RELATIVE to REL (cwd) so GNU tar doesn't read a Windows "C:\..."
+// path as a remote host (host:path) and fail.
+function targz(outFile, stageDir) {
+  execFileSync('tar', ['-czf', path.relative(REL, outFile), '-C', path.relative(REL, stageDir), '.'], { cwd: REL, stdio: 'inherit' });
+}
 
 console.log(`\n== Building OpsPoint v${VER} release bundle ==\n`);
 
@@ -59,10 +66,10 @@ for (const d of DIRS) {
   if (fs.existsSync(src)) fs.cpSync(src, path.join(STAGE, d), { recursive: true });
 }
 
-// 3. Zip (contents at zip root) via PowerShell Compress-Archive
-console.log('• zipping…');
+// 3. Archive (contents at root) as cross-platform .tar.gz
+console.log('• archiving (tar.gz)…');
 fs.rmSync(ZIP, { force: true });
-ps(`Compress-Archive -Path '${STAGE.replace(/'/g, "''")}\\*' -DestinationPath '${ZIP.replace(/'/g, "''")}' -Force`);
+targz(ZIP, STAGE);
 
 // 4. Hash + size
 const buf = fs.readFileSync(ZIP);
@@ -93,7 +100,7 @@ const manifest = {
   min_node: prev.min_node || '20.0.0',
   min_from: prev.min_from || '2.3.0',
   mandatory: !!prev.mandatory,
-  url: `https://github.com/${REPO}/releases/download/v${VER}/opspoint-${VER}.zip`,
+  url: `https://github.com/${REPO}/releases/download/v${VER}/opspoint-${VER}.tar.gz`,
   sha256,
   size,
   sig_alg: 'ed25519',
@@ -112,13 +119,13 @@ if (fs.existsSync(cpkgPath)) {
   const C_FILES = ['server.js', 'db.js', 'updater.js', 'bootstrap.js', 'package.json', 'package-lock.json'];
   const C_DIRS = ['public'];
   const CSTAGE = path.join(REL, `central-${CVER}`);
-  CZIP = path.join(REL, `central-${CVER}.zip`);
+  CZIP = path.join(REL, `central-${CVER}.tar.gz`);
   fs.rmSync(CSTAGE, { recursive: true, force: true });
   fs.mkdirSync(CSTAGE, { recursive: true });
   for (const f of C_FILES) { const s = path.join(ROOT, 'central', f); if (fs.existsSync(s)) fs.copyFileSync(s, path.join(CSTAGE, f)); }
   for (const d of C_DIRS) { const s = path.join(ROOT, 'central', d); if (fs.existsSync(s)) fs.cpSync(s, path.join(CSTAGE, d), { recursive: true }); }
   fs.rmSync(CZIP, { force: true });
-  ps(`Compress-Archive -Path '${CSTAGE.replace(/'/g, "''")}\\*' -DestinationPath '${CZIP.replace(/'/g, "''")}' -Force`);
+  targz(CZIP, CSTAGE);
   const cbuf = fs.readFileSync(CZIP);
   const csha = createHash('sha256').update(cbuf).digest('hex');
   const csize = cbuf.length;
@@ -129,7 +136,7 @@ if (fs.existsSync(cpkgPath)) {
     version: CVER, released: new Date().toISOString(),
     min_node: cprev.min_node || '20.0.0', min_from: cprev.min_from || '0.1.0',
     mandatory: !!cprev.mandatory,
-    url: `https://github.com/${REPO}/releases/download/v${VER}/central-${CVER}.zip`,
+    url: `https://github.com/${REPO}/releases/download/v${VER}/central-${CVER}.tar.gz`,
     sha256: csha, size: csize, sig_alg: 'ed25519', signature: csig,
     changelog: Array.isArray(cprev.changelog) ? cprev.changelog : [],
   };

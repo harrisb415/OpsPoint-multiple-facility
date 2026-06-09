@@ -2,9 +2,10 @@
 
 ---
 
-## v2.3.4 — Fleet update system (2026-06-07)
+## v2.3.5 — Fleet update system, cross-platform (2026-06-08)
 
 ### Multi-facility fleet updates
+- **Cross-platform updates** — release bundles are now `.tar.gz` (Linux, macOS, Windows); `tar -xf` extracts on every OS. Added `run.sh` launchers for Linux/macOS. (v2.3.4's `.zip` bundles failed to extract on Linux.)
 - **Signed releases** — Ed25519-signed manifests; the in-app updater verifies signature + sha256 + size before applying anything
 - **HQ self-update** and **on-prem bundle relay** — facilities pull updates from HQ over the LAN; no internet needed at the buildings
 - **Auto-rollback launcher** — a bootstrap supervisor health-checks each update and reverts a failed boot automatically

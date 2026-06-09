@@ -140,18 +140,21 @@ function verifyManifestSignature(m) {
   } catch (e) { return false; }
 }
 
-// Extract a .zip on Windows: try bsdtar (built in since Win10 1803), then
-// fall back to PowerShell Expand-Archive.
-function extractZip(zipPath, destDir) {
+// Extract a bundle, cross-platform. `tar -xf` handles .tar.gz on every platform
+// (GNU tar on Linux, bsdtar on Windows/macOS) and also .zip via bsdtar. If tar
+// fails, fall back per-OS: Windows → PowerShell Expand-Archive; else → unzip.
+function extractZip(archivePath, destDir) {
   return new Promise((resolve, reject) => {
     fs.mkdirSync(destDir, { recursive: true });
-    execFile('tar', ['-xf', zipPath, '-C', destDir], (err) => {
+    execFile('tar', ['-xf', archivePath, '-C', destDir], (err) => {
       if (!err) return resolve();
-      const ps = `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
-      execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], (err2) => {
-        if (err2) return reject(new Error('Extraction failed: ' + (err2.message || err.message)));
-        resolve();
-      });
+      if (process.platform === 'win32') {
+        const ps = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
+        return execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], (e2) =>
+          e2 ? reject(new Error('Extraction failed: ' + (e2.message || err.message))) : resolve());
+      }
+      execFile('unzip', ['-o', '-q', archivePath, '-d', destDir], (e2) =>
+        e2 ? reject(new Error('Extraction failed (tar: ' + (err.message || '') + '; unzip: ' + (e2.message || '') + ')')) : resolve());
     });
   });
 }
@@ -278,7 +281,7 @@ function createUpdater(ctx) {
 
       // 1. Download
       setState({ phase: 'download', pct: 12, message: 'Downloading v' + ver + '…' });
-      const zipPath = path.join(STAGING, 'opspoint-' + ver + '.zip');
+      const zipPath = path.join(STAGING, 'opspoint-' + ver + '.tgz');
       rmrf(zipPath);
       await downloadToFile(m.url, zipPath, [manifestHost()], (got, total) => {
         if (total > 0) setState({ phase: 'download', pct: 12 + Math.round((got / total) * 28), message: 'Downloading v' + ver + '… ' + Math.round((got / total) * 100) + '%' });

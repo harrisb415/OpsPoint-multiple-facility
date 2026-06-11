@@ -103,7 +103,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
   async function handleSubmit() {
     if (!isInterview && !clientId) { setErr('Select a resident'); return }
     if (!staff.trim())             { setErr('Conducted by is required'); return }
-    if (!reason)                   { setErr('Select a reason'); return }
+    if (!isInterview && !reason)   { setErr('Select a reason'); return }
 
     const c = clients.find(x => String(x.id) === String(clientId))
 
@@ -119,9 +119,11 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
     if (neg.length) parts.push(`NEG: ${neg.join(', ')}`)
     if (nt.length)  parts.push(`NT: ${nt.join(', ')}`)
     const resultStr   = parts.join(' | ') || 'No results entered'
-    const reasonLabel = REASON_OPTS.find(o => o.v === reason)?.l || reason
+    const reasonLabel = reason
+      ? (REASON_OPTS.find(o => o.v === reason)?.l || reason)
+      : (isInterview ? 'Interview' : '')
     const collLabel   = collMethod.charAt(0).toUpperCase() + collMethod.slice(1)
-    const suffix      = ` — by ${staff.trim()} [${reasonLabel}, ${collLabel}]`
+    const suffix      = ` — by ${staff.trim()} [${[reasonLabel, collLabel].filter(Boolean).join(', ')}]`
     const logMsg      = pos.length === 0 && nt.length === 0
       ? `${subjectName} — UA: All NEG${suffix}`
       : `${subjectName} — UA: ${resultStr}${suffix}`
@@ -337,7 +339,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           <button
             className="btn btn-primary"
             onClick={handleSubmit}
-            disabled={saving || (!isInterview && !clientId) || !staff.trim() || !reason}>
+            disabled={saving || (!isInterview && !clientId) || !staff.trim() || (!isInterview && !reason)}>
             {saving ? 'Saving…' : 'Save UA Record'}
           </button>
         </div>

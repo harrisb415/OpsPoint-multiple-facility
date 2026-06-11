@@ -279,15 +279,17 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
 
           {/* Reason + Collection method (row) */}
           <div style={{ display:'flex', gap:10 }}>
-            <div className="field" style={{ flex:1 }}>
-              <label>Reason</label>
-              <select value={reason} onChange={e => setReason(e.target.value)}>
-                <option value="">— Select reason —</option>
-                {REASON_OPTS.map(o => (
-                  <option key={o.v} value={o.v}>{o.l}</option>
-                ))}
-              </select>
-            </div>
+            {!isInterview && (
+              <div className="field" style={{ flex:1 }}>
+                <label>Reason</label>
+                <select value={reason} onChange={e => setReason(e.target.value)}>
+                  <option value="">— Select reason —</option>
+                  {REASON_OPTS.map(o => (
+                    <option key={o.v} value={o.v}>{o.l}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="field" style={{ flex:1 }}>
               <label>Collection method</label>
               <select value={collMethod} onChange={e => setCollMethod(e.target.value)}>

@@ -19,7 +19,7 @@ function localDT(s) {
   catch { return '' }
 }
 
-const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'Out' }
+const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'In' }
 
 function StatusBadge({ status }) {
   const styles = {

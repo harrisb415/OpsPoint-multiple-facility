@@ -116,6 +116,7 @@ export default function ReportTab() {
 
   const clients  = data?.clients  || []
   const reports  = data?.reports  || []
+  const passes   = data?.passes   || []
   const activeId = data?.active_report_id ?? null
   const activeReport = reports.find(r => r.id === activeId) ?? null
 
@@ -208,13 +209,25 @@ export default function ReportTab() {
     }
   }, [activeReport, activeId])
 
+  // Pass-derived status override: Out/Extended pass → 'pass', In pass → 'building'
+  const passOverride = useMemo(() => {
+    const m = {}
+    passes.forEach(p => {
+      if (p.status === 'Returned') return
+      if (p.status === 'Out' || p.status === 'Extended') m[p.client_id] = 'pass'
+      else if (p.status === 'In') m[p.client_id] = 'building'
+    })
+    return m
+  }, [passes])
+  const effStatus = (cid) => passOverride[cid] ?? statuses[cid] ?? 'building'
+
   // Census
   const census = useMemo(() => {
     const cnt = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
     clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT')
-      .forEach(c => { const st = statuses[c.id] || 'building'; if (Object.hasOwn(cnt, st)) cnt[st]++ })
+      .forEach(c => { const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'; if (Object.hasOwn(cnt, st)) cnt[st]++ })
     return cnt
-  }, [clients, statuses])
+  }, [clients, statuses, passOverride])
   const censusTotal = Object.values(census).reduce((a, b) => a + b, 0)
 
   // Log entries — sortable by time or type
@@ -467,8 +480,8 @@ export default function ReportTab() {
           case 'name': av = (a.name||'').toLowerCase(); bv = (b.name||'').toLowerCase(); break
           case 'status': {
             const lbls = { building:'In Building',work:'Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out/Other',vacant:'Vacant' }
-            av = lbls[statuses[a.id]||(a.name==='VACANT'?'vacant':'building')]||''
-            bv = lbls[statuses[b.id]||(b.name==='VACANT'?'vacant':'building')]||''
+            av = lbls[a.name==='VACANT'?'vacant':effStatus(a.id)]||''
+            bv = lbls[b.name==='VACANT'?'vacant':effStatus(b.id)]||''
             break
           }
           case 'last_ua': av = lastUa[a.id]||''; bv = lastUa[b.id]||''; break
@@ -825,7 +838,8 @@ export default function ReportTab() {
                 {sortedClients.map(c => (
                   <RosterRow
                     key={c.id} client={c}
-                    status={statuses[c.id]} comment={comments[c.id] || ''}
+                    status={effStatus(c.id)} comment={comments[c.id] || ''}
+                    passLocked={!!passOverride[c.id]}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
                     onStatusChange={handleStatusChange}
@@ -1135,7 +1149,7 @@ function WellnessModal({ clients = [], statuses = {}, onClose, onSubmit }) {
                 background: '#fff',
               }}>
                 {activeClients.map((c, i) => {
-                  const st = statuses[c.id] || 'building'
+                  const st = effStatus(c.id)
                   const marked = notLocated.has(c.id)
                   return (
                     <div key={c.id} onClick={() => toggleNotLocated(c.id)} style={{
@@ -1661,7 +1675,7 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
   )
 }
 
-function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, onStatusChange, onCommentChange, onUARequest }) {
+function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
   const opt = stOpt(cur)
   return (
@@ -1673,7 +1687,7 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
           <span style={{ color: '#cbd5e1' }}>—</span>
         ) : c.name === 'VACANT' ? (
           <span className="ss s-vacant" style={{ display: 'inline-block', pointerEvents: 'none' }}>Vacant</span>
-        ) : isClosed || !canStatus ? (
+        ) : isClosed || !canStatus || passLocked ? (
           <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>
         ) : (
           <select className={`ss ${opt.c}`} value={cur} onChange={e => onStatusChange(c.id, e.target.value)}>

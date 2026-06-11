@@ -864,6 +864,7 @@ export default function ReportTab() {
         <WellnessModal
           clients={data?.clients || []}
           statuses={statuses}
+          passOverride={passOverride}
           onClose={() => setQuickModal(null)}
           onSubmit={addLogEntry}
         />
@@ -1077,7 +1078,7 @@ function tsFromInput(val) {
 }
 
 // Wellness Check
-function WellnessModal({ clients = [], statuses = {}, onClose, onSubmit }) {
+function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose, onSubmit }) {
   const [by, setBy]       = useState('')
   const [time, setTime]   = useState(timeFieldDefault)
   const [saving, setSaving] = useState(false)

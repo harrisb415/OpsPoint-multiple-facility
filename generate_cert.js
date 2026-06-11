@@ -24,13 +24,22 @@ function getLanIPs() {
     const selfsigned = require('selfsigned');
 
     const lanIPs  = getLanIPs();
+    // Extra hostnames / IPs can be passed as CLI args:
+    //   node generate_cert.js opspoint.duckdns.org 203.0.113.5
+    const extraArgs = process.argv.slice(2);
+    const extraDNS  = extraArgs.filter(a => !/^\d+\.\d+\.\d+\.\d+$/.test(a));
+    const extraIPs  = extraArgs.filter(a =>  /^\d+\.\d+\.\d+\.\d+$/.test(a));
+
     const altNames = [
       { type: 2, value: 'localhost' },
       { type: 7, ip:    '127.0.0.1' },
-      ...lanIPs.map(ip => ({ type: 7, ip }))
+      ...lanIPs.map(ip => ({ type: 7, ip })),
+      ...extraDNS.map(h => ({ type: 2, value: h })),
+      ...extraIPs.map(ip => ({ type: 7, ip })),
     ];
 
-    const attrs = [{ name: 'commonName', value: 'localhost' }];
+    const cn    = extraDNS[0] || 'localhost';
+    const attrs = [{ name: 'commonName', value: cn }];
     const opts  = {
       days:       3650,
       algorithm:  'sha256',
@@ -53,7 +62,7 @@ function getLanIPs() {
     fs.writeFileSync(path.join(DATA, 'key.pem'),  privKey);
     fs.writeFileSync(path.join(DATA, 'cert.pem'), certPem);
 
-    const sanList = ['localhost', '127.0.0.1', ...lanIPs].join(', ');
+    const sanList = ['localhost', '127.0.0.1', ...lanIPs, ...extraDNS, ...extraIPs].join(', ');
     console.log('Certificate generated successfully.');
     console.log('Valid for: ' + sanList);
     process.exit(0);

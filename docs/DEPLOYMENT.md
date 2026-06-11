@@ -2,7 +2,7 @@
 
 OpsPoint supports two deployment modes:
 
-- **Local (on-premise)** — runs on a Windows PC at the facility; staff access via LAN; self-signed TLS certificate. Sections 1–10 cover this path.
+- **Local (on-premise)** — runs on a Windows or Linux machine at the facility; staff access via LAN; self-signed TLS certificate. Sections 1–10 cover this path with instructions for both operating systems.
 - **Cloud (self-hosted)** — runs on a Linux VPS or cloud instance (e.g. Google Cloud); nginx handles TLS with a Let's Encrypt certificate; accessible from anywhere over HTTPS. See [Section 11](#11-cloud-deployment-linux--nginx--lets-encrypt).
 
 ---
@@ -14,7 +14,7 @@ OpsPoint supports two deployment modes:
 3. [First run and credential setup](#3-first-run-and-credential-setup)
 4. [Network access (mobile and desktop)](#4-network-access-mobile-and-desktop)
 5. [HTTPS / WSS (recommended)](#5-https--wss-recommended)
-6. [Windows autostart](#6-windows-autostart)
+6. [Autostart](#6-autostart)
 7. [User management](#7-user-management)
 8. [Backup strategy](#8-backup-strategy)
 9. [Updating OpsPoint](#9-updating-opspoint)
@@ -25,52 +25,73 @@ OpsPoint supports two deployment modes:
 
 ## 1. Prerequisites
 
-| Requirement | Notes |
-|-------------|-------|
-| Windows 10 or 11 | Server machine — can be any PC that stays on |
-| Node.js LTS | Download from https://nodejs.org — click "LTS", run installer with all defaults |
-| Chrome or Edge | Recommended browser for the desktop app |
-| LAN Wi-Fi | All devices must be on the same network |
+| Requirement | Windows | Linux |
+|-------------|---------|-------|
+| OS | Windows 10 or 11 | Ubuntu 20.04+ / Debian 11+ / any modern distro |
+| Node.js LTS | Download from https://nodejs.org — click "LTS", run installer with all defaults | Install via NodeSource (see below) |
+| Browser | Chrome or Edge recommended | Any modern browser |
+| Network | All devices on the same Wi-Fi/LAN | All devices on the same Wi-Fi/LAN |
 
-Verify Node.js installed correctly by opening a Command Prompt and running:
+**Windows** — verify Node.js by opening a Command Prompt:
 
 ```
 node --version
 npm --version
 ```
 
-Both should print version numbers. If not, reinstall Node.js.
+**Linux** — install Node.js 20 via NodeSource, then verify:
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version
+npm --version
+```
+
+Both should print version numbers.
 
 ---
 
 ## 2. Installation
 
-1. Copy the OpsPoint folder to a permanent location on the server machine, e.g.:
-   ```
-   C:\OpsPoint\
-   ```
+**Step 1 — Place the files**
 
-2. Open a Command Prompt in that folder and install **server** dependencies:
-   ```
-   npm install
-   ```
+**Windows:** Copy the OpsPoint folder to a permanent location, e.g. `C:\OpsPoint\`
 
-3. Install and build the **React frontend**:
-   ```
-   cd client
-   npm install
-   npm run build
-   cd ..
-   ```
-   This creates `client/dist/` — the compiled SPA served by Express. It only needs to be re-run when the frontend code changes (e.g., after an update).
+**Linux:** Clone or copy to a permanent directory, e.g.:
+```bash
+git clone https://github.com/harrisb415/OpsPoint-multiple-facility.git /opt/opspoint
+cd /opt/opspoint
+```
 
-4. Create the data directories (the server does this automatically on first run, but you can create them manually):
-   ```
-   mkdir data
-   mkdir data\photos
-   ```
+**Step 2 — Install server dependencies**
 
-> **`run.bat`** handles steps 2–3 automatically: it runs `npm install` in both the root and `client/` directories, builds the frontend if needed, then starts the server.
+```bash
+npm install
+```
+
+**Step 3 — Install and build the React frontend**
+
+```bash
+cd client && npm install && npm run build && cd ..
+```
+
+This creates `client/dist/` — the compiled SPA served by Express. Only needs to be re-run when frontend code changes (e.g. after an update).
+
+**Step 4 — Create data directories** (the server does this on first run, but you can create them manually)
+
+**Windows:**
+```
+mkdir data
+mkdir data\photos
+```
+
+**Linux:**
+```bash
+mkdir -p data/photos
+```
+
+> **Windows shortcut:** double-click **`run.bat`** — it handles steps 2–3 and starts the server in one step. No Linux equivalent; run the commands above manually or use PM2 (see [Section 6](#6-autostart)).
 
 ---
 
@@ -78,11 +99,17 @@ Both should print version numbers. If not, reinstall Node.js.
 
 Start the server:
 
+**Windows:** double-click **`run.bat`**, or in a Command Prompt:
 ```
 node server.js
 ```
 
-Or double-click **`run.bat`**.
+**Linux:**
+```bash
+node server.js
+# or with PM2 (keeps running after logout):
+pm2 start bootstrap.js --name opspoint
+```
 
 **On the very first run**, OpsPoint detects an empty database and creates three accounts with randomly-generated passwords. These are printed to the console in a box like this:
 
@@ -161,13 +188,13 @@ After accepting, all traffic (including WebSocket) is encrypted.
 
 ---
 
-## 6. Windows autostart
+## 6. Autostart
 
-For the server to run automatically whenever the PC boots (without anyone logging in), use the included startup installer.
+### Windows
 
-**Step 1:**
+Use the included startup installer to run the server automatically at boot (without anyone logged in).
 
-Right-click `install_startup.bat` and select **Run as administrator**.
+**Step 1:** Right-click `install_startup.bat` and select **Run as administrator**.
 
 The script will:
 - Detect your Node.js installation path
@@ -177,7 +204,7 @@ The script will:
 
 **Step 2:** The script starts the task immediately. Open `http://localhost:3000` to confirm it's running.
 
-### Managing the scheduled task
+#### Managing the scheduled task
 
 | Action | Command |
 |--------|---------|
@@ -186,23 +213,65 @@ The script will:
 | Remove autostart | `schtasks /delete /tn "OpsPointServer" /f` |
 | Check status | Task Scheduler → Task Scheduler Library → OpsPointServer |
 
-You can also use **`start_server.bat`** (double-click) to start the server on demand.
+You can also double-click **`start_server.bat`** to start the server on demand.
 
-### Fallback: startup folder
+#### Fallback: startup folder
 
-If the scheduled task cannot be registered (e.g., Group Policy restriction), place a shortcut to `run.bat` in your Windows Startup folder:
+If the scheduled task cannot be registered (e.g. Group Policy restriction), place a shortcut to `run.bat` in the Windows Startup folder:
 
 ```
 %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
 ```
 
-The server will start when you log into Windows instead of at boot.
+The server starts when you log in to Windows instead of at boot.
 
-### Firewall
+#### Firewall (Windows)
 
-Windows Firewall may prompt you to allow Node.js through the firewall when the server first starts. Click **Allow access** and check both "Private networks" and "Public networks" if staff connect via public-facing Wi-Fi.
+Windows Firewall may prompt you to allow Node.js when the server first starts. Click **Allow access** and check both network types. If mobile devices still can't reach the server, open Windows Defender Firewall and add an inbound rule for TCP port 3000.
 
-If the prompt doesn't appear and mobile devices can't reach the server, open Windows Defender Firewall and add an inbound rule for TCP port 3000.
+---
+
+### Linux (PM2)
+
+PM2 is a process manager that keeps the server running in the background and restarts it automatically after a reboot.
+
+**Install PM2:**
+
+```bash
+sudo npm install -g pm2
+```
+
+**Start OpsPoint:**
+
+```bash
+cd /opt/opspoint   # or wherever OpsPoint is installed
+pm2 start bootstrap.js --name opspoint
+pm2 save
+```
+
+**Register PM2 to start at boot** (follow the printed command):
+
+```bash
+pm2 startup
+# run the command it prints, e.g.:
+# sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp $HOME
+```
+
+#### Managing with PM2
+
+| Action | Command |
+|--------|---------|
+| View logs | `pm2 logs opspoint` |
+| Restart | `pm2 restart opspoint` |
+| Stop | `pm2 stop opspoint` |
+| Status | `pm2 status` |
+
+#### Firewall (Linux — UFW)
+
+```bash
+sudo ufw allow 3000/tcp   # open port 3000 for LAN access
+sudo ufw enable
+```
 
 ---
 
@@ -248,7 +317,7 @@ Everything else (code, `node_modules`, `client/dist/`, config) is replaceable. O
 
 Copy the `data/` folder to a USB drive or network share at the end of each week.
 
-**Option B — Scheduled backup with Windows Task Scheduler**
+**Option B (Windows) — Scheduled backup with Task Scheduler**
 
 Create a task that runs daily and copies `data/` to a backup location:
 
@@ -256,7 +325,21 @@ Create a task that runs daily and copies `data/` to a backup location:
 xcopy /E /I /Y "C:\OpsPoint\data" "D:\Backups\OpsPoint\data-%date:~-4,4%%date:~-7,2%%date:~0,2%"
 ```
 
-**Option C — Cloud sync**
+**Option B (Linux) — Daily cron job**
+
+```bash
+crontab -e
+# add this line:
+0 3 * * * cp /opt/opspoint/data/opspoint.db /opt/opspoint/backups/db-$(date +\%Y\%m\%d).db
+```
+
+Or use `rsync` to copy the whole data directory to a remote location:
+
+```bash
+0 3 * * * rsync -a /opt/opspoint/data/ user@backup-host:/backups/opspoint/
+```
+
+**Option C (Windows) — Cloud sync**
 
 Place the entire OpsPoint folder inside a OneDrive or Dropbox folder. Cloud sync will automatically back up `data/opspoint.db` whenever it changes.
 
@@ -273,20 +356,43 @@ Place the entire OpsPoint folder inside a OneDrive or Dropbox folder. Cloud sync
 
 ## 9. Updating OpsPoint
 
-1. **Stop the server** (close the terminal window, or run `schtasks /end /tn "OpsPointServer"`).
-2. **Back up** `data/opspoint.db` and `data/photos/`.
-3. **Replace the application files** — copy the new version over the existing folder. Do not delete the `data/` folder.
-4. Run `npm install` in the root folder to pick up any new server dependencies.
-5. **Rebuild the frontend** — required after any update that includes frontend changes:
-   ```
-   cd client
-   npm install
-   npm run build
-   cd ..
-   ```
-6. **Start the server.**
+**Step 1 — Stop the server**
 
-Database schema migrations (new columns/tables) run automatically on startup via the `init()` function in `db.js`. No manual SQL is needed.
+Windows: close the terminal window, or run `schtasks /end /tn "OpsPointServer"`
+
+Linux: `pm2 stop opspoint`
+
+**Step 2 — Back up** `data/opspoint.db` and `data/photos/`
+
+**Step 3 — Update the application files**
+
+Windows: copy the new version over the existing folder (do not delete `data/`)
+
+Linux (git):
+```bash
+cd /opt/opspoint
+git pull
+```
+
+**Step 4 — Install any new server dependencies:**
+
+```bash
+npm install
+```
+
+**Step 5 — Rebuild the frontend** (required after any update that includes frontend changes):
+
+```bash
+cd client && npm install && npm run build && cd ..
+```
+
+**Step 6 — Start the server**
+
+Windows: double-click `run.bat` or `schtasks /run /tn "OpsPointServer"`
+
+Linux: `pm2 restart opspoint`
+
+Database schema migrations run automatically on startup — no manual SQL needed.
 
 ---
 
@@ -294,19 +400,25 @@ Database schema migrations (new columns/tables) run automatically on startup via
 
 ### Server won't start
 
-**"node is not recognized"** — Node.js is not installed or not on the PATH. Download from https://nodejs.org and reinstall.
+**"node is not recognized" / "command not found: node"** — Node.js is not installed or not on PATH.
+- Windows: download from https://nodejs.org and reinstall
+- Linux: install via NodeSource (see [Section 1](#1-prerequisites))
 
 **"Cannot find module ..."** — dependencies are missing. Run `npm install` in the OpsPoint folder (and `cd client && npm install` if React modules are missing).
 
-**"EADDRINUSE: address already in use :3000"** — another process is using port 3000. Either stop the other process or change OpsPoint's port in `server.js` (search for `3000`).
+**"EADDRINUSE: address already in use :3000"** — another process is using port 3000.
+- Windows: `netstat -ano | findstr :3000` to find the PID, then `taskkill /PID <pid> /F`
+- Linux: `lsof -i :3000` to find the process, then `kill <pid>`
 
 **Blank page / React app not loading** — the frontend may not have been built. Run `cd client && npm run build` and restart the server.
+
+**Linux: server exits immediately** — check PM2 logs: `pm2 logs opspoint --lines 50`
 
 ### Mobile can't connect
 
 - Confirm the phone is on the same Wi-Fi network as the server.
 - Check the IP address printed in the server console and use that exact address.
-- Check Windows Firewall — add an inbound TCP rule for port 3000 if needed.
+- Firewall: Windows — add inbound TCP rule for port 3000. Linux — `sudo ufw allow 3000/tcp`
 - If using HTTPS, the phone must accept the self-signed certificate before WebSocket connections will work.
 
 ### "Your connection is not private" (HTTPS)
@@ -325,12 +437,16 @@ Stop the server. Delete `data/opspoint.db`. Restart — a fresh database is crea
 
 ### Server stops unexpectedly
 
-Check the terminal output for an error message. Common causes:
-- Disk full (SQLite write fails)
-- `data/opspoint.db` was deleted or corrupted while the server was running
-- Node.js process killed by Windows (rare — can happen if the machine has very low RAM)
+Check logs for an error message:
+- Windows: scroll up in the terminal window
+- Linux: `pm2 logs opspoint --lines 100`
 
-Restart the server. If crashes are frequent, check available disk space and RAM.
+Common causes:
+- Disk full (SQLite write fails) — check with `df -h` (Linux) or File Explorer (Windows)
+- `data/opspoint.db` deleted or corrupted while the server was running
+- Out of memory — check with `free -h` (Linux) or Task Manager (Windows)
+
+Restart and monitor. If crashes are frequent, check disk space and available RAM.
 
 ---
 

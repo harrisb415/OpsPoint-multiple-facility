@@ -1198,7 +1198,7 @@ app.post('/api/facility/reorder', requireAuth, csrfCheck, requirePermission('fac
 });
 app.post('/api/facility/reset', requireAuth, csrfCheck, requirePermission('facility.manage'),(req,res)=>{
   const{rooms}=req.body;
-  if(!Array.isArray(rooms)||!rooms.length) return res.status(400).json({error:'rooms array required'});
+  if(!Array.isArray(rooms)) return res.status(400).json({error:'rooms must be an array'});
   db.run('DELETE FROM clients');
   rooms.forEach((r,i)=>db.run(
     `INSERT INTO clients (room,name,is_active,is_special,special_label,sort_order) VALUES (?,?,1,?,?,?)`,

@@ -326,11 +326,15 @@ function audit(req, action, targetType, targetId, targetLabel, detail, override)
 }
 
 // VULN-1: CSRF defence — reject cross-origin state-changing requests
+function getProto(req) {
+  const fwd = req.headers['x-forwarded-proto'];
+  if (fwd) return fwd.split(',')[0].trim();
+  return req.secure ? 'https' : 'http';
+}
 function csrfCheck(req, res, next) {
   var origin = req.headers.origin;
   if (origin) {
-    var proto = req.secure ? 'https' : 'http';
-    var expected = proto + '://' + req.headers.host;
+    var expected = getProto(req) + '://' + req.headers.host;
     if (origin !== expected) return res.status(403).json({error:'Forbidden'});
   }
   next();
@@ -1230,8 +1234,7 @@ app.get('/api/me', requireAuth,(req,res)=>{
 app.post('/api/login', express.json(), (req,res)=>{
   const loginOrigin = req.headers.origin;
   if (loginOrigin) {
-    const proto = req.secure ? 'https' : 'http';
-    const expectedOrigin = proto + '://' + req.headers.host;
+    const expectedOrigin = getProto(req) + '://' + req.headers.host;
     if (loginOrigin !== expectedOrigin) return res.status(403).json({error:'Forbidden'});
   }
   const ip = req.ip||req.connection.remoteAddress||'unknown';

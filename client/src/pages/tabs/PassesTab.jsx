@@ -37,7 +37,7 @@ function StatusBadge({ status }) {
 }
 
 export default function PassesTab() {
-  const { data, openProfile } = useData()
+  const { data, openProfile, loadData } = useData()
   const { hasPerm } = usePermission()
   const canEdit   = hasPerm('passes.edit')
   const canStatus = hasPerm('passes.status') || canEdit  // passes.edit implies status too
@@ -134,12 +134,13 @@ export default function PassesTab() {
   }
 
   async function quickStatus(p, newStatus) {
-    await fetch(`/api/passes/${p.id}`, {
+    const r = await fetch(`/api/passes/${p.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ ...p, status: newStatus }),
     })
+    if (r.ok) loadData()
   }
 
   async function markReturned(p) {
@@ -149,7 +150,8 @@ export default function PassesTab() {
 
   async function del(p) {
     if (!window.confirm(`Delete pass for ${p.name}?`)) return
-    await fetch(`/api/passes/${p.id}`, { method: 'DELETE', credentials: 'include' })
+    const r = await fetch(`/api/passes/${p.id}`, { method: 'DELETE', credentials: 'include' })
+    if (r.ok) loadData()
   }
 
   return (

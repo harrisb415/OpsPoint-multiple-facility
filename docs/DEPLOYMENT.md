@@ -1,6 +1,9 @@
 # OpsPoint — Deployment Guide
 
-This guide covers installing OpsPoint on a Windows machine that will act as the permanent server for your facility. Staff access the app from any browser on the same Wi-Fi network.
+OpsPoint supports two deployment modes:
+
+- **Local (on-premise)** — runs on a Windows PC at the facility; staff access via LAN; self-signed TLS certificate. Sections 1–10 cover this path.
+- **Cloud (self-hosted)** — runs on a Linux VPS or cloud instance (e.g. Google Cloud); nginx handles TLS with a Let's Encrypt certificate; accessible from anywhere over HTTPS. See [Section 11](#11-cloud-deployment-linux--nginx--lets-encrypt).
 
 ---
 
@@ -16,6 +19,7 @@ This guide covers installing OpsPoint on a Windows machine that will act as the 
 8. [Backup strategy](#8-backup-strategy)
 9. [Updating OpsPoint](#9-updating-opspoint)
 10. [Troubleshooting](#10-troubleshooting)
+11. [Cloud deployment (Linux + nginx + Let's Encrypt)](#11-cloud-deployment-linux--nginx--lets-encrypt)
 
 ---
 
@@ -327,3 +331,217 @@ Check the terminal output for an error message. Common causes:
 - Node.js process killed by Windows (rare — can happen if the machine has very low RAM)
 
 Restart the server. If crashes are frequent, check available disk space and RAM.
+
+---
+
+## 11. Cloud deployment (Linux + nginx + Let's Encrypt)
+
+This section covers hosting OpsPoint on a Linux server (e.g. Google Cloud, DigitalOcean, Linode) with a real HTTPS certificate and external access via a custom domain.
+
+### 11.1 Prerequisites
+
+| Requirement | Notes |
+|-------------|-------|
+| Linux VPS or cloud VM | Ubuntu 22.04 LTS recommended |
+| Domain or subdomain | Free option: [DuckDNS](https://www.duckdns.org) — e.g. `opspoint.duckdns.org` |
+| Node.js 20 LTS | Install via NodeSource (see below) |
+| nginx | TLS terminator — proxies HTTPS → Node.js HTTP |
+| certbot | Obtains and auto-renews Let's Encrypt certificates |
+| PM2 | Process manager — keeps the server running across reboots |
+| Git | To clone and update the repo |
+
+### 11.2 Install Node.js
+
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+node --version   # should print v20.x.x
+```
+
+### 11.3 Install nginx and certbot
+
+```bash
+sudo apt install -y nginx certbot python3-certbot-nginx
+sudo systemctl enable nginx
+sudo systemctl start nginx
+```
+
+### 11.4 Clone and build OpsPoint
+
+```bash
+git clone https://github.com/harrisb415/OpsPoint-multiple-facility.git /opt/opspoint
+cd /opt/opspoint
+npm install
+cd client && npm install && npm run build && cd ..
+```
+
+### 11.5 Point your domain to the server
+
+If using DuckDNS:
+
+1. Log in at [duckdns.org](https://www.duckdns.org) and create a subdomain (e.g. `opspoint`).
+2. Set the IP to your server's external IP address.
+3. Set up auto-renewal on the server so the IP stays current if it changes:
+
+```bash
+# Run every 5 minutes via cron
+*/5 * * * * curl -s "https://www.duckdns.org/update?domains=opspoint&token=YOUR_TOKEN&ip=" > /dev/null
+```
+
+Confirm the domain resolves before continuing:
+
+```bash
+dig +short opspoint.duckdns.org
+# should return your server's IP
+```
+
+### 11.6 Configure nginx
+
+Create `/etc/nginx/sites-available/opspoint`:
+
+```nginx
+server {
+    listen 80;
+    server_name opspoint.duckdns.org;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+}
+```
+
+Enable it and reload:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/opspoint /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 11.7 Obtain a Let's Encrypt certificate
+
+```bash
+sudo certbot --nginx -d opspoint.duckdns.org
+```
+
+Certbot rewrites the nginx config to add SSL and sets up an HTTP→HTTPS redirect automatically. Certificates auto-renew via a systemd timer — no manual action needed.
+
+Confirm auto-renewal works:
+
+```bash
+sudo certbot renew --dry-run
+```
+
+> **Do not** create a self-signed certificate (`node generate_cert.js`) on the cloud server. Node.js runs as plain HTTP internally; nginx handles TLS. If `data/cert.pem` and `data/key.pem` exist, delete them — the server will start in HTTP mode and nginx will handle HTTPS.
+
+### 11.8 Start OpsPoint with PM2
+
+```bash
+sudo npm install -g pm2
+cd /opt/opspoint
+pm2 start bootstrap.js --name opspoint
+pm2 save
+pm2 startup   # follow the printed command to register PM2 as a systemd service
+```
+
+The server starts automatically on every reboot.
+
+Useful PM2 commands:
+
+| Action | Command |
+|--------|---------|
+| View logs | `pm2 logs opspoint` |
+| Restart | `pm2 restart opspoint` |
+| Stop | `pm2 stop opspoint` |
+| Status | `pm2 status` |
+| Restart all | `pm2 restart all` |
+
+### 11.9 Open firewall ports (Google Cloud)
+
+In the Google Cloud Console → VPC network → Firewall:
+
+- Allow **TCP 80** (HTTP — needed for certbot renewals and redirect)
+- Allow **TCP 443** (HTTPS — the public-facing port)
+
+Port 3000 does **not** need to be open externally. nginx listens on 80/443 and proxies to Node.js on 3000 internally.
+
+If using UFW instead:
+
+```bash
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+```
+
+### 11.10 First run
+
+On first start OpsPoint prints credentials to the console:
+
+```bash
+pm2 logs opspoint --lines 50
+```
+
+Look for the credential box (same format as local — see [Section 3](#3-first-run-and-credential-setup)). Open `https://opspoint.duckdns.org` in a browser and log in with the `admin` account to set your permanent password.
+
+### 11.11 Updating (cloud)
+
+```bash
+cd /opt/opspoint
+git pull
+cd client && npm run build && cd ..
+pm2 restart all
+```
+
+If `package.json` changed (new server dependencies):
+
+```bash
+npm install
+pm2 restart all
+```
+
+### 11.12 Backup strategy (cloud)
+
+The only file that must be backed up is `data/opspoint.db`. Options:
+
+**Manual — copy to local machine:**
+```bash
+scp user@your-server:/opt/opspoint/data/opspoint.db ./backup-$(date +%Y%m%d).db
+```
+
+**Scheduled — daily cron on the server:**
+```bash
+0 3 * * * cp /opt/opspoint/data/opspoint.db /opt/opspoint/backups/db-$(date +\%Y\%m\%d).db
+```
+
+Also back up `data/photos/` if photo attachments are in use.
+
+### 11.13 HQ Central (multi-facility)
+
+If running OpsPoint HQ Central alongside the facility server:
+
+- HQ Central runs as a separate Node.js process on port 4000.
+- Create a second nginx site (`/etc/nginx/sites-available/hq-opspoint`) pointing to port 4000, with its own certbot certificate.
+- Register it as a separate PM2 process: `pm2 start bootstrap.js --name hq-central --cwd /opt/hq-central`
+
+```nginx
+server {
+    listen 80;
+    server_name hq-opspoint.duckdns.org;
+    location / {
+        proxy_pass http://127.0.0.1:4000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+}
+```
+
+Then: `sudo certbot --nginx -d hq-opspoint.duckdns.org`

@@ -384,9 +384,10 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
 .log-entry .msg { flex: 1; }
 
 /* - Activity log table ------------------------------------------ */
-.log-table-wrap { overflow-x: auto; }
+.log-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 620px; }
 .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .log-th {
+  position: sticky; top: 0; z-index: 1;
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: .05em; color: var(--teal-700); padding: 10px 12px;
   border-bottom: 1px solid var(--teal-200); background: var(--raised-bg); text-align: left;

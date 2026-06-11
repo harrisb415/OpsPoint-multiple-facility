@@ -7,6 +7,19 @@ const STACK = [
   'Express', 'SQLite (better-sqlite3)', 'WebSocket (ws)', 'PBKDF2-SHA512',
 ]
 
+const DEPLOY = [
+  {
+    icon: '🖥',
+    title: 'Local (On-Premise)',
+    desc: 'Runs on Windows or Linux hardware at the facility. Staff access via LAN. Optional self-signed TLS certificate.',
+  },
+  {
+    icon: '☁',
+    title: 'Cloud (Self-Hosted)',
+    desc: 'Hosted on a VPS or cloud server. nginx handles TLS termination with a Let\'s Encrypt certificate. Accessible from anywhere over HTTPS.',
+  },
+]
+
 const FEATURES = [
   { icon: '📋', title: 'Shift Reports',    desc: 'Resident statuses, log entries, issues, medical notes.' },
   { icon: '📡', title: 'Real-time Sync',   desc: 'WebSocket broadcast — desktop and mobile stay in sync.' },
@@ -59,8 +72,8 @@ export default function About() {
         }}>
           <p style={{ fontSize: '.88rem', color: '#1e293b', lineHeight: 1.65, margin: 0 }}>
             <strong>OpsPoint</strong> is an operations and compliance platform built for residential treatment facilities.
-            It centralizes shift documentation, resident tracking, and clinical record-keeping into a single system
-            accessible from any device on the facility network.
+            It centralizes shift documentation, resident tracking, and clinical record-keeping into a single system —
+            deployable on-premise at the facility or self-hosted on a cloud server.
           </p>
           <p style={{ fontSize: '.84rem', color: '#475569', lineHeight: 1.65, margin: '10px 0 0' }}>
             Staff log shift activity, track resident statuses, manage passes and mail, conduct and record UA tests,
@@ -68,6 +81,29 @@ export default function About() {
             to clinical records, milestone tracking, 42 CFR Part 2 consent management, and a full audit trail.
             Permissions are fully configurable per user and group.
           </p>
+        </div>
+
+        {/* Deployment */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{
+            fontSize: '.68rem', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase',
+            color: 'var(--crimson)', marginBottom: 10, paddingBottom: 5,
+            borderBottom: '2px solid var(--line)',
+          }}>Deployment</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 8 }}>
+            {DEPLOY.map(d => (
+              <div key={d.title} style={{
+                background: '#fff', borderRadius: 8, padding: '10px 12px',
+                border: '1px solid var(--line)', display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}>
+                <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: 1 }}>{d.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '.81rem', marginBottom: 2 }}>{d.title}</div>
+                  <div style={{ fontSize: '.74rem', color: 'var(--steel)', lineHeight: 1.4 }}>{d.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Features */}

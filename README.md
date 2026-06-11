@@ -1,6 +1,6 @@
 # OpsPoint · v2.3.6
 
-Shift management platform for residential facilities. React 19 + Vite SPA frontend, Node.js + Express + SQLite backend, real-time WebSocket sync. Runs entirely on-premise — no cloud dependency.
+Shift management platform for residential facilities. React 19 + Vite SPA frontend, Node.js + Express + SQLite backend, real-time WebSocket sync. Runs on-premise at the facility or self-hosted on a cloud server — no SaaS dependency.
 
 ---
 
@@ -40,7 +40,7 @@ Shift management platform for residential facilities. React 19 + Vite SPA fronte
 - Rate limiting: 10 login attempts / 15 min per IP; 300 API requests / min per IP
 - Magic-byte validation on photo uploads; 4 MB file size cap
 - Input length limits enforced server-side
-- HTTPS / WSS with self-signed certificate (auto-detected)
+- HTTPS / WSS — self-signed cert for local deployments; Let's Encrypt via nginx for cloud
 
 ---
 
@@ -116,13 +116,33 @@ Actual access is controlled by the **permissions** array on each user. Roles are
 
 ---
 
-## HTTPS
+## Deployment modes
 
-```bash
-node generate_cert.js
+### Local (on-premise)
+Run `run.bat` (Windows) or `node server.js` directly on facility hardware. Staff access via LAN. Generate a self-signed certificate with `node generate_cert.js` — browsers will show a cert warning; add a permanent exception once per device.
+
+### Cloud (self-hosted)
+Deploy to a Linux VPS or cloud instance (e.g. Google Cloud). Run the server as plain HTTP on a local port, then front it with **nginx** as a TLS terminator using a **Let's Encrypt** certificate:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name your-domain.duckdns.org;
+    ssl_certificate     /etc/letsencrypt/live/your-domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain/privkey.pem;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_set_header X-Real-IP         $remote_addr;
+    }
+}
 ```
 
-If `data/cert.pem` and `data/key.pem` exist, the server automatically starts in HTTPS/WSS mode. Browsers will show a self-signed cert warning — add a permanent exception once per device.
+Use `certbot --nginx -d your-domain.duckdns.org` to obtain and auto-renew the certificate. The server is accessible over HTTPS from anywhere. Use **PM2** (`pm2 start bootstrap.js`) to keep the process running across reboots.
 
 ---
 

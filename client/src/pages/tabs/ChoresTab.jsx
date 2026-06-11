@@ -2,6 +2,44 @@ import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 
+const _DS = ['Mo','Tu','We','Th','Fr','Sa','Su']
+function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+function printChoreAssignments(clients) {
+  const rows = clients
+    .filter(c => c.chore)
+    .map(c => {
+      let days, shifts
+      try { days = c.chore_days ? JSON.parse(c.chore_days) : [] } catch { days = [] }
+      try { shifts = c.chore_day_shifts ? JSON.parse(c.chore_day_shifts) : {} } catch { shifts = {} }
+      const sched = days.length > 0
+        ? days.map(i => `${_DS[i]} (${shifts[i]||'AM'})`).join(', ')
+        : 'Every day'
+      return `<tr><td>${_esc(c.room)}</td><td>${_esc(c.name)}</td><td>${_esc(c.chore)}</td><td>${_esc(sched)}</td></tr>`
+    }).join('')
+
+  const html = `<!DOCTYPE html><html><head><title>Chore Assignments</title>
+<style>
+  body{font-family:Arial,sans-serif;margin:24px;color:#111}
+  h2{margin:0 0 4px;font-size:1.2rem}
+  p{margin:0 0 14px;font-size:.8rem;color:#555}
+  table{width:100%;border-collapse:collapse;font-size:.88rem}
+  th,td{border:1px solid #ccc;padding:7px 10px;text-align:left}
+  th{background:#f0f4f8;font-weight:700}
+  tr:nth-child(even)td{background:#fafbfc}
+  @media print{@page{margin:.5in}}
+</style></head><body>
+<h2>Chore Assignments</h2>
+<p>Printed ${new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</p>
+<table><thead><tr><th>Rm</th><th>Name</th><th>Chore</th><th>Schedule</th></tr></thead>
+<tbody>${rows||'<tr><td colspan="4" style="color:#999;text-align:center">No chores assigned</td></tr>'}</tbody></table>
+<script>window.onload=()=>{window.print()}</script>
+</body></html>`
+
+  const w = window.open('','_blank','width=800,height=600')
+  if (w) { w.document.write(html); w.document.close() }
+}
+
 // ── Week helpers ──────────────────────────────────────────────────────
 function todayStr() { return new Date().toLocaleDateString('en-CA') }
 
@@ -189,6 +227,10 @@ export default function ChoresTab() {
             <span>Weekly Chore Log</span>
             {loadingWeek && <span style={{ fontSize: '.72rem', color: '#94a3b8', marginLeft: 8 }}>Loading…</span>}
           </div>
+          <button onClick={() => printChoreAssignments(clients)}
+            style={{ padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 5, background: '#f8fafc', cursor: 'pointer', fontSize: '.78rem' }}>
+            Print List
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '.75rem', color: '#94a3b8', fontFamily: 'var(--mono)' }}>
               {weekStats.done}/{weekStats.total} ({weekStats.pct}%)
@@ -354,16 +396,16 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
                           lineHeight: '22px', textAlign: 'center',
                         }}>{label}</button>
                       {active && (
-                        <div style={{ display: 'flex', gap: 1 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                           {['AM','PM'].map(t => (
                             <button key={t} type="button"
                               onClick={e => { e.stopPropagation(); setDayShift(idx, t) }}
                               style={{
-                                padding: '0 3px', borderRadius: 3, fontSize: '.55rem', fontWeight: 700,
+                                padding: '0 2px', borderRadius: 3, fontSize: '.55rem', fontWeight: 700,
                                 background: shift === t ? '#0a4655' : '#f1f5f9',
                                 color: shift === t ? '#fff' : '#94a3b8',
                                 border: `1px solid ${shift === t ? '#0a4655' : '#d1d5db'}`,
-                                cursor: 'pointer', lineHeight: '14px',
+                                cursor: 'pointer', lineHeight: '12px',
                               }}>{t}</button>
                           ))}
                         </div>

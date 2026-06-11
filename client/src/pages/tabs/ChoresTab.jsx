@@ -3,7 +3,7 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 
 // ── Week helpers ──────────────────────────────────────────────────────
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+function todayStr() { return new Date().toLocaleDateString('en-CA') }
 
 function getWeekStart(dateStr) {
   // Returns the Monday of the week containing dateStr

@@ -13,8 +13,8 @@ export default function PrintScopeModal({
   onClose,
   onConfirm,
 }) {
-  const today = new Date().toISOString().slice(0, 10)
-  const weekAgo = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA')
+  const weekAgo = new Date(Date.now() - 6 * 86400000).toLocaleDateString('en-CA')
   const [mode, setMode]           = useState(defaultMode)
   const [startDate, setStartDate] = useState(weekAgo)
   const [endDate, setEndDate]     = useState(today)

@@ -133,7 +133,7 @@ export function DataProvider({ children }) {
   // Load notification-only data (draws + broadcasts) once on session start
   const loadNotifData = useCallback(async () => {
     loadDismissed()
-    const since = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    const since = new Date(Date.now() - 30 * 86400000).toLocaleDateString('en-CA')
     const [drawsRes, bcRes] = await Promise.all([
       fetch(`/api/ua-draws?since=${since}`, { credentials: 'include' }),
       fetch('/api/broadcasts',              { credentials: 'include' }),

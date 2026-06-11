@@ -56,7 +56,7 @@ const DISCHARGE_LABELS = {
 
 // Builds the HTML for a single client card
 function buildCard(c, data, sections, limit) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA')
   const days = c.intake_date
     ? Math.max(0, Math.floor((Date.now() - new Date(c.intake_date + 'T00:00:00')) / 86400000))
     : null

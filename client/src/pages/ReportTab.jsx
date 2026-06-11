@@ -35,7 +35,7 @@ const DEFAULT_WALK_AREAS = [
   'Stairs Down to Main','Perimeter Check',
 ]
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+function todayStr() { return new Date().toLocaleDateString('en-CA') }
 function autoShift() {
   const h = new Date().getHours()
   if (h >= 7 && h < 15) return 'Day Shift'
@@ -1567,7 +1567,7 @@ function MailQuickModal({ clients, onClose }) {
 
 // Violation quick-log
 function ViolationModal({ clients, onClose, onLogEntry }) {
-  function todayStrLocal() { return new Date().toISOString().slice(0, 10) }
+  function todayStrLocal() { return new Date().toLocaleDateString('en-CA') }
   const [form, setForm]     = useState({ client_id: '', client_name: '', room: '', violation_date: todayStrLocal(), description: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')

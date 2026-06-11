@@ -18,7 +18,7 @@ function formatPhone(raw) {
   return raw
 }
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+function todayStr() { return new Date().toLocaleDateString('en-CA') }
 
 const BLANK_FORM = {
   room: '', name: '', case_manager: '', phone: '', intake_date: '', discharge_date: '',

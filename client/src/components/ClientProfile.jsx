@@ -86,13 +86,13 @@ function computeRisk(clientId, data) {
   )
   if (openInc) return 'red'
   // Amber: POS UA result in the last 30 days
-  const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+  const cutoff = new Date(Date.now() - 30 * 86400000).toLocaleDateString('en-CA')
   const posUA = (data.ua_records || []).find(
     r => r.client_id === clientId && r.result === 'POS' && (r.tested_at || '').slice(0, 10) >= cutoff
   )
   if (posUA) return 'amber'
   // Amber: overdue milestone (due date passed, not yet completed)
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA')
   const overdue = (data.milestones || []).find(
     m => m.client_id === clientId && m.due_date && m.due_date < today && !m.completed_at
   )
@@ -492,7 +492,7 @@ function MedsTab({ client, data }) {
 }
 
 function MilestonesTab({ client, data }) {
-  const today      = new Date().toISOString().slice(0, 10)
+  const today      = new Date().toLocaleDateString('en-CA')
   const milestones = (data?.milestones || [])
     .filter(m => m.client_id === client.id)
     .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'))

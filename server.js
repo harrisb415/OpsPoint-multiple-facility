@@ -1364,13 +1364,13 @@ app.get('/api/chore-log', requireAuth,(req,res)=>{
 });
 // Upsert a chore log entry (any authenticated user can initial)
 app.put('/api/chore-log', requireAuth, csrfCheck, requirePermission('chores.log'),(req,res)=>{
-  const{client_id,log_date,initials}=req.body;
+  const{client_id,log_date,am_initials,pm_initials}=req.body;
   if(!client_id||!log_date) return res.status(400).json({error:'client_id and log_date required'});
-  db.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials) VALUES (?,?,?)',
-    [parseInt(client_id),log_date,initials||'']);
+  db.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials,am_initials,pm_initials) VALUES (?,?,?,?,?)',
+    [parseInt(client_id),log_date,'',am_initials||'',pm_initials||'']);
   db.save();
-  audit(req,'chore.initial','client',client_id,String(client_id),{log_date,initials:initials||''});
-  broadcast({type:'chore_log_updated',user:req.session.displayName,client_id,log_date,initials});
+  audit(req,'chore.initial','client',client_id,String(client_id),{log_date,am_initials:am_initials||'',pm_initials:pm_initials||''});
+  broadcast({type:'chore_log_updated',user:req.session.displayName,client_id,log_date,am_initials,pm_initials});
   res.json({ok:true});
 });
 

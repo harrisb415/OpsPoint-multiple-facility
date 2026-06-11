@@ -79,10 +79,10 @@ export default function ChoresTab() {
 
   const masterChores = useMemo(() => data?.master_chores || [], [data?.master_chores])
 
-  // Build lookup: client_id + log_date → initials
+  // Build lookup: client_id + log_date → {am, pm}
   const logMap = useMemo(() => {
     const m = {}
-    weekLog.forEach(e => { m[`${e.client_id}_${e.log_date}`] = e.initials || '' })
+    weekLog.forEach(e => { m[`${e.client_id}_${e.log_date}`] = { am: e.am_initials || '', pm: e.pm_initials || '' } })
     return m
   }, [weekLog])
 
@@ -113,16 +113,15 @@ export default function ChoresTab() {
     loadData()
   }
 
-  async function saveInitials(clientId, logDate, initials) {
+  async function saveInitials(clientId, logDate, { am, pm }) {
     await fetch('/api/chore-log', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ client_id: clientId, log_date: logDate, initials }),
+      body: JSON.stringify({ client_id: clientId, log_date: logDate, am_initials: am, pm_initials: pm }),
     })
-    // Update local weekLog optimistically
     setWeekLog(prev => {
       const existing = prev.find(e => e.client_id === clientId && e.log_date === logDate)
-      if (existing) return prev.map(e => e.client_id === clientId && e.log_date === logDate ? { ...e, initials } : e)
-      return [...prev, { client_id: clientId, log_date: logDate, initials }]
+      if (existing) return prev.map(e => e.client_id === clientId && e.log_date === logDate ? { ...e, am_initials: am, pm_initials: pm } : e)
+      return [...prev, { client_id: clientId, log_date: logDate, am_initials: am, pm_initials: pm }]
     })
   }
 
@@ -137,7 +136,7 @@ export default function ChoresTab() {
   // Completion stats for the week
   const weekStats = useMemo(() => {
     const total = clients.length * 7
-    const done  = weekLog.filter(e => e.initials && e.initials.trim()).length
+    const done  = weekLog.filter(e => (e.am_initials || '').trim() || (e.pm_initials || '').trim()).length
     return { total, done, pct: total > 0 ? Math.round(done / total * 100) : 0 }
   }, [clients, weekLog])
 
@@ -250,7 +249,7 @@ export default function ChoresTab() {
                 </thead>
                 <tbody>
                   {clients.map(c => {
-                    const daysInitialed = weekDays.filter(d => (logMap[c.id + '_' + d] || '').trim()).length
+                    const daysInitialed = weekDays.filter(d => { const v = logMap[c.id + '_' + d]; return v && ((v.am||'').trim() || (v.pm||'').trim()) }).length
                     return (
                       <ChoreRow
                         key={c.id}
@@ -263,7 +262,7 @@ export default function ChoresTab() {
                         canLog={canLog}
                         daysInitialed={daysInitialed}
                         onChoreChange={assignment => saveChoreAssign(c.id, assignment)}
-                        onInitialsChange={(date, initials) => saveInitials(c.id, date, initials)}
+                        onInitialsChange={(date, shifts) => saveInitials(c.id, date, shifts)}
                       />
                     )
                   })}
@@ -318,7 +317,8 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
   const assignedCount = localDays.length > 0 ? localDays.length : 7
   const initialed = weekDays.filter((d, i) => {
     const scheduled = localDays.length === 0 || localDays.includes(i)
-    return scheduled && (logMap[`${c.id}_${d}`] || '').trim()
+    const v = logMap[`${c.id}_${d}`]
+    return scheduled && v && ((v.am||'').trim() || (v.pm||'').trim())
   }).length
 
   return (
@@ -391,18 +391,19 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
         )}
       </td>
       {weekDays.map((d, dayIdx) => {
-        const key        = `${c.id}_${d}`
-        const initials   = logMap[key] || ''
-        const isToday    = d === today
-        const scheduled  = localDays.length === 0 || localDays.includes(dayIdx)
+        const key       = `${c.id}_${d}`
+        const cell      = logMap[key] || { am: '', pm: '' }
+        const isToday   = d === today
+        const scheduled = localDays.length === 0 || localDays.includes(dayIdx)
         return (
           <DayCell
             key={d}
-            initials={initials}
+            amInitials={cell.am}
+            pmInitials={cell.pm}
             isToday={isToday}
             canEdit={canLog && scheduled}
             scheduled={scheduled}
-            onBlur={val => onInitialsChange(d, val)}
+            onBlur={shifts => onInitialsChange(d, shifts)}
           />
         )
       })}
@@ -417,57 +418,76 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
 }
 
 // ── DayCell ───────────────────────────────────────────────────────────
-function DayCell({ initials: savedInitials, isToday, canEdit, scheduled, onBlur }) {
-  const [val, setVal] = useState(savedInitials)
-  const done = val.trim().length > 0
+function DayCell({ amInitials: savedAm, pmInitials: savedPm, isToday, canEdit, scheduled, onBlur }) {
+  const [am, setAm] = useState(savedAm)
+  const [pm, setPm] = useState(savedPm)
 
-  // Sync if parent data updates
-  useEffect(() => { setVal(savedInitials) }, [savedInitials])
+  useEffect(() => { setAm(savedAm) }, [savedAm])
+  useEffect(() => { setPm(savedPm) }, [savedPm])
+
+  function handleAmBlur(newAm) { if (newAm !== savedAm) onBlur({ am: newAm, pm }) }
+  function handlePmBlur(newPm) { if (newPm !== savedPm) onBlur({ am, pm: newPm }) }
+
+  const amDone = am.trim().length > 0
+  const pmDone = pm.trim().length > 0
+
+  const rows = [
+    { label: 'AM', val: am, done: amDone, setVal: setAm, onBlurFn: handleAmBlur },
+    { label: 'PM', val: pm, done: pmDone, setVal: setPm, onBlurFn: handlePmBlur },
+  ]
 
   if (!scheduled) {
-    // Day not in this resident's chore schedule — show muted non-editable cell
     return (
-      <td style={{ textAlign: 'center', background: '#f8fafc', padding: '4px 4px' }}>
-        <span style={{
-          display: 'inline-block', width: 52, padding: '3px 4px',
-          fontFamily: 'var(--mono)', fontSize: '.85rem', fontWeight: 700,
-          color: done ? '#94a3b8' : '#d1d5db', borderRadius: 5,
-          background: done ? '#f1f5f9' : 'transparent',
-        }}>
-          {val || '—'}
-        </span>
+      <td style={{ textAlign: 'center', background: '#f8fafc', padding: '3px 2px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+          {rows.map(({ label, val, done }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <span style={{ fontSize: '.52rem', fontWeight: 700, color: '#d1d5db', width: 14, textAlign: 'right' }}>{label}</span>
+              <span style={{
+                fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700, width: 32, textAlign: 'center',
+                color: done ? '#94a3b8' : '#d1d5db',
+              }}>{val || '—'}</span>
+            </div>
+          ))}
+        </div>
       </td>
     )
   }
 
   return (
-    <td style={{ textAlign: 'center', background: isToday ? '#EFF6FF' : undefined, padding: '4px 4px' }}>
-      {canEdit ? (
-        <input
-          type="text"
-          value={val}
-          maxLength={6}
-          onChange={e => setVal(e.target.value)}
-          onBlur={e => { if (e.target.value !== savedInitials) onBlur(e.target.value) }}
-          placeholder="—"
-          style={{
-            width: 52, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: '.85rem', fontWeight: 700,
-            padding: '3px 4px', border: `1.5px solid ${done ? '#86EFAC' : 'var(--line)'}`,
-            borderRadius: 5, background: done ? '#DCFCE7' : '#fff',
-            outline: 'none', letterSpacing: '.08em', color: done ? '#15803D' : 'inherit',
-          }}
-        />
-      ) : (
-        <span style={{
-          display: 'inline-block', minWidth: 52, padding: '3px 4px',
-          fontFamily: 'var(--mono)', fontSize: '.85rem', fontWeight: 700,
-          background: done ? '#DCFCE7' : 'transparent',
-          color: done ? '#15803D' : '#94a3b8',
-          borderRadius: 5,
-        }}>
-          {val || '—'}
-        </span>
-      )}
+    <td style={{ textAlign: 'center', background: isToday ? '#EFF6FF' : undefined, padding: '3px 2px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
+        {rows.map(({ label, val, done, setVal, onBlurFn }) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <span style={{ fontSize: '.52rem', fontWeight: 700, color: done ? '#15803D' : '#94a3b8', width: 14, textAlign: 'right' }}>{label}</span>
+            {canEdit ? (
+              <input
+                type="text"
+                value={val}
+                maxLength={4}
+                onChange={e => setVal(e.target.value)}
+                onBlur={e => onBlurFn(e.target.value)}
+                placeholder="—"
+                style={{
+                  width: 34, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
+                  padding: '2px 2px', border: `1.5px solid ${done ? '#86EFAC' : 'var(--line)'}`,
+                  borderRadius: 4, background: done ? '#DCFCE7' : '#fff',
+                  outline: 'none', letterSpacing: '.06em', color: done ? '#15803D' : 'inherit',
+                }}
+              />
+            ) : (
+              <span style={{
+                display: 'inline-block', width: 34, textAlign: 'center', padding: '2px 2px',
+                fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
+                background: done ? '#DCFCE7' : 'transparent',
+                color: done ? '#15803D' : '#94a3b8', borderRadius: 4,
+              }}>
+                {val || '—'}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
     </td>
   )
 }

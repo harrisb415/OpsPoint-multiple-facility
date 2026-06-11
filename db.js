@@ -174,6 +174,9 @@ function init(dbPath) {
     // Central-managed users (multi-facility Phase 2b)
     "ALTER TABLE users ADD COLUMN central_managed INTEGER DEFAULT 0",
     "ALTER TABLE users ADD COLUMN central_uid TEXT DEFAULT NULL",
+    // chore_log — per-shift initials
+    "ALTER TABLE chore_log ADD COLUMN am_initials TEXT DEFAULT ''",
+    "ALTER TABLE chore_log ADD COLUMN pm_initials TEXT DEFAULT ''",
   ];
   migrations.forEach(sql => { try { _db.exec(sql); } catch(e) {} });
   _seedDefaults();

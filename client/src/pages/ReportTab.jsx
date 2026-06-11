@@ -209,15 +209,21 @@ export default function ReportTab() {
     }
   }, [activeReport, activeId])
 
-  // Pass-derived status override: Out/Extended pass → 'pass', In pass → 'building'
+  // passOverride: only Out/Extended passes lock status to 'pass' (Weekend Pass)
+  // In passes do NOT override — the user can still set any status except Weekend Pass
   const passOverride = useMemo(() => {
     const m = {}
     passes.forEach(p => {
-      if (p.status === 'Returned') return
       if (p.status === 'Out' || p.status === 'Extended') m[p.client_id] = 'pass'
-      else if (p.status === 'In') m[p.client_id] = 'building'
     })
     return m
+  }, [passes])
+
+  // inPass: clients with an active In-status pass (not Returned) — used to filter out Weekend Pass option
+  const inPass = useMemo(() => {
+    const s = new Set()
+    passes.forEach(p => { if (p.status === 'In') s.add(p.client_id) })
+    return s
   }, [passes])
   // Census
   const census = useMemo(() => {
@@ -838,6 +844,7 @@ export default function ReportTab() {
                     key={c.id} client={c}
                     status={passOverride[c.id] ?? statuses[c.id] ?? 'building'} comment={comments[c.id] || ''}
                     passLocked={passOverride[c.id] === 'pass'}
+                    hasInPass={inPass.has(c.id)}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
                     onStatusChange={handleStatusChange}
@@ -1674,9 +1681,11 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
   )
 }
 
-function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, onStatusChange, onCommentChange, onUARequest }) {
+function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
   const opt = stOpt(cur)
+  // In-pass clients can use any status except Weekend Pass
+  const statusOpts = hasInPass ? STATUS_OPTS.filter(o => o.v !== 'pass') : STATUS_OPTS
   return (
     <tr className={c.is_special ? 'srow' : ''}>
       <td className="rm">{c.room}</td>
@@ -1690,7 +1699,7 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
           <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>
         ) : (
           <select className={`ss ${opt.c}`} value={cur} onChange={e => onStatusChange(c.id, e.target.value)}>
-            {STATUS_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+            {statusOpts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
           </select>
         )}
       </td>

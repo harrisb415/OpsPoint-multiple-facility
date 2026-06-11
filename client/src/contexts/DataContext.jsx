@@ -342,6 +342,25 @@ export function DataProvider({ children }) {
     return () => { cancelled = true; clearInterval(id) }
   }, [session])
 
+  // ── Physical activity tracking: reset idle clock on user interaction ──
+  // Read-only work (browsing, viewing reports) only fires GETs which don't
+  // bump last_activity. Track actual mouse/keyboard activity and signal the
+  // server so the HIPAA idle timer reflects real workstation inactivity.
+  useEffect(() => {
+    if (!session) return
+    let lastSignal = 0
+    const THROTTLE = 5 * 60 * 1000 // at most one signal per 5 min
+    function onActivity() {
+      const now = Date.now()
+      if (now - lastSignal < THROTTLE) return
+      lastSignal = now
+      fetch('/api/heartbeat', { credentials:'include', headers:{ 'X-User-Activity':'1' } }).catch(() => {})
+    }
+    const EVT = ['mousemove','mousedown','keydown','touchstart','scroll']
+    EVT.forEach(e => window.addEventListener(e, onActivity, { passive:true }))
+    return () => EVT.forEach(e => window.removeEventListener(e, onActivity))
+  }, [session])
+
   // ── Save / Patch ───────────────────────────────────────────────────
   const saveData = useCallback(async (payload) => {
     setSaveStatus('saving')

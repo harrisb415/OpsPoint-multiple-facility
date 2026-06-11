@@ -326,16 +326,13 @@ function audit(req, action, targetType, targetId, targetLabel, detail, override)
 }
 
 // VULN-1: CSRF defence — reject cross-origin state-changing requests
-function getProto(req) {
-  const fwd = req.headers['x-forwarded-proto'];
-  if (fwd) return fwd.split(',')[0].trim();
-  return req.secure ? 'https' : 'http';
+function originHost(origin) {
+  try { return new URL(origin).host; } catch { return null; }
 }
 function csrfCheck(req, res, next) {
   var origin = req.headers.origin;
-  if (origin) {
-    var expected = getProto(req) + '://' + req.headers.host;
-    if (origin !== expected) return res.status(403).json({error:'Forbidden'});
+  if (origin && originHost(origin) !== req.headers.host) {
+    return res.status(403).json({error:'Forbidden'});
   }
   next();
 }
@@ -1233,9 +1230,8 @@ app.get('/api/me', requireAuth,(req,res)=>{
 // JSON login endpoint for React frontend
 app.post('/api/login', express.json(), (req,res)=>{
   const loginOrigin = req.headers.origin;
-  if (loginOrigin) {
-    const expectedOrigin = getProto(req) + '://' + req.headers.host;
-    if (loginOrigin !== expectedOrigin) return res.status(403).json({error:'Forbidden'});
+  if (loginOrigin && originHost(loginOrigin) !== req.headers.host) {
+    return res.status(403).json({error:'Forbidden'});
   }
   const ip = req.ip||req.connection.remoteAddress||'unknown';
   if (loginRateCheck(ip)) return res.status(429).json({error:'Too many login attempts. Wait 15 minutes.'});

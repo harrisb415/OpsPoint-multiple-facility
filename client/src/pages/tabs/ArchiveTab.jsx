@@ -218,11 +218,11 @@ function printArchivedReport(r, data) {
       ${r.is_closed?'<span class="closed">CLOSED</span>':''}
     </div>
     ${censusSect}
+    ${logSect}${issuesHtml}${medHtml}
     <div class="section"><div class="sh">Roster</div><div class="sb" style="padding:0">
       <table class="roster"><thead><tr>
         <th style="width:55px">Rm</th><th>Name</th><th style="width:120px">Status</th><th>Comment</th>
       </tr></thead><tbody>${rosterRows}</tbody></table></div></div>
-    ${logSect}${issuesHtml}${medHtml}
     <div class="footer">Printed ${esc(printedAt)} · OpsPoint · Confidential</div>
     </div></body></html>`
 
@@ -299,39 +299,6 @@ function ReportDetail({ report: r, data, onBack }) {
         </div>
       )}
 
-      {/* Roster */}
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Roster</span></div></div>
-        <div className="section-body" style={{ padding: 0 }}>
-          <div className="roster-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rm</th><th>Name</th><th>Status</th><th>Comment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.filter(c => c.is_active).map(c => {
-                  const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
-                  const opt = stOpt(cur)
-                  return (
-                    <tr key={c.id} className={c.is_special ? 'srow' : ''}>
-                      <td className="rm">{c.room}</td>
-                      <td className="name-cell">{c.name}</td>
-                      <td>
-                        {c.is_special ? <span style={{ color: '#cbd5e1' }}>—</span>
-                          : <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>}
-                      </td>
-                      <td style={{ fontSize: '.84rem', color: '#475569' }}>{comments[c.id] || ''}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
       {/* Log */}
       {logEntries.length > 0 && (
         <div className="section">
@@ -381,6 +348,39 @@ function ReportDetail({ report: r, data, onBack }) {
           </div>
         </div>
       )}
+
+      {/* Roster */}
+      <div className="section">
+        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Roster</span></div></div>
+        <div className="section-body" style={{ padding: 0 }}>
+          <div className="roster-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Rm</th><th>Name</th><th>Status</th><th>Comment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.filter(c => c.is_active).map(c => {
+                  const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
+                  const opt = stOpt(cur)
+                  return (
+                    <tr key={c.id} className={c.is_special ? 'srow' : ''}>
+                      <td className="rm">{c.room}</td>
+                      <td className="name-cell">{c.name}</td>
+                      <td>
+                        {c.is_special ? <span style={{ color: '#cbd5e1' }}>—</span>
+                          : <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>}
+                      </td>
+                      <td style={{ fontSize: '.84rem', color: '#475569' }}>{comments[c.id] || ''}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

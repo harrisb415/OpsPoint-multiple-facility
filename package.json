@@ -1,7 +1,7 @@
 {
   "name": "opspoint",
   "version": "2.3.6",
-  "description": "OpsPoint â€” Shift management platform",
+  "description": "OpsPoint — Shift management platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

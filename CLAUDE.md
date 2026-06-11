@@ -30,7 +30,7 @@ cd client && npm run dev
 cd client && npm run lint
 ```
 
-**Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `https://localhost:3000` â€” the backend **must** be running with TLS (`data/cert.pem` + `data/key.pem` must exist) or the proxy will fail with SSL errors. Run `node generate_cert.js` first if certs don't exist.
+**Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `https://localhost:3000` — the backend **must** be running with TLS (`data/cert.pem` + `data/key.pem` must exist) or the proxy will fail with SSL errors. Run `node generate_cert.js` first if certs don't exist.
 
 **Windows scripts:** `run.bat` installs dependencies and starts the server in one step. `install_startup.bat` (run as administrator) registers a Windows Scheduled Task for boot-time autostart under `NetworkService`.
 
@@ -41,7 +41,7 @@ git rev-parse HEAD && git rev-parse "HEAD^{tree}" && \
 git ls-files -z | sort -z | xargs -0 sha256sum | sha256sum | awk '{print $1}'
 ```
 
-The digest is a SHA-256 over all git-tracked files (sorted), independent of commit metadata â€” it changes whenever tracked content changes. The recorded baseline must always match the current pushed `HEAD`. This baseline feeds the Option B update mechanism's integrity checks.
+The digest is a SHA-256 over all git-tracked files (sorted), independent of commit metadata — it changes whenever tracked content changes. The recorded baseline must always match the current pushed `HEAD`. This baseline feeds the Option B update mechanism's integrity checks.
 
 ---
 
@@ -55,36 +55,36 @@ The digest is a SHA-256 over all git-tracked files (sorted), independent of comm
 | Database | SQLite via `better-sqlite3` (in-process, direct disk writes) |
 | Frontend | React 19 + Vite SPA served from `client/dist/` |
 | Routing | React Router v7 (client-side); Express mirrors routes server-side for direct navigation |
-| Auth state | `GET /api/me` â†’ `AuthContext`; no `window.SESSION` injection |
+| Auth state | `GET /api/me` → `AuthContext`; no `window.SESSION` injection |
 
 ### Server (`server.js`)
 
 Express + `ws` WebSocket server. Handles auth, all API routes, and real-time broadcast. Route middleware:
-- `requireAuth` â€” any logged-in user
-- `requirePermission(perm)` â€” user must have the named permission
-- `requireAnyPermission(...perms)` â€” user must have at least one listed permission
-- `csrfCheck` â€” validates `Origin` header on all state-changing routes
+- `requireAuth` — any logged-in user
+- `requirePermission(perm)` — user must have the named permission
+- `requireAnyPermission(...perms)` — user must have at least one listed permission
+- `csrfCheck` — validates `Origin` header on all state-changing routes
 
 Every write route calls `db.save()` then `broadcast({type: '...'})`. The WebSocket is authentication-gated at handshake level; incoming WS messages from clients are dropped.
 
 The server serves `client/dist/index.html` for every SPA route via `serveSPA(res)`. Server-side routes that mirror React Router paths:
 
 ```
-GET /          â†’ serveSPA (AuthGuard in React handles redirect if unauth)
-GET /login     â†’ serveSPA
-GET /change-password â†’ serveSPA
-GET /admin     â†’ requireAuth + requirePermission('admin.users') â†’ serveSPA
-GET /mobile    â†’ requireAuth + requirePermission('mobile.access') â†’ serveSPA
-GET /about     â†’ requireAuth â†’ serveSPA
+GET /          → serveSPA (AuthGuard in React handles redirect if unauth)
+GET /login     → serveSPA
+GET /change-password → serveSPA
+GET /admin     → requireAuth + requirePermission('admin.users') → serveSPA
+GET /mobile    → requireAuth + requirePermission('mobile.access') → serveSPA
+GET /about     → requireAuth → serveSPA
 ```
 
-**Security:** PBKDF2-SHA512 (600k iterations; legacy SHA-256/100k accepted and re-hashed on next login). CSRF: `Origin` validated on all state-changing routes. Rate limits: 10 login attempts/15 min per IP, 300 API requests/min per IP (implemented manually â€” no rate-limit package). `X-Powered-By` suppressed.
+**Security:** PBKDF2-SHA512 (600k iterations; legacy SHA-256/100k accepted and re-hashed on next login). CSRF: `Origin` validated on all state-changing routes. Rate limits: 10 login attempts/15 min per IP, 300 API requests/min per IP (implemented manually — no rate-limit package). `X-Powered-By` suppressed.
 
 **First-run credentials:** Empty DB creates three accounts with cryptographically random 16-character passwords, printed once to the console. No hardcoded defaults.
 
 ### Database (`db.js`)
 
-`better-sqlite3` â€” synchronous in-process SQLite. All reads/writes happen in the same Node.js process; no async, no flush step. Data is written directly to `data/opspoint.db` on every `db.run()` or `db.save()`.
+`better-sqlite3` — synchronous in-process SQLite. All reads/writes happen in the same Node.js process; no async, no flush step. Data is written directly to `data/opspoint.db` on every `db.run()` or `db.save()`.
 
 Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSetting`, `setSettingAndSave`, `getAllData`, `upsertReport`, `savePhoto`, `getPhotoB64`, `getPermissionProfiles`, `setPermissionProfiles`, `auditLog`, `getAuditLog`, `pruneAuditLog`.
 
@@ -99,21 +99,21 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | `users` | `id`, `username`, `display_name`, `role`, `hash`, `salt`, `must_change_pw`, `permissions` (JSON), `created_at` |
 | `staff` | `id`, `category`, `name`, `phone`, `phone2`, `notes`, `sort_order`, `created_at` |
 | `passes` | `id`, `client_id`, `room`, `name`, `departure`, `return_date`, `ua_notes`, `notes`, `status` (`Out`/`Extended`/`Returned`), `created_at` |
-| `chore_log` | `id`, `client_id`, `log_date`, `initials` â€” unique per `(client_id, log_date)` |
+| `chore_log` | `id`, `client_id`, `log_date`, `initials` — unique per `(client_id, log_date)` |
 | `ua_requests` | `id`, `client_id`, `client_name`, `room`, `requested_by`, `requested_at`, `acknowledged`, `acknowledged_by`, `acknowledged_at` |
 | `mail_log` | `id`, `client_id`, `client_name`, `room`, `logged_by`, `logged_at`, `report_id`, `notes`, `status` (`pending`/`approved`/`delivered`), `approved_by`, `approved_at`, `delivered_at` |
 | `audit_log` | `id`, `ts`, `actor_id`, `actor_name`, `ip`, `action`, `target_type`, `target_id`, `target_label`, `detail` |
 
 \* `chore` and `chore_time` added via `ALTER TABLE` migration.
 
-**Schema migrations** â€” use the try/catch `ALTER TABLE ADD COLUMN` pattern in `init()`. Never drop or rename columns.
+**Schema migrations** — use the try/catch `ALTER TABLE ADD COLUMN` pattern in `init()`. Never drop or rename columns.
 
-**Settings** â€” JSON strings in the `settings` key-value table. `getSetting(key, default)` handles parsing. Seed new keys in `_seedDefaults()`.
+**Settings** — JSON strings in the `settings` key-value table. `getSetting(key, default)` handles parsing. Seed new keys in `_seedDefaults()`.
 
-**`getAllData()`** â€” returns the full JSON payload for `GET /api/data`. Client photos are converted to base64 data URIs by `resolveClientPhoto()` before the payload is sent. When adding new tables, extend `getAllData()` and the corresponding GET route.
+**`getAllData()`** — returns the full JSON payload for `GET /api/data`. Client photos are converted to base64 data URIs by `resolveClientPhoto()` before the payload is sent. When adding new tables, extend `getAllData()` and the corresponding GET route.
 
-**Room / client model** â€” all rooms live in the `clients` table:
-- Regular residents: `name â‰  'VACANT'`, `is_special = 0`, `is_active = 1`
+**Room / client model** — all rooms live in the `clients` table:
+- Regular residents: `name ≠ 'VACANT'`, `is_special = 0`, `is_active = 1`
 - Vacant rooms: `name = 'VACANT'`, `is_special = 0`, `is_active = 1`
 - Special rooms: `is_special = 1`, may have a `special_label`
 - Discharged: `is_active = 0`
@@ -140,29 +140,29 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | Admin | `POST /api/admin/restart`, `GET /api/audit-log` | `admin.settings` / `admin.users` |
 | Photos | `GET /photos/:filename` | `requireAuth` |
 
-### Frontend â€” React SPA (`client/`)
+### Frontend — React SPA (`client/`)
 
 ```
 client/
   src/
-    App.jsx              â† Route tree, guards, mobile redirect
+    App.jsx              ← Route tree, guards, mobile redirect
     contexts/
-      AuthContext.jsx    â† Session state (fetched from GET /api/me)
-      DataContext.jsx    â† All app data, WebSocket, real-time sync
+      AuthContext.jsx    ← Session state (fetched from GET /api/me)
+      DataContext.jsx    ← All app data, WebSocket, real-time sync
     components/
-      AppShell.jsx       â† Desktop layout: header, icon sidebar, Outlet; DOCX export via jszip
-      PrintScopeModal.jsx â† Modal for selecting print date range
-      ProtectedRoute.jsx â† AuthGuard, ChangePasswordGuard
+      AppShell.jsx       ← Desktop layout: header, icon sidebar, Outlet; DOCX export via jszip
+      PrintScopeModal.jsx ← Modal for selecting print date range
+      ProtectedRoute.jsx ← AuthGuard, ChangePasswordGuard
     hooks/
-      usePermission.js   â† hasPerm() helper (reads from AuthContext)
+      usePermission.js   ← hasPerm() helper (reads from AuthContext)
     pages/
       Login.jsx
       ChangePassword.jsx
-      Dashboard.jsx      â† Tab switcher + all tab panels
-      Admin.jsx          â† User mgmt, permission profiles, facility config, audit log
-      Mobile.jsx         â† Standalone mobile interface (own WS + data fetch)
-      About.jsx          â† Version / org info page
-      ReportTab.jsx      â† Active report tab (at pages/ level, not pages/tabs/)
+      Dashboard.jsx      ← Tab switcher + all tab panels
+      Admin.jsx          ← User mgmt, permission profiles, facility config, audit log
+      Mobile.jsx         ← Standalone mobile interface (own WS + data fetch)
+      About.jsx          ← Version / org info page
+      ReportTab.jsx      ← Active report tab (at pages/ level, not pages/tabs/)
       tabs/
         ArchiveTab.jsx
         CaseloadsTab.jsx
@@ -174,29 +174,29 @@ client/
         UARequestsTab.jsx
         ViolationsTab.jsx
     utils/
-      printLog.js        â† openPrintWindow() â€” opens a styled print-ready tab; shared by tabs
-  index.css              â† Global styles (includes body { overflow: hidden })
+      printLog.js        ← openPrintWindow() — opens a styled print-ready tab; shared by tabs
+  index.css              ← Global styles (includes body { overflow: hidden })
 ```
 
 **Routing (`App.jsx`):**
 ```
-/login                â†’ Login (public)
-/change-password      â†’ ChangePassword (ChangePasswordGuard)
-/mobile               â†’ MobileGuard â†’ Mobile (requireAuth + mobile.access)
-/about                â†’ About (AuthGuard â€” authenticated users only)
-/                     â†’ AuthGuard â†’ AppShell â†’ Dashboard
-/admin                â†’ AuthGuard â†’ AppShell â†’ Admin
+/login                → Login (public)
+/change-password      → ChangePassword (ChangePasswordGuard)
+/mobile               → MobileGuard → Mobile (requireAuth + mobile.access)
+/about                → About (AuthGuard — authenticated users only)
+/                     → AuthGuard → AppShell → Dashboard
+/admin                → AuthGuard → AppShell → Admin
 ```
 
-`MobileAutoRedirect` â€” detects mobile UA, checks `mobile.access`, redirects to `/mobile` unless `?desktop=1` is in the URL or the path is already excluded.
+`MobileAutoRedirect` — detects mobile UA, checks `mobile.access`, redirects to `/mobile` unless `?desktop=1` is in the URL or the path is already excluded.
 
 **Auth flow:** `AuthContext` calls `GET /api/me` on mount. Returns `{ id, username, displayName, role, permissions, mustChangePw }`. Guards redirect based on this state. No `window.SESSION` injection.
 
 **Data flow (`DataContext`):**
-1. `loadData()` calls `GET /api/data` â€” full snapshot
+1. `loadData()` calls `GET /api/data` — full snapshot
 2. Opens WebSocket; handles: `data_saved` (full reload), `patched` (optimistic merge), `staff_updated`, `passes_updated`, `pass_notice_updated`, `chore_log_updated`, `mail_updated`, `ua_request`, `permissions_updated`, `settings_updated`, `server_restarting`
-3. `saveData(patch)` â€” calls `POST /api/data`, optimistically updates local state
-4. `saveStatus` â€” `'idle' | 'saving' | 'saved' | 'err'` â€” shown in header
+3. `saveData(patch)` — calls `POST /api/data`, optimistically updates local state
+4. `saveStatus` — `'idle' | 'saving' | 'saved' | 'err'` — shown in header
 
 **Permission check:** `usePermission().hasPerm('perm.key')` in components, `requirePermission('perm.key')` middleware server-side.
 
@@ -212,9 +212,9 @@ client/
 Permissions stored as a JSON array on each `users` row. `PERMISSIONS` is the master list; `ROLE_PRESETS` defines defaults per role. Used during account creation and permission profile seeding.
 
 Boot-time migrations:
-- `_migratePermissions` â€” strips retired permissions from all users (runs every boot)
-- `_migrateGroups` â€” strips retired perms from stored permission groups
-- `_migrateProfiles` â€” strips retired perms from stored permission profiles
+- `_migratePermissions` — strips retired permissions from all users (runs every boot)
+- `_migrateGroups` — strips retired perms from stored permission groups
+- `_migrateProfiles` — strips retired perms from stored permission profiles
 
 | Permission | What it grants |
 |------------|---------------|
@@ -245,7 +245,7 @@ Boot-time migrations:
 
 ### Mobile page (`Mobile.jsx`)
 
-Standalone React component â€” does **not** use `AppShell` or `DataContext`. Has its own:
+Standalone React component — does **not** use `AppShell` or `DataContext`. Has its own:
 - `fetch('/api/data')` on mount
 - WebSocket connection with reconnect (handles `data_saved`, `patched`, `settings_updated`)
 - Inlined CSS (no bleed to desktop styles)
@@ -266,8 +266,8 @@ Optimistic PATCH writes to `/api/data`. Deduplicates own log entries when WS ech
 ### Client photo flow
 
 1. `db.savePhoto(b64, fname)` writes to `data/photos/`; stores filename in DB
-2. `getAllData()` â†’ `resolveClientPhoto(c)` reads the file and returns a `data:image/â€¦;base64,â€¦` string
-3. React state holds the data URI directly â€” `src={c.photo}` with **no** path prefix
+2. `getAllData()` → `resolveClientPhoto(c)` reads the file and returns a `data:image/…;base64,…` string
+3. React state holds the data URI directly — `src={c.photo}` with **no** path prefix
 
 ### TLS
 
@@ -281,7 +281,7 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 | File | Purpose |
 |------|---------|
 | `server.js` | All routes, WS logic, auth, CSRF, rate limiting |
-| `db.js` | Database layer â€” schema, migrations, queries, photo storage |
+| `db.js` | Database layer — schema, migrations, queries, photo storage |
 | `client/src/App.jsx` | Route tree, auth guards, mobile redirect |
 | `client/src/contexts/AuthContext.jsx` | Session state |
 | `client/src/contexts/DataContext.jsx` | All app data, WS, real-time sync |
@@ -292,5 +292,5 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 | `client/src/pages/About.jsx` | Version / org info (authenticated users only) |
 | `client/src/pages/ReportTab.jsx` | Active shift report tab (lives at pages/ level, not pages/tabs/) |
 | `client/src/pages/tabs/*.jsx` | Individual tab components |
-| `client/src/utils/printLog.js` | `openPrintWindow()` â€” shared print helper used by multiple tabs |
+| `client/src/utils/printLog.js` | `openPrintWindow()` — shared print helper used by multiple tabs |
 | `data/opspoint.db` | The only file that needs backing up |

@@ -75,7 +75,7 @@ export default function Login() {
               />
             </div>
             <button type="submit" className="auth-btn" disabled={busy}>
-              {busy ? 'Signing Inâ€¦' : 'Sign In â†’'}
+              {busy ? 'Signing In…' : 'Sign In →'}
             </button>
           </form>
         </div>

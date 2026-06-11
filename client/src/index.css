@@ -85,7 +85,7 @@ body {
 .header-brand-facility { font-size: 13px; font-weight: 600; color: var(--teal-100); letter-spacing: 0; }
 .header-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 
-/* All buttons/links in the header sit on teal â€” light text */
+/* All buttons/links in the header sit on teal — light text */
 .site-header a,
 .site-header button:not(.btn):not(.btn-primary):not(.btn-danger):not(.dropdown-item),
 .notif-bell-btn { color: var(--teal-100); }
@@ -281,7 +281,7 @@ body {
 .del-btn:hover { color: var(--danger); }
 
 /* - Inputs ------------------------------------------------------- */
-/* Global base — every bare input gets a visible border and no browser outline */
+/* Global base � every bare input gets a visible border and no browser outline */
 input:not([type=checkbox]):not([type=radio]):not([type=range]),
 textarea {
   border: 1px solid var(--border-light);
@@ -294,7 +294,7 @@ textarea {
   transition: border-color 150ms, box-shadow 150ms;
 }
 
-/* Global focus ring — every text input gets the gold glow.
+/* Global focus ring � every text input gets the gold glow.
    !important on border-color/box-shadow is intentional: inline border styles
    on inputs throughout the codebase would otherwise silently block the focus ring. */
 input:not([type=checkbox]):not([type=radio]):focus,
@@ -437,7 +437,7 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
   background: #fff; border: 1px solid var(--border-light); border-radius: 8px; font-size: 13px;
 }
 .issue-item .issue-text { flex: 1; }
-/* medical-note entries use inline style with #eff6ff â€” bump to correct status-work blue */
+/* medical-note entries use inline style with #eff6ff — bump to correct status-work blue */
 .issues-list .issue-item[style*="eff6ff"] { background: #d8e9fe !important; border-color: #88b6f5 !important; }
 .issue-add { display: flex; gap: 8px; }
 .issue-add input {
@@ -628,9 +628,9 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
 /* - Sortable th ------------------------------------------------- */
 th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: var(--teal-700); }
-th.sortable::after { content: ' â‡…'; opacity: .4; font-size: .75em; }
-th.sortable.asc::after  { content: ' â†‘'; opacity: 1; color: var(--gold-500); }
-th.sortable.desc::after { content: ' â†“'; opacity: 1; color: var(--gold-500); }
+th.sortable::after { content: ' ⇅'; opacity: .4; font-size: .75em; }
+th.sortable.asc::after  { content: ' ↑'; opacity: 1; color: var(--gold-500); }
+th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
 
 /* - Archive report cards ---------------------------------------- */
 .report-list { display: flex; flex-direction: column; gap: 8px; }
@@ -765,7 +765,7 @@ th.sortable.desc::after { content: ' â†“'; opacity: 1; color: var(--gold-50
 .report-2col > .section { margin-bottom: 0; }
 @media (max-width: 720px) { .report-2col { grid-template-columns: 1fr; } }
 
-/* - Admin shell (clinical-style panels; scoped — no global bleed) -- */
+/* - Admin shell (clinical-style panels; scoped � no global bleed) -- */
 /* Re-skins the legacy boxed `.section` chrome to match the clinical look:
    light bordered card, no gold dot, readable normal-case title. Panels
    fill the content width; form inputs stay capped so they don't stretch. */

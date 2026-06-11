@@ -15,7 +15,7 @@ function fmtDT(s) {
 
 const RESULT_LABEL = { pending:'Pending', pass:'Negative', fail:'Positive', dilute:'Dilute', refused:'Refused', invalid:'Invalid' }
 const REASON_LABEL = {
-  suspicious:       'Suspicious',
+  suspicious:       'Suspicion',
   random:           'Random',
   return_from_pass: 'Return from pass',
   cm_request:       'CM request',

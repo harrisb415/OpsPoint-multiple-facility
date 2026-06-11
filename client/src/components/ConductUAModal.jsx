@@ -28,7 +28,7 @@ const UA_LABELS = {
 
 // ── Reason options ────────────────────────────────────────────────────────
 const REASON_OPTS = [
-  { v: 'suspicious',       l: 'Suspicious' },
+  { v: 'suspicious',       l: 'Suspicion' },
   { v: 'random',           l: 'Random' },
   { v: 'return_from_pass', l: 'Return from pass' },
   { v: 'cm_request',       l: 'CM request' },

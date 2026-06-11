@@ -79,10 +79,10 @@ export default function ChoresTab() {
 
   const masterChores = useMemo(() => data?.master_chores || [], [data?.master_chores])
 
-  // Build lookup: client_id + log_date → {am, pm}
+  // Build lookup: client_id + log_date → initials string
   const logMap = useMemo(() => {
     const m = {}
-    weekLog.forEach(e => { m[`${e.client_id}_${e.log_date}`] = { am: e.am_initials || '', pm: e.pm_initials || '' } })
+    weekLog.forEach(e => { m[`${e.client_id}_${e.log_date}`] = e.initials || '' })
     return m
   }, [weekLog])
 
@@ -113,15 +113,15 @@ export default function ChoresTab() {
     loadData()
   }
 
-  async function saveInitials(clientId, logDate, { am, pm }) {
+  async function saveInitials(clientId, logDate, initials) {
     await fetch('/api/chore-log', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ client_id: clientId, log_date: logDate, am_initials: am, pm_initials: pm }),
+      body: JSON.stringify({ client_id: clientId, log_date: logDate, initials }),
     })
     setWeekLog(prev => {
       const existing = prev.find(e => e.client_id === clientId && e.log_date === logDate)
-      if (existing) return prev.map(e => e.client_id === clientId && e.log_date === logDate ? { ...e, am_initials: am, pm_initials: pm } : e)
-      return [...prev, { client_id: clientId, log_date: logDate, am_initials: am, pm_initials: pm }]
+      if (existing) return prev.map(e => e.client_id === clientId && e.log_date === logDate ? { ...e, initials } : e)
+      return [...prev, { client_id: clientId, log_date: logDate, initials }]
     })
   }
 
@@ -136,7 +136,7 @@ export default function ChoresTab() {
   // Completion stats for the week
   const weekStats = useMemo(() => {
     const total = clients.length * 7
-    const done  = weekLog.filter(e => (e.am_initials || '').trim() || (e.pm_initials || '').trim()).length
+    const done  = weekLog.filter(e => (e.initials || '').trim()).length
     return { total, done, pct: total > 0 ? Math.round(done / total * 100) : 0 }
   }, [clients, weekLog])
 
@@ -249,7 +249,7 @@ export default function ChoresTab() {
                 </thead>
                 <tbody>
                   {clients.map(c => {
-                    const daysInitialed = weekDays.filter(d => { const v = logMap[c.id + '_' + d]; return v && ((v.am||'').trim() || (v.pm||'').trim()) }).length
+                    const daysInitialed = weekDays.filter(d => (logMap[c.id + '_' + d] || '').trim()).length
                     return (
                       <ChoreRow
                         key={c.id}
@@ -262,7 +262,7 @@ export default function ChoresTab() {
                         canLog={canLog}
                         daysInitialed={daysInitialed}
                         onChoreChange={assignment => saveChoreAssign(c.id, assignment)}
-                        onInitialsChange={(date, shifts) => saveInitials(c.id, date, shifts)}
+                        onInitialsChange={(date, initials) => saveInitials(c.id, date, initials)}
                       />
                     )
                   })}
@@ -277,48 +277,50 @@ export default function ChoresTab() {
 }
 
 // Day labels — index 0=Mon … 6=Sun (matches weekDays array order)
-const DAY_CHIPS  = ['M','T','W','T','F','S','S']
-const DAY_SHORT  = ['Mo','Tu','We','Th','Fr','Sa','Su']
+const DAY_CHIPS = ['M','T','W','T','F','S','S']
+const DAY_SHORT = ['Mo','Tu','We','Th','Fr','Sa','Su']
 
 // ── ChoreRow ──────────────────────────────────────────────────────────
 function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign, canLog, daysInitialed, onChoreChange, onInitialsChange }) {
-  const [localChore, setLocalChore] = useState(c.chore || '')
-  const [localDays,  setLocalDays]  = useState(() => { try { return c.chore_days ? JSON.parse(c.chore_days) : [] } catch { return [] } })
-  const [localTime,  setLocalTime]  = useState(c.chore_time || '')
+  const [localChore,     setLocalChore]     = useState(c.chore || '')
+  const [localDays,      setLocalDays]      = useState(() => { try { return c.chore_days ? JSON.parse(c.chore_days) : [] } catch { return [] } })
+  const [localDayShifts, setLocalDayShifts] = useState(() => { try { return c.chore_day_shifts ? JSON.parse(c.chore_day_shifts) : {} } catch { return {} } })
 
-  // Keep in sync if parent data changes
   useEffect(() => { setLocalChore(c.chore || '') }, [c.chore])
   useEffect(() => { try { setLocalDays(c.chore_days ? JSON.parse(c.chore_days) : []) } catch { setLocalDays([]) } }, [c.chore_days])
-  useEffect(() => { setLocalTime(c.chore_time || '') }, [c.chore_time])
+  useEffect(() => { try { setLocalDayShifts(c.chore_day_shifts ? JSON.parse(c.chore_day_shifts) : {}) } catch { setLocalDayShifts({}) } }, [c.chore_day_shifts])
 
   function handleChoreChange(newChore) {
     setLocalChore(newChore)
-    const days = newChore ? localDays : []
-    const time = newChore ? localTime : ''
-    if (!newChore) { setLocalDays([]); setLocalTime('') }
-    onChoreChange({ chore: newChore, chore_days: days, chore_time: time })
+    const days   = newChore ? localDays      : []
+    const shifts = newChore ? localDayShifts : {}
+    if (!newChore) { setLocalDays([]); setLocalDayShifts({}) }
+    onChoreChange({ chore: newChore, chore_days: days, chore_day_shifts: shifts })
   }
 
   function toggleDay(idx) {
-    const next = localDays.includes(idx)
+    const active    = localDays.includes(idx)
+    const nextDays  = active
       ? localDays.filter(d => d !== idx)
       : [...localDays, idx].sort((a, b) => a - b)
-    setLocalDays(next)
-    onChoreChange({ chore: localChore, chore_days: next, chore_time: localTime })
+    const nextShifts = { ...localDayShifts }
+    if (!active) { if (!nextShifts[idx]) nextShifts[idx] = 'AM' }
+    else delete nextShifts[idx]
+    setLocalDays(nextDays)
+    setLocalDayShifts(nextShifts)
+    onChoreChange({ chore: localChore, chore_days: nextDays, chore_day_shifts: nextShifts })
   }
 
-  function handleTimeChange(t) {
-    const next = localTime === t ? '' : t
-    setLocalTime(next)
-    onChoreChange({ chore: localChore, chore_days: localDays, chore_time: next })
+  function setDayShift(idx, t) {
+    const nextShifts = { ...localDayShifts, [idx]: t }
+    setLocalDayShifts(nextShifts)
+    onChoreChange({ chore: localChore, chore_days: localDays, chore_day_shifts: nextShifts })
   }
 
-  // How many assigned days this week (scheduled + initialed)
   const assignedCount = localDays.length > 0 ? localDays.length : 7
   const initialed = weekDays.filter((d, i) => {
     const scheduled = localDays.length === 0 || localDays.includes(i)
-    const v = logMap[`${c.id}_${d}`]
-    return scheduled && v && ((v.am||'').trim() || (v.pm||'').trim())
+    return scheduled && (logMap[`${c.id}_${d}`] || '').trim()
   }).length
 
   return (
@@ -328,7 +330,6 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
       <td style={{ verticalAlign: 'top', paddingTop: 7 }}>
         {canAssign ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {/* Chore dropdown */}
             <select value={localChore} onChange={e => handleChoreChange(e.target.value)}
               style={{ fontFamily: 'var(--sans)', fontSize: '.84rem', padding: '4px 8px',
                 border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none',
@@ -336,16 +337,14 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
               <option value="">— Unassigned —</option>
               {masterChores.map((ch, i) => <option key={i} value={ch}>{ch}</option>)}
             </select>
-            {/* Day + time row — only shown when a chore is selected */}
             {localChore && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                {/* Day chips */}
-                <div style={{ display: 'flex', gap: 2 }}>
-                  {DAY_CHIPS.map((label, idx) => {
-                    const active = localDays.includes(idx)
-                    return (
-                      <button key={idx} type="button" onClick={() => toggleDay(idx)}
-                        title={DAY_SHORT[idx]}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {DAY_CHIPS.map((label, idx) => {
+                  const active = localDays.includes(idx)
+                  const shift  = localDayShifts[idx] || 'AM'
+                  return (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                      <button type="button" onClick={() => toggleDay(idx)} title={DAY_SHORT[idx]}
                         style={{
                           width: 22, height: 22, borderRadius: '50%', padding: 0,
                           background: active ? 'var(--accent)' : '#e2e8f0',
@@ -354,56 +353,56 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
                           cursor: 'pointer', fontSize: '.6rem', fontWeight: 800,
                           lineHeight: '22px', textAlign: 'center',
                         }}>{label}</button>
-                    )
-                  })}
-                </div>
-                {/* AM / PM toggle */}
-                <div style={{ display: 'flex', gap: 2 }}>
-                  {['AM','PM'].map(t => (
-                    <button key={t} type="button" onClick={() => handleTimeChange(t)}
-                      style={{
-                        padding: '1px 6px', borderRadius: 4, fontSize: '.65rem', fontWeight: 800,
-                        background: localTime === t ? '#0a4655' : '#f1f5f9',
-                        color: localTime === t ? '#fff' : '#64748b',
-                        border: `1.5px solid ${localTime === t ? '#0a4655' : '#d1d5db'}`,
-                        cursor: 'pointer',
-                      }}>{t}</button>
-                  ))}
-                </div>
+                      {active && (
+                        <div style={{ display: 'flex', gap: 1 }}>
+                          {['AM','PM'].map(t => (
+                            <button key={t} type="button"
+                              onClick={e => { e.stopPropagation(); setDayShift(idx, t) }}
+                              style={{
+                                padding: '0 3px', borderRadius: 3, fontSize: '.55rem', fontWeight: 700,
+                                background: shift === t ? '#0a4655' : '#f1f5f9',
+                                color: shift === t ? '#fff' : '#94a3b8',
+                                border: `1px solid ${shift === t ? '#0a4655' : '#d1d5db'}`,
+                                cursor: 'pointer', lineHeight: '14px',
+                              }}>{t}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
         ) : (
-          /* Read-only display */
           <div style={{ fontSize: '.84rem' }}>
             <span style={{ color: localChore ? 'var(--text-primary)' : '#94a3b8', fontWeight: localChore ? 600 : 400 }}>
               {localChore || '—'}
             </span>
-            {localChore && (localDays.length > 0 || localTime) && (
+            {localChore && (
               <div style={{ fontSize: '.7rem', color: '#64748b', marginTop: 2 }}>
                 {localDays.length > 0
-                  ? DAY_SHORT.filter((_, i) => localDays.includes(i)).join(' ')
-                  : 'All days'}
-                {localTime && ` · ${localTime}`}
+                  ? localDays.map(idx => `${DAY_SHORT[idx]}:${localDayShifts[idx]||'AM'}`).join(' ')
+                  : 'All days · AM'}
               </div>
             )}
           </div>
         )}
       </td>
       {weekDays.map((d, dayIdx) => {
-        const key       = `${c.id}_${d}`
-        const cell      = logMap[key] || { am: '', pm: '' }
+        const initials  = logMap[`${c.id}_${d}`] || ''
         const isToday   = d === today
         const scheduled = localDays.length === 0 || localDays.includes(dayIdx)
+        const shift     = localDayShifts[dayIdx] || 'AM'
         return (
           <DayCell
             key={d}
-            amInitials={cell.am}
-            pmInitials={cell.pm}
+            initials={initials}
+            shift={shift}
             isToday={isToday}
             canEdit={canLog && scheduled}
             scheduled={scheduled}
-            onBlur={shifts => onInitialsChange(d, shifts)}
+            onBlur={val => onInitialsChange(d, val)}
           />
         )
       })}
@@ -418,75 +417,52 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
 }
 
 // ── DayCell ───────────────────────────────────────────────────────────
-function DayCell({ amInitials: savedAm, pmInitials: savedPm, isToday, canEdit, scheduled, onBlur }) {
-  const [am, setAm] = useState(savedAm)
-  const [pm, setPm] = useState(savedPm)
+function DayCell({ initials: savedInitials, shift, isToday, canEdit, scheduled, onBlur }) {
+  const [val, setVal] = useState(savedInitials || '')
 
-  useEffect(() => { setAm(savedAm) }, [savedAm])
-  useEffect(() => { setPm(savedPm) }, [savedPm])
+  useEffect(() => { setVal(savedInitials || '') }, [savedInitials])
 
-  function handleAmBlur(newAm) { if (newAm !== savedAm) onBlur({ am: newAm, pm }) }
-  function handlePmBlur(newPm) { if (newPm !== savedPm) onBlur({ am, pm: newPm }) }
-
-  const amDone = am.trim().length > 0
-  const pmDone = pm.trim().length > 0
-
-  const rows = [
-    { label: 'AM', val: am, done: amDone, setVal: setAm, onBlurFn: handleAmBlur },
-    { label: 'PM', val: pm, done: pmDone, setVal: setPm, onBlurFn: handlePmBlur },
-  ]
+  const done = val.trim().length > 0
 
   if (!scheduled) {
     return (
       <td style={{ textAlign: 'center', background: '#f8fafc', padding: '3px 2px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-          {rows.map(({ label, val, done }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <span style={{ fontSize: '.52rem', fontWeight: 700, color: '#d1d5db', width: 14, textAlign: 'right' }}>{label}</span>
-              <span style={{
-                fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700, width: 32, textAlign: 'center',
-                color: done ? '#94a3b8' : '#d1d5db',
-              }}>{val || '—'}</span>
-            </div>
-          ))}
-        </div>
+        <span style={{ color: '#d1d5db', fontFamily: 'var(--mono)', fontSize: '.72rem' }}>—</span>
       </td>
     )
   }
 
   return (
     <td style={{ textAlign: 'center', background: isToday ? '#EFF6FF' : undefined, padding: '3px 2px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'center' }}>
-        {rows.map(({ label, val, done, setVal, onBlurFn }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <span style={{ fontSize: '.52rem', fontWeight: 700, color: done ? '#15803D' : '#94a3b8', width: 14, textAlign: 'right' }}>{label}</span>
-            {canEdit ? (
-              <input
-                type="text"
-                value={val}
-                maxLength={4}
-                onChange={e => setVal(e.target.value)}
-                onBlur={e => onBlurFn(e.target.value)}
-                placeholder="—"
-                style={{
-                  width: 34, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
-                  padding: '2px 2px', border: `1.5px solid ${done ? '#86EFAC' : 'var(--line)'}`,
-                  borderRadius: 4, background: done ? '#DCFCE7' : '#fff',
-                  outline: 'none', letterSpacing: '.06em', color: done ? '#15803D' : 'inherit',
-                }}
-              />
-            ) : (
-              <span style={{
-                display: 'inline-block', width: 34, textAlign: 'center', padding: '2px 2px',
-                fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
-                background: done ? '#DCFCE7' : 'transparent',
-                color: done ? '#15803D' : '#94a3b8', borderRadius: 4,
-              }}>
-                {val || '—'}
-              </span>
-            )}
-          </div>
-        ))}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+        <span style={{ fontSize: '.52rem', fontWeight: 700, color: done ? '#15803D' : '#94a3b8' }}>
+          {shift}
+        </span>
+        {canEdit ? (
+          <input
+            type="text"
+            value={val}
+            maxLength={4}
+            onChange={e => setVal(e.target.value)}
+            onBlur={e => { if (e.target.value !== savedInitials) onBlur(e.target.value) }}
+            placeholder="—"
+            style={{
+              width: 34, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
+              padding: '2px 2px', border: `1.5px solid ${done ? '#86EFAC' : 'var(--line)'}`,
+              borderRadius: 4, background: done ? '#DCFCE7' : '#fff',
+              outline: 'none', letterSpacing: '.06em', color: done ? '#15803D' : 'inherit',
+            }}
+          />
+        ) : (
+          <span style={{
+            display: 'inline-block', width: 34, textAlign: 'center', padding: '2px 2px',
+            fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
+            background: done ? '#DCFCE7' : 'transparent',
+            color: done ? '#15803D' : '#94a3b8', borderRadius: 4,
+          }}>
+            {val || '—'}
+          </span>
+        )}
       </div>
     </td>
   )

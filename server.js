@@ -1344,13 +1344,14 @@ app.put('/api/master-chores', requireAuth, csrfCheck, requirePermission('chores.
 app.patch('/api/clients/:id/chore', requireAuth, csrfCheck, requirePermission('chores.assign'),(req,res)=>{
   const id=parseInt(req.params.id);
   if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{chore,chore_time,chore_days}=req.body;
-  if(chore!==undefined)      db.run('UPDATE clients SET chore=? WHERE id=?',[chore||'',id]);
-  if(chore_time!==undefined) db.run('UPDATE clients SET chore_time=? WHERE id=?',[chore_time||'',id]);
-  if(chore_days!==undefined) db.run('UPDATE clients SET chore_days=? WHERE id=?',[chore_days!=null?JSON.stringify(chore_days):null,id]);
+  const{chore,chore_time,chore_days,chore_day_shifts}=req.body;
+  if(chore!==undefined)            db.run('UPDATE clients SET chore=? WHERE id=?',[chore||'',id]);
+  if(chore_time!==undefined)       db.run('UPDATE clients SET chore_time=? WHERE id=?',[chore_time||'',id]);
+  if(chore_days!==undefined)       db.run('UPDATE clients SET chore_days=? WHERE id=?',[chore_days!=null?JSON.stringify(chore_days):null,id]);
+  if(chore_day_shifts!==undefined) db.run('UPDATE clients SET chore_day_shifts=? WHERE id=?',[chore_day_shifts!=null?JSON.stringify(chore_day_shifts):null,id]);
   db.save();
   const _cc=db.query1('SELECT name,room FROM clients WHERE id=?',[id]);
-  audit(req,'chore.assign','client',id,_cc?(_cc.name+' Rm.'+_cc.room):String(id),{chore:chore||'',chore_time:chore_time||''});
+  audit(req,'chore.assign','client',id,_cc?(_cc.name+' Rm.'+_cc.room):String(id),{chore:chore||''});
   broadcast({type:'data_saved',user:req.session.displayName});
   res.json({ok:true});
 });
@@ -1362,15 +1363,15 @@ app.get('/api/chore-log', requireAuth,(req,res)=>{
   const date=req.query.date||new Date().toISOString().slice(0,10);
   res.json(db.query('SELECT * FROM chore_log WHERE log_date=?',[date]));
 });
-// Upsert a chore log entry (any authenticated user can initial)
+// Upsert a chore log entry
 app.put('/api/chore-log', requireAuth, csrfCheck, requirePermission('chores.log'),(req,res)=>{
-  const{client_id,log_date,am_initials,pm_initials}=req.body;
+  const{client_id,log_date,initials}=req.body;
   if(!client_id||!log_date) return res.status(400).json({error:'client_id and log_date required'});
-  db.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials,am_initials,pm_initials) VALUES (?,?,?,?,?)',
-    [parseInt(client_id),log_date,'',am_initials||'',pm_initials||'']);
+  db.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials) VALUES (?,?,?)',
+    [parseInt(client_id),log_date,initials||'']);
   db.save();
-  audit(req,'chore.initial','client',client_id,String(client_id),{log_date,am_initials:am_initials||'',pm_initials:pm_initials||''});
-  broadcast({type:'chore_log_updated',user:req.session.displayName,client_id,log_date,am_initials,pm_initials});
+  audit(req,'chore.initial','client',client_id,String(client_id),{log_date,initials:initials||''});
+  broadcast({type:'chore_log_updated',user:req.session.displayName,client_id,log_date,initials});
   res.json({ok:true});
 });
 

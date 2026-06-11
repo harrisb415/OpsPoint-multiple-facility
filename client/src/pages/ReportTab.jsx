@@ -839,7 +839,7 @@ export default function ReportTab() {
                   <RosterRow
                     key={c.id} client={c}
                     status={effStatus(c.id)} comment={comments[c.id] || ''}
-                    passLocked={!!passOverride[c.id]}
+                    passLocked={passOverride[c.id] === 'pass'}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
                     onStatusChange={handleStatusChange}

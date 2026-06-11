@@ -1878,7 +1878,7 @@ app.get('/api/ua-records/:id', requireAuth, (req, res) => {
 });
 app.post('/api/ua-records', requireAuth, csrfCheck, requirePermission('ua.record'), (req,res) => {
   const b = req.body || {};
-  if (!b.client_id) return res.status(400).json({error:'client_id required'});
+  if (!b.client_id && !b.is_interview) return res.status(400).json({error:'client_id required'});
   if (!b.tested_at) return res.status(400).json({error:'tested_at required'});
   const me = req.session;
   const rec = db.createUARecord({

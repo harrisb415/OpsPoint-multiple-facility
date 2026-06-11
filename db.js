@@ -163,6 +163,7 @@ function init(dbPath) {
     // ua_records — added post-launch
     "ALTER TABLE ua_records ADD COLUMN reason TEXT DEFAULT ''",
     "ALTER TABLE ua_records ADD COLUMN log_entry_id INTEGER DEFAULT NULL",
+    "ALTER TABLE ua_records ADD COLUMN is_interview INTEGER DEFAULT 0",
     // mail_log — added post-launch
     "ALTER TABLE mail_log ADD COLUMN mail_type TEXT DEFAULT ''",
     // users — is_protected predates the current CREATE TABLE on some installs
@@ -1058,10 +1059,10 @@ function createUARecord(rec) {
     `INSERT INTO ua_records
      (client_id,client_name,room,ua_request_id,report_id,log_entry_id,tested_at,
       witnessed_by_id,witnessed_by_name,collection_method,reason,result,panel_results,
-      chain_of_custody,photo,notes,created_by_id,created_by_name)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      chain_of_custody,photo,notes,created_by_id,created_by_name,is_interview)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
-      rec.client_id, rec.client_name||'', rec.room||'',
+      rec.client_id||0, rec.client_name||'', rec.room||'',
       rec.ua_request_id||null, rec.report_id||null,
       rec.log_entry_id||null,
       rec.tested_at,
@@ -1072,6 +1073,7 @@ function createUARecord(rec) {
       JSON.stringify(rec.panel_results||{}),
       rec.chain_of_custody||'', rec.photo||null, rec.notes||'',
       rec.created_by_id, rec.created_by_name||'',
+      rec.is_interview ? 1 : 0,
     ]
   );
   return getUARecord(r.lastInsertRowid);

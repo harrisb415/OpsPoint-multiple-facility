@@ -161,10 +161,23 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
         logEntryId = pj.log_entry_id || null
       }
 
-      // 2. Save UA record (residents only — interviews are log-only)
+      // 2. Save UA record (residents and interviews)
       //    log_entry_id links it to the shared chain-of-custody photo on the log entry.
-      if (!isInterview) {
-        const body = {
+      {
+        const body = isInterview ? {
+          is_interview:      true,
+          client_id:         0,
+          client_name:       interviewName.trim() || 'Interview',
+          room:              '',
+          tested_at:         nowLocalDT(),
+          collection_method: collMethod,
+          reason,
+          result:            overall,
+          panel_results:     panelResults,
+          witnessed_by_name: staff.trim(),
+          notes,
+          log_entry_id:      logEntryId,
+        } : {
           client_id:         parseInt(clientId),
           client_name:       c?.name  || '',
           room:              c?.room  || '',

@@ -219,8 +219,6 @@ export default function ReportTab() {
     })
     return m
   }, [passes])
-  const effStatus = (cid) => passOverride[cid] ?? statuses[cid] ?? 'building'
-
   // Census
   const census = useMemo(() => {
     const cnt = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
@@ -480,8 +478,8 @@ export default function ReportTab() {
           case 'name': av = (a.name||'').toLowerCase(); bv = (b.name||'').toLowerCase(); break
           case 'status': {
             const lbls = { building:'In Building',work:'Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out/Other',vacant:'Vacant' }
-            av = lbls[a.name==='VACANT'?'vacant':effStatus(a.id)]||''
-            bv = lbls[b.name==='VACANT'?'vacant':effStatus(b.id)]||''
+            av = lbls[a.name==='VACANT'?'vacant':(passOverride[a.id]??statuses[a.id]??'building')]||''
+            bv = lbls[b.name==='VACANT'?'vacant':(passOverride[b.id]??statuses[b.id]??'building')]||''
             break
           }
           case 'last_ua': av = lastUa[a.id]||''; bv = lastUa[b.id]||''; break
@@ -490,7 +488,7 @@ export default function ReportTab() {
         }
         return av < bv ? -sortDir : av > bv ? sortDir : 0
       })
-  }, [clients, search, sortKey, sortDir, statuses, lastUa, lastRs])
+  }, [clients, search, sortKey, sortDir, statuses, lastUa, lastRs, passOverride])
 
   const isClosed = activeReport?.is_closed ?? false
 
@@ -838,7 +836,7 @@ export default function ReportTab() {
                 {sortedClients.map(c => (
                   <RosterRow
                     key={c.id} client={c}
-                    status={effStatus(c.id)} comment={comments[c.id] || ''}
+                    status={passOverride[c.id] ?? statuses[c.id] ?? 'building'} comment={comments[c.id] || ''}
                     passLocked={passOverride[c.id] === 'pass'}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
@@ -1149,7 +1147,7 @@ function WellnessModal({ clients = [], statuses = {}, onClose, onSubmit }) {
                 background: '#fff',
               }}>
                 {activeClients.map((c, i) => {
-                  const st = effStatus(c.id)
+                  const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'
                   const marked = notLocated.has(c.id)
                   return (
                     <div key={c.id} onClick={() => toggleNotLocated(c.id)} style={{

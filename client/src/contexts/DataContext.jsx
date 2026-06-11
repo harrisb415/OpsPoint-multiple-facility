@@ -242,6 +242,7 @@ export function DataProvider({ children }) {
             // Mark newly drawn requests as seen so ua_request WS doesn't double-fire
             ;(msg.requests || []).forEach(r => seenUAIds.current.add(r.id))
             setNotif(prev => ({ ...prev, uaRequests: msg.requests }))
+            setData(prev => prev ? { ...prev, ua_requests: msg.requests } : prev)
           }
           if (_hasSessionPerm('ua.acknowledge')) playSound('ua')
           break

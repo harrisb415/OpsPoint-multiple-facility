@@ -259,6 +259,11 @@
           <h2 style="margin:0">HQ software updates</h2>
           <button class="ghost" onclick="checkUpdate()">Check for updates</button>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+          <input id="updManifestUrl" style="flex:1;min-width:280px;padding:7px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:.85rem" placeholder="https://github.com/…/central-manifest.json" />
+          <button class="ghost" onclick="saveManifestUrl()">Save URL</button>
+          <span id="updManifestMsg" class="dim" style="font-size:.82rem"></span>
+        </div>
         <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
           <div>Current version: <b id="updCurrent">…</b></div>
           <span id="updLatest" class="dim"></span>
@@ -680,8 +685,20 @@ async function loadSystem(){
   if(!r.ok){ if(r.status===401) showLogin(); return; }
   renderUpd(r.body);
   loadBackups();
+  loadManifestUrl();
   const p = r.body.progress || {};
   if (p.applying) startUpdPoll();   // resume polling if an apply is mid-flight
+}
+async function loadManifestUrl(){
+  const r = await api('/api/update/manifest-url');
+  if(r.ok) $('updManifestUrl').value = r.body.url || '';
+}
+async function saveManifestUrl(){
+  const url = $('updManifestUrl').value.trim();
+  $('updManifestMsg').textContent = 'Saving…';
+  const r = await api('/api/update/manifest-url',{method:'POST',body:{url}});
+  $('updManifestMsg').textContent = r.ok ? 'Saved.' : ((r.body&&r.body.error)||'Error');
+  setTimeout(()=>{ $('updManifestMsg').textContent=''; },2500);
 }
 function renderUpd(s){
   $('updCurrent').textContent = s.current || '—';

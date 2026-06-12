@@ -359,6 +359,20 @@ app.post('/api/update/apply', requireAdmin, (req, res) => {
   res.json({ ok: true, started: true });
 });
 app.get('/api/update/backups', requireAdmin, (req, res) => res.json(updater.backups()));
+
+app.get('/api/update/manifest-url', requireAdmin, (req, res) => {
+  res.json({ url: db.getSetting('update_manifest_url', '') });
+});
+app.post('/api/update/manifest-url', requireAdmin, (req, res) => {
+  const url = String((req.body && req.body.url) || '').trim();
+  if (!url) return res.status(400).json({ error: 'URL required' });
+  try { new URL(url); } catch (e) { return res.status(400).json({ error: 'Invalid URL' }); }
+  db.setSetting('update_manifest_url', url);
+  const actor = db.getUser(req.session.userId);
+  db.audit({ actor: actor && actor.username, action: 'update.manifest_url.set', target: url, ip: clientIp(req) });
+  res.json({ ok: true });
+});
+
 // Liveness probe for the bootstrap supervisor (unauthenticated).
 app.get('/api/health', (req, res) => { let v = '0.0.0'; try { v = require('./package.json').version; } catch (e) {} res.json({ ok: true, version: v }); });
 app.post('/api/update/rollback', requireAdmin, async (req, res) => {

@@ -226,6 +226,12 @@ function _seedDefaults() {
   if (getSetting('update_manifest_url') === null)
     setSetting('update_manifest_url',
       'https://github.com/harrisb415/opspoint-releases/releases/latest/download/central-manifest.json');
+  if (getSetting('releases_facility_manifest_url') === null)
+    setSetting('releases_facility_manifest_url',
+      'https://github.com/harrisb415/opspoint-releases/releases/latest/download/update-manifest.json');
+  if (getSetting('releases_central_manifest_url') === null)
+    setSetting('releases_central_manifest_url',
+      'https://github.com/harrisb415/opspoint-releases/releases/latest/download/central-manifest.json');
 
   const cnt = _q1('SELECT COUNT(*) AS c FROM central_users');
   if (!cnt || cnt.c === 0) {

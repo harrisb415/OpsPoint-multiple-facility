@@ -420,6 +420,21 @@ app.post('/api/releases/import', requireAdmin, async (req, res) => {
   } catch (e) { res.status(502).json({ error: (e && e.message) || 'import failed' }); }
 });
 
+app.get('/api/releases/saved-urls', requireAdmin, (req, res) => {
+  res.json({
+    facility: db.getSetting('releases_facility_manifest_url', ''),
+    central:  db.getSetting('releases_central_manifest_url',  ''),
+  });
+});
+app.post('/api/releases/saved-urls', requireAdmin, (req, res) => {
+  const { channel, url } = req.body || {};
+  const u = String(url || '').trim();
+  if (channel === 'facility')      db.setSetting('releases_facility_manifest_url', u);
+  else if (channel === 'central')  db.setSetting('releases_central_manifest_url',  u);
+  else return res.status(400).json({ error: 'channel required (facility|central)' });
+  res.json({ ok: true });
+});
+
 app.get('/api/releases', requireAdmin, (req, res) => res.json({ releases: db.listReleases() }));
 app.post('/api/releases/:channel/:version/status', requireAdmin, (req, res) => {
   if (!db.getRelease(req.params.channel, req.params.version)) return res.status(404).json({ error: 'not found' });

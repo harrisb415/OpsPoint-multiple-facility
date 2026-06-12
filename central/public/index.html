@@ -299,11 +299,6 @@
         <h2>Import a release</h2>
         <div class="dim" style="margin-bottom:12px">Fetches a <b>signed</b> manifest, verifies its signature + checksum, downloads the bundle, and stores it here so facilities pull from HQ — no internet needed at the buildings. Unsigned or tampered releases are refused.</div>
         <div class="row" style="flex-wrap:wrap">
-          <div><label>Channel</label>
-            <select id="relChannel" style="width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit" onchange="onRelChannelChange()">
-              <option value="facility">facility</option><option value="central">central</option>
-            </select>
-          </div>
           <div style="flex:2"><label>Manifest URL</label><input id="relUrl" placeholder="https://github.com/…/releases/latest/download/update-manifest.json" /></div>
           <button class="ghost" onclick="saveRelUrl()" style="align-self:flex-end">Save URL</button>
           <button class="gold" onclick="importRelease()" style="align-self:flex-end">Import</button>
@@ -763,10 +758,9 @@ async function loadBackups(){
 }
 
 // ── Releases (HQ bundle store) ──
-let _relSavedUrls = { facility: '', central: '' };
 async function loadReleases(){
   const su = await api('/api/releases/saved-urls');
-  if(su.ok){ _relSavedUrls = su.body; $('relUrl').value = _relSavedUrls[$('relChannel').value] || ''; }
+  if(su.ok) $('relUrl').value = su.body.facility || '';
   const r = await api('/api/releases');
   if(!r.ok){ if(r.status===401) showLogin(); return; }
   const rows = r.body.releases || [];
@@ -779,25 +773,18 @@ async function loadReleases(){
       <td style="text-align:right"><button class="ghost" onclick="setRelStatus('${esc(x.channel)}','${esc(x.version)}','${next}')">${next==='yanked'?'Yank':'Publish'}</button></td></tr>`;
   }).join('') : `<tr><td colspan="7" class="muted">No releases imported yet.</td></tr>`;
 }
-function onRelChannelChange(){
-  $('relUrl').value = _relSavedUrls[$('relChannel').value] || '';
-}
 async function saveRelUrl(){
-  const channel = $('relChannel').value, url = $('relUrl').value.trim();
-  _relSavedUrls[channel] = url;
-  await api('/api/releases/saved-urls',{method:'POST',body:{channel,url}});
+  const url = $('relUrl').value.trim();
+  await api('/api/releases/saved-urls',{method:'POST',body:{channel:'facility',url}});
 }
 async function importRelease(){
   $('relErr').textContent=''; $('relMsg').textContent='Importing… (downloads + verifies the bundle)';
-  const channel = $('relChannel').value;
-  const body = { manifest_url:$('relUrl').value.trim(), channel };
+  const body = { manifest_url:$('relUrl').value.trim(), channel:'facility' };
   if(!body.manifest_url){ $('relErr').textContent='Manifest URL required'; $('relMsg').textContent=''; return; }
   const r = await api('/api/releases/import',{method:'POST',body:JSON.stringify(body)});
   if(!r.ok){ $('relErr').textContent=(r.body&&r.body.error)||'Import failed'; $('relMsg').textContent=''; return; }
-  // Auto-save the URL that worked
-  _relSavedUrls[channel] = body.manifest_url;
-  await api('/api/releases/saved-urls',{method:'POST',body:{channel,url:body.manifest_url}});
-  $('relMsg').textContent='✓ Imported '+r.body.release.channel+' v'+r.body.release.version;
+  await api('/api/releases/saved-urls',{method:'POST',body:{channel:'facility',url:body.manifest_url}});
+  $('relMsg').textContent='✓ Imported v'+r.body.release.version;
   loadReleases();
 }
 async function setRelStatus(channel,version,status){

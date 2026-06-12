@@ -1856,11 +1856,31 @@ function applyManagedUsers(list) {
         _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,central_managed,central_uid)
               VALUES (?,?,?,?,?,?,?,1,?)`,
           [uname, String(m.display_name || ''), String(m.role || 'pa'), m.hash || '', m.salt || '', m.must_change_pw ? 1 : 0, permsJson, uid]);
+        const newU = _q1('SELECT id FROM users WHERE central_uid=?', [uid]);
+        if (newU) {
+          const g = _q1('SELECT id FROM groups WHERE key=?', [String(m.role || 'pa')]);
+          if (g) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [newU.id, g.id]);
+        }
         created++;
       } else if (row.central_managed) {
+        const newRole = String(m.role || 'pa');
         // HQ master for identity/permissions; do NOT touch the password.
         _run('UPDATE users SET display_name=?, role=?, permissions=?, central_uid=? WHERE id=?',
-          [String(m.display_name || ''), String(m.role || 'pa'), permsJson, uid, row.id]);
+          [String(m.display_name || ''), newRole, permsJson, uid, row.id]);
+        if (row.role !== newRole) {
+          // Role changed — swap group assignment
+          const oldG = _q1('SELECT id FROM groups WHERE key=?', [row.role]);
+          const newG = _q1('SELECT id FROM groups WHERE key=?', [newRole]);
+          if (oldG) _run('DELETE FROM user_groups WHERE user_id=? AND group_id=?', [row.id, oldG.id]);
+          if (newG) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [row.id, newG.id]);
+        } else {
+          // Same role — ensure group is assigned (backfills users created before this fix)
+          const noGroup = !_q1('SELECT 1 FROM user_groups WHERE user_id=?', [row.id]);
+          if (noGroup) {
+            const g = _q1('SELECT id FROM groups WHERE key=?', [newRole]);
+            if (g) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [row.id, g.id]);
+          }
+        }
         updated++;
       } else {
         skipped++; // a LOCAL account owns this username — never hijack it

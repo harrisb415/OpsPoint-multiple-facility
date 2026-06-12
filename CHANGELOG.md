@@ -2,6 +2,27 @@
 
 ---
 
+## v2.3.7 — Chores overhaul, archive reorder, session fix (2026-06-11)
+
+### Chores
+- **Per-day AM/PM shift selector** — each day chip now has its own AM/PM toggle (stacked vertically). Activating a day defaults to AM; toggle per-day independently
+- **Single initials box per day** — chore log cells show one input labeled with that day's assigned shift instead of stacked AM/PM inputs
+- **Weekly print grid** — Print List opens a landscape weekly table (Rm / Name / Chore / Mon–Sun) with an initials line per assigned day and greyed-out unscheduled days; prints the currently viewed week
+
+### Passes
+- Delete and status changes now call `loadData()` immediately on success — no more stale row until the next WebSocket event
+
+### Report tab
+- Fixed: status changes on residents with an active "In" pass were silently blocked by a passOverride that forced "In Building". Now only Out/Extended passes lock the status (to Weekend Pass); In-pass residents are freely editable and the Weekend Pass option is filtered from their dropdown
+
+### Archive
+- Reordered both the in-app view and the print output: **Census → Activity Log → Issues & Concerns → Medical Notes → Roster**
+
+### Session
+- Fixed HIPAA idle timeout firing during active read-only work (browsing the report, viewing chores). Physical activity (mouse, keyboard, touch, scroll) now resets the idle clock via a throttled heartbeat ping — at most one signal per 5 minutes
+
+---
+
 ## v2.3.6 � Facility removal, HQ central v0.1.3 (2026-06-08)
 
 ### HQ Central

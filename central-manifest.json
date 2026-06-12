@@ -1,14 +1,14 @@
 {
   "version": "0.1.4",
-  "released": "2026-06-12T04:41:53.598Z",
+  "released": "2026-06-12T04:44:28.252Z",
   "min_node": "20.0.0",
   "min_from": "0.1.0",
   "mandatory": false,
   "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.7/central-0.1.4.tar.gz",
-  "sha256": "b4b9ce58ad92375dae3a98468397924e185ca738fd53ecdcf83df52159037f46",
-  "size": 47920,
+  "sha256": "87afe5a7810d1bb21d34be67a8fd0589a414301cffc4e85e893abf0afa0d6279",
+  "size": 48245,
   "sig_alg": "ed25519",
-  "signature": "8cITgaj9Ch02WnjqTv7qUG5p6d/7iZVyrIx5qO+aWe3yx1u0+ekGAD9O5Nuv9UsILvlPV7VsjiesWQ/+uz21DQ==",
+  "signature": "Ytvf2NdBEOKhiMFKr/uQ01N+47Ef56c93ponYARU7qT4NSHATifhiqX6VLMNiQBcDfs9eysUAXxL4MG2dAR5CA==",
   "changelog": [
     "Remove facility: permanently deletes facility record, API key, and all backed-up data from HQ"
   ]

@@ -20,55 +20,55 @@
 
 /* - Design Tokens ----------------------------------------------- */
 :root {
-  /* -- Brand ---------------------------------------------------- */
-  --sidebar-bg:       #0a4655;
-  --sidebar-active:   #106f88;
-  --sidebar-text:     #d4eef4;
-  --sidebar-group:    #74c6da;
-  --accent:           #c9780c;
-  --accent-hover:     #a85d08;
-  --page-bg:          #d4e4ea;
+  /* -- Brand (Console rebrand: names kept, values now blue/sky/gray) -- */
+  --sidebar-bg:       #1e40af;
+  --sidebar-active:   #2563eb;
+  --sidebar-text:     #dbeafe;
+  --sidebar-group:    #93c5fd;
+  --accent:           #2563eb;
+  --accent-hover:     #1d4ed8;
+  --page-bg:          #f9fafb;
   --card-bg:          #ffffff;
-  --text-primary:     #0f2430;
-  --text-muted:       #5c7081;
-  --border-light:     #d8e6ec;
-  --table-row-alt:    #eef5f8;
+  --text-primary:     #111827;
+  --text-muted:       #6b7280;
+  --border-light:     #e5e7eb;
+  --table-row-alt:    #f9fafb;
   --status-green:     #15a34a;
   --status-green-bg:  #e3f8ea;
   --danger:           #d62828;
   --danger-bg:        #fde3e3;
-  --shadow-card:      0 1px 2px rgba(7,51,63,.06), 0 3px 10px rgba(7,51,63,.05);
-  --shadow-modal:     0 24px 64px rgba(7,51,63,.24);
-  --shadow-drop:      0 8px 24px rgba(7,51,63,.13);
+  --shadow-card:      0 1px 2px rgba(17,24,39,.06), 0 3px 10px rgba(17,24,39,.04);
+  --shadow-modal:     0 24px 64px rgba(17,24,39,.22);
+  --shadow-drop:      0 8px 24px rgba(17,24,39,.12);
 
   /* -- Legacy vars (inline JSX var() refs) ---------------------- */
-  --dark:       #0a4655;  --crimson: #c9780c;  --mid:  #106f88;
-  --orange:     #c9780c;  --gold:    #e8920f;  --gold-light: #fff8e6;
-  --bg:         #d4e4ea;  --white:   #ffffff;  --line: #d8e6ec;
-  --sky:        #eef5f8;  --steel:   #5c7081;  --text: #0f2430;
-  --red:        #d62828;  --amber:   #c9780c;  --green: #15a34a;
-  --navy:       #0a4655;  --blue:    #106f88;
-  --mono: 'SFMono-Regular', ui-monospace, Consolas, 'Liberation Mono', monospace;
-  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --dark:       #1e40af;  --crimson: #2563eb;  --mid:  #2563eb;
+  --orange:     #2563eb;  --gold:    #0ea5e9;  --gold-light: #f0f9ff;
+  --bg:         #f9fafb;  --white:   #ffffff;  --line: #e5e7eb;
+  --sky:        #f3f4f6;  --steel:   #6b7280;  --text: #111827;
+  --red:        #d62828;  --amber:   #d97706;  --green: #15a34a;
+  --navy:       #1e3a8a;  --blue:    #2563eb;
+  --mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, Consolas, 'Liberation Mono', monospace;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
-  /* -- Teal scale ----------------------------------------------- */
-  --teal-900: #07333f;  --teal-800: #0a4655;  --teal-700: #0d5a6e;
-  --teal-600: #106f88;  --teal-300: #74c6da;  --teal-200: #aaddeb;
-  --teal-100: #d4eef4;  --teal-50:  #eef8fb;
+  /* -- Primary blue scale (names kept as --teal-* for back-compat) -- */
+  --teal-900: #1e3a8a;  --teal-800: #1e40af;  --teal-700: #1d4ed8;
+  --teal-600: #2563eb;  --teal-300: #93c5fd;  --teal-200: #bfdbfe;
+  --teal-100: #dbeafe;  --teal-50:  #eff6ff;
 
-  /* -- Gold scale ----------------------------------------------- */
-  --gold-700: #a85d08;  --gold-600: #c9780c;  --gold-500: #e8920f;
-  --gold-400: #f7ad2e;  --gold-300: #fcc858;  --gold-200: #fde08f;
-  --gold-50:  #fff8e6;
+  /* -- Sky accent scale (names kept as --gold-*) -- */
+  --gold-700: #0369a1;  --gold-600: #0284c7;  --gold-500: #0ea5e9;
+  --gold-400: #38bdf8;  --gold-300: #7dd3fc;  --gold-200: #bae6fd;
+  --gold-50:  #f0f9ff;
 
   /* -- Surfaces + gradients ------------------------------------- */
-  --raised-bg:    #eaf3f6;
-  --grad-sidebar: linear-gradient(180deg, #0a4655 0%, #07333f 78%, #062a33 100%);
-  --grad-teal:    linear-gradient(135deg, #106f88 0%, #0a4655 100%);
-  --grad-census:  linear-gradient(150deg, #106f88 0%, #0a4655 100%);
-  --grad-page:    linear-gradient(170deg, #d4eef4 0%, #e0edf1 180px, #d4e4ea 460px);
-  --grad-gold:    linear-gradient(135deg, #f7ad2e 0%, #c9780c 100%);
-  --glow-gold:    0 0 0 3px rgba(232,146,15,.18);
+  --raised-bg:    #f9fafb;
+  --grad-sidebar: linear-gradient(180deg, #1e40af 0%, #1e3a8a 78%, #172554 100%);
+  --grad-teal:    linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  --grad-census:  linear-gradient(150deg, #2563eb 0%, #1e40af 100%);
+  --grad-page:    linear-gradient(170deg, #eff6ff 0%, #f3f4f6 180px, #f9fafb 460px);
+  --grad-gold:    linear-gradient(135deg, #38bdf8 0%, #0284c7 100%);
+  --glow-gold:    0 0 0 3px rgba(14,165,233,.18);
 }
 
 /* - Reset & base ------------------------------------------------ */

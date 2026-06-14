@@ -1,10 +1,15 @@
 import { useState, useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import { Mail as MailIcon, Inbox, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
+import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, TextCell, MutedCell, MonoCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 const PAGE_SIZE = 30
+const MAIL_TONE = { pending: 'yellow', approved: 'blue', delivered: 'green' }
+const MAIL_LABEL = { pending: 'Pending', approved: 'Approved', delivered: 'Delivered' }
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -39,11 +44,13 @@ export default function MailTab() {
   const canApprove = hasPerm('mail.approve')
   const canDeliver = hasPerm('mail.deliver')
   const canDelete  = hasPerm('mail.delete')
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const mail = data?.mail || []
   const clients = data?.clients || []
 
   const [filter, setFilter] = useState('all') // all | pending | approved | delivered
+  const [menuId, setMenuId] = useState(null)
   const [page, setPage] = useState(0)
   const [modal, setModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
@@ -70,8 +77,10 @@ export default function MailTab() {
   )
 
   const filtered = useMemo(() => {
+    const gq = globalSearch.toLowerCase().trim()
     let rows = [...mail]
     if (filter !== 'all') rows = rows.filter(m => m.status === filter)
+    if (gq) rows = rows.filter(m => (m.client_name || '').toLowerCase().includes(gq) || String(m.room || '').includes(gq))
     rows.sort((a, b) => {
       let cmp = 0
       if (sortKey === 'logged_at') cmp = String(a.logged_at || '').localeCompare(String(b.logged_at || ''))
@@ -84,7 +93,7 @@ export default function MailTab() {
       return cmp * sortDir
     })
     return rows
-  }, [mail, filter, sortKey, sortDir])
+  }, [mail, filter, sortKey, sortDir, globalSearch])
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -95,6 +104,7 @@ export default function MailTab() {
     approved: mail.filter(m => m.status === 'approved').length,
     delivered: mail.filter(m => m.status === 'delivered').length,
   }), [mail])
+  const loggedToday = useMemo(() => { const t = new Date().toLocaleDateString('en-CA'); return mail.filter(m => (m.logged_at || '').slice(0, 10) === t).length }, [mail])
 
   function toggleClient(id) {
     const sid = String(id)
@@ -166,113 +176,67 @@ export default function MailTab() {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Mail Log</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{mail.length} total</span>
-            <button onClick={() => setPrintOpen(true)} disabled={mail.length === 0}
-              title="Print mail log"
-              style={{
-                fontSize: '.72rem', padding: '4px 10px',
-                background: '#f1f5f9', border: '1px solid var(--border-light)',
-                color: 'var(--text-muted)', borderRadius: 5, cursor: mail.length ? 'pointer' : 'not-allowed',
-                fontWeight: 600, opacity: mail.length ? 1 : .5,
-              }}>
-              Print
-            </button>
-            {canLog && <button className="btn btn-sm btn-primary" onClick={openModal}>+ Log Mail</button>}
-          </div>
-        </div>
+      <Header
+        crumb={['Daily Ops', 'Mail']}
+        title="Mail Log"
+        sub="Incoming mail and packages"
+        actions={[
+          { Icon: Printer, label: 'Print', onClick: () => mail.length && setPrintOpen(true) },
+          ...(canLog ? [{ Icon: Plus, label: 'Log Mail', primary: true, onClick: openModal }] : []),
+        ]}
+      />
 
-        {/* Filter tabs */}
-        <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
-          {FILTERS.map(f => (
-            <button key={f.key} onClick={() => { setFilter(f.key); setPage(0) }}
-              style={{
-                padding: '4px 12px', borderRadius: 20, fontSize: '.76rem', fontWeight: 700,
-                border: '1.5px solid', cursor: 'pointer', transition: 'all .15s',
-                borderColor: filter === f.key ? 'var(--crimson)' : 'var(--line)',
-                background: filter === f.key ? 'var(--crimson)' : 'transparent',
-                color: filter === f.key ? '#fff' : 'var(--steel)',
-              }}>
-              {f.label} ({counts[f.key]})
-            </button>
-          ))}
-        </div>
+      <KpiRow>
+        <Kpi label="Logged Today" value={loggedToday} sub="items" Icon={MailIcon} accent="primary" />
+        <Kpi label="Pending" value={counts.pending} sub="awaiting approval" Icon={Inbox} accent="yellow" />
+        <Kpi label="Delivered" value={counts.delivered} sub="completed" Icon={CheckCircle} accent="green" />
+      </KpiRow>
 
-        <div className="section-body" style={{ padding: 0 }}>
-          {paged.length === 0 ? (
-            <div className="empty-state">No mail records{filter !== 'all' ? ` with status "${filter}"` : ''}.</div>
-          ) : (
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <SortableTh label="Rm"     k="room"      curKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Name"   k="name"      curKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Status" k="status"    curKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <SortableTh label="Logged" k="logged_at" curKey={sortKey} dir={sortDir} onSort={toggleSort} />
-                    <th>By</th><th>Type</th><th>Notes</th>
-                    {(canApprove || canDeliver || canDelete) && <th className="tc">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paged.map(m => (
-                    <tr key={m.id}>
-                      <td className="rm">{m.room}</td>
-                      <td className="name-cell">
-                        {m.client_id ? (
-                          <button onClick={() => openProfile(m.client_id)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'inherit', fontFamily:'inherit', fontSize:'inherit', fontWeight:'inherit', textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(27,47,110,.4)' }}>
-                            {m.client_name}
-                          </button>
-                        ) : m.client_name}
-                      </td>
-                      <td><StatusBadge status={m.status} /></td>
-                      <td className="date-cell">{fmtDT(m.logged_at)}</td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{m.logged_by || '—'}</td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        {(m.mail_type || '').split(',').filter(Boolean).map(t => (
-                          <span key={t} style={{
-                            display: 'inline-block', marginRight: 3,
-                            fontSize: '.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10,
-                            background: t === 'package' ? '#fef3c7' : '#eff6ff',
-                            color: t === 'package' ? '#92400e' : '#1e40af',
-                            border: `1px solid ${t === 'package' ? '#fde68a' : '#bfdbfe'}`,
-                            textTransform: 'capitalize',
-                          }}>{t}</span>
-                        ))}
-                        {!(m.mail_type || '') && <span style={{ color: '#94a3b8', fontSize: '.78rem' }}>—</span>}
-                      </td>
-                      <td style={{ fontSize: '.82rem', color: '#475569', maxWidth: 200 }}>{m.notes || ''}</td>
-                      {(canApprove || canDeliver || canDelete) && (
-                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {canApprove && m.status === 'pending' && (
-                            <button className="btn btn-sm btn-primary" style={{ marginRight: 4 }} onClick={() => approve(m)}>Approve</button>
-                          )}
-                          {canDeliver && m.status === 'approved' && (
-                            <button className="btn btn-sm btn-green" style={{ marginRight: 4 }} onClick={() => deliver(m)}>Deliver</button>
-                          )}
-                          {canDelete && (
-                            <button className="btn-danger-sm" onClick={() => del(m)}>✕</button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', fontSize: '.82rem', borderTop: '1px solid var(--line)' }}>
-              <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-              <span style={{ color: '#475569' }}>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-              <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-            </div>
-          )}
+      <Toolbar
+        filters={FILTERS.map(f => `${f.label} (${counts[f.key]})`)}
+        active={Math.max(0, FILTERS.findIndex(f => f.key === filter))}
+        onFilter={i => { setFilter(FILTERS[i].key); setPage(0) }}
+        count={filtered.length}
+      />
+
+      <Table headers={[{ label: 'Recipient' }, { label: 'Type' }, { label: 'Logged By' }, { label: 'Time' }, { label: 'Status' }, { label: '', right: true }]}>
+        {paged.length === 0 ? (
+          <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No mail records{filter !== 'all' ? ` with status "${filter}"` : ''}.</td></tr>
+        ) : paged.map((m, i) => (
+          <tr key={m.id} className={rowCls(i)}>
+            <NameCell name={m.client_name} sub={`Rm ${m.room}`} onClick={m.client_id ? () => openProfile(m.client_id) : undefined} />
+            <TextCell>{(m.mail_type || '').split(',').filter(Boolean).map(t => t[0].toUpperCase() + t.slice(1)).join(', ') || '—'}</TextCell>
+            <MutedCell>{m.logged_by || '—'}</MutedCell>
+            <MonoCell>{fmtDT(m.logged_at)}</MonoCell>
+            <BadgeCell tone={MAIL_TONE[m.status] || 'gray'} label={MAIL_LABEL[m.status] || m.status} />
+            <ActionsCell>
+              {(canApprove || canDeliver || canDelete) && (
+                <div className="relative inline-block text-left">
+                  <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>
+                  {menuId === m.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+                      <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
+                        {canApprove && m.status === 'pending' && <button onClick={() => { setMenuId(null); approve(m) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Approve</button>}
+                        {canDeliver && m.status === 'approved' && <button onClick={() => { setMenuId(null); deliver(m) }} className="block w-full px-3 py-2 text-sm text-left text-green-700 rounded-md hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30">Deliver</button>}
+                        {canDelete && <button onClick={() => { setMenuId(null); del(m) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </ActionsCell>
+          </tr>
+        ))}
+      </Table>
+
+      {totalPages > 1 && (
+        <div className="flex items-center gap-3 mt-3">
+          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">← Prev</button>
+          <span className="text-sm text-gray-500 dark:text-gray-400 font-mono tabular-nums">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+          <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Next →</button>
         </div>
-      </div>
+      )}
 
       <PrintScopeModal
         open={printOpen}

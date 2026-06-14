@@ -1,7 +1,9 @@
 import { useState, useMemo, useRef } from 'react'
+import { Plus, BarChart3, Search } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
+import { CARD, TH, PageHeader, StatCard, Pill, SortHeader } from '../../components/console.jsx'
 
 const PAGE_SIZE = 50
 
@@ -33,17 +35,7 @@ function blankAdd(vacantRooms) {
   return { ...BLANK_ADD, room: vacantRooms[0] || '' }
 }
 
-function SortTh({ col, sortKey, sortDir, onSort, children }) {
-  const active = sortKey === col
-  return (
-    <th onClick={() => onSort(col)} style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-      {children}
-      <span style={{ marginLeft: 4, fontSize: '.65em', opacity: active ? 0.9 : 0.35, color: active ? 'var(--accent)' : 'inherit' }}>
-        {active ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
-      </span>
-    </th>
-  )
-}
+// SortHeader now imported from components/console.jsx
 
 const BLANK_DISCHARGE = {
   discharge_date: todayStr(),
@@ -352,154 +344,139 @@ export default function ClientsTab() {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Clients</span></div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '.75rem', color: '#94a3b8', fontFamily: 'var(--mono)' }}>
-              {active} active · {vacant} vacant · {special} special · {discharged} discharged
-            </span>
-            {canEdit && (
-              <button className="btn btn-sm btn-primary" onClick={() => { setAddForm(blankAdd(vacantRooms)); setAddError(''); setAddModal(true) }}>
-                + Add Client
-              </button>
-            )}
-            <button className="btn btn-sm"
-              style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
-              onClick={() => setReportModal(true)}>
-              📊 Report
-            </button>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: '.78rem', color: '#94a3b8' }}>
-              <input type="checkbox" checked={showDischarged} onChange={e => { setShowDischarged(e.target.checked); setPage(0) }} />
-              Show discharged
-            </label>
-            <input type="text" placeholder="Search…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }}
-              style={{ fontSize: '.78rem', padding: '4px 10px', border: '1px solid var(--border-light)', borderRadius: 5, background: '#fff', color: 'var(--text-primary)', outline: 'none', width: 160 }} />
+      <PageHeader title="Clients" subtitle="Resident roster & status">
+        {canEdit && (
+          <button onClick={() => { setAddForm(blankAdd(vacantRooms)); setAddError(''); setAddModal(true) }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-white rounded-lg bg-primary-600 hover:bg-primary-700">
+            <Plus className="w-4 h-4" /> Add Client
+          </button>
+        )}
+        <button onClick={() => setReportModal(true)}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <BarChart3 className="w-4 h-4" /> Report
+        </button>
+      </PageHeader>
+
+      <div className="grid grid-cols-2 gap-3 mb-4 lg:grid-cols-4">
+        <StatCard label="Active" value={active} tone="green" />
+        <StatCard label="Vacant" value={vacant} tone="gray" />
+        <StatCard label="Special" value={special} tone="purple" />
+        <StatCard label="Discharged" value={discharged} tone="orange" />
+      </div>
+
+      <div className={CARD}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-500 cursor-pointer dark:text-gray-400">
+            <input type="checkbox" checked={showDischarged} onChange={e => { setShowDischarged(e.target.checked); setPage(0) }} className="w-4 h-4 rounded" />
+            Show discharged
+          </label>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-400 font-mono tabular-nums">{filtered.length} records</span>
+            <div className="relative">
+              <Search className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 pointer-events-none left-3 top-1/2" />
+              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} placeholder="Search…"
+                className="w-44 py-2 pl-9 pr-3 text-sm border border-gray-200 rounded-lg sm:w-56 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            </div>
           </div>
         </div>
-        <div className="section-body" style={{ padding: 0 }}>
-          {paged.length === 0 ? (
-            <div className="empty-state">No clients found.</div>
-          ) : (
-            <>
-              <div className="roster-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <SortTh col="room"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Rm</SortTh>
-                      <SortTh col="name"         sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Name</SortTh>
-                      <SortTh col="case_manager" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Case Manager</SortTh>
-                      <SortTh col="phone"        sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Phone</SortTh>
-                      <SortTh col="intake"       sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Intake</SortTh>
-                      <SortTh col="discharge"    sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Discharge</SortTh>
-                      <SortTh col="status"       sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Status</SortTh>
-                      {canEdit && <th>Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paged.map(c => {
-                      const isVacant  = c.name === 'VACANT' && !c.is_special
-                      const isSpecial = !!c.is_special
-                      const isLocked  = !c.is_active && !!c.discharge_date && c.discharge_date < todayStr()
-                      const rowStyle  = isVacant
-                        ? { background: 'rgba(148,163,184,.06)' }
-                        : isSpecial
-                          ? { background: 'rgba(120,53,15,.05)' }
-                          : undefined
-                      return (
-                      <tr key={c.id} className={!c.is_active ? 'drow' : ''} style={rowStyle}>
-                        <td className="rm">{c.room}</td>
-                        <td className="name-cell">
-                          {isSpecial ? (
-                            <>
-                              <span style={{ marginRight: 8, fontSize: '1rem', verticalAlign: 'middle' }}>🏷️</span>
-                              <span style={{ fontStyle: 'italic', color: '#78350f' }}>{c.special_label || c.name || 'Special Room'}</span>
-                              <span style={{ marginLeft: 7, fontSize: '.62rem', fontWeight: 700, background: '#fed7aa', color: '#7c2d12', padding: '2px 6px', borderRadius: 10, textTransform: 'uppercase' }}>Special</span>
-                            </>
-                          ) : isVacant ? (
-                            <>
-                              <span style={{ display: 'inline-block', width: 28, height: 28, borderRadius: '50%', background: '#e2e8f0', marginRight: 8, verticalAlign: 'middle', textAlign: 'center', lineHeight: '28px', fontSize: '.85rem', color: '#94a3b8' }}>—</span>
-                              <span style={{ fontStyle: 'italic', color: '#64748b' }}>Vacant</span>
-                            </>
-                          ) : (
-                            <>
-                              {c.photo && (
-                                <img src={c.photo} alt=""
-                                  onClick={() => setPhotoPopout({ src: c.photo, name: c.name })}
-                                  style={{ width: 28, height: 28, objectFit: 'cover', borderRadius: '50%',
-                                    marginRight: 8, verticalAlign: 'middle', border: '1px solid var(--line)',
-                                    cursor: 'pointer' }} />
-                              )}
-                              <button
-                                onClick={() => openProfile(c.id)}
-                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                                  color: 'inherit', fontWeight: 'inherit', fontFamily: 'inherit',
-                                  fontSize: 'inherit', textAlign: 'left',
-                                  textDecoration: 'underline', textDecorationStyle: 'dotted',
-                                  textDecorationColor: 'rgba(27,47,110,.4)' }}
-                              >
-                                {c.name}
-                              </button>
-                              {!c.is_active && <span style={{ marginLeft: 7, fontSize: '.62rem', fontWeight: 700, background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 10, textTransform: 'uppercase' }}>Discharged</span>}
-                            </>
-                          )}
-                        </td>
-                        <td style={{ fontSize: '.84rem', color: (isVacant || isSpecial) ? '#cbd5e1' : undefined }}>{(isVacant || isSpecial) ? '—' : (c.case_manager || '—')}</td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: (isVacant || isSpecial) ? '#cbd5e1' : undefined }}>{(isVacant || isSpecial) ? '—' : (formatPhone(c.phone) || '—')}</td>
-                        <td className="date-cell" style={{ color: (isVacant || isSpecial) ? '#cbd5e1' : undefined }}>{(isVacant || isSpecial) ? '—' : fmtDate(c.intake_date)}</td>
-                        <td className="date-cell" style={{ color: (isVacant || isSpecial) ? '#cbd5e1' : undefined }}>{(isVacant || isSpecial) ? '—' : fmtDate(c.discharge_date)}</td>
-                        <td>
-                          {isSpecial ? (
-                            <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#92400e' }}>Special</span>
-                          ) : isVacant ? (
-                            <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#64748b' }}>Vacant</span>
-                          ) : (
-                            <span style={{ fontSize: '.75rem', fontWeight: 700, color: c.is_active ? '#15803d' : '#94a3b8' }}>
-                              {c.is_active ? 'Active' : isLocked ? '🔒 Discharged' : 'Discharged'}
-                            </span>
-                          )}
-                        </td>
-                        {canEdit && (
-                          <td>
-                            <div style={{ display: 'flex', gap: 5, whiteSpace: 'nowrap', alignItems: 'center' }}>
-                              {isVacant ? (
-                                <button className="btn btn-sm btn-primary"
-                                  onClick={() => { setAddForm({ ...BLANK_ADD, room: c.room }); setAddError(''); setAddModal(true) }}>
-                                  + Assign Client
-                                </button>
-                              ) : isSpecial ? (
-                                <span style={{ fontSize: '.72rem', color: '#94a3b8', fontStyle: 'italic' }}>Manage in Facility Setup</span>
-                              ) : c.is_active ? (
-                                <>
-                                  <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
-                                    onClick={() => openEdit(c)}>✎ Edit</button>
-                                  <button className="btn-danger-sm" onClick={() => openDischarge(c)}>Discharge</button>
-                                </>
-                              ) : isLocked ? (
-                                <span style={{ fontSize: '.72rem', color: '#94a3b8', fontStyle: 'italic' }}>🔒 Record locked</span>
-                              ) : (
-                                <button className="btn btn-sm"
-                                  style={{ background: '#15803d', border: 'none', color: '#fff', fontWeight: 700 }}
-                                  onClick={() => openReactivate(c)}>↩ Reactivate</button>
-                              )}
-                            </div>
-                          </td>
+
+        {paged.length === 0 ? (
+          <div className="px-5 py-12 text-center text-gray-400">No clients found.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                  <SortHeader col="room" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Rm</SortHeader>
+                  <SortHeader col="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Name</SortHeader>
+                  <SortHeader col="case_manager" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Case Manager</SortHeader>
+                  <SortHeader col="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Phone</SortHeader>
+                  <SortHeader col="intake" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Intake</SortHeader>
+                  <SortHeader col="discharge" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Discharge</SortHeader>
+                  <SortHeader col="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Status</SortHeader>
+                  {canEdit && <th className={`${TH} text-right`}>Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {paged.map(c => {
+                  const isVacant  = c.name === 'VACANT' && !c.is_special
+                  const isSpecial = !!c.is_special
+                  const isLocked  = !c.is_active && !!c.discharge_date && c.discharge_date < todayStr()
+                  const dim = isVacant || isSpecial
+                  return (
+                    <tr key={c.id} className={`hover:bg-primary-50/60 dark:hover:bg-gray-700/40 ${(!c.is_active && !dim) ? 'opacity-60' : ''}`}>
+                      <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">{c.room}</td>
+                      <td className="px-4 py-2.5">
+                        {isSpecial ? (
+                          <span className="inline-flex items-center gap-2">
+                            <span>🏷️</span>
+                            <span className="italic text-gray-600 dark:text-gray-300">{c.special_label || c.name || 'Special Room'}</span>
+                            <Pill tone="purple">Special</Pill>
+                          </span>
+                        ) : isVacant ? (
+                          <span className="italic text-gray-400">Vacant</span>
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            {c.photo && (
+                              <img src={c.photo} alt="" onClick={() => setPhotoPopout({ src: c.photo, name: c.name })}
+                                className="object-cover rounded-full cursor-pointer w-7 h-7 ring-1 ring-gray-200" />
+                            )}
+                            <button onClick={() => openProfile(c.id)} className="font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{c.name}</button>
+                            {!c.is_active && <Pill tone="red">Discharged</Pill>}
+                          </span>
                         )}
-                      </tr>
-                    )})}
-                  </tbody>
-                </table>
-              </div>
-              {totalPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', fontSize: '.82rem', borderTop: '1px solid var(--line)' }}>
-                  <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                  <span style={{ color: '#475569' }}>{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-                  <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{dim ? '—' : (c.case_manager || '—')}</td>
+                      <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-300">{dim ? '—' : (formatPhone(c.phone) || '—')}</td>
+                      <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">{dim ? '—' : fmtDate(c.intake_date)}</td>
+                      <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">{dim ? '—' : fmtDate(c.discharge_date)}</td>
+                      <td className="px-4 py-2.5">
+                        {isSpecial ? <Pill tone="purple">Special</Pill>
+                          : isVacant ? <Pill tone="gray">Vacant</Pill>
+                          : c.is_active ? <Pill tone="green">Active</Pill>
+                          : <Pill tone="red">{isLocked ? '🔒 Discharged' : 'Discharged'}</Pill>}
+                      </td>
+                      {canEdit && (
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                            {isVacant ? (
+                              <button onClick={() => { setAddForm({ ...BLANK_ADD, room: c.room }); setAddError(''); setAddModal(true) }}
+                                className="px-2.5 py-1 text-xs font-semibold text-white rounded-md bg-primary-600 hover:bg-primary-700">+ Assign</button>
+                            ) : isSpecial ? (
+                              <span className="text-xs italic text-gray-400">Manage in Facility Setup</span>
+                            ) : c.is_active ? (
+                              <>
+                                <button onClick={() => openEdit(c)}
+                                  className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Edit</button>
+                                <button onClick={() => openDischarge(c)}
+                                  className="px-2.5 py-1 text-xs font-medium text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Discharge</button>
+                              </>
+                            ) : isLocked ? (
+                              <span className="text-xs italic text-gray-400">🔒 Record locked</span>
+                            ) : (
+                              <button onClick={() => openReactivate(c)}
+                                className="px-2.5 py-1 text-xs font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">↩ Reactivate</button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
+              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">← Prev</button>
+            <span className="text-sm text-gray-500 dark:text-gray-400 font-mono tabular-nums">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+            <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}
+              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Next →</button>
+          </div>
+        )}
       </div>
 
       {/* Edit Modal */}

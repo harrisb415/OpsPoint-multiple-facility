@@ -1,55 +1,38 @@
 import { useState, useMemo } from 'react'
+import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { CARD, Header, Kpi, KpiRow, Table, NameCell, BadgeCell, MonoCell, MutedCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 const PAGE_SIZE = 25
+const PASS_TONE = { Out: 'yellow', Extended: 'red', In: 'green', Returned: 'gray' }
 
 function fmtDT(s) {
   if (!s) return '—'
   try {
     const d = new Date(s)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
       d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   } catch { return s }
 }
-
-function localDT(s) {
-  if (!s) return ''
-  try { return new Date(s).toISOString().slice(0, 16) }
-  catch { return '' }
-}
+function localDT(s) { if (!s) return ''; try { return new Date(s).toISOString().slice(0, 16) } catch { return '' } }
 
 const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'In' }
-
-function StatusBadge({ status }) {
-  const styles = {
-    Out: { background: '#fef9c3', color: '#854d0e', border: '1px solid #fde047' },
-    Extended: { background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5' },
-    In: { background: '#dcfce7', color: '#15803d', border: '1px solid #86efac' },
-    Returned: { background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1' },
-  }
-  const s = styles[status] || styles.Out
-  return (
-    <span style={{ ...s, fontSize: '.73rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap' }}>
-      {status}
-    </span>
-  )
-}
 
 export default function PassesTab() {
   const { data, openProfile, loadData } = useData()
   const { hasPerm } = usePermission()
   const canEdit   = hasPerm('passes.edit')
-  const canStatus = hasPerm('passes.status') || canEdit  // passes.edit implies status too
+  const canStatus = hasPerm('passes.status') || canEdit
 
   const passes = data?.passes || []
   const clients = data?.clients || []
-  const passNotice = data?.pass_notice || ''
 
-  const [noticeText, setNoticeText] = useState(passNotice)
+  const [noticeText, setNoticeText] = useState(data?.pass_notice || '')
   const [noticeSaving, setNoticeSaving] = useState(false)
   const [retPage, setRetPage] = useState(0)
-  const [modal, setModal] = useState(null) // null | 'add' | passObject
+  const [menuId, setMenuId] = useState(null)
+  const [modal, setModal] = useState(null)
   const [form, setForm] = useState(BLANK_PASS)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -57,7 +40,6 @@ export default function PassesTab() {
   const active = useMemo(() => passes.filter(p => p.status !== 'Returned'), [passes])
   const returned = useMemo(() => passes.filter(p => p.status === 'Returned')
     .slice().sort((a, b) => (b.return_date || '').localeCompare(a.return_date || '')), [passes])
-
   const retPages = Math.ceil(returned.length / PAGE_SIZE)
   const retPaged = returned.slice(retPage * PAGE_SIZE, (retPage + 1) * PAGE_SIZE)
 
@@ -69,248 +51,133 @@ export default function PassesTab() {
 
   async function saveNotice() {
     setNoticeSaving(true)
-    await fetch('/api/pass-notice', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ notice: noticeText }),
-    })
+    await fetch('/api/pass-notice', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ notice: noticeText }) })
     setNoticeSaving(false)
   }
-
-  function openAdd() {
-    setForm({ ...BLANK_PASS })
-    setError('')
-    setModal('add')
-  }
-
+  function openAdd() { setForm({ ...BLANK_PASS }); setError(''); setModal('add') }
   function openEdit(p) {
-    setForm({
-      client_id: String(p.client_id || ''),
-      room: p.room || '',
-      name: p.name || '',
-      departure: localDT(p.departure),
-      return_date: localDT(p.return_date),
-      ua_notes: p.ua_notes || '',
-      notes: p.notes || '',
-      status: p.status || 'Out',
-    })
-    setError('')
-    setModal(p)
+    setForm({ client_id: String(p.client_id || ''), room: p.room || '', name: p.name || '', departure: localDT(p.departure), return_date: localDT(p.return_date), ua_notes: p.ua_notes || '', notes: p.notes || '', status: p.status || 'Out' })
+    setError(''); setModal(p)
   }
-
   function handleClientSelect(clientId) {
     const c = clients.find(x => String(x.id) === String(clientId))
     setForm(f => ({ ...f, client_id: clientId, room: c?.room || f.room, name: c?.name || f.name }))
   }
-
   async function submit() {
     if (!form.name.trim()) { setError('Name is required.'); return }
     setSaving(true); setError('')
     try {
       const isNew = modal === 'add'
       const url = isNew ? '/api/passes' : `/api/passes/${modal.id}`
-      const body = {
-        client_id: form.client_id ? parseInt(form.client_id) : null,
-        room: form.room,
-        name: form.name.trim(),
-        departure: form.departure || null,
-        return_date: form.return_date || null,
-        ua_notes: form.ua_notes,
-        notes: form.notes,
-        status: form.status,
-      }
-      const r = await fetch(url, {
-        method: isNew ? 'POST' : 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(body),
-      })
+      const body = { client_id: form.client_id ? parseInt(form.client_id) : null, room: form.room, name: form.name.trim(), departure: form.departure || null, return_date: form.return_date || null, ua_notes: form.ua_notes, notes: form.notes, status: form.status }
+      const r = await fetch(url, { method: isNew ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) })
       const j = await r.json()
       if (!r.ok) { setError(j.error || 'Save failed'); return }
       setModal(null)
     } catch { setError('Network error') }
     finally { setSaving(false) }
   }
-
   async function quickStatus(p, newStatus) {
-    const r = await fetch(`/api/passes/${p.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ ...p, status: newStatus }),
-    })
+    const r = await fetch(`/api/passes/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ...p, status: newStatus }) })
     if (r.ok) loadData()
   }
-
-  async function markReturned(p) {
-    if (!window.confirm(`Mark ${p.name} as returned?`)) return
-    await quickStatus(p, 'Returned')
-  }
-
   async function del(p) {
     if (!window.confirm(`Delete pass for ${p.name}?`)) return
     const r = await fetch(`/api/passes/${p.id}`, { method: 'DELETE', credentials: 'include' })
     if (r.ok) loadData()
   }
 
+  const notesOf = p => [p.ua_notes ? `UA: ${p.ua_notes}` : '', p.notes || ''].filter(Boolean).join(' · ') || '—'
+  const nameCell = p => <NameCell name={p.name} sub={`Rm ${p.room}`} onClick={p.client_id ? () => openProfile(p.client_id) : undefined} />
+
+  function RowMenu({ p }) {
+    if (!canEdit && !canStatus) return null
+    return (
+      <div className="relative inline-block text-left">
+        <button onClick={() => setMenuId(menuId === p.id ? null : p.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>
+        {menuId === p.id && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+            <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
+              {canEdit && <button onClick={() => { setMenuId(null); openEdit(p) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Edit</button>}
+              {canStatus && p.status !== 'Returned' && <button onClick={() => { setMenuId(null); quickStatus(p, 'Returned') }} className="block w-full px-3 py-2 text-sm text-left text-green-700 rounded-md hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30">Mark Returned</button>}
+              {canStatus && p.status === 'Out' && <button onClick={() => { setMenuId(null); quickStatus(p, 'Extended') }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Mark Extended</button>}
+              {canEdit && <button onClick={() => { setMenuId(null); del(p) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div>
-      {/* Pass Notice */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Pass Notice Board</span></div>
-          {canEdit && (
-            <button className="btn btn-sm btn-primary" disabled={noticeSaving} onClick={saveNotice}>
-              {noticeSaving ? 'Saving…' : 'Save Notice'}
-            </button>
-          )}
+      <Header
+        crumb={['Daily Ops', 'Passes']}
+        title="Passes"
+        sub="Active and recent resident passes"
+        actions={canEdit ? [{ Icon: Plus, label: 'New Pass', primary: true, onClick: openAdd }] : []}
+      />
+
+      <KpiRow>
+        <Kpi label="Currently Out" value={active.length} sub="on pass" deltaLabel="now" Icon={Ticket} accent="primary" />
+        <Kpi label="Extended" value={active.filter(p => p.status === 'Extended').length} sub="needs follow-up" Icon={AlertTriangle} accent="red" />
+        <Kpi label="Returned" value={returned.length} sub="total" Icon={LogIn} accent="green" />
+      </KpiRow>
+
+      {/* Pass notice board */}
+      <div className={`${CARD} mb-4`}>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Pass Notice Board</h3>
+          {canEdit && <button onClick={saveNotice} disabled={noticeSaving} className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50">{noticeSaving ? 'Saving…' : 'Save Notice'}</button>}
         </div>
-        <div className="section-body">
-          <textarea value={noticeText} onChange={e => setNoticeText(e.target.value)}
-            rows={3} disabled={!canEdit}
-            placeholder="Enter any pass-related notices for this weekend…"
-            style={{ width: '100%', resize: 'vertical', fontFamily: 'var(--sans)', fontSize: '.9rem', padding: '9px 11px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', background: canEdit ? '#fff' : '#f8fafc', color: 'var(--text)' }} />
-        </div>
+        <textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} rows={2} disabled={!canEdit}
+          placeholder="Enter any pass-related notices for this weekend…"
+          className="block w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
       </div>
 
-      {/* Active Passes */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Active Passes</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{active.length} out</span>
-            {canEdit && <button className="btn btn-sm btn-primary" onClick={openAdd}>+ Add Pass</button>}
-          </div>
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
+      {/* Active passes */}
+      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Active passes</h3>
+      <div className="mb-6">
+        <Table headers={[{ label: 'Resident' }, { label: 'Status' }, { label: 'Departure' }, { label: 'Return' }, { label: 'Notes' }, { label: '', right: true }]}>
           {active.length === 0 ? (
-            <div className="empty-state">No active passes.</div>
-          ) : (
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rm</th><th>Name</th><th>Status</th>
-                    <th>Departure</th><th>Return</th>
-                    <th>UA Notes</th><th>Notes</th>
-                    {(canEdit || canStatus) && <th className="tc">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {active.map(p => (
-                    <tr key={p.id}>
-                      <td className="rm">{p.room}</td>
-                      <td className="name-cell">
-                        {p.client_id ? (
-                          <button onClick={() => openProfile(p.client_id)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'inherit', fontFamily:'inherit', fontSize:'inherit', fontWeight:'inherit', textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(27,47,110,.4)' }}>
-                            {p.name}
-                          </button>
-                        ) : p.name}
-                      </td>
-                      <td>
-                        {canStatus ? (
-                          <select
-                            value={p.status}
-                            onChange={e => quickStatus(p, e.target.value)}
-                            style={{
-                              fontFamily: 'var(--sans)', fontSize: '.78rem', fontWeight: 700,
-                              padding: '3px 6px', border: '1px solid var(--line)', borderRadius: 8,
-                              cursor: 'pointer', outline: 'none',
-                              background: p.status === 'Out' ? '#fef9c3'
-                                : p.status === 'Extended' ? '#fee2e2'
-                                : p.status === 'In' ? '#dcfce7'
-                                : '#f1f5f9',
-                              color: p.status === 'Out' ? '#854d0e'
-                                : p.status === 'Extended' ? '#991b1b'
-                                : p.status === 'In' ? '#15803d'
-                                : '#64748b',
-                            }}
-                          >
-                            <option value="Out">Out</option>
-                            <option value="Extended">Extended</option>
-                            <option value="In">In</option>
-                          </select>
-                        ) : (
-                          <StatusBadge status={p.status} />
-                        )}
-                      </td>
-                      <td className="date-cell">{fmtDT(p.departure)}</td>
-                      <td className="date-cell">{fmtDT(p.return_date)}</td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{p.ua_notes || ''}</td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{p.notes || ''}</td>
-                      {(canEdit || canStatus) && (
-                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {canEdit && (
-                            <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', marginRight: 4 }}
-                              onClick={() => openEdit(p)}>✎</button>
-                          )}
-                          {canStatus && (
-                            <button className="btn btn-sm btn-green" style={{ marginRight: canEdit ? 4 : 0 }} onClick={() => markReturned(p)}>Returned</button>
-                          )}
-                          {canEdit && (
-                            <button className="btn-danger-sm" onClick={() => del(p)}>✕</button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+            <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No active passes.</td></tr>
+          ) : active.map((p, i) => (
+            <tr key={p.id} className={rowCls(i)}>
+              {nameCell(p)}
+              <BadgeCell tone={PASS_TONE[p.status] || 'gray'} label={p.status} />
+              <MonoCell>{fmtDT(p.departure)}</MonoCell>
+              <MonoCell>{fmtDT(p.return_date)}</MonoCell>
+              <MutedCell>{notesOf(p)}</MutedCell>
+              <ActionsCell><RowMenu p={p} /></ActionsCell>
+            </tr>
+          ))}
+        </Table>
       </div>
 
-      {/* Returned Passes */}
+      {/* Returned passes */}
       {returned.length > 0 && (
-        <div className="section">
-          <div className="section-head">
-            <div className="sh-left"><span className="sh-dot" /><span>Returned Passes</span></div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{returned.length} total</span>
-          </div>
-          <div className="section-body" style={{ padding: 0 }}>
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rm</th><th>Name</th><th>Departure</th><th>Returned</th><th>Notes</th>
-                    {canEdit && <th className="tc">Del</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {retPaged.map(p => (
-                    <tr key={p.id} style={{ opacity: .7 }}>
-                      <td className="rm">{p.room}</td>
-                      <td className="name-cell">
-                        {p.client_id ? (
-                          <button onClick={() => openProfile(p.client_id)} style={{ background:'none', border:'none', padding:0, cursor:'pointer', color:'inherit', fontFamily:'inherit', fontSize:'inherit', fontWeight:'inherit', textDecoration:'underline', textDecorationStyle:'dotted', textDecorationColor:'rgba(27,47,110,.4)' }}>
-                            {p.name}
-                          </button>
-                        ) : p.name}
-                      </td>
-                      <td className="date-cell">{fmtDT(p.departure)}</td>
-                      <td className="date-cell">{fmtDT(p.return_date)}</td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{p.notes || ''}</td>
-                      {canEdit && (
-                        <td style={{ textAlign: 'center' }}>
-                          <button className="btn-danger-sm" onClick={() => del(p)}>✕</button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        <>
+          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Returned passes</h3>
+          <Table headers={[{ label: 'Resident' }, { label: 'Departure' }, { label: 'Returned' }, { label: 'Notes' }, { label: '', right: true }]}>
+            {retPaged.map((p, i) => (
+              <tr key={p.id} className={`${rowCls(i)} opacity-70`}>
+                {nameCell(p)}
+                <MonoCell>{fmtDT(p.departure)}</MonoCell>
+                <MonoCell>{fmtDT(p.return_date)}</MonoCell>
+                <MutedCell>{p.notes || '—'}</MutedCell>
+                <ActionsCell>{canEdit && <button onClick={() => del(p)} className="p-1.5 text-gray-400 rounded-lg hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"><MoreHorizontal className="w-4 h-4" /></button>}</ActionsCell>
+              </tr>
+            ))}
+          </Table>
+          {retPages > 1 && (
+            <div className="flex items-center gap-3 mt-3">
+              <button disabled={retPage === 0} onClick={() => setRetPage(p => p - 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">← Prev</button>
+              <span className="text-sm text-gray-500 dark:text-gray-400 font-mono tabular-nums">{retPage * PAGE_SIZE + 1}–{Math.min((retPage + 1) * PAGE_SIZE, returned.length)} of {returned.length}</span>
+              <button disabled={retPage + 1 >= retPages} onClick={() => setRetPage(p => p + 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Next →</button>
             </div>
-            {retPages > 1 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', fontSize: '.82rem', borderTop: '1px solid var(--line)' }}>
-                <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={retPage === 0} onClick={() => setRetPage(p => p - 1)}>← Prev</button>
-                <span style={{ color: '#475569' }}>{retPage * PAGE_SIZE + 1}–{Math.min((retPage + 1) * PAGE_SIZE, returned.length)} of {returned.length}</span>
-                <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={retPage + 1 >= retPages} onClick={() => setRetPage(p => p + 1)}>Next →</button>
-              </div>
-            )}
-          </div>
-        </div>
+          )}
+        </>
       )}
 
       {/* Add/Edit Modal */}
@@ -342,13 +209,11 @@ export default function PassesTab() {
                   <input type="datetime-local" value={form.return_date} onChange={e => setForm(f => ({ ...f, return_date: e.target.value }))} /></div>
               </div>
               <div className="field"><label>Status</label>
-                <select value={form.status} disabled={!canStatus}
-                  onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                <select value={form.status} disabled={!canStatus} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                   <option value="Out">Out</option>
                   <option value="Extended">Extended</option>
                   <option value="In">In</option>
                 </select>
-                {!canStatus && <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 2 }}>Requires passes.status permission to change.</div>}
               </div>
               <div className="field"><label>UA Requirements / Notes</label>
                 <input type="text" value={form.ua_notes} onChange={e => setForm(f => ({ ...f, ua_notes: e.target.value }))} placeholder="e.g. UA required on return" /></div>

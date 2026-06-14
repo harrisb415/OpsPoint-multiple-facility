@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
@@ -48,6 +49,7 @@ export default function ClientsTab() {
   const { data, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canEdit = hasPerm('residents.edit')
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(0)
@@ -352,12 +354,14 @@ export default function ClientsTab() {
   const residents = useMemo(() => clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT'), [clients])
   const rows = useMemo(() => {
     const q = search.toLowerCase().trim()
+    const gq = globalSearch.toLowerCase().trim()
     const key = STATUS_KEYS[statusFilter]
+    const match = (c, s) => !s || c.name.toLowerCase().includes(s) || String(c.room).includes(s) || (c.case_manager || '').toLowerCase().includes(s)
     return residents
       .filter(c => !key || (statuses[c.id] || 'building') === key)
-      .filter(c => !q || c.name.toLowerCase().includes(q) || String(c.room).includes(q) || (c.case_manager || '').toLowerCase().includes(q))
+      .filter(c => match(c, q) && match(c, gq))
       .slice().sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
-  }, [residents, statuses, search, statusFilter])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [residents, statuses, search, statusFilter, globalSearch])  // eslint-disable-line react-hooks/exhaustive-deps
   const daysSince = d => { if (!d) return null; return Math.max(0, Math.floor((Date.now() - new Date(d + 'T12:00:00').getTime()) / 86400000)) }
   const onSite = residents.filter(c => (statuses[c.id] || 'building') === 'building').length
   const pct = residents.length ? Math.round(onSite / residents.length * 100) : 0

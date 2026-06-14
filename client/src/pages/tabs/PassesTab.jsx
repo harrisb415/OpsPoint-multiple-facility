@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
@@ -24,6 +25,7 @@ export default function PassesTab() {
   const { hasPerm } = usePermission()
   const canEdit   = hasPerm('passes.edit')
   const canStatus = hasPerm('passes.status') || canEdit
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const passes = data?.passes || []
   const clients = data?.clients || []
@@ -37,9 +39,11 @@ export default function PassesTab() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const active = useMemo(() => passes.filter(p => p.status !== 'Returned'), [passes])
-  const returned = useMemo(() => passes.filter(p => p.status === 'Returned')
-    .slice().sort((a, b) => (b.return_date || '').localeCompare(a.return_date || '')), [passes])
+  const gq = globalSearch.toLowerCase().trim()
+  const pmatch = p => !gq || (p.name || '').toLowerCase().includes(gq) || String(p.room || '').includes(gq)
+  const active = useMemo(() => passes.filter(p => p.status !== 'Returned' && pmatch(p)), [passes, gq])  // eslint-disable-line react-hooks/exhaustive-deps
+  const returned = useMemo(() => passes.filter(p => p.status === 'Returned' && pmatch(p))
+    .slice().sort((a, b) => (b.return_date || '').localeCompare(a.return_date || '')), [passes, gq])  // eslint-disable-line react-hooks/exhaustive-deps
   const retPages = Math.ceil(returned.length / PAGE_SIZE)
   const retPaged = returned.slice(retPage * PAGE_SIZE, (retPage + 1) * PAGE_SIZE)
 

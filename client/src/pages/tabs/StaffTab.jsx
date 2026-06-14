@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import { UserPlus, MoreHorizontal, Users, UserCog, ClipboardList } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
@@ -17,6 +18,7 @@ export default function StaffTab() {
   const { data } = useData()
   const { hasPerm } = usePermission()
   const canEdit = hasPerm('staff.edit')
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const staff = data?.staff || []
   const categories = data?.staff_categories || ['Director', 'Case Manager', 'Program Assistant', 'Other']
@@ -28,11 +30,12 @@ export default function StaffTab() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const filtered = useMemo(() =>
-    staff.filter(s => filterCat === 'All' || s.category === filterCat)
-      .slice().sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999) || a.name.localeCompare(b.name)),
-    [staff, filterCat]
-  )
+  const filtered = useMemo(() => {
+    const gq = globalSearch.toLowerCase().trim()
+    return staff.filter(s => filterCat === 'All' || s.category === filterCat)
+      .filter(s => !gq || s.name.toLowerCase().includes(gq) || (s.category || '').toLowerCase().includes(gq) || (s.phone || '').includes(gq))
+      .slice().sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999) || a.name.localeCompare(b.name))
+  }, [staff, filterCat, globalSearch])
 
   function openAdd() {
     setForm({ ...BLANK, category: filterCat !== 'All' ? filterCat : (categories[0] || '') })

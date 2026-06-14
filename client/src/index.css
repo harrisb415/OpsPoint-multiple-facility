@@ -305,27 +305,31 @@
 
 /* - Inputs ------------------------------------------------------- */
 /* Global base � every bare input gets a visible border and no browser outline */
-input:not([type=checkbox]):not([type=radio]):not([type=range]),
-textarea {
-  border: 1px solid var(--border-light);
-  border-radius: 6px;
-  background: #fff;
-  font-family: var(--sans);
-  font-size: 13px;
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color 150ms, box-shadow 150ms;
+@layer base {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]),
+  textarea {
+    border: 1px solid var(--border-light);
+    border-radius: 6px;
+    background: #fff;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
 }
 
 /* Global focus ring � every text input gets the gold glow.
    !important on border-color/box-shadow is intentional: inline border styles
    on inputs throughout the codebase would otherwise silently block the focus ring. */
-input:not([type=checkbox]):not([type=radio]):focus,
-select:focus,
-textarea:focus {
-  border-color: var(--gold-500) !important;
-  box-shadow: var(--glow-gold) !important;
-  outline: none !important;
+@layer base {
+  input:not([type=checkbox]):not([type=radio]):focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--gold-500) !important;
+    box-shadow: var(--glow-gold) !important;
+    outline: none !important;
+  }
 }
 
 .field { margin-bottom: 14px; }

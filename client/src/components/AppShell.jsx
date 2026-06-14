@@ -12,7 +12,7 @@ import {
   FlaskConical, Pill,
   Ban, PenLine, Archive,
   Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse, Stethoscope,
-  Moon, Sun, MoreHorizontal, LayoutDashboard,
+  Moon, Sun, MoreHorizontal, LayoutDashboard, Search,
 } from 'lucide-react'
 
 // ── Sidebar group config ──────────────────────────────────────────────
@@ -599,7 +599,7 @@ function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
 }
 
 // ── Header / top bar (Console) ────────────────────────────────────────
-function Header({ onGoTab, offset = true }) {
+function Header({ onGoTab, offset = true, search = '', onSearch }) {
   const { session, logout }                 = useAuth()
   const { hasPerm }                         = usePermission()
   const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident } = useData()
@@ -906,21 +906,26 @@ function Header({ onGoTab, offset = true }) {
       )}
       <nav className={`fixed top-0 ${offset ? 'left-64' : 'left-0'} right-0 z-30 h-16 bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
         <div className="flex items-center justify-between h-full px-5">
-          {/* Left: save status + live indicator */}
-          <div className="flex items-center gap-3">
-            {saveStatus === 'saving' && <span className="text-xs font-medium text-gray-400">Saving…</span>}
-            {saveStatus === 'saved'  && <span className="text-xs font-medium text-green-600 dark:text-green-400">Saved</span>}
-            {saveStatus === 'err'    && <span className="text-xs font-medium text-red-600 dark:text-red-400">Save failed</span>}
+          {/* Left: global search */}
+          <form className="hidden md:block" onSubmit={e => e.preventDefault()}>
+            <div className="relative md:w-72 lg:w-96">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"><Search className="w-4 h-4 text-gray-400" /></div>
+              <input type="text" value={search} onChange={e => onSearch?.(e.target.value)} placeholder="Search residents, rooms, logs…"
+                className="block w-full py-2.5 pl-10 pr-3 text-sm text-gray-900 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            </div>
+          </form>
+
+          {/* Right: save · live · actions ⋯ · notifications · gear · theme · avatar */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {saveStatus === 'saving' && <span className="hidden mr-1 text-xs font-medium text-gray-400 sm:inline">Saving…</span>}
+            {saveStatus === 'saved'  && <span className="hidden mr-1 text-xs font-medium text-green-600 sm:inline dark:text-green-400">Saved</span>}
+            {saveStatus === 'err'    && <span className="hidden mr-1 text-xs font-medium text-red-600 sm:inline dark:text-red-400">Save failed</span>}
             <span title={wsConnected ? 'Server connected' : 'Reconnecting…'} className={`items-center hidden gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full sm:inline-flex ${wsConnected ? 'text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300' : 'text-gray-500 bg-gray-100 dark:bg-gray-700 dark:text-gray-300'}`}>
               <span className="relative flex w-2 h-2">
                 {wsConnected && <span className="absolute inline-flex w-full h-full bg-green-400 rounded-full opacity-75 animate-ping" />}
                 <span className={`relative inline-flex w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
               </span>{wsConnected ? 'Live' : 'Offline'}
             </span>
-          </div>
-
-          {/* Right: actions ⋯ · notifications · gear · theme · avatar */}
-          <div className="flex items-center gap-1 sm:gap-2">
             {(hasPerm('reports.create') || hasPerm('broadcast.send')) && (
               <div className="relative" ref={moreRef}>
                 <button onClick={() => setMoreOpen(o => !o)} title="Shift actions" className="p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400">
@@ -1012,6 +1017,7 @@ function InnerShell() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [requestedTab, setRequestedTab] = useState(null)
   const [drawOpen, setDrawOpen]   = useState(false)
+  const [globalSearch, setGlobalSearch] = useState('')
 
   const isAdmin    = location.pathname === '/admin'
   const isClinical = location.pathname.startsWith('/clinical')
@@ -1034,7 +1040,7 @@ function InnerShell() {
 
   return (
     <>
-      <Header onGoTab={setRequestedTab} offset={!fullBleed} />
+      <Header onGoTab={setRequestedTab} offset={!fullBleed} search={globalSearch} onSearch={setGlobalSearch} />
       {!fullBleed && (
         <Sidebar
           activeTab={activeTab}
@@ -1050,7 +1056,7 @@ function InnerShell() {
         />
       )}
       <main className={`${fullBleed ? '' : 'ml-64'} pt-16 h-screen overflow-hidden flex flex-col bg-gray-50 dark:bg-gray-900`}>
-        <Outlet context={{ activeTab, setActiveTab, requestedTab, clearRequestedTab: () => setRequestedTab(null) }} />
+        <Outlet context={{ activeTab, setActiveTab, requestedTab, clearRequestedTab: () => setRequestedTab(null), globalSearch }} />
       </main>
       <ClientProfile onNavigateTab={setRequestedTab} />
       <UADrawModal

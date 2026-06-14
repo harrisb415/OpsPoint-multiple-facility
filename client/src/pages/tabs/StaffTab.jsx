@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
+import { UserPlus, MoreHorizontal, Users, UserCog, ClipboardList } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, TextCell, MonoCell, MutedCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 function formatPhone(raw) {
   if (!raw) return ''
@@ -20,6 +22,7 @@ export default function StaffTab() {
   const categories = data?.staff_categories || ['Director', 'Case Manager', 'Program Assistant', 'Other']
 
   const [filterCat, setFilterCat] = useState('All')
+  const [menuId, setMenuId] = useState(null)
   const [modal, setModal] = useState(null) // null | 'add' | staffObject
   const [form, setForm] = useState(BLANK)
   const [error, setError] = useState('')
@@ -66,82 +69,63 @@ export default function StaffTab() {
     await fetch(`/api/staff/${s.id}`, { method: 'DELETE', credentials: 'include' })
   }
 
-  const catCounts = useMemo(() => {
-    const m = { All: staff.length }
-    categories.forEach(c => { m[c] = staff.filter(s => s.category === c).length })
-    return m
-  }, [staff, categories])
+  const filters = ['All', ...categories]
+  const caseMgrs = staff.filter(s => s.category === 'Case Manager').length
+  const pas      = staff.filter(s => s.category === 'Program Assistant').length
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Staff Directory</span></div>
-          {canEdit && (
-            <button className="btn btn-sm btn-primary" onClick={openAdd}>+  Add Staff Member</button>
-          )}
-        </div>
+      <Header
+        crumb={['People', 'Staff']}
+        title="Staff"
+        sub={`${staff.length} team member${staff.length === 1 ? '' : 's'}`}
+        actions={canEdit ? [{ Icon: UserPlus, label: 'Add Staff', primary: true, onClick: openAdd }] : []}
+      />
 
-        {/* Category filter */}
-        <div style={{ display: 'flex', gap: 7, padding: '10px 14px', flexWrap: 'wrap', borderBottom: '1px solid var(--line)' }}>
-          {['All', ...categories].map(cat => (
-            <button key={cat} onClick={() => setFilterCat(cat)}
-              style={{
-                padding: '4px 12px', borderRadius: 20, fontSize: '.76rem', fontWeight: 700,
-                border: '1.5px solid', cursor: 'pointer', transition: 'all .15s',
-                borderColor: filterCat === cat ? 'var(--crimson)' : 'var(--line)',
-                background: filterCat === cat ? 'var(--crimson)' : 'transparent',
-                color: filterCat === cat ? '#fff' : 'var(--steel)',
-              }}>
-              {cat} {catCounts[cat] != null ? `(${catCounts[cat]})` : ''}
-            </button>
-          ))}
-        </div>
+      <KpiRow>
+        <Kpi label="Team Members" value={staff.length} sub={`across ${categories.length} categories`} Icon={Users} accent="primary" />
+        <Kpi label="Case Managers" value={caseMgrs} sub="active" Icon={UserCog} accent="sky" />
+        <Kpi label="Program Assistants" value={pas} sub="active" Icon={ClipboardList} accent="green" />
+      </KpiRow>
 
-        <div className="section-body" style={{ padding: 0 }}>
-          {filtered.length === 0 ? (
-            <div className="empty-state">No staff members in this category.</div>
-          ) : (
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Category</th>
-                    <th>Phone</th>
-                    <th>Alt Phone</th>
-                    <th>Notes</th>
-                    {canEdit && <th className="tc">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map(s => (
-                    <tr key={s.id}>
-                      <td className="name-cell">{s.name}</td>
-                      <td>
-                        <span style={{
-                          fontSize: '.73rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                          background: '#e2e8f0', color: '#475569'
-                        }}>{s.category || '—'}</span>
-                      </td>
-                      <td style={{ fontFamily: 'var(--mono)', fontSize: '.8rem' }}>{formatPhone(s.phone) || '—'}</td>
-                      <td style={{ fontFamily: 'var(--mono)', fontSize: '.8rem' }}>{formatPhone(s.phone2) || '—'}</td>
-                      <td style={{ fontSize: '.84rem', color: '#475569', maxWidth: 280 }}>{s.notes || ''}</td>
-                      {canEdit && (
-                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', marginRight: 5 }}
-                            onClick={() => openEdit(s)}>✎ Edit</button>
-                          <button className="btn-danger-sm" onClick={() => del(s)}>Remove</button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
+      <Toolbar
+        filters={filters}
+        active={Math.max(0, filters.indexOf(filterCat))}
+        onFilter={i => setFilterCat(filters[i])}
+        count={filtered.length}
+      />
+
+      <Table headers={[{ label: 'Name' }, { label: 'Role' }, { label: 'Phone' }, { label: 'Alt Phone' }, { label: 'Notes' }, { label: '', right: true }]}>
+        {filtered.length === 0 ? (
+          <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No staff members in this category.</td></tr>
+        ) : filtered.map((s, i) => (
+          <tr key={s.id} className={rowCls(i)}>
+            <NameCell name={s.name} />
+            <TextCell>{s.category || '—'}</TextCell>
+            <MonoCell>{formatPhone(s.phone) || '—'}</MonoCell>
+            <MonoCell>{formatPhone(s.phone2) || '—'}</MonoCell>
+            <MutedCell>{s.notes || '—'}</MutedCell>
+            <ActionsCell>
+              {canEdit && (
+                <div className="relative inline-block text-left">
+                  <button onClick={() => setMenuId(menuId === s.id ? null : s.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700">
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                  {menuId === s.id && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+                      <div className="absolute right-0 z-50 w-36 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
+                        <button onClick={() => { setMenuId(null); openEdit(s) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Edit</button>
+                        <button onClick={() => { setMenuId(null); del(s) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Remove</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </ActionsCell>
+          </tr>
+        ))}
+      </Table>
 
       {/* Add/Edit Modal */}
       {modal && (

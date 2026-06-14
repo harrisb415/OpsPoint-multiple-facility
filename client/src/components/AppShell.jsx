@@ -12,6 +12,7 @@ import {
   FlaskConical, Pill,
   Ban, PenLine, Archive,
   Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse, Stethoscope,
+  Moon, Sun, MoreHorizontal, LayoutDashboard,
 } from 'lucide-react'
 
 // ── Sidebar group config ──────────────────────────────────────────────
@@ -475,31 +476,39 @@ function UADrawModal({ open, onClose, clients, statuses }) {
   )
 }
 
-// ── Sidebar ───────────────────────────────────────────────────────────
-function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen, onClinical }) {
+// ── Operational sidebar (Console) ─────────────────────────────────────
+const navRowBase = 'flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left group'
+const navRowOn   = 'bg-primary-50 text-primary-700 dark:bg-gray-700 dark:text-white'
+const navRowOff  = 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+
+function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis, onDrawOpen, onClinical, onHome, onSignOut }) {
   function isTabVisible(id) {
     if (uiVis.tabs && Object.keys(uiVis.tabs).length > 0) {
       if (uiVis.tabs[id] === false) return false
     }
     return true
   }
-
   const initials = (session?.displayName || session?.username || '?')
     .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-user-card">
-        <div className="sidebar-avatar">{initials}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="sidebar-user-name">
-            {session?.displayName || session?.username}
-          </div>
-          <div className="sidebar-user-role">{session?.role || 'Staff'}</div>
+    <aside className="fixed top-0 left-0 z-40 flex flex-col w-64 h-full bg-white border-r border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+      {/* Brand → Dashboard (brand-click landing, not a nav item) */}
+      <button onClick={onHome} className="flex items-center w-full gap-2.5 h-16 px-4 text-left border-b shrink-0 border-gray-200 dark:border-gray-700">
+        <img src="/static/icons/icon-192.png" alt="" className="w-8 h-8 rounded-lg shadow-sm" />
+        <div className="leading-tight min-w-0">
+          <p className="text-base font-bold text-gray-900 dark:text-white">OpsPoint</p>
+          <p className="text-[11px] text-gray-400 truncate">{facilityName}</p>
         </div>
-      </div>
+      </button>
 
-      <div className="sidebar-body">
+      <nav className="flex-1 px-3 py-3 overflow-y-auto">
+        <div className="space-y-1">
+          <button onClick={() => onTabChange('dashboard')} className={`${navRowBase} ${activeTab === 'dashboard' ? navRowOn : navRowOff}`}>
+            <LayoutDashboard className={`w-5 h-5 shrink-0 ${activeTab === 'dashboard' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white'}`} />
+            <span className="flex-1">Dashboard</span>
+          </button>
+        </div>
         {SIDEBAR_GROUPS.map(group => {
           const visItems = group.items.filter(item => {
             if (item.perm  && !hasPerm(item.perm)) return false
@@ -507,41 +516,55 @@ function Sidebar({ activeTab, onTabChange, session, hasPerm, uiVis, onDrawOpen, 
             if (!isTabVisible(item.id)) return false
             return true
           })
-          if (visItems.length === 0) return null
+          const showDraw     = group.label === 'HEALTH & COMPLIANCE' && hasPerm('ua.draw')
+          const showClinical = group.label === 'HEALTH & COMPLIANCE' && CLINICAL_SECTION_PERMS.some(p => hasPerm(p))
+          if (visItems.length === 0 && !showDraw && !showClinical) return null
           return (
             <div key={group.label}>
-              <div className="sidebar-group-label">{group.label}</div>
-              {visItems.map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  className={`sidebar-item${activeTab === id ? ' active' : ''}`}
-                  onClick={() => onTabChange(id)}
-                >
-                  <Icon size={16} className="sidebar-icon" />
-                  {label}
-                </button>
-              ))}
-              {group.label === 'HEALTH & COMPLIANCE' && hasPerm('ua.draw') && (
-                <button className="sidebar-item" onClick={onDrawOpen}>
-                  <Dice5 size={16} className="sidebar-icon" />
-                  UA Draw
-                </button>
-              )}
-              {group.label === 'HEALTH & COMPLIANCE' && CLINICAL_SECTION_PERMS.some(p => hasPerm(p)) && (
-                <button className="sidebar-item" onClick={onClinical}>
-                  <Stethoscope size={16} className="sidebar-icon" />
-                  Clinical
-                </button>
-              )}
+              <p className="px-3 pt-5 pb-1 text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-gray-500">{group.label}</p>
+              <div className="space-y-1">
+                {visItems.map(({ id, label, Icon }) => {
+                  const on = activeTab === id
+                  return (
+                    <button key={id} onClick={() => onTabChange(id)} className={`${navRowBase} ${on ? navRowOn : navRowOff}`}>
+                      <Icon className={`w-5 h-5 shrink-0 ${on ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white'}`} />
+                      <span className="flex-1">{label}</span>
+                    </button>
+                  )
+                })}
+                {showDraw && (
+                  <button onClick={onDrawOpen} className={`${navRowBase} ${navRowOff}`}>
+                    <Dice5 className="w-5 h-5 shrink-0 text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white" />
+                    <span className="flex-1">UA Draw</span>
+                  </button>
+                )}
+                {showClinical && (
+                  <button onClick={onClinical} className={`${navRowBase} ${navRowOff}`}>
+                    <Stethoscope className="w-5 h-5 shrink-0 text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white" />
+                    <span className="flex-1">Clinical</span>
+                  </button>
+                )}
+              </div>
             </div>
           )
         })}
+      </nav>
+
+      <div className="flex items-center gap-3 p-3 border-t shrink-0 border-gray-200 dark:border-gray-700">
+        <span className="flex items-center justify-center text-sm font-semibold rounded-full w-9 h-9 bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">{initials}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate text-gray-900 dark:text-white">{session?.displayName || session?.username}</p>
+          <p className="text-xs truncate text-gray-400">{session?.role || 'Staff'}</p>
+        </div>
+        <button onClick={onSignOut} title="Sign out" className="p-1 text-gray-400 rounded hover:text-gray-700 hover:bg-gray-100 dark:hover:text-white dark:hover:bg-gray-700">
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   )
 }
 
-// ── Settings gear dropdown ────────────────────────────────────────────
+// ── Settings gear dropdown (Console) — Admin / About / Sign out only ──
 function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -551,29 +574,23 @@ function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
   return (
-    <div className="header-menu" ref={ref} style={{ position: 'relative' }}>
-      <button
-        className="settings-gear-btn"
-        onClick={() => setOpen(o => !o)}
-        title="Settings"
-        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
-                 width:34, height:34, border:'none', background:'none', borderRadius:6, cursor:'pointer' }}
-      >
-        <Settings size={18} />
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)} title="Settings" className="p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400">
+        <Settings className="w-5 h-5" />
       </button>
       {open && (
-        <div className="header-dropdown">
-          <button className="dropdown-item" onClick={() => { setOpen(false); onAbout?.() }}>
-            <Info size={16} /> About
-          </button>
+        <div className="absolute right-0 z-50 mt-1 p-1.5 bg-white border border-gray-200 shadow-lg w-52 rounded-xl dark:bg-gray-800 dark:border-gray-700">
           {showAdmin && (
-            <button className="dropdown-item" onClick={() => { setOpen(false); onAdmin?.() }}>
-              <Shield size={16} /> Admin
+            <button onClick={() => { setOpen(false); onAdmin?.() }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+              <Shield className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">Admin</span>
             </button>
           )}
-          <div className="dropdown-sep" />
-          <button className="dropdown-item danger" onClick={() => { setOpen(false); onSignOut?.() }}>
-            <LogOut size={16} /> Sign Out
+          <button onClick={() => { setOpen(false); onAbout?.() }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+            <Info className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">About OpsPoint</span>
+          </button>
+          <div className="my-1 border-t border-gray-100 dark:border-gray-700" />
+          <button onClick={() => { setOpen(false); onSignOut?.() }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-500 rounded-md hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700">
+            <LogOut className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">Sign out</span>
           </button>
         </div>
       )}
@@ -581,8 +598,8 @@ function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
   )
 }
 
-// ── Header ─────────────────────────────────────────────────────────────
-function Header({ onGoTab }) {
+// ── Header / top bar (Console) ────────────────────────────────────────
+function Header({ onGoTab, offset = true }) {
   const { session, logout }                 = useAuth()
   const { hasPerm }                         = usePermission()
   const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident } = useData()
@@ -590,6 +607,14 @@ function Header({ onGoTab }) {
 
   const [panelOpen, setPanelOpen]           = useState(false)
   const [broadcastOpen, setBroadcastOpen]   = useState(false)
+  const [dark, setDark]                     = useDarkMode()
+  const [moreOpen, setMoreOpen]             = useState(false)
+  const moreRef = useRef(null)
+  useEffect(() => {
+    const onDoc = e => { if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false) }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [])
 
   const [dismissedDrawIds, setDismissedDrawIds] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('spDismissedDraws') || '[]')) }
@@ -879,69 +904,80 @@ function Header({ onGoTab }) {
           Server is restarting — page will reload in a moment…
         </div>
       )}
-      <header className="site-header">
-        <div className="header-brand">
-          <img src="/static/icons/icon-192.png" alt="" className="header-brand-logo" />
-          <span className="header-brand-name">OpsPoint</span>
-          <span className="header-brand-sep">|</span>
-          <span className="header-brand-facility">{facilityName}</span>
-        </div>
-
-        <div className="header-actions">
-          {saveStatus === 'saving' && <div className="save-status saving"><span className="sindot" />Saving…</div>}
-          {saveStatus === 'saved'  && <div className="save-status saved" ><span className="sindot" />Saved</div>}
-          {saveStatus === 'err'    && <div className="save-status err"   ><span className="sindot" />Save failed</div>}
-
-          <div title={wsConnected ? 'Server connected' : 'Reconnecting…'} style={{
-            display: 'flex', alignItems: 'center', gap: 4,
-            fontSize: '11px', color: wsConnected ? 'var(--gold-300)' : '#fca5a5', fontWeight: 600,
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%',
-                           background: wsConnected ? 'var(--gold-400)' : '#ef4444',
-                           flexShrink: 0, display: 'inline-block' }} />
-            {wsConnected ? 'Live' : 'Offline'}
+      <nav className={`fixed top-0 ${offset ? 'left-64' : 'left-0'} right-0 z-30 h-16 bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
+        <div className="flex items-center justify-between h-full px-5">
+          {/* Left: save status + live indicator */}
+          <div className="flex items-center gap-3">
+            {saveStatus === 'saving' && <span className="text-xs font-medium text-gray-400">Saving…</span>}
+            {saveStatus === 'saved'  && <span className="text-xs font-medium text-green-600 dark:text-green-400">Saved</span>}
+            {saveStatus === 'err'    && <span className="text-xs font-medium text-red-600 dark:text-red-400">Save failed</span>}
+            <span title={wsConnected ? 'Server connected' : 'Reconnecting…'} className={`items-center hidden gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full sm:inline-flex ${wsConnected ? 'text-green-700 bg-green-100 dark:bg-green-900/40 dark:text-green-300' : 'text-gray-500 bg-gray-100 dark:bg-gray-700 dark:text-gray-300'}`}>
+              <span className="relative flex w-2 h-2">
+                {wsConnected && <span className="absolute inline-flex w-full h-full bg-green-400 rounded-full opacity-75 animate-ping" />}
+                <span className={`relative inline-flex w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
+              </span>{wsConnected ? 'Live' : 'Offline'}
+            </span>
           </div>
 
-          {hasPerm('reports.create') && (
-            <>
-              {uiVis.buttons?.walkthrough !== false && (
-                <button className="header-link" onClick={fileWalkthroughs} title="File Walkthrough — filled filing record">
-                  <Footprints size={14} /> File Walkthrough
+          {/* Right: actions ⋯ · notifications · gear · theme · avatar */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {(hasPerm('reports.create') || hasPerm('broadcast.send')) && (
+              <div className="relative" ref={moreRef}>
+                <button onClick={() => setMoreOpen(o => !o)} title="Shift actions" className="p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400">
+                  <MoreHorizontal className="w-5 h-5" />
                 </button>
-              )}
-              {uiVis.buttons?.wellness !== false && (
-                <button className="header-link" onClick={fileWellnessChecks} title="File Wellness Check — filled filing record">
-                  <HeartPulse size={14} /> File Wellness
-                </button>
-              )}
-              <button className="header-link" onClick={sendOutlook} title="Email shift report">
-                <Mail size={14} /> Email
-              </button>
-            </>
-          )}
-
-          {hasPerm('broadcast.send') && (
-            <button className="header-link" onClick={() => setBroadcastOpen(true)} title="Send Announcement">
-              <Megaphone size={14} />
-              Announce
-            </button>
-          )}
-
-          <SettingsMenu
-            showAdmin={hasPerm('admin.users')}
-            onAbout={() => navigate('/about')}
-            onAdmin={() => navigate('/admin')}
-            onSignOut={handleLogout}
-          />
-
-          <button className="notif-bell-btn" onClick={() => setPanelOpen(o => !o)} title="Notifications">
-            <Bell size={18} />
-            {badgeCount > 0 && (
-              <span className="notif-bell-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>
+                {moreOpen && (
+                  <div className="absolute right-0 z-50 mt-1 p-1.5 bg-white border border-gray-200 shadow-lg w-56 rounded-xl dark:bg-gray-800 dark:border-gray-700">
+                    {hasPerm('reports.create') && uiVis.buttons?.walkthrough !== false && (
+                      <button onClick={() => { setMoreOpen(false); fileWalkthroughs() }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+                        <Footprints className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">File Walkthrough</span>
+                      </button>
+                    )}
+                    {hasPerm('reports.create') && uiVis.buttons?.wellness !== false && (
+                      <button onClick={() => { setMoreOpen(false); fileWellnessChecks() }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+                        <HeartPulse className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">File Wellness</span>
+                      </button>
+                    )}
+                    {hasPerm('reports.create') && (
+                      <button onClick={() => { setMoreOpen(false); sendOutlook() }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+                        <Mail className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">Email Report</span>
+                      </button>
+                    )}
+                    {hasPerm('broadcast.send') && (
+                      <button onClick={() => { setMoreOpen(false); setBroadcastOpen(true) }} className="flex items-center w-full gap-2.5 px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">
+                        <Megaphone className="w-4 h-4 text-gray-400" /><span className="flex-1 text-left">Announce</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
-          </button>
+
+            <button onClick={() => setPanelOpen(o => !o)} title="Notifications" className="relative p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400">
+              <Bell className="w-5 h-5" />
+              {badgeCount > 0 && (
+                <span className="absolute flex items-center justify-center px-1 min-w-4 h-4 text-[10px] font-bold text-white bg-red-500 rounded-full top-1 right-1">{badgeCount > 99 ? '99+' : badgeCount}</span>
+              )}
+            </button>
+
+            <SettingsMenu
+              showAdmin={hasPerm('admin.users')}
+              onAbout={() => navigate('/about')}
+              onAdmin={() => navigate('/admin')}
+              onSignOut={handleLogout}
+            />
+
+            <button onClick={() => setDark(d => !d)} title="Toggle theme" className="p-2 text-gray-500 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400">
+              {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
+
+            <div className="hidden w-px h-6 mx-1 bg-gray-200 sm:block dark:bg-gray-700" />
+            <span className="flex items-center justify-center text-xs font-semibold rounded-full w-8 h-8 bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">
+              {(session?.displayName || session?.username || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+            </span>
+          </div>
         </div>
-      </header>
+      </nav>
 
       <NotifPanel
         open={panelOpen}
@@ -967,13 +1003,13 @@ function Header({ onGoTab }) {
 
 // ── Inner shell (has access to DataContext) ───────────────────────────
 function InnerShell() {
-  const { session }      = useAuth()
+  const { session, logout } = useAuth()
   const { hasPerm }      = usePermission()
   const { data }         = useData()
   const location         = useLocation()
 
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('report')
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [requestedTab, setRequestedTab] = useState(null)
   const [drawOpen, setDrawOpen]   = useState(false)
 
@@ -991,26 +1027,31 @@ function InnerShell() {
   const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
   const statuses     = activeReport?.statuses || {}
   const clients      = data?.clients || []
+  const facilityName = data?.facility_name || 'OpsPoint'
+
+  const onHome    = () => { setActiveTab('dashboard'); navigate('/') }
+  const onSignOut = async () => { await logout(); navigate('/login') }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Header onGoTab={setRequestedTab} />
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-        {!fullBleed && (
-          <Sidebar
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            session={session}
-            hasPerm={hasPerm}
-            uiVis={uiVis}
-            onDrawOpen={() => setDrawOpen(true)}
-            onClinical={() => navigate('/clinical')}
-          />
-        )}
-        <div className="app-content" style={fullBleed ? { marginLeft: 0 } : undefined}>
-          <Outlet context={{ activeTab, setActiveTab, requestedTab, clearRequestedTab: () => setRequestedTab(null) }} />
-        </div>
-      </div>
+    <>
+      <Header onGoTab={setRequestedTab} offset={!fullBleed} />
+      {!fullBleed && (
+        <Sidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          session={session}
+          facilityName={facilityName}
+          hasPerm={hasPerm}
+          uiVis={uiVis}
+          onDrawOpen={() => setDrawOpen(true)}
+          onClinical={() => navigate('/clinical')}
+          onHome={onHome}
+          onSignOut={onSignOut}
+        />
+      )}
+      <main className={`${fullBleed ? '' : 'ml-64'} pt-16 h-screen overflow-hidden flex flex-col bg-gray-50 dark:bg-gray-900`}>
+        <Outlet context={{ activeTab, setActiveTab, requestedTab, clearRequestedTab: () => setRequestedTab(null) }} />
+      </main>
       <ClientProfile onNavigateTab={setRequestedTab} />
       <UADrawModal
         open={drawOpen}
@@ -1018,8 +1059,22 @@ function InnerShell() {
         clients={clients}
         statuses={statuses}
       />
-    </div>
+    </>
   )
+}
+
+// ── Dark-mode hook (Tailwind class strategy + localStorage) ───────────
+function useDarkMode() {
+  const [dark, setDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const s = localStorage.getItem('opspoint-theme')
+    return s ? s === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    localStorage.setItem('opspoint-theme', dark ? 'dark' : 'light')
+  }, [dark])
+  return [dark, setDark]
 }
 
 // ── AppShell ───────────────────────────────────────────────────────────

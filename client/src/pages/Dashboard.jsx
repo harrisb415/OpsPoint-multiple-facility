@@ -15,6 +15,7 @@ import ViolationsTab from './tabs/ViolationsTab.jsx'
 import MedLogTab     from './tabs/MedLogTab.jsx'
 import ConsentTab    from './tabs/ConsentTab.jsx'
 import GroupsTab     from './tabs/GroupsTab.jsx'
+import DashboardHome  from './DashboardHome.jsx'
 
 const ALL_TABS = [
   { id: 'report',     label: 'Report' },
@@ -77,7 +78,10 @@ export default function Dashboard() {
     )
   }
 
-  const currentTab = activeTab || 'report'
+  const currentTab = activeTab || 'dashboard'
+  if (currentTab === 'dashboard') {
+    return <DashboardHome onNavigate={setActiveTab} />
+  }
   const active = visibleTabs.find(t => t.id === currentTab) || visibleTabs[0]
 
   return (

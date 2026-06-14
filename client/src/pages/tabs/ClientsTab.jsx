@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef } from 'react'
-import { Plus, BarChart3, Search } from 'lucide-react'
+import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
-import { CARD, TH, PageHeader, StatCard, Pill, SortHeader } from '../../components/console.jsx'
+import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, BadgeCell, TextCell, MutedCell, DaysCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 const PAGE_SIZE = 50
 
@@ -50,6 +50,8 @@ export default function ClientsTab() {
   const canEdit = hasPerm('residents.edit')
 
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState(0)
+  const [menuId, setMenuId] = useState(null)
   const [showDischarged, setShowDischarged] = useState(false)
   const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState('room')
@@ -342,142 +344,90 @@ export default function ClientsTab() {
   const special = clients.filter(c => c.is_special).length
   const discharged = clients.filter(c => !c.is_special && !c.is_active).length
 
+  // ── Console table data (active residents; shift status from active report) ──
+  const STATUS = { building:{tone:'green',label:'In Building'}, work:{tone:'blue',label:'At Work'}, pass:{tone:'yellow',label:'On Pass'}, hospital:{tone:'red',label:'Hospital'}, bhc:{tone:'purple',label:'BHC'}, efc:{tone:'purple',label:'EFC'}, out:{tone:'orange',label:'Out'} }
+  const STATUS_KEYS = [null, 'building', 'work', 'pass', 'hospital']
+  const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
+  const statuses = activeReport?.statuses || {}
+  const residents = useMemo(() => clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT'), [clients])
+  const rows = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    const key = STATUS_KEYS[statusFilter]
+    return residents
+      .filter(c => !key || (statuses[c.id] || 'building') === key)
+      .filter(c => !q || c.name.toLowerCase().includes(q) || String(c.room).includes(q) || (c.case_manager || '').toLowerCase().includes(q))
+      .slice().sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
+  }, [residents, statuses, search, statusFilter])  // eslint-disable-line react-hooks/exhaustive-deps
+  const daysSince = d => { if (!d) return null; return Math.max(0, Math.floor((Date.now() - new Date(d + 'T12:00:00').getTime()) / 86400000)) }
+  const onSite = residents.filter(c => (statuses[c.id] || 'building') === 'building').length
+  const pct = residents.length ? Math.round(onSite / residents.length * 100) : 0
+  const newIntakes = residents.filter(c => { const dd = daysSince(c.intake_date); return dd != null && dd <= 7 }).length
+  const tenures = residents.map(c => daysSince(c.intake_date)).filter(v => v != null)
+  const avgTenure = tenures.length ? Math.round(tenures.reduce((a, b) => a + b, 0) / tenures.length) : 0
+
   return (
     <div>
-      <PageHeader title="Clients" subtitle="Resident roster & status">
-        {canEdit && (
-          <button onClick={() => { setAddForm(blankAdd(vacantRooms)); setAddError(''); setAddModal(true) }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-white rounded-lg bg-primary-600 hover:bg-primary-700">
-            <Plus className="w-4 h-4" /> Add Client
-          </button>
-        )}
-        <button onClick={() => setReportModal(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
-          <BarChart3 className="w-4 h-4" /> Report
-        </button>
-      </PageHeader>
+      <Header
+        crumb={['People', 'Clients']}
+        title="Clients"
+        sub={`${active} residents · ${data?.facility_name || 'Facility'}`}
+        actions={[
+          { Icon: Download, label: 'Export', onClick: () => setReportModal(true) },
+          ...(canEdit ? [{ Icon: UserPlus, label: 'New Intake', primary: true, onClick: () => { setAddForm(blankAdd(vacantRooms)); setAddError(''); setAddModal(true) } }] : []),
+        ]}
+      />
 
-      <div className="grid grid-cols-2 gap-3 mb-4 lg:grid-cols-4">
-        <StatCard label="Active" value={active} tone="green" />
-        <StatCard label="Vacant" value={vacant} tone="gray" />
-        <StatCard label="Special" value={special} tone="purple" />
-        <StatCard label="Discharged" value={discharged} tone="orange" />
-      </div>
+      <KpiRow>
+        <Kpi label="Total Residents" value={active} sub={`${vacant} beds open`} deltaLabel="this week" Icon={Users} accent="primary" />
+        <Kpi label="On Site" value={onSite} sub={`${pct}% of census`} deltaLabel="now" Icon={Home} accent="green" />
+        <Kpi label="New Intakes" value={newIntakes} sub="last 7 days" deltaLabel="this week" Icon={UserPlus} accent="sky" />
+        <Kpi label="Avg Tenure" value={avgTenure} sub="days in program" deltaLabel="vs last mo" Icon={CalendarDays} accent="yellow" />
+      </KpiRow>
 
-      <div className={CARD}>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-500 cursor-pointer dark:text-gray-400">
-            <input type="checkbox" checked={showDischarged} onChange={e => { setShowDischarged(e.target.checked); setPage(0) }} className="w-4 h-4 rounded" />
-            Show discharged
-          </label>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400 font-mono tabular-nums">{filtered.length} records</span>
-            <div className="relative">
-              <Search className="absolute w-4 h-4 text-gray-400 -translate-y-1/2 pointer-events-none left-3 top-1/2" />
-              <input type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} placeholder="Search…"
-                className="w-44 py-2 pl-9 pr-3 text-sm border border-gray-200 rounded-lg sm:w-56 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-            </div>
-          </div>
-        </div>
+      <Toolbar
+        filters={['All', 'In Building', 'At Work', 'On Pass', 'Hospital']}
+        active={statusFilter}
+        onFilter={setStatusFilter}
+        count={rows.length}
+        search={search}
+        onSearch={setSearch}
+      />
 
-        {paged.length === 0 ? (
-          <div className="px-5 py-12 text-center text-gray-400">No clients found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 dark:bg-gray-700">
-                <tr>
-                  <SortHeader col="room" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Rm</SortHeader>
-                  <SortHeader col="name" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Name</SortHeader>
-                  <SortHeader col="case_manager" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Case Manager</SortHeader>
-                  <SortHeader col="phone" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Phone</SortHeader>
-                  <SortHeader col="intake" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Intake</SortHeader>
-                  <SortHeader col="discharge" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Discharge</SortHeader>
-                  <SortHeader col="status" sortKey={sortKey} sortDir={sortDir} onSort={handleSort}>Status</SortHeader>
-                  {canEdit && <th className={`${TH} text-right`}>Actions</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {paged.map(c => {
-                  const isVacant  = c.name === 'VACANT' && !c.is_special
-                  const isSpecial = !!c.is_special
-                  const isLocked  = !c.is_active && !!c.discharge_date && c.discharge_date < todayStr()
-                  const dim = isVacant || isSpecial
-                  return (
-                    <tr key={c.id} className={`hover:bg-primary-50/60 dark:hover:bg-gray-700/40 ${(!c.is_active && !dim) ? 'opacity-60' : ''}`}>
-                      <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">{c.room}</td>
-                      <td className="px-4 py-2.5">
-                        {isSpecial ? (
-                          <span className="inline-flex items-center gap-2">
-                            <span>🏷️</span>
-                            <span className="italic text-gray-600 dark:text-gray-300">{c.special_label || c.name || 'Special Room'}</span>
-                            <Pill tone="purple">Special</Pill>
-                          </span>
-                        ) : isVacant ? (
-                          <span className="italic text-gray-400">Vacant</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-2">
-                            {c.photo && (
-                              <img src={c.photo} alt="" onClick={() => setPhotoPopout({ src: c.photo, name: c.name })}
-                                className="object-cover rounded-full cursor-pointer w-7 h-7 ring-1 ring-gray-200" />
-                            )}
-                            <button onClick={() => openProfile(c.id)} className="font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{c.name}</button>
-                            {!c.is_active && <Pill tone="red">Discharged</Pill>}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-gray-600 dark:text-gray-300">{dim ? '—' : (c.case_manager || '—')}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-600 dark:text-gray-300">{dim ? '—' : (formatPhone(c.phone) || '—')}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">{dim ? '—' : fmtDate(c.intake_date)}</td>
-                      <td className="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">{dim ? '—' : fmtDate(c.discharge_date)}</td>
-                      <td className="px-4 py-2.5">
-                        {isSpecial ? <Pill tone="purple">Special</Pill>
-                          : isVacant ? <Pill tone="gray">Vacant</Pill>
-                          : c.is_active ? <Pill tone="green">Active</Pill>
-                          : <Pill tone="red">{isLocked ? '🔒 Discharged' : 'Discharged'}</Pill>}
-                      </td>
-                      {canEdit && (
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                            {isVacant ? (
-                              <button onClick={() => { setAddForm({ ...BLANK_ADD, room: c.room }); setAddError(''); setAddModal(true) }}
-                                className="px-2.5 py-1 text-xs font-semibold text-white rounded-md bg-primary-600 hover:bg-primary-700">+ Assign</button>
-                            ) : isSpecial ? (
-                              <span className="text-xs italic text-gray-400">Manage in Facility Setup</span>
-                            ) : c.is_active ? (
-                              <>
-                                <button onClick={() => openEdit(c)}
-                                  className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Edit</button>
-                                <button onClick={() => openDischarge(c)}
-                                  className="px-2.5 py-1 text-xs font-medium text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Discharge</button>
-                              </>
-                            ) : isLocked ? (
-                              <span className="text-xs italic text-gray-400">🔒 Record locked</span>
-                            ) : (
-                              <button onClick={() => openReactivate(c)}
-                                className="px-2.5 py-1 text-xs font-semibold text-white bg-green-600 rounded-md hover:bg-green-700">↩ Reactivate</button>
-                            )}
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {totalPages > 1 && (
-          <div className="flex items-center gap-3 px-4 py-3 border-t border-gray-200 dark:border-gray-700">
-            <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">← Prev</button>
-            <span className="text-sm text-gray-500 dark:text-gray-400 font-mono tabular-nums">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-            <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Next →</button>
-          </div>
-        )}
-      </div>
+      <Table headers={[{ label: 'Resident' }, { label: 'Status' }, { label: 'Phase' }, { label: 'Sobriety' }, { label: 'Case Manager' }, { label: '', right: true }]}>
+        {rows.length === 0 ? (
+          <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No residents found.</td></tr>
+        ) : rows.map((c, i) => {
+          const st = STATUS[statuses[c.id] || 'building'] || STATUS.building
+          const days = daysSince(c.intake_date)
+          return (
+            <tr key={c.id} className={rowCls(i)}>
+              <NameCell name={c.name} sub={`Rm ${c.room}`} onClick={() => openProfile(c.id)} />
+              <BadgeCell tone={st.tone} label={st.label} />
+              <TextCell>{c.program_track || '—'}</TextCell>
+              {days != null ? <DaysCell>{days}</DaysCell> : <MutedCell>—</MutedCell>}
+              <MutedCell>{c.case_manager || '—'}</MutedCell>
+              <ActionsCell>
+                {canEdit && (
+                  <div className="relative inline-block text-left">
+                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    {menuId === c.id && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+                        <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
+                          <button onClick={() => { setMenuId(null); openEdit(c) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Edit</button>
+                          <button onClick={() => { setMenuId(null); openDischarge(c) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Discharge</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </ActionsCell>
+            </tr>
+          )
+        })}
+      </Table>
 
       {/* Edit Modal */}
       {editModal && (

@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { ListChecks, CheckCircle, Users, Printer, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { CARD, Header, Kpi, KpiRow } from '../../components/console.jsx'
 
 function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 
@@ -211,90 +213,77 @@ export default function ChoresTab() {
 
   const isThisWeek = weekStart === getWeekStart(today)
 
+  const navBtn = 'inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+
   return (
     <div>
+      <Header
+        crumb={['Daily Ops', 'Chores']}
+        title="Chores"
+        sub="Weekly chore assignments and completion log"
+        actions={[
+          { Icon: Printer, label: 'Print List', onClick: () => printChoreAssignments(clients, weekStart) },
+        ]}
+      />
+
+      <KpiRow>
+        <Kpi label="Week Completion" value={`${weekStats.pct}%`} sub={`${weekStats.done}/${weekStats.total} logged`} Icon={CheckCircle} accent={weekStats.pct >= 80 ? 'green' : weekStats.pct >= 50 ? 'yellow' : 'red'} />
+        <Kpi label="Active Residents" value={clients.length} sub="on the roster" Icon={Users} accent="primary" />
+        <Kpi label="Defined Chores" value={masterChores.length} sub="in master list" Icon={ListChecks} accent="sky" />
+      </KpiRow>
+
       {/* Master Chore List */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Master Chore List</span></div>
+      <div className={`${CARD} mb-4`}>
+        <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Master Chore List</h3>
+        <div className="flex flex-wrap gap-2">
+          {masterChores.map((chore, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full dark:bg-gray-700 dark:text-gray-200">
+              {chore}
+              {canAssign && (
+                <button onClick={() => removeMasterChore(i)} className="text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>
+              )}
+            </span>
+          ))}
+          {masterChores.length === 0 && <span className="text-sm text-gray-400">No chores defined yet.</span>}
         </div>
-        <div className="section-body">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: masterChores.length > 0 ? 10 : 0 }}>
-            {masterChores.map((chore, i) => (
-              <span key={i} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: '#f1f5f9', border: '1px solid var(--line)',
-                borderRadius: 20, padding: '3px 10px', fontSize: '.8rem', fontWeight: 600,
-              }}>
-                {chore}
-                {canAssign && (
-                  <button onClick={() => removeMasterChore(i)} style={{
-                    background: 'none', border: 'none', cursor: 'pointer',
-                    color: '#94a3b8', fontSize: '.8rem', padding: 0, lineHeight: 1,
-                  }}>×</button>
-                )}
-              </span>
-            ))}
-            {masterChores.length === 0 && (
-              <span style={{ color: '#94a3b8', fontSize: '.84rem' }}>No chores defined yet.</span>
-            )}
+        {canAssign && (
+          <div className="flex gap-2 mt-3">
+            <input type="text" value={newChore} onChange={e => setNewChore(e.target.value)}
+              placeholder="Add chore…" onKeyDown={e => e.key === 'Enter' && addMasterChore()}
+              className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+            <button onClick={addMasterChore} disabled={savingChores}
+              className="px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50">+ Add</button>
           </div>
-          {canAssign && (
-            <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
-              <input type="text" value={newChore} onChange={e => setNewChore(e.target.value)}
-                placeholder="Add chore…" onKeyDown={e => e.key === 'Enter' && addMasterChore()}
-                style={{ flex: 1, fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none' }} />
-              <button className="btn-add btn-add-b" onClick={addMasterChore} disabled={savingChores}>+ Add</button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Weekly Chore Log */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left">
-            <span className="sh-dot" />
-            <span>Weekly Chore Log</span>
-            {loadingWeek && <span style={{ fontSize: '.72rem', color: '#94a3b8', marginLeft: 8 }}>Loading…</span>}
+      <div className={`${CARD}`} style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Weekly Chore Log</h3>
+            {loadingWeek && <span className="text-xs text-gray-400">Loading…</span>}
           </div>
-          <button onClick={() => printChoreAssignments(clients, weekStart)}
-            style={{ padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 5, background: '#f8fafc', cursor: 'pointer', fontSize: '.78rem' }}>
-            Print List
-          </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: '.75rem', color: '#94a3b8', fontFamily: 'var(--mono)' }}>
-              {weekStats.done}/{weekStats.total} ({weekStats.pct}%)
-            </span>
-            {/* Week navigation */}
-            <button onClick={() => setWeekStart(w => offsetWeek(w, -1))}
-              style={{ padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 5, background: '#f8fafc', cursor: 'pointer', fontSize: '.78rem' }}>
-              ← Prev
-            </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setWeekStart(w => offsetWeek(w, -1))} className={navBtn}><ChevronLeft className="w-4 h-4" /> Prev</button>
             <button onClick={() => setWeekStart(getWeekStart(today))}
-              style={{
-                padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 5, cursor: 'pointer', fontSize: '.78rem',
-                background: isThisWeek ? 'var(--accent)' : '#f8fafc',
-                color: isThisWeek ? '#fff' : 'inherit',
-                fontWeight: isThisWeek ? 700 : 400,
-              }}>
+              className={isThisWeek
+                ? 'inline-flex items-center px-3 py-1.5 text-xs font-medium text-white rounded-lg bg-primary-600'
+                : navBtn}>
               This Week
             </button>
-            <button onClick={() => setWeekStart(w => offsetWeek(w, 1))}
-              style={{ padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 5, background: '#f8fafc', cursor: 'pointer', fontSize: '.78rem' }}>
-              Next →
-            </button>
+            <button onClick={() => setWeekStart(w => offsetWeek(w, 1))} className={navBtn}>Next <ChevronRight className="w-4 h-4" /></button>
           </div>
         </div>
 
         {/* Week range label */}
-        <div style={{ padding: '6px 16px', background: '#f8fafc', borderBottom: '1px solid var(--line)', fontSize: '.78rem', color: '#64748b', fontWeight: 600 }}>
+        <div className="px-4 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700 dark:text-gray-400">
           {fmtWeekRange(weekDays)}
         </div>
 
-        <div className="section-body" style={{ padding: 0 }}>
+        <div style={{ padding: 0 }}>
           {clients.length === 0 ? (
-            <div className="empty-state">No active residents.</div>
+            <div className="p-8 text-sm text-center text-gray-400">No active residents.</div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table style={{ minWidth: 700 }}>

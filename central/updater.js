@@ -10,9 +10,9 @@
  *   rollback() — restore code from the most recent backup, then restart
  *
  * Differences from the facility updater:
- *   - runtime payload is server.js/db.js/updater.js/package*.json + public/
- *     (no client/dist, no migrations dir)
- *   - bundle is sanity-checked for server.js + public/index.html
+ *   - runtime payload is server.js/db.js/updater.js/package*.json + client/dist/
+ *     (the Vite-built console UI; no migrations dir)
+ *   - bundle is sanity-checked for server.js + client/dist/index.html
  *   - no WebSocket: progress is read by the console polling status()
  *
  * Security: download hosts are allow-listed; the bundle's sha256 AND a vendor
@@ -36,7 +36,7 @@ MCowBQYDK2VwAyEAFtGFXRfmB1goFWdp+CGmv+LqC6LsQOdmCZe79038Y0U=
 // Central runtime files/dirs an update bundle may replace. data/ and
 // node_modules/ are NEVER touched.
 const RUNTIME_FILES = ['server.js', 'db.js', 'updater.js', 'package.json', 'package-lock.json'];
-const RUNTIME_DIRS = ['public'];
+const RUNTIME_DIRS = ['client/dist'];
 
 function cmpSemver(a, b) {
   const pa = String(a || '0').split('.').map(n => parseInt(n, 10) || 0);
@@ -270,8 +270,8 @@ function createUpdater(ctx) {
       rmrf(stageDir);
       await extractZip(zipPath, stageDir);
       const root = _bundleRoot(stageDir);
-      if (!fs.existsSync(path.join(root, 'server.js')) || !fs.existsSync(path.join(root, 'public', 'index.html')))
-        throw new Error('Bundle is missing server.js or public/index.html — aborting');
+      if (!fs.existsSync(path.join(root, 'server.js')) || !fs.existsSync(path.join(root, 'client', 'dist', 'index.html')))
+        throw new Error('Bundle is missing server.js or client/dist/index.html — aborting');
 
       // 4. Backup current code + database
       setState({ phase: 'backup', pct: 68, message: 'Backing up current install…' });

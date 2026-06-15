@@ -1,3 +1,7 @@
 node_modules/
 data/
 *.log
+
+# Vite-built console UI (rebuilt by run.bat / release)
+client/dist/
+client/.vite/

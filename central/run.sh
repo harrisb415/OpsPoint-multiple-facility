@@ -6,6 +6,10 @@ set -e
 cd "$(dirname "$0")"
 command -v node >/dev/null 2>&1 || { echo "ERROR: Node.js not found."; exit 1; }
 [ -d node_modules ] || npm install
+if [ ! -f client/dist/index.html ]; then
+  echo "Building the console UI…"
+  ( cd client && { [ -d node_modules ] || npm install; } && npm run build )
+fi
 mkdir -p data
 echo "OpsPoint Central — starting (supervised) on :4000…"
 exec node bootstrap.js

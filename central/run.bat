@@ -17,6 +17,16 @@ if not exist node_modules\ (
   if %ERRORLEVEL% neq 0 ( echo  ERROR: npm install failed. & pause & exit /b 1 )
 )
 
+if not exist client\dist\index.html (
+  echo  Building the console UI...
+  pushd client
+  if not exist node_modules\ npm install
+  if %ERRORLEVEL% neq 0 ( echo  ERROR: client npm install failed. & popd & pause & exit /b 1 )
+  npm run build
+  if %ERRORLEVEL% neq 0 ( echo  ERROR: client build failed. & popd & pause & exit /b 1 )
+  popd
+)
+
 if not exist data\ mkdir data
 
 set "_proto=http"

@@ -499,9 +499,17 @@ app.post('/api/rollout/:action', requireAdmin, (req, res) => {
   res.json({ ok: true, rollout: updated });
 });
 
-// ── Console (static SPA-ish single page) ─────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// ── Console (Vite-built React SPA in client/dist) ────────────────────────
+// The console is a React SPA built by `cd client && npm run build`
+// (run.bat / run.sh do this automatically on first launch).
+const CLIENT_DIST = path.join(__dirname, 'client', 'dist');
+const INDEX_HTML = path.join(CLIENT_DIST, 'index.html');
+app.use(express.static(CLIENT_DIST));
+app.get('*', (req, res) => {
+  if (!fs.existsSync(INDEX_HTML))
+    return res.status(503).send('Console not built — run "npm run build" in central/client.');
+  res.sendFile(INDEX_HTML);
+});
 
 // ── Boot (HTTP, or HTTPS if certs present) ───────────────────────────────
 const certPath = path.join(DATA_DIR, 'cert.pem');

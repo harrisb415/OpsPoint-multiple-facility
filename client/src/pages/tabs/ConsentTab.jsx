@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { ShieldCheck, FileCheck, Share2, Plus } from 'lucide-react'
+import { CARD, Header, Kpi, KpiRow, Table, NameCell, MonoCell, MutedCell, TextCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function fmtDate(d) {
@@ -9,13 +11,13 @@ function fmtDate(d) {
   catch { return d }
 }
 
-function StatusBadge({ row }) {
-  if (row.revoked) return <span className="vbadge vbadge-waived">Revoked</span>
+function consentStatus(row) {
+  if (row.revoked) return { key: 'revoked', tone: 'gray', label: 'Revoked' }
   if (row.expiration_date) {
     const exp = new Date(row.expiration_date + 'T23:59:59')
-    if (exp < new Date()) return <span className="vbadge vbadge-waived">Expired</span>
+    if (exp < new Date()) return { key: 'expired', tone: 'gray', label: 'Expired' }
   }
-  return <span className="vbadge vbadge-completed">Active</span>
+  return { key: 'active', tone: 'green', label: 'Active' }
 }
 
 const BLANK = {
@@ -34,6 +36,7 @@ const INFO_TYPES = [
   { value:'med_administration_log', label:'Med admin log only' },
   { value:'discharge_records',   label:'Discharge record only' },
 ]
+const INFO_LABEL = Object.fromEntries(INFO_TYPES.map(t => [t.value, t.label]))
 
 export default function ConsentTab() {
   const { data } = useData()
@@ -111,97 +114,97 @@ export default function ConsentTab() {
     loadConsents(selectedClient)
   }
 
+  const activeCount = consents.filter(c => consentStatus(c).key === 'active').length
+  const inactiveCount = consents.length - activeCount
+
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>42 CFR Part 2 — Consent &amp; Disclosures</span></div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-            <select value={selectedClient} onChange={e=>setSelectedClient(e.target.value)}>
-              <option value="">— select resident —</option>
-              {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-            </select>
-            {canManage && selectedClient && (
-              <button className="btn btn-primary" onClick={()=>{ setForm(BLANK); setModalErr(''); setModal(true) }}>
-                + New Consent
-              </button>
-            )}
-          </div>
+      <Header
+        crumb={['Records', 'Consents']}
+        title="Consents"
+        sub="42 CFR Part 2 — consent &amp; disclosure tracking"
+        actions={canManage && selectedClient ? [
+          { Icon: Plus, label: 'New Consent', primary: true, onClick: () => { setForm(BLANK); setModalErr(''); setModal(true) } },
+        ] : []}
+      />
+
+      {/* Resident selector */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Resident:</span>
+        <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)}
+          className="px-2.5 py-1.5 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">— select resident —</option>
+          {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
+        </select>
+      </div>
+
+      {!selectedClient ? (
+        <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>
+          Select a resident to view their consent records and disclosure history.
         </div>
-        <div className="section-body">
-          {!selectedClient ? (
-            <div style={{ color:'#94a3b8', padding:'16px 0' }}>
-              Select a resident to view their consent records and disclosure history.
-            </div>
-          ) : loading ? (
-            <div>Loading…</div>
-          ) : err ? (
-            <div className="auth-error">{err}</div>
-          ) : (
+      ) : loading ? (
+        <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>Loading…</div>
+      ) : err ? (
+        <div className={`${CARD} p-8 text-sm text-center text-red-600`}>{err}</div>
+      ) : (
+        <>
+          <KpiRow>
+            <Kpi label="Active Consents" value={activeCount} sub="currently in force" Icon={ShieldCheck} accent="green" />
+            <Kpi label="Revoked / Expired" value={inactiveCount} sub="no longer valid" Icon={FileCheck} accent="primary" />
+            {canViewDisc && <Kpi label="Disclosures" value={disclosures.length} sub="external releases logged" Icon={Share2} accent="sky" />}
+          </KpiRow>
+
+          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Active &amp; historical consents</h3>
+          {consents.length === 0
+            ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No consent records on file.</div>
+            : (
+              <Table headers={[{ label: 'Recipient' }, { label: 'Purpose' }, { label: 'Scope' }, { label: 'Effective' }, { label: 'Expires' }, { label: 'Status' }, { label: '', right: true }]}>
+                {consents.map((c, i) => {
+                  const st = consentStatus(c)
+                  return (
+                    <tr key={c.id} className={rowCls(i)}>
+                      <NameCell name={c.recipient_name} sub={c.recipient_org || ''} square />
+                      <MutedCell>{c.purpose}</MutedCell>
+                      <MutedCell>{INFO_LABEL[c.information_type] || c.information_type}</MutedCell>
+                      <MonoCell>{fmtDate(c.effective_date)}</MonoCell>
+                      <MonoCell>{c.expiration_date ? fmtDate(c.expiration_date) : '—'}</MonoCell>
+                      <BadgeCell tone={st.tone} label={st.label} />
+                      <ActionsCell>
+                        {!c.revoked && canManage
+                          ? <button onClick={() => revoke(c)} className="px-3 py-1.5 text-xs font-medium text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30">Revoke</button>
+                          : <span className="text-xs text-gray-300">—</span>}
+                      </ActionsCell>
+                    </tr>
+                  )
+                })}
+              </Table>
+            )
+          }
+
+          {canViewDisc && (
             <>
-              <h3 style={{ fontSize:'.92em', margin:'4px 0 8px' }}>Active &amp; historical consents</h3>
-              {consents.length === 0
-                ? <div style={{ color:'#94a3b8' }}>No consent records on file.</div>
+              <h3 className="mt-6 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Disclosure history</h3>
+              {disclosures.length === 0
+                ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No external disclosures logged.</div>
                 : (
-                  <table className="table">
-                    <thead><tr>
-                      <th>Recipient</th><th>Purpose</th><th>Scope</th><th>Effective</th><th>Expires</th><th>Status</th><th></th>
-                    </tr></thead>
-                    <tbody>
-                      {consents.map(c => (
-                        <tr key={c.id}>
-                          <td>
-                            <strong>{c.recipient_name}</strong>
-                            {c.recipient_org && <div style={{ fontSize:'.75em', color:'#64748b' }}>{c.recipient_org}</div>}
-                          </td>
-                          <td style={{ fontSize:'.85em' }}>{c.purpose}</td>
-                          <td style={{ fontSize:'.85em' }}>{c.information_type}</td>
-                          <td>{fmtDate(c.effective_date)}</td>
-                          <td>{c.expiration_date ? fmtDate(c.expiration_date) : '—'}</td>
-                          <td><StatusBadge row={c}/></td>
-                          <td style={{ textAlign:'right' }}>
-                            {!c.revoked && canManage && (
-                              <button className="btn btn-sm btn-danger" onClick={()=>revoke(c)}>Revoke</button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <Table headers={[{ label: 'When' }, { label: 'Recipient' }, { label: 'Scope' }, { label: 'Method' }, { label: 'By' }, { label: 'Consent' }]}>
+                    {disclosures.map((d, i) => (
+                      <tr key={d.id} className={rowCls(i)}>
+                        <MonoCell>{fmtDate((d.disclosed_at||'').slice(0,10))} {(d.disclosed_at||'').slice(11,16)}</MonoCell>
+                        <TextCell>{d.recipient}</TextCell>
+                        <MutedCell>{INFO_LABEL[d.information_type] || d.information_type}</MutedCell>
+                        <MutedCell>{d.method || '—'}</MutedCell>
+                        <MutedCell>{d.disclosed_by_name}</MutedCell>
+                        <MonoCell>{d.consent_id ? '✓ #' + d.consent_id : '—'}</MonoCell>
+                      </tr>
+                    ))}
+                  </Table>
                 )
               }
-
-              {canViewDisc && (
-                <>
-                  <h3 style={{ fontSize:'.92em', margin:'20px 0 8px' }}>Disclosure history</h3>
-                  {disclosures.length === 0
-                    ? <div style={{ color:'#94a3b8' }}>No external disclosures logged.</div>
-                    : (
-                      <table className="table">
-                        <thead><tr>
-                          <th>When</th><th>Recipient</th><th>Scope</th><th>Method</th><th>By</th><th>Consent</th>
-                        </tr></thead>
-                        <tbody>
-                          {disclosures.map(d => (
-                            <tr key={d.id}>
-                              <td>{fmtDate((d.disclosed_at||'').slice(0,10))} {(d.disclosed_at||'').slice(11,16)}</td>
-                              <td>{d.recipient}</td>
-                              <td style={{ fontSize:'.85em' }}>{d.information_type}</td>
-                              <td>{d.method || '—'}</td>
-                              <td style={{ fontSize:'.85em' }}>{d.disclosed_by_name}</td>
-                              <td>{d.consent_id ? '✓ #' + d.consent_id : '—'}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )
-                  }
-                </>
-              )}
             </>
           )}
-        </div>
-      </div>
+        </>
+      )}
 
       {modal && (
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(false)}>

@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react'
+import { Award, Plus, Lock } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { CARD, Header, Badge, Table, NameCell, MutedCell, MonoCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+
+const MS_TONE  = { in_progress: 'yellow', completed: 'green', waived: 'gray' }
+const MS_LABEL = { in_progress: 'In Progress', completed: 'Completed', waived: 'Waived' }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function fmtDate(d) {
@@ -22,13 +27,7 @@ function completedOn(m) {
 }
 
 function StatusBadge({ status }) {
-  const cls = {
-    in_progress: 'vbadge vbadge-pending',
-    completed:   'vbadge vbadge-completed',
-    waived:      'vbadge vbadge-waived',
-  }
-  const labels = { in_progress: 'In Progress', completed: 'Completed', waived: 'Waived' }
-  return <span className={cls[status] || 'vbadge vbadge-pending'}>{labels[status] || status}</span>
+  return <Badge tone={MS_TONE[status] || 'gray'}>{MS_LABEL[status] || status}</Badge>
 }
 
 const BLANK = { client_id: '', client_name: '', phase: '', objective: '', target_date: '', notes: '', goal_ref: '' }
@@ -181,95 +180,92 @@ export default function MilestonesTab() {
     return Object.values(map)
   }, [filtered])
 
+  const actionBtn = 'px-2.5 py-1 text-xs font-medium rounded-lg'
+
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Program Milestones</span></div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-            <select value={view} onChange={e=>setView(e.target.value)}>
-              <option value="by_client">By Resident</option>
-              <option value="list">All (list)</option>
-            </select>
-            <select value={filterClient} onChange={e=>setFilterClient(e.target.value)}>
-              <option value="">All residents</option>
-              {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-              <option value="waived">Waived</option>
-            </select>
-            {canEdit && <button className="btn btn-primary" onClick={()=>openAdd()}>+ Add Milestone</button>}
-          </div>
-        </div>
-        <div className="section-body">
-          {filtered.length === 0
-            ? <div style={{ color:'#94a3b8', padding:'16px 0' }}>No milestones.</div>
-            : view === 'list' ? (
-              <table className="table">
-                <thead><tr>
-                  <th>Resident</th><th>Phase</th><th>Objective</th><th>Target</th><th>Completed</th><th>Status</th><th>Signed off by</th><th>Logged</th><th></th>
-                </tr></thead>
-                <tbody>
-                  {filtered.map(m => (
-                    <tr key={m.id}>
-                      <td>{m.client_name}</td>
-                      <td>{m.phase}</td>
-                      <td>{m.objective}</td>
-                      <td>{fmtDate(m.target_date)}</td>
-                      <td style={{ color: m.status === 'completed' ? '#15803d' : '#94a3b8' }}>{m.status === 'completed' ? fmtDate(completedOn(m)) : '—'}</td>
-                      <td><StatusBadge status={m.status}/></td>
-                      <td style={{ fontSize:'.85em' }}>{m.counselor_name || '—'}</td>
-                      <td style={{ fontSize:'.85em', color:'#94a3b8', whiteSpace:'nowrap' }}>{fmtLogged(m.created_at)}</td>
-                      <td style={{ textAlign:'right', whiteSpace:'nowrap' }}>
-                        {m.locked_at
-                          ? (canUnlock ? <button className="btn btn-sm" onClick={()=>{setUnlockReason(''); setUnlockModal(m)}}>🔒</button> : <span>🔒</span>)
-                          : <>
-                              {canEdit && <button className="btn btn-sm" onClick={()=>openEdit(m)}>Edit</button>}
-                              {m.status === 'in_progress' && canSignoff && (
-                                <button className="btn btn-sm btn-primary" style={{ marginLeft:6 }} onClick={()=>signoff(m)}>✓ Complete</button>
-                              )}
-                              {m.status === 'in_progress' && canEdit && (
-                                <button className="btn btn-sm" style={{ marginLeft:6 }} onClick={()=>setStatus(m,'waived')}>Waive</button>
-                              )}
-                              {canEdit && <button className="btn btn-sm btn-danger" style={{ marginLeft:6 }} onClick={()=>del(m)}>Delete</button>}
-                            </>
-                        }
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              grouped.map(g => (
-                <div key={g.id} style={{ borderBottom:'1px solid var(--line)', padding:'10px 0' }}>
-                  <div style={{ fontWeight:700, marginBottom:4 }}>{g.name}</div>
-                  <ul style={{ margin:0, paddingLeft:18 }}>
-                    {g.items.map(m => (
-                      <li key={m.id} style={{ fontSize:'.9em', marginBottom:8 }}>
-                        <strong>{m.phase}</strong> — {m.objective}{' '}
-                        <StatusBadge status={m.status}/>{' '}
-                        {m.target_date && <span style={{ color:'#64748b' }}>target {fmtDate(m.target_date)}</span>}{' '}
-                        {m.status === 'completed' && completedOn(m) &&
-                          <span style={{ color:'#15803d', fontWeight:600 }}>· completed {fmtDate(completedOn(m))}</span>}{' '}
-                        {!m.locked_at && m.status === 'in_progress' && canSignoff &&
-                          <button className="btn btn-sm btn-primary" onClick={()=>signoff(m)}>✓ Complete</button>}
-                        {!m.locked_at && canEdit &&
-                          <button className="btn btn-sm" style={{ marginLeft:4 }} onClick={()=>openEdit(m)}>Edit</button>}
-                        <div style={{ fontSize:'.82em', color:'#94a3b8', marginTop:2 }}>
-                          Logged {fmtLogged(m.created_at)}{m.counselor_name ? ` · signed off by ${m.counselor_name}` : ''}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
-            )
-          }
-        </div>
+      <Header
+        crumb={['Clinical', 'Milestones']}
+        title="Milestones"
+        sub="Program milestones and phase objectives"
+        actions={canEdit ? [{ Icon: Plus, label: 'Add Milestone', primary: true, onClick: () => openAdd() }] : []}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <select value={view} onChange={e=>setView(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="by_client">By Resident</option>
+          <option value="list">All (list)</option>
+        </select>
+        <select value={filterClient} onChange={e=>setFilterClient(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">All residents</option>
+          {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">All statuses</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="waived">Waived</option>
+        </select>
+        <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
+
+      {filtered.length === 0
+        ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No milestones.</div>
+        : view === 'list' ? (
+          <Table headers={[{ label: 'Resident' }, { label: 'Phase' }, { label: 'Objective' }, { label: 'Target' }, { label: 'Completed' }, { label: 'Status' }, { label: 'Signed Off By' }, { label: 'Logged' }, { label: '', right: true }]}>
+            {filtered.map((m, i) => (
+              <tr key={m.id} className={rowCls(i)}>
+                <NameCell name={m.client_name} />
+                <MutedCell>{m.phase}</MutedCell>
+                <MutedCell>{m.objective}</MutedCell>
+                <MonoCell>{fmtDate(m.target_date)}</MonoCell>
+                <MonoCell>{m.status === 'completed' ? fmtDate(completedOn(m)) : '—'}</MonoCell>
+                <BadgeCell tone={MS_TONE[m.status] || 'gray'} label={MS_LABEL[m.status] || m.status} />
+                <MutedCell>{m.counselor_name || '—'}</MutedCell>
+                <MonoCell>{fmtLogged(m.created_at)}</MonoCell>
+                <ActionsCell>
+                  <div className="inline-flex items-center justify-end gap-1">
+                    {m.locked_at
+                      ? (canUnlock
+                          ? <button onClick={()=>{setUnlockReason(''); setUnlockModal(m)}} title="Unlock" className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><Lock className="w-4 h-4" /></button>
+                          : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
+                      : <>
+                          {canEdit && <button onClick={()=>openEdit(m)} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Edit</button>}
+                          {m.status === 'in_progress' && canSignoff && <button onClick={()=>signoff(m)} className={`${actionBtn} text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30`}>✓ Complete</button>}
+                          {m.status === 'in_progress' && canEdit && <button onClick={()=>setStatus(m,'waived')} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Waive</button>}
+                          {canEdit && <button onClick={()=>del(m)} className={`${actionBtn} text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30`}>Delete</button>}
+                        </>
+                    }
+                  </div>
+                </ActionsCell>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>
+            {grouped.map(g => (
+              <div key={g.id} className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{g.name}</div>
+                <ul className="space-y-2">
+                  {g.items.map(m => (
+                    <li key={m.id} className="text-sm text-gray-600 dark:text-gray-300">
+                      <strong className="text-gray-900 dark:text-white">{m.phase}</strong> — {m.objective}{' '}
+                      <StatusBadge status={m.status}/>{' '}
+                      {m.target_date && <span className="text-gray-400">target {fmtDate(m.target_date)}</span>}{' '}
+                      {m.status === 'completed' && completedOn(m) && <span className="font-medium text-green-600 dark:text-green-400">· completed {fmtDate(completedOn(m))}</span>}{' '}
+                      {!m.locked_at && m.status === 'in_progress' && canSignoff && <button onClick={()=>signoff(m)} className={`${actionBtn} text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30`}>✓ Complete</button>}
+                      {!m.locked_at && canEdit && <button onClick={()=>openEdit(m)} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Edit</button>}
+                      <div className="mt-1 text-xs text-gray-400">
+                        Logged {fmtLogged(m.created_at)}{m.counselor_name ? ` · signed off by ${m.counselor_name}` : ''}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )
+      }
 
       {modal && (
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>

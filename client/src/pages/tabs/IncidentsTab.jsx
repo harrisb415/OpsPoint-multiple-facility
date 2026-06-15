@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react'
+import { Plus, Lock } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { CARD, Header, Badge, Table, NameCell, MonoCell, MutedCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+
+const SEV_TONE = { low: 'blue', medium: 'yellow', high: 'orange', critical: 'red' }
+const STATUS_TONE = { open: 'yellow', reviewed: 'blue', closed: 'green' }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function nowTime()  { const d = new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
@@ -12,22 +17,11 @@ function fmtDate(d) {
 }
 
 const SEVERITY_LABEL = { low:'Low', medium:'Medium', high:'High', critical:'Critical' }
-const SEVERITY_COLOR = {
-  low:      { bg:'#dbeafe', fg:'#1d4ed8' },
-  medium:   { bg:'#fef3c7', fg:'#92400e' },
-  high:     { bg:'#ffedd5', fg:'#9a3412' },
-  critical: { bg:'#fee2e2', fg:'#991b1b' },
-}
 function SeverityBadge({ severity }) {
-  const c = SEVERITY_COLOR[severity] || SEVERITY_COLOR.low
-  return <span style={{
-    background:c.bg, color:c.fg, padding:'2px 8px', borderRadius:6,
-    fontSize:'.72em', fontWeight:700, textTransform:'uppercase', letterSpacing:'.04em',
-  }}>{SEVERITY_LABEL[severity] || severity}</span>
+  return <Badge tone={SEV_TONE[severity] || 'gray'}>{SEVERITY_LABEL[severity] || severity}</Badge>
 }
 function StatusBadge({ status }) {
-  const cls = { open:'vbadge vbadge-pending', reviewed:'vbadge vbadge-assigned', closed:'vbadge vbadge-completed' }
-  return <span className={cls[status] || 'vbadge'}>{status}</span>
+  return <Badge tone={STATUS_TONE[status] || 'gray'}>{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>
 }
 
 const BLANK = {
@@ -171,84 +165,75 @@ export default function IncidentsTab() {
     })
   }, [incidents, filterClient, filterSev, filterStatus])
 
+  const actionBtn = 'px-2.5 py-1 text-xs font-medium rounded-lg'
+
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Behavioral Incident Reports</span></div>
-          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-            <select value={filterClient} onChange={e=>setFilterClient(e.target.value)}>
-              <option value="">All residents</option>
-              {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-            </select>
-            <select value={filterSev} onChange={e=>setFilterSev(e.target.value)}>
-              <option value="">All severities</option>
-              {Object.entries(SEVERITY_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
-              <option value="">All statuses</option>
-              <option value="open">Open</option>
-              <option value="reviewed">Reviewed</option>
-              <option value="closed">Closed</option>
-            </select>
-            {canLog && <button className="btn btn-primary" onClick={openAdd}>+ New Report</button>}
-          </div>
-        </div>
-        <div className="section-body">
-          <div style={{ fontSize:'.78em', color:'#64748b', marginBottom:8 }}>
-            Behavioral incidents are formal regulatory documents — distinct from program-rule violations.
-            Severity drives mandatory notifications.
-          </div>
-          {filtered.length === 0
-            ? <div style={{ color:'#94a3b8', padding:'16px 0' }}>No incident reports.</div>
-            : (
-              <table className="table">
-                <thead><tr>
-                  <th>Date</th><th>Resident</th><th>Severity</th><th>Narrative</th><th>Status</th><th>Reviewer</th><th></th>
-                </tr></thead>
-                <tbody>
-                  {filtered.map(i => (
-                    <tr key={i.id}>
-                      <td>{fmtDate(i.incident_date)} {i.incident_time}</td>
-                      <td>Rm {i.room} · {i.client_name}</td>
-                      <td><SeverityBadge severity={i.severity}/></td>
-                      <td style={{ maxWidth:340 }}>
-                        <div style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                          {i.narrative}
-                        </div>
-                        {i.notifications_required?.length > 0 && (
-                          <div style={{ fontSize:'.72em', color:'#64748b', marginTop:2 }}>
-                            Notify: {i.notifications_required.join(', ')}
-                          </div>
-                        )}
-                      </td>
-                      <td><StatusBadge status={i.status}/></td>
-                      <td style={{ fontSize:'.85em' }}>{i.supervisor_name || '—'}</td>
-                      <td style={{ textAlign:'right', whiteSpace:'nowrap' }}>
-                        {i.locked_at
-                          ? (canUnlock ? <button className="btn btn-sm" onClick={()=>{setUnlockReason(''); setUnlockModal(i)}}>🔒</button> : <span>🔒</span>)
-                          : (
-                            <>
-                              {canLog && <button className="btn btn-sm" onClick={()=>openEdit(i)}>Edit</button>}
-                              {canReview && i.status !== 'closed' && (
-                                <button className="btn btn-sm btn-primary" style={{ marginLeft:6 }}
-                                  onClick={()=>{ setReviewNotes(i.review_notes||''); setReviewStatus(i.status==='open'?'reviewed':'closed'); setReviewModal(i) }}>
-                                  {i.status === 'open' ? 'Review' : 'Close'}
-                                </button>
-                              )}
-                              {canDelete && <button className="btn btn-sm btn-danger" style={{ marginLeft:6 }} onClick={()=>del(i)}>Delete</button>}
-                            </>
-                          )
-                        }
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-          }
-        </div>
+      <Header
+        crumb={['Clinical', 'Incident Reports']}
+        title="Incident Reports"
+        sub="Behavioral incidents are formal regulatory documents — distinct from program-rule infractions; severity drives mandatory notifications"
+        actions={canLog ? [{ Icon: Plus, label: 'New Report', primary: true, onClick: openAdd }] : []}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <select value={filterClient} onChange={e=>setFilterClient(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">All residents</option>
+          {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
+        </select>
+        <select value={filterSev} onChange={e=>setFilterSev(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">All severities</option>
+          {Object.entries(SEVERITY_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="reviewed">Reviewed</option>
+          <option value="closed">Closed</option>
+        </select>
+        <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
+
+      {filtered.length === 0
+        ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No incident reports.</div>
+        : (
+          <Table headers={[{ label: 'Date' }, { label: 'Resident' }, { label: 'Severity' }, { label: 'Narrative' }, { label: 'Status' }, { label: 'Reviewer' }, { label: '', right: true }]}>
+            {filtered.map((i, idx) => (
+              <tr key={i.id} className={rowCls(idx)}>
+                <MonoCell>{fmtDate(i.incident_date)} {i.incident_time}</MonoCell>
+                <NameCell name={i.client_name} sub={`Rm ${i.room}`} />
+                <BadgeCell tone={SEV_TONE[i.severity] || 'gray'} label={SEVERITY_LABEL[i.severity] || i.severity} />
+                <td className="p-3 text-sm text-gray-500 dark:text-gray-400" style={{ maxWidth: 340 }}>
+                  <div className="overflow-hidden whitespace-nowrap text-ellipsis">{i.narrative}</div>
+                  {i.notifications_required?.length > 0 && (
+                    <div className="mt-1 text-xs text-gray-400">Notify: {i.notifications_required.join(', ')}</div>
+                  )}
+                </td>
+                <BadgeCell tone={STATUS_TONE[i.status] || 'gray'} label={i.status.charAt(0).toUpperCase() + i.status.slice(1)} />
+                <MutedCell>{i.supervisor_name || '—'}</MutedCell>
+                <ActionsCell>
+                  <div className="inline-flex items-center justify-end gap-1">
+                    {i.locked_at
+                      ? (canUnlock
+                          ? <button onClick={()=>{setUnlockReason(''); setUnlockModal(i)}} title="Unlock" className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><Lock className="w-4 h-4" /></button>
+                          : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
+                      : <>
+                          {canLog && <button onClick={()=>openEdit(i)} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Edit</button>}
+                          {canReview && i.status !== 'closed' && (
+                            <button onClick={()=>{ setReviewNotes(i.review_notes||''); setReviewStatus(i.status==='open'?'reviewed':'closed'); setReviewModal(i) }} className={`${actionBtn} text-primary-700 hover:bg-primary-50 dark:text-primary-300 dark:hover:bg-primary-900/30`}>
+                              {i.status === 'open' ? 'Review' : 'Close'}
+                            </button>
+                          )}
+                          {canDelete && <button onClick={()=>del(i)} className={`${actionBtn} text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30`}>Delete</button>}
+                        </>
+                    }
+                  </div>
+                </ActionsCell>
+              </tr>
+            ))}
+          </Table>
+        )
+      }
 
       {modal && (
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>

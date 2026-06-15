@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
+import { Users, CalendarCheck, ListChecks, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { CARD, Header, Kpi, KpiRow } from '../../components/console.jsx'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -68,56 +70,78 @@ export default function GroupsTab() {
   }
 
   if (!canView) {
-    return <div className="empty-state">You don't have permission to view group attendance.</div>
+    return <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>You don't have permission to view group attendance.</div>
   }
+
+  const navBtnCls = 'inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+
+  const att = sessions.reduce((acc, s) => {
+    const list = s.attendees || []
+    return { present: acc.present + list.filter(a => a.participation === 'present').length, total: acc.total + list.length }
+  }, { present: 0, total: 0 })
+  const avgPct = att.total > 0 ? Math.round(att.present / att.total * 100) : 0
 
   return (
     <div>
+      <Header
+        crumb={['Daily Ops', 'Groups']}
+        title="Groups"
+        sub="Group attendance — clinicians add and sign session notes under Clinical"
+        actions={canLog ? [
+          { Icon: Plus, label: 'Log Attendance', primary: true, onClick: () => setModal({}) },
+        ] : []}
+      />
+
+      <KpiRow>
+        <Kpi label="Sessions" value={sessions.length} sub="on selected date" Icon={CalendarCheck} accent="primary" />
+        <Kpi label="Avg Attendance" value={`${avgPct}%`} sub={`${att.present}/${att.total} present`} Icon={Users} accent={avgPct >= 80 ? 'green' : avgPct >= 50 ? 'yellow' : 'red'} />
+        <Kpi label="Defined Groups" value={masterGroups.length} sub="in master list" Icon={ListChecks} accent="sky" />
+      </KpiRow>
+
       {/* Master Group List */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Master Group List</span></div>
+      <div className={`${CARD} mb-4`}>
+        <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Master Group List</h3>
+        <div className="flex flex-wrap gap-2">
+          {masterGroups.map((g, i) => (
+            <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full dark:bg-gray-700 dark:text-gray-200">
+              {g}
+              {canLog && <button onClick={() => saveMaster(masterGroups.filter((_, idx) => idx !== i))} className="text-gray-400 hover:text-red-500"><X className="w-3 h-3" /></button>}
+            </span>
+          ))}
+          {masterGroups.length === 0 && <span className="text-sm text-gray-400">No groups defined yet.</span>}
         </div>
-        <div className="section-body">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: masterGroups.length > 0 ? 10 : 0 }}>
-            {masterGroups.map((g, i) => (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f1f5f9', border: '1px solid var(--line)', borderRadius: 20, padding: '3px 10px', fontSize: '.8rem', fontWeight: 600 }}>
-                {g}
-                {canLog && <button onClick={() => saveMaster(masterGroups.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '.8rem', padding: 0, lineHeight: 1 }}>×</button>}
-              </span>
-            ))}
-            {masterGroups.length === 0 && <span style={{ color: '#94a3b8', fontSize: '.84rem' }}>No groups defined yet.</span>}
+        {canLog && (
+          <div className="flex gap-2 mt-3">
+            <input type="text" value={newGroup} onChange={e => setNewGroup(e.target.value)}
+              placeholder="Add group…" onKeyDown={e => e.key === 'Enter' && addMasterGroup()}
+              className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+            <button onClick={addMasterGroup} disabled={savingGroup}
+              className="px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50">+ Add</button>
           </div>
-          {canLog && (
-            <div style={{ display: 'flex', gap: 7, marginTop: 10 }}>
-              <input type="text" value={newGroup} onChange={e => setNewGroup(e.target.value)}
-                placeholder="Add group…" onKeyDown={e => e.key === 'Enter' && addMasterGroup()}
-                style={{ flex: 1, fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none' }} />
-              <button className="btn-add btn-add-b" onClick={addMasterGroup} disabled={savingGroup}>+ Add</button>
-            </div>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Session Log */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Group Attendance</span></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => setViewDate(d => offsetDate(d, -1))} style={navBtn}>← Prev</button>
-            <button onClick={() => setViewDate(todayStr())} style={{ ...navBtn, background: isToday ? 'var(--accent)' : '#f8fafc', color: isToday ? '#fff' : 'inherit', fontWeight: isToday ? 700 : 400 }}>Today</button>
-            <button onClick={() => setViewDate(d => offsetDate(d, 1))} style={navBtn}>Next →</button>
-            {canLog && <button className="btn btn-sm btn-primary" onClick={() => setModal({})}>+ Log Attendance</button>}
+      <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Group Attendance</h3>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setViewDate(d => offsetDate(d, -1))} className={navBtnCls}><ChevronLeft className="w-4 h-4" /> Prev</button>
+            <button onClick={() => setViewDate(todayStr())}
+              className={isToday ? 'inline-flex items-center px-3 py-1.5 text-xs font-medium text-white rounded-lg bg-primary-600' : navBtnCls}>
+              Today
+            </button>
+            <button onClick={() => setViewDate(d => offsetDate(d, 1))} className={navBtnCls}>Next <ChevronRight className="w-4 h-4" /></button>
           </div>
         </div>
 
-        <div style={{ padding: '6px 16px', background: '#f8fafc', borderBottom: '1px solid var(--line)', fontSize: '.78rem', color: '#64748b', fontWeight: 600 }}>
+        <div className="px-4 py-2 text-xs font-semibold text-gray-500 border-b border-gray-200 bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700 dark:text-gray-400">
           {fmtDateHeading(viewDate)}
         </div>
 
-        <div className="section-body" style={{ padding: sessions.length === 0 ? undefined : 0 }}>
+        <div>
           {sessions.length === 0
-            ? <div className="empty-state">No group attendance logged for this date.</div>
+            ? <div className="p-8 text-sm text-center text-gray-400">No group attendance logged for this date.</div>
             : sessions.map(s => (
               <SessionCard key={s.id} session={s} canLog={canLog}
                 onEdit={() => setModal(s)} onDelete={() => deleteSession(s.id)} />
@@ -300,5 +324,4 @@ function SessionCard({ session: s, canLog, onEdit, onDelete }) {
   )
 }
 
-const navBtn = { padding: '3px 10px', border: '1px solid var(--line)', borderRadius: 5, background: '#f8fafc', cursor: 'pointer', fontSize: '.78rem' }
 const pillBtn = { background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', fontSize: '.72rem' }

@@ -1,8 +1,11 @@
 import { useState, useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import { Ban, Flame, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
+import { CARD, Header, Kpi, KpiRow, Toolbar, Table, NameCell, MonoCell, MutedCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -24,6 +27,9 @@ function StatusBadge({ status }) {
 }
 
 const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', notes: '' }
+const VIO_TONE = { pending: 'yellow', assigned: 'blue', waived: 'gray', completed: 'green' }
+const VIO_LABEL = { pending: 'Pending Review', assigned: 'Consequence Assigned', waived: 'Waived', completed: 'Completed' }
+const VIO_STATUS_KEYS = [null, 'pending', 'assigned', 'waived', 'completed']
 
 export default function ViolationsTab() {
   const { data }                = useData()
@@ -33,6 +39,7 @@ export default function ViolationsTab() {
   const canReview   = hasPerm('violations.review')
   const canComplete = hasPerm('violations.complete')
   const canDelete   = hasPerm('violations.delete')
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const clients = useMemo(() =>
     (data?.clients || [])
@@ -50,6 +57,8 @@ export default function ViolationsTab() {
   const [dateRange, setDateRange]     = useState('all')    // this_week | this_month | all
   const [clientFilter, setClientFilter] = useState('')
   const [viewMode, setViewMode]       = useState('list')   // list | by_client
+  const [statusFilter, setStatusFilter] = useState(0)
+  const [menuId, setMenuId]           = useState(null)
 
   const [modal, setModal]             = useState(null)     // null | 'add' | {violation}
   const [reviewModal, setReviewModal] = useState(null)     // null | {violation}
@@ -98,8 +107,12 @@ export default function ViolationsTab() {
   }
 
   const filtered = useMemo(() => {
+    const gq = globalSearch.toLowerCase().trim()
+    const skey = VIO_STATUS_KEYS[statusFilter]
     let rows = violations.filter(v => {
       if (clientFilter && String(v.client_id) !== clientFilter) return false
+      if (skey && v.status !== skey) return false
+      if (gq && !((v.client_name || '').toLowerCase().includes(gq) || String(v.room || '').includes(gq) || (v.description || '').toLowerCase().includes(gq))) return false
       return inRange(v)
     })
     if (sort === 'newest')      rows = [...rows].sort((a,b) => b.id - a.id)
@@ -111,7 +124,7 @@ export default function ViolationsTab() {
       rows = [...rows].sort((a,b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
     }
     return rows
-  }, [violations, clientFilter, dateRange, sort])
+  }, [violations, clientFilter, dateRange, sort, statusFilter, globalSearch])
 
   // By-client grouping
   const byClient = useMemo(() => {
@@ -201,104 +214,98 @@ export default function ViolationsTab() {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Infractions</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{violations.length} total</span>
-            <button onClick={() => setPrintOpen(true)} disabled={violations.length === 0}
-              title="Print violations log"
-              style={{
-                fontSize: '.72rem', padding: '4px 10px',
-                background: '#f1f5f9', border: '1px solid var(--border-light)',
-                color: 'var(--text-muted)', borderRadius: 5, cursor: violations.length ? 'pointer' : 'not-allowed',
-                fontWeight: 600, opacity: violations.length ? 1 : .5,
-              }}>
-              Print
-            </button>
-            {canLog && <button className="btn btn-sm btn-primary" onClick={openAdd}>+ Log Violation</button>}
-          </div>
+      <Header
+        crumb={['Records', 'Infractions']}
+        title="Infractions"
+        sub="House rule infractions and actions taken"
+        actions={[
+          { Icon: Printer, label: 'Print', onClick: () => violations.length && setPrintOpen(true) },
+          ...(canLog ? [{ Icon: Plus, label: 'Log Infraction', primary: true, onClick: openAdd }] : []),
+        ]}
+      />
+
+      <KpiRow>
+        <Kpi label="Total" value={violations.length} sub="logged" Icon={Ban} accent="primary" />
+        <Kpi label="Pending Review" value={violations.filter(v => v.status === 'pending').length} sub="awaiting review" Icon={Flame} accent="red" />
+        <Kpi label="Resolved" value={violations.filter(v => v.status === 'completed' || v.status === 'waived').length} sub="completed or waived" Icon={CheckCircle} accent="green" />
+      </KpiRow>
+
+      <Toolbar
+        filters={['All', 'Pending', 'Assigned', 'Waived', 'Completed']}
+        active={statusFilter}
+        onFilter={setStatusFilter}
+        count={filtered.length}
+      />
+
+      {/* Secondary filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="inline-flex overflow-hidden border border-gray-200 rounded-lg dark:border-gray-700">
+          {['list', 'by_client'].map(m => (
+            <button key={m} onClick={() => setViewMode(m)} className={`px-3 py-1.5 text-xs font-medium ${viewMode === m ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300'}`}>{m === 'list' ? 'List' : 'By Client'}</button>
+          ))}
         </div>
+        <select value={sort} onChange={e => setSort(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="room">By Room</option>
+          <option value="name">By Name</option>
+          <option value="status">By Status</option>
+          {viewMode === 'by_client' && <option value="most">Most Violations</option>}
+        </select>
+        <select value={dateRange} onChange={e => setDateRange(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="all">All Time</option>
+          <option value="this_month">This Month</option>
+          <option value="this_week">This Week</option>
+        </select>
+        <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+          <option value="">All Residents</option>
+          {clientOptions.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
+        </select>
+      </div>
 
-        {/* Toolbar */}
-        <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* View mode */}
-          <div style={{ display: 'flex', border: '1.5px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-            {['list','by_client'].map(m => (
-              <button key={m} onClick={() => setViewMode(m)} style={{
-                padding: '4px 12px', fontSize: '.76rem', fontWeight: 700, border: 'none', cursor: 'pointer',
-                background: viewMode === m ? 'var(--crimson)' : 'transparent',
-                color: viewMode === m ? '#fff' : 'var(--steel)',
-              }}>{m === 'list' ? 'List' : 'By Client'}</button>
-            ))}
-          </div>
+      {/* LIST VIEW */}
+      {viewMode === 'list' && (
+        filtered.length === 0
+          ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No violations found.</div>
+          : (
+            <Table headers={[{ label: 'Resident' }, { label: 'Date' }, { label: 'Description' }, { label: 'Status' }, { label: 'Consequence' }, { label: 'Logged By' }, { label: '', right: true }]}>
+              {filtered.map((v, i) => (
+                <tr key={v.id} className={rowCls(i)}>
+                  <NameCell name={v.client_name} sub={`Rm ${v.room}`} />
+                  <MonoCell>{fmtDate(v.violation_date)}</MonoCell>
+                  <MutedCell>{v.description}</MutedCell>
+                  <BadgeCell tone={VIO_TONE[v.status] || 'gray'} label={VIO_LABEL[v.status] || v.status} />
+                  <MutedCell>{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0, 10))}</span>}</MutedCell>
+                  <MutedCell>{v.logged_by || '—'}</MutedCell>
+                  <ActionsCell>
+                    {(canReview || canComplete || canDelete) && (
+                      <div className="relative inline-block text-left">
+                        <button onClick={() => setMenuId(menuId === v.id ? null : v.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>
+                        {menuId === v.id && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
+                            <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
+                              {canReview && v.status === 'pending' && <button onClick={() => { setMenuId(null); openReview(v) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Review</button>}
+                              {canComplete && v.status === 'assigned' && <button onClick={() => { setMenuId(null); markComplete(v) }} className="block w-full px-3 py-2 text-sm text-left text-green-700 rounded-md hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30">Mark Complete</button>}
+                              {canDelete && <button onClick={() => { setMenuId(null); del(v) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </ActionsCell>
+                </tr>
+              ))}
+            </Table>
+          )
+      )}
 
-          {/* Sort */}
-          <select value={sort} onChange={e => setSort(e.target.value)}
-            style={{ padding: '4px 8px', fontSize: '.78rem', border: '1.5px solid var(--line)', borderRadius: 5 }}>
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="room">By Room</option>
-            <option value="name">By Name</option>
-            <option value="status">By Status</option>
-            {viewMode === 'by_client' && <option value="most">Most Violations</option>}
-          </select>
-
-          {/* Date range */}
-          <select value={dateRange} onChange={e => setDateRange(e.target.value)}
-            style={{ padding: '4px 8px', fontSize: '.78rem', border: '1.5px solid var(--line)', borderRadius: 5 }}>
-            <option value="all">All Time</option>
-            <option value="this_month">This Month</option>
-            <option value="this_week">This Week</option>
-          </select>
-
-          {/* Client filter */}
-          <select value={clientFilter} onChange={e => setClientFilter(e.target.value)}
-            style={{ padding: '4px 8px', fontSize: '.78rem', border: '1.5px solid var(--line)', borderRadius: 5 }}>
-            <option value="">All Residents</option>
-            {clientOptions.map(c => (
-              <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="section-body" style={{ padding: 0 }}>
-          {/* LIST VIEW */}
-          {viewMode === 'list' && (
-            filtered.length === 0
-              ? <div className="empty-state">No violations found.</div>
-              : (
-                <div className="roster-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Rm</th><th>Name</th><th>Date</th>
-                        <th>Description</th><th>Status</th>
-                        <th>Consequence</th><th>Logged By</th>
-                        {(canReview || canComplete || canDelete) && <th className="tc">Actions</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filtered.map(v => (
-                        <ViolationRow
-                          key={v.id} v={v}
-                          canReview={canReview} canComplete={canComplete} canDelete={canDelete}
-                          onReview={() => openReview(v)}
-                          onComplete={() => markComplete(v)}
-                          onDelete={() => del(v)}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
-          )}
-
-          {/* BY CLIENT VIEW */}
-          {viewMode === 'by_client' && (
-            byClient.length === 0
-              ? <div className="empty-state">No violations found.</div>
-              : byClient.map(cg => {
+      {/* BY CLIENT VIEW */}
+      {viewMode === 'by_client' && (
+        <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>
+          {byClient.length === 0
+            ? <div className="p-8 text-sm text-center text-gray-400">No violations found.</div>
+            : byClient.map(cg => {
                 const isExp = !!expanded[cg.id]
                 const pending   = cg.rows.filter(v => v.status === 'pending').length
                 const assigned  = cg.rows.filter(v => v.status === 'assigned').length
@@ -349,9 +356,9 @@ export default function ViolationsTab() {
                   </div>
                 )
               })
-          )}
+          }
         </div>
-      </div>
+      )}
 
       {/* Add Modal */}
       {modal === 'add' && (

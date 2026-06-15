@@ -4,7 +4,7 @@ import {
   clinicalApi, fmtDate, activeClients, todayStr,
   StatusBadge, Chip, Modal, EmptyState, SignedLine, inp, lbl, field,
 } from './clinicalShared.jsx'
-import { card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
+import { Header, card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
 
 const api = clinicalApi('group-notes')
 const PARTICIPATION = ['present', 'absent', 'excused']
@@ -33,10 +33,7 @@ export default function GroupNotes() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>Group Notes</h1>
-        <button className="btn btn-primary" onClick={() => setEditing({})}>+ New</button>
-      </div>
+      <Header title="Group Notes" onNew={() => setEditing({})} />
 
       {(groupNotes || []).length === 0
         ? <EmptyState>No group session notes yet.</EmptyState>

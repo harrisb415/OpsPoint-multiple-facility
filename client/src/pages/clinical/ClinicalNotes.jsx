@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { ChevronRight, Plus } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import {
   clinicalApi, fmtDate, activeClients, clientLabel, todayStr,
@@ -157,23 +158,35 @@ function NoteModal({ clients, record, onClose, onSaved, busy, setBusy }) {
 }
 
 // ── Shared header bar (title + client filter + New) ───────────────────────
-export function Header({ title, clients, filter, setFilter, onNew, newLabel = '+ New' }) {
+export function Header({ title, clients, filter, setFilter, onNew, newLabel = 'New' }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-      <h1 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: '#0f172a' }}>{title}</h1>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <select value={filter} onChange={e => setFilter(e.target.value)}
-          style={{ ...inp, width: 'auto', minWidth: 180, padding: '6px 10px' }}>
-          <option value="all">All residents</option>
-          {activeClients(clients).map(c => <option key={c.id} value={c.id}>{clientLabel(clients, c.id)}</option>)}
-        </select>
-        <button className="btn btn-primary" onClick={onNew}>{newLabel}</button>
+    <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <nav className="flex items-center mb-1 text-xs text-gray-400">
+          <span>Clinical</span><ChevronRight className="w-3.5 h-3.5 mx-1" /><span className="text-gray-600 dark:text-gray-300">{title}</span>
+        </nav>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+      </div>
+      <div className="flex items-center gap-2">
+        {clients && setFilter && (
+          <select value={filter} onChange={e => setFilter(e.target.value)}
+            className="px-2.5 py-2 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+            <option value="all">All residents</option>
+            {activeClients(clients).map(c => <option key={c.id} value={c.id}>{clientLabel(clients, c.id)}</option>)}
+          </select>
+        )}
+        {onNew && (
+          <button onClick={onNew}
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700">
+            <Plus className="w-4 h-4" />{newLabel}
+          </button>
+        )}
       </div>
     </div>
   )
 }
 
-const card = { background: '#fff', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--line, #e2e8f0)' }
+const card = { background: '#fff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e5e7eb', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' }
 const btnSm = { padding: '4px 10px', fontSize: '.76rem', fontWeight: 700, borderRadius: 6, cursor: 'pointer', border: '1px solid var(--line, #cbd5e1)', background: '#f8fafc', color: '#334155' }
 const btnSmGreen = { ...btnSm, background: '#dcfce7', color: '#15803d', borderColor: '#bbf7d0' }
 const btnSmRed = { ...btnSm, background: '#fee2e2', color: '#b91c1c', borderColor: '#fecaca' }

@@ -3,17 +3,19 @@
 // Reuses the app's existing modal / field / button CSS classes for visual
 // consistency with the rest of OpsPoint.
 // ════════════════════════════════════════════════════════════════════════
+import { NotebookPen, Target, Award, ClipboardList, Users, Siren, DoorOpen } from 'lucide-react'
+import { Badge } from '../../components/console.jsx'
 
 // Navigation entries for the clinical section. `perm` (single) or `perms`
-// (any-of) controls visibility.
+// (any-of) controls visibility. `icon` is a lucide-react component.
 export const CLINICAL_NAV = [
-  { path: '/clinical/notes',           label: 'Clinical Notes',      perm: 'clinical.notes',       icon: '📝' },
-  { path: '/clinical/treatment-plans', label: 'Treatment Plans',     perm: 'clinical.treatment',   icon: '🎯' },
-  { path: '/clinical/milestones',      label: 'Milestones',          perms: ['milestones.edit', 'milestones.signoff'], icon: '🏆' },
-  { path: '/clinical/assessments',     label: 'Assessments',         perm: 'clinical.assessments', icon: '📋' },
-  { path: '/clinical/group-notes',     label: 'Group Notes',         perm: 'clinical.groups',      icon: '👥' },
-  { path: '/clinical/incidents',       label: 'Incident Reports',    perms: ['incidents.log', 'incidents.review', 'incidents.delete'], icon: '🚨' },
-  { path: '/clinical/discharge',       label: 'Discharge Summaries', perm: 'clinical.discharge',   icon: '🚪' },
+  { path: '/clinical/notes',           label: 'Clinical Notes',      perm: 'clinical.notes',       icon: NotebookPen },
+  { path: '/clinical/treatment-plans', label: 'Treatment Plans',     perm: 'clinical.treatment',   icon: Target },
+  { path: '/clinical/milestones',      label: 'Milestones',          perms: ['milestones.edit', 'milestones.signoff'], icon: Award },
+  { path: '/clinical/assessments',     label: 'Assessments',         perm: 'clinical.assessments', icon: ClipboardList },
+  { path: '/clinical/group-notes',     label: 'Group Notes',         perm: 'clinical.groups',      icon: Users },
+  { path: '/clinical/incidents',       label: 'Incident Reports',    perms: ['incidents.log', 'incidents.review', 'incidents.delete'], icon: Siren },
+  { path: '/clinical/discharge',       label: 'Discharge Summaries', perm: 'clinical.discharge',   icon: DoorOpen },
 ]
 
 // Every permission that grants access to *something* in the clinical section.
@@ -79,23 +81,14 @@ export function todayStr() {
 }
 
 // ── Status badge ─────────────────────────────────────────────────────────
-const STATUS_COLORS = {
-  draft:        ['#fef9c3', '#854d0e'],
-  final:        ['#dcfce7', '#15803d'],
-  amended:      ['#dbeafe', '#1d4ed8'],
-  active:       ['#dcfce7', '#15803d'],
-  completed:    ['#dbeafe', '#1d4ed8'],
-  discontinued: ['#f1f5f9', '#64748b'],
+const STATUS_TONE = {
+  draft: 'yellow', final: 'green', amended: 'blue',
+  active: 'green', completed: 'blue', discontinued: 'gray',
+  signed: 'green', pending: 'yellow', reviewed: 'blue',
 }
 export function StatusBadge({ status }) {
-  const [bg, fg] = STATUS_COLORS[status] || ['#f1f5f9', '#475569']
-  return (
-    <span style={{
-      background: bg, color: fg, fontSize: '.68rem', fontWeight: 700,
-      padding: '2px 9px', borderRadius: 20, textTransform: 'capitalize',
-      letterSpacing: '.02em', whiteSpace: 'nowrap',
-    }}>{status}</span>
-  )
+  const label = String(status || '')
+  return <Badge tone={STATUS_TONE[status] || 'gray'}>{label.charAt(0).toUpperCase() + label.slice(1)}</Badge>
 }
 
 // ── Generic chip badge ─────────────────────────────────────────────────────
@@ -139,10 +132,9 @@ export const field = { marginBottom: 14 }
 // ── Empty-state row ─────────────────────────────────────────────────────────
 export function EmptyState({ children }) {
   return (
-    <div style={{
-      padding: '40px 20px', textAlign: 'center', color: '#94a3b8',
-      fontSize: '.9rem', background: '#fff', borderRadius: 8, border: '1px dashed var(--line, #cbd5e1)',
-    }}>{children}</div>
+    <div className="p-10 text-sm text-center text-gray-400 bg-white border border-gray-200 border-dashed rounded-xl dark:bg-gray-800 dark:border-gray-700">
+      {children}
+    </div>
   )
 }
 

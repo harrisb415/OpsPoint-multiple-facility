@@ -1,4 +1,5 @@
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom'
+import { Stethoscope, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { CLINICAL_NAV, navItemVisible } from './clinicalShared.jsx'
@@ -26,50 +27,49 @@ export default function ClinicalLayout() {
   if (navItems.length === 0) return <Navigate to="/" replace />
 
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+    <div className="flex h-full min-h-0 overflow-hidden">
       {/* Clinical rail */}
-      <aside style={{
-        width: 220, flexShrink: 0, background: '#fff',
-        borderRight: '1px solid var(--line, #e2e8f0)', display: 'flex', flexDirection: 'column',
-      }}>
-        <div style={{ padding: '16px 16px 10px' }}>
-          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--sidebar-bg, #0a4655)', letterSpacing: '-.01em' }}>
-            🏥 Clinical
+      <aside className="flex flex-col bg-white border-r border-gray-200 shrink-0 w-60 dark:bg-gray-800 dark:border-gray-700">
+        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-gray-200 dark:border-gray-700">
+          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">
+            <Stethoscope className="w-5 h-5" />
+          </span>
+          <div className="leading-tight">
+            <p className="text-base font-bold text-gray-900 dark:text-white">Clinical</p>
+            <p className="text-[11px] text-gray-400">Charting &amp; records</p>
           </div>
-          <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 2 }}>Charting & documentation</div>
         </div>
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
-          {navItems.map(n => (
-            <NavLink
-              key={n.path}
-              to={n.path}
-              style={({ isActive }) => ({
-                display: 'flex', alignItems: 'center', gap: 9,
-                padding: '9px 12px', marginBottom: 2, borderRadius: 7,
-                fontSize: '.85rem', fontWeight: 600, textDecoration: 'none',
-                color: isActive ? '#fff' : '#334155',
-                background: isActive ? 'var(--teal-600, #106f88)' : 'transparent',
-              })}
-            >
-              <span style={{ fontSize: '1rem' }}>{n.icon}</span>
-              {n.label}
-            </NavLink>
-          ))}
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+          {navItems.map(n => {
+            const Icon = n.icon
+            return (
+              <NavLink
+                key={n.path}
+                to={n.path}
+                className={({ isActive }) => `flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg group ${isActive ? 'bg-primary-50 text-primary-700 dark:bg-gray-700 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}`}
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white'}`} />
+                    <span className="flex-1">{n.label}</span>
+                  </>
+                )}
+              </NavLink>
+            )
+          })}
         </nav>
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--line, #e2e8f0)' }}>
+        <div className="p-3 border-t shrink-0 border-gray-200 dark:border-gray-700">
           <button
             onClick={() => navigate('/')}
-            style={{
-              width: '100%', padding: '8px 0', borderRadius: 6, cursor: 'pointer',
-              border: '1px solid var(--line, #cbd5e1)', background: '#f8fafc',
-              fontSize: '.8rem', fontWeight: 700, color: '#475569',
-            }}
-          >← Back to Dashboard</button>
+            className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
+          >
+            <ArrowLeft className="w-4 h-4" /> Return to shift
+          </button>
         </div>
       </aside>
 
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '20px 24px', background: 'var(--bg, #f1f5f9)' }}>
+      <div className="flex-1 min-w-0 px-6 py-5 overflow-y-auto bg-gray-50 dark:bg-gray-900">
         <Outlet />
       </div>
     </div>

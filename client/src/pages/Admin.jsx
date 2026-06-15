@@ -1,32 +1,38 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  Settings, ArrowLeft, Users, UserPlus, KeyRound, ShieldCheck,
+  Tag, DoorOpen, MonitorCog, Map, FlaskConical, ClipboardList,
+  AlertTriangle, ScrollText,
+} from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 
 // ── Admin sections (clinical-style left rail) ─────────────────────
 // Each item maps to a single content panel — no nested sub-tabs. Grouped and
-// permission-filtered exactly like the Clinical section's rail.
+// permission-filtered exactly like the Clinical section's rail. `icon` is a
+// lucide-react component.
 const ADMIN_NAV = [
   { group: 'Accounts', items: [
-    { key: 'users:staff',   label: 'Staff & Users',     icon: '👥', perm: 'admin.users' },
-    { key: 'users:add',     label: 'Add User',          icon: '➕', perm: 'admin.users' },
-    { key: 'users:reset',   label: 'Reset Password',    icon: '🔑', perm: 'admin.users' },
-    { key: 'users:groups',  label: 'Permission Groups', icon: '🛡️', perm: 'admin.users' },
+    { key: 'users:staff',   label: 'Staff & Users',     icon: Users,       perm: 'admin.users' },
+    { key: 'users:add',     label: 'Add User',          icon: UserPlus,    perm: 'admin.users' },
+    { key: 'users:reset',   label: 'Reset Password',    icon: KeyRound,    perm: 'admin.users' },
+    { key: 'users:groups',  label: 'Permission Groups', icon: ShieldCheck, perm: 'admin.users' },
   ] },
   { group: 'Facility', items: [
-    { key: 'fac:general',   label: 'General',          icon: '🏷️', perm: 'admin.settings' },
-    { key: 'fac:rooms',     label: 'Rooms',            icon: '🚪', perm: 'facility.manage' },
-    { key: 'fac:display',   label: 'Features',         icon: '🖥️', perm: 'admin.settings' },
-    { key: 'fac:walk',      label: 'Walk Areas',       icon: '🗺️', perm: 'admin.settings' },
-    { key: 'fac:ua',        label: 'UA Panel',         icon: '🧪', perm: 'admin.settings' },
-    { key: 'fac:ehr',       label: 'EHR / Compliance', icon: '📋', perm: 'admin.settings' },
-    { key: 'fac:resetfac',  label: 'Reset Facility',   icon: '⚠️', perm: 'facility.manage', danger: true },
+    { key: 'fac:general',   label: 'General',          icon: Tag,           perm: 'admin.settings' },
+    { key: 'fac:rooms',     label: 'Rooms',            icon: DoorOpen,      perm: 'facility.manage' },
+    { key: 'fac:display',   label: 'Features',         icon: MonitorCog,    perm: 'admin.settings' },
+    { key: 'fac:walk',      label: 'Walk Areas',       icon: Map,           perm: 'admin.settings' },
+    { key: 'fac:ua',        label: 'UA Panel',         icon: FlaskConical,  perm: 'admin.settings' },
+    { key: 'fac:ehr',       label: 'EHR / Compliance', icon: ClipboardList, perm: 'admin.settings' },
+    { key: 'fac:resetfac',  label: 'Reset Facility',   icon: AlertTriangle, perm: 'facility.manage', danger: true },
   ] },
   { group: 'Records', items: [
-    { key: 'audit', label: 'Audit Log', icon: '📜', perm: 'admin.audit' },
+    { key: 'audit', label: 'Audit Log', icon: ScrollText, perm: 'admin.audit' },
   ] },
   { group: 'System', items: [
-    { key: 'system', label: 'System', icon: '⚙️', perm: 'admin.system' },
+    { key: 'system', label: 'System', icon: Settings, perm: 'admin.system' },
   ] },
 ]
 
@@ -48,44 +54,55 @@ export default function Admin() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+    <div className="flex h-full min-h-0 overflow-hidden">
       {/* Rail */}
-      <aside style={{ width: 220, flexShrink: 0, background: '#fff', borderRight: '1px solid var(--line, #e2e8f0)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '16px 16px 10px' }}>
-          <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--sidebar-bg, #0a4655)', letterSpacing: '-.01em' }}>⚙️ Administration</div>
-          <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 2 }}>System configuration</div>
+      <aside className="flex flex-col bg-white border-r border-gray-200 shrink-0 w-60 dark:bg-gray-800 dark:border-gray-700">
+        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-gray-200 dark:border-gray-700">
+          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">
+            <Settings className="w-5 h-5" />
+          </span>
+          <div className="leading-tight">
+            <p className="text-base font-bold text-gray-900 dark:text-white">Administration</p>
+            <p className="text-[11px] text-gray-400">System configuration</p>
+          </div>
         </div>
-        <nav style={{ flex: 1, overflowY: 'auto', padding: '4px 8px' }}>
+        <nav className="flex-1 px-3 py-3 overflow-y-auto">
           {groups.map(g => (
-            <div key={g.group}>
-              <div style={{ fontSize: '.62rem', fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#94a3b8', padding: '10px 12px 4px' }}>{g.group}</div>
-              {g.items.map(it => {
-                const isActive = active === it.key
-                return (
-                  <button key={it.key} onClick={() => setActive(it.key)} style={{
-                    display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left',
-                    padding: '9px 12px', marginBottom: 2, borderRadius: 7, border: 'none', cursor: 'pointer',
-                    fontSize: '.85rem', fontWeight: 600, fontFamily: 'var(--sans)',
-                    color: isActive ? '#fff' : (it.danger ? 'var(--danger, #dc2626)' : '#334155'),
-                    background: isActive ? 'var(--teal-600, #106f88)' : 'transparent',
-                  }}>
-                    <span style={{ fontSize: '1rem' }}>{it.icon}</span>
-                    {it.label}
-                  </button>
-                )
-              })}
+            <div key={g.group} className="mb-1">
+              <p className="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-gray-400 uppercase dark:text-gray-500">{g.group}</p>
+              <div className="space-y-1">
+                {g.items.map(it => {
+                  const isActive = active === it.key
+                  const Icon = it.icon
+                  const cls = isActive
+                    ? 'bg-primary-50 text-primary-700 dark:bg-gray-700 dark:text-white'
+                    : it.danger
+                      ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30'
+                      : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                  const iconCls = isActive
+                    ? 'text-primary-600 dark:text-primary-400'
+                    : it.danger ? 'text-red-500' : 'text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white'
+                  return (
+                    <button key={it.key} onClick={() => setActive(it.key)}
+                      className={`flex items-center w-full gap-3 px-3 py-2 text-sm font-medium text-left rounded-lg group ${cls}`}>
+                      <Icon className={`w-5 h-5 ${iconCls}`} />
+                      <span className="flex-1">{it.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           ))}
         </nav>
-        <div style={{ padding: '10px 12px', borderTop: '1px solid var(--line, #e2e8f0)' }}>
-          <Link to="/" style={{ display: 'block', width: '100%', textAlign: 'center', padding: '8px 0', borderRadius: 6, border: '1px solid var(--line, #cbd5e1)', background: '#f8fafc', fontSize: '.8rem', fontWeight: 700, color: '#475569', textDecoration: 'none' }}>
-            ← Back to Shift
+        <div className="p-3 border-t shrink-0 border-gray-200 dark:border-gray-700">
+          <Link to="/" className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700">
+            <ArrowLeft className="w-4 h-4" /> Return to shift
           </Link>
         </div>
       </aside>
 
       {/* Content */}
-      <div className="admin-shell" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '20px 24px', background: 'var(--bg, #f1f5f9)' }}>
+      <div className="flex-1 min-w-0 px-6 py-5 overflow-y-auto admin-shell bg-gray-50 dark:bg-gray-900">
         {renderPanel()}
       </div>
     </div>

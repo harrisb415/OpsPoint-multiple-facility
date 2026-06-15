@@ -799,10 +799,10 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
    fill the content width; form inputs stay capped so they don't stretch. */
 .admin-shell .section {
   background: #fff;
-  border: 1px solid var(--line, #e2e8f0);
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
-  box-shadow: none;
-  margin-bottom: 14px;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  margin-bottom: 16px;
 }
 .admin-shell .section-head {
   background: #fff;

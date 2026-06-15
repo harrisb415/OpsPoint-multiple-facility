@@ -170,3 +170,60 @@ export const MonoCell  = ({ children }) => <td className="p-3 font-mono text-sm 
 export const StrongCell = ({ children }) => <td className="p-3 text-sm font-semibold text-gray-900 whitespace-nowrap dark:text-white">{children}</td>
 export const DaysCell  = ({ children }) => <td className="p-3 whitespace-nowrap"><span className="font-mono text-sm font-semibold text-gray-900 dark:text-white">{children}</span><span className="ml-1 text-xs text-gray-400">days</span></td>
 export const ActionsCell = ({ children }) => <td className="p-3 text-right whitespace-nowrap">{children || <button className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>}</td>
+
+/* ── Board (kanban-ish columns of cards) ────────────────────────────── */
+const BOARD_TONE = {
+  primary: 'text-primary-600 bg-primary-100 dark:bg-primary-900/40 dark:text-primary-300',
+  green:   'text-green-600 bg-green-100 dark:bg-green-900/40 dark:text-green-300',
+  yellow:  'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/40 dark:text-yellow-300',
+  red:     'text-red-600 bg-red-100 dark:bg-red-900/40 dark:text-red-300',
+  sky:     'text-sky-600 bg-sky-100 dark:bg-sky-900/40 dark:text-sky-300',
+  gray:    'text-gray-600 bg-gray-100 dark:bg-gray-700 dark:text-gray-300',
+}
+const BOARD_GRID = { 1: 'xl:grid-cols-1', 2: 'xl:grid-cols-2', 3: 'xl:grid-cols-3', 4: 'xl:grid-cols-4' }
+export function Board({ columns = [] }) {
+  const n = Math.min(columns.length, 4) || 1
+  return (
+    <div className={`grid gap-4 sm:grid-cols-2 ${BOARD_GRID[n]}`}>
+      {columns.map((col, i) => {
+        const Icon = col.Icon
+        const count = col.count != null ? col.count : (Array.isArray(col.cards) ? col.cards.length : undefined)
+        return (
+          <div key={i} className="flex flex-col">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`flex items-center justify-center w-6 h-6 rounded-lg shrink-0 ${BOARD_TONE[col.accent] || BOARD_TONE.gray}`}>
+                  {Icon && <Icon className="w-3.5 h-3.5" />}
+                </span>
+                <h3 className="text-sm font-semibold text-gray-900 whitespace-nowrap dark:text-white">{col.title}</h3>
+              </div>
+              {count != null && <span className="px-2 text-xs font-medium text-gray-500 bg-gray-100 rounded-full shrink-0 dark:bg-gray-700 dark:text-gray-300">{count}</span>}
+            </div>
+            <div className="space-y-2">
+              {col.cards}
+              {col.empty && (!col.cards || (Array.isArray(col.cards) && col.cards.length === 0)) && (
+                <div className="p-3 text-xs text-center text-gray-400 border border-gray-200 border-dashed rounded-lg dark:border-gray-700">{col.empty}</div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+export function BoardCard({ title, badge, sub, meta, metaIcon: MetaIcon, onClick, children }) {
+  const Wrap = onClick ? 'button' : 'div'
+  return (
+    <Wrap onClick={onClick} className={`block w-full p-3 text-left bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700 ${onClick ? 'hover:border-primary-300 dark:hover:border-primary-700 cursor-pointer' : ''}`}>
+      {(title || badge) && (
+        <div className="flex items-start justify-between gap-2">
+          {title && <p className="text-sm font-semibold text-gray-900 dark:text-white">{title}</p>}
+          {badge && <span className="shrink-0"><Badge tone={badge.tone}>{badge.label}</Badge></span>}
+        </div>
+      )}
+      {sub && <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{sub}</p>}
+      {meta && <div className="flex items-center gap-1.5 mt-2 text-xs text-gray-400">{MetaIcon && <MetaIcon className="w-3.5 h-3.5" />}<span className="font-mono">{meta}</span></div>}
+      {children}
+    </Wrap>
+  )
+}

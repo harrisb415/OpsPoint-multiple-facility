@@ -1,15 +1,18 @@
 import { useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import { Users, UserCheck, UserX, Calendar } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
+import { CARD, Header, Kpi, KpiRow, Board, BoardCard } from '../../components/console.jsx'
 
-const STATUS_OPTS = [
-  { v: 'building', l: 'In Building', c: 's-building' },
-  { v: 'work',     l: 'Work',         c: 's-work' },
-  { v: 'pass',     l: 'Weekend Pass', c: 's-pass' },
-  { v: 'out',      l: 'Out / Other',  c: 's-out' },
-  { v: 'bhc',      l: 'BHC',          c: 's-bhc' },
-  { v: 'efc',      l: 'EFC',          c: 's-efc' },
-  { v: 'hospital', l: 'Hospital',     c: 's-hospital' },
-]
+const STATUS_LABEL = {
+  building: 'In Building', work: 'Work', pass: 'Weekend Pass',
+  out: 'Out / Other', bhc: 'BHC', efc: 'EFC', hospital: 'Hospital',
+}
+const STATUS_TONE = {
+  building: 'green', work: 'sky', pass: 'yellow',
+  out: 'gray', bhc: 'purple', efc: 'purple', hospital: 'red',
+}
+const COL_ACCENT = ['primary', 'sky', 'green', 'purple', 'yellow', 'red']
 
 function fmtDate(d) {
   if (!d) return '—'
@@ -18,7 +21,7 @@ function fmtDate(d) {
 }
 
 function formatPhone(raw) {
-  if (!raw) return '—'
+  if (!raw) return ''
   const d = String(raw).replace(/\D/g, '').replace(/^1(\d{10})$/, '$1')
   if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`
   return raw
@@ -29,9 +32,15 @@ export default function CaseloadsTab() {
   const clients = data?.clients || []
   const reports = data?.reports || []
   const activeId = data?.active_report_id
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const activeReport = reports.find(r => r.id === activeId)
   const statuses = activeReport?.statuses || {}
+
+  const match = c => {
+    const q = globalSearch.trim().toLowerCase()
+    return !q || `${c.name} ${c.room} ${c.case_manager || ''}`.toLowerCase().includes(q)
+  }
 
   const grouped = useMemo(() => {
     const active = clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT' && c.case_manager)
@@ -51,92 +60,62 @@ export default function CaseloadsTab() {
     [clients]
   )
 
-  if (grouped.length === 0 && unassigned.length === 0) {
-    return <div className="empty-state" style={{ paddingTop: 48 }}>No active residents with case managers assigned.</div>
+  const assignedTotal = grouped.reduce((n, [, list]) => n + list.length, 0)
+
+  const card = c => {
+    const cur = statuses[c.id] || 'building'
+    const phone = formatPhone(c.phone)
+    return (
+      <BoardCard
+        key={c.id}
+        title={c.name}
+        badge={{ tone: STATUS_TONE[cur] || 'gray', label: STATUS_LABEL[cur] || cur }}
+        sub={`Rm ${c.room}${phone ? ' · ' + phone : ''}`}
+        meta={c.intake_date ? `Intake ${fmtDate(c.intake_date)}` : undefined}
+        metaIcon={Calendar}
+      />
+    )
+  }
+
+  const columns = grouped.map(([cm, list], i) => {
+    const visible = list.filter(match)
+    return {
+      Icon: Users,
+      title: cm,
+      accent: COL_ACCENT[i % COL_ACCENT.length],
+      count: list.length,
+      cards: visible.map(card),
+      empty: 'No matches',
+    }
+  })
+  if (unassigned.length > 0) {
+    columns.push({
+      Icon: UserX,
+      title: 'No Case Manager',
+      accent: 'gray',
+      count: unassigned.length,
+      cards: unassigned.filter(match).map(card),
+      empty: 'No matches',
+    })
   }
 
   return (
     <div>
-      {grouped.map(([cm, cmClients]) => (
-        <div key={cm} className="section">
-          <div className="section-head">
-            <div className="sh-left">
-              <span className="sh-dot" />
-              <span>{cm}</span>
-            </div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>
-              {cmClients.length} {cmClients.length === 1 ? 'resident' : 'residents'}
-            </span>
-          </div>
-          <div className="section-body" style={{ padding: 0 }}>
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rm</th>
-                    <th>Name</th>
-                    <th>Status</th>
-                    <th>Phone</th>
-                    <th>Intake</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cmClients.map(c => {
-                    const cur = statuses[c.id] || 'building'
-                    const opt = STATUS_OPTS.find(o => o.v === cur) || { l: cur, c: '' }
-                    return (
-                      <tr key={c.id}>
-                        <td className="rm">{c.room}</td>
-                        <td className="name-cell">{c.name}</td>
-                        <td>
-                          <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>
-                            {opt.l}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: '.78rem' }}>{formatPhone(c.phone)}</td>
-                        <td className="date-cell">{fmtDate(c.intake_date)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      ))}
+      <Header
+        crumb={['People', 'Caseloads']}
+        title="Caseloads"
+        sub="Active residents grouped by case manager"
+      />
 
-      {unassigned.length > 0 && (
-        <div className="section">
-          <div className="section-head">
-            <div className="sh-left"><span className="sh-dot" /><span>No Case Manager Assigned</span></div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{unassigned.length}</span>
-          </div>
-          <div className="section-body" style={{ padding: 0 }}>
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr><th>Rm</th><th>Name</th><th>Status</th><th>Phone</th><th>Intake</th></tr>
-                </thead>
-                <tbody>
-                  {unassigned.map(c => {
-                    const cur = statuses[c.id] || 'building'
-                    const opt = STATUS_OPTS.find(o => o.v === cur) || { l: cur, c: '' }
-                    return (
-                      <tr key={c.id}>
-                        <td className="rm">{c.room}</td>
-                        <td className="name-cell">{c.name}</td>
-                        <td><span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span></td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: '.78rem' }}>{formatPhone(c.phone)}</td>
-                        <td className="date-cell">{fmtDate(c.intake_date)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+      <KpiRow>
+        <Kpi label="Case Managers" value={grouped.length} sub="with assignments" Icon={UserCheck} accent="primary" />
+        <Kpi label="Assigned" value={assignedTotal} sub="residents on a caseload" Icon={Users} accent="green" />
+        <Kpi label="Unassigned" value={unassigned.length} sub="no case manager" Icon={UserX} accent="yellow" />
+      </KpiRow>
+
+      {columns.length === 0
+        ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No active residents with case managers assigned.</div>
+        : <Board columns={columns} />}
     </div>
   )
 }

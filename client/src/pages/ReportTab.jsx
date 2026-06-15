@@ -1,9 +1,34 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
+import { Plus, ClipboardList } from 'lucide-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
+import { CARD, Header } from '../components/console.jsx'
 import { openPrintWindow, fmtDateFriendly, classifyLogEntry } from '../utils/printLog.js'
+
+function Panel({ title, right, flush, children }) {
+  if (flush) {
+    return (
+      <div className={`${CARD} mb-4`} style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="flex flex-col gap-2 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+          {right}
+        </div>
+        {children}
+      </div>
+    )
+  }
+  return (
+    <div className={`${CARD} mb-4`}>
+      <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
+}
 
 const STATUS_OPTS = [
   { v: 'building', l: 'In Building', c: 's-building' },
@@ -507,17 +532,21 @@ export default function ReportTab() {
   // ── No active report ──────────────────────────────────────────────
   if (!activeId && !creating) {
     return (
-      <div className="empty-state" style={{ paddingTop: 60 }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: 12 }}>📋</div>
-        <h2 style={{ fontWeight: 700, marginBottom: 8, color: 'var(--dark)', fontSize: '1.1rem' }}>
-          No Active Shift Report
-        </h2>
-        <p style={{ marginBottom: 20 }}>Start a new report to begin logging this shift.</p>
-        {canCreate && (
-          <button className="btn btn-primary" onClick={handleNewReport}>
-            + New Shift Report
-          </button>
-        )}
+      <div>
+        <Header crumb={['Daily Ops', 'Shift Report']} title="Shift Report" sub="No active report for this shift" />
+        <div className={`${CARD} flex flex-col items-center justify-center py-16 text-center`}>
+          <div className="flex items-center justify-center mb-4 rounded-full w-14 h-14 bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300">
+            <ClipboardList className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-white">No Active Shift Report</h2>
+          <p className="mt-1 mb-5 text-sm text-gray-500 dark:text-gray-400">Start a new report to begin logging this shift.</p>
+          {canCreate && (
+            <button onClick={handleNewReport}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700">
+              <Plus className="w-4 h-4" /> New Shift Report
+            </button>
+          )}
+        </div>
       </div>
     )
   }
@@ -532,42 +561,19 @@ export default function ReportTab() {
 
   return (
     <div>
-      {/* Report Hero */}
-      <div className="report-hero">
-        <div className="report-hero-left">
-          <div className="report-hero-eyebrow">
-            Daily Ops · Shift Report {activeId ? `#${activeId}` : ''}
-          </div>
-          <h2 className="report-hero-title">{shift} Report</h2>
-          <div className="report-hero-meta">
-            {reportDate} · {shiftRange}{facilityName ? ` · ${facilityName}` : ''}
-          </div>
-        </div>
-        <div className="report-hero-actions">
-          {isClosed && <span className="report-hero-badge">Closed</span>}
-          {canClose && !isClosed && activeId && (
-            <button className="report-hero-btn-outline" onClick={handleCloseShift}>Close Shift</button>
-          )}
-          {canCreate && isClosed && (
-            <button className="report-hero-btn-gold" onClick={handleNewReport} disabled={creating}>
-              {creating ? 'Creating…' : '+ New Report'}
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Report Header */}
+      <Header
+        crumb={['Daily Ops', 'Shift Report']}
+        title={`${shift} Report`}
+        sub={`${reportDate} · ${shiftRange}${facilityName ? ' · ' + facilityName : ''}${activeId ? ' · #' + activeId : ''}${isClosed ? ' · Closed' : ''}`}
+        actions={[
+          ...(canClose && !isClosed && activeId ? [{ label: 'Close Shift', onClick: handleCloseShift }] : []),
+          ...(canCreate && isClosed ? [{ Icon: Plus, label: creating ? 'Creating…' : 'New Report', primary: true, onClick: handleNewReport }] : []),
+        ]}
+      />
 
       {/* Shift Details */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left">
-            <span className="sh-dot" />
-            <span>Shift Details</span>
-          </div>
-          {activeId && (
-            <span>Report #{activeId} · {isClosed ? 'Closed' : 'Open'}</span>
-          )}
-        </div>
-        <div className="section-body">
+      <Panel title="Shift Details" right={activeId && <span className="text-xs text-gray-400">Report #{activeId} · {isClosed ? 'Closed' : 'Open'}</span>}>
           <div className="meta-grid">
             <div className="field">
               <label>Date</label>
@@ -589,16 +595,10 @@ export default function ReportTab() {
                 onChange={e => handleMetaChange('mod', e.target.value)} />
             </div>
           </div>
-        </div>
-      </div>
+      </Panel>
 
       {/* Census */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Census</span></div>
-          <span>{censusTotal} Residents</span>
-        </div>
-        <div className="section-body">
+      <Panel title="Census" right={<span className="text-xs text-gray-400">{censusTotal} Residents</span>}>
           <div className="census-grid">
             {[
               { key: 'building', label: 'In Building' },
@@ -619,8 +619,7 @@ export default function ReportTab() {
               <div className="clabel">Total</div>
             </div>
           </div>
-        </div>
-      </div>
+      </Panel>
 
       {/* Reminder bar */}
       {canReminders && (
@@ -650,33 +649,26 @@ export default function ReportTab() {
       )}
 
       {/* Activity Log */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Activity Log</span></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span>{logEntries.length} {logEntries.length === 1 ? 'Entry' : 'Entries'}</span>
-            <div style={{ display: 'flex', gap: 4, fontSize: '.7rem' }}>
-              <button onClick={() => toggleLogSort('time')} title="Sort by time"
-                style={sortBtnStyle(logSortKey === 'time', logSortDir)}>
+      <Panel
+        title="Activity Log"
+        right={
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">{logEntries.length} {logEntries.length === 1 ? 'Entry' : 'Entries'}</span>
+            <div className="flex gap-1">
+              <button onClick={() => toggleLogSort('time')} title="Sort by time" style={sortBtnStyle(logSortKey === 'time', logSortDir)}>
                 Time {logSortKey === 'time' ? (logSortDir > 0 ? '↑' : '↓') : ''}
               </button>
-              <button onClick={() => toggleLogSort('type')} title="Sort by type"
-                style={sortBtnStyle(logSortKey === 'type', logSortDir)}>
+              <button onClick={() => toggleLogSort('type')} title="Sort by type" style={sortBtnStyle(logSortKey === 'type', logSortDir)}>
                 Type {logSortKey === 'type' ? (logSortDir > 0 ? '↑' : '↓') : ''}
               </button>
             </div>
-            <button onClick={() => setLogPrintOpen(true)}
-              title="Print activity log"
-              style={{
-                fontSize: '.72rem', padding: '4px 10px',
-                background: '#f1f5f9', border: '1px solid var(--border-light)',
-                color: 'var(--text-muted)', borderRadius: 5, cursor: 'pointer', fontWeight: 600,
-              }}>
+            <button onClick={() => setLogPrintOpen(true)} title="Print activity log"
+              className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
               Print
             </button>
           </div>
-        </div>
-        <div className="section-body">
+        }
+      >
           {/* Quick-action pills */}
           {canLog && !isClosed && (
             <div className="pill-bar">
@@ -745,16 +737,11 @@ export default function ReportTab() {
               <button className="btn-add btn-add-b" onClick={handleAddLog}>+ Add</button>
             </div>
           )}
-        </div>
-      </div>
+      </Panel>
 
       {/* Issues & Concerns + Medical Notes — side by side */}
       <div className="report-2col">
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Issues & Concerns</span></div>
-        </div>
-        <div className="section-body">
+      <Panel title="Issues & Concerns">
           <div className="issues-list">
             {issues.length === 0 && (
               <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 0' }}>None recorded.</div>
@@ -776,15 +763,10 @@ export default function ReportTab() {
               <button className="btn-add btn-add-b" onClick={handleAddIssue}>+ Add</button>
             </div>
           )}
-        </div>
-      </div>
+      </Panel>
 
       {/* Medical Notes */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Medical Notes</span></div>
-        </div>
-        <div className="section-body">
+      <Panel title="Medical Notes">
           <div className="issues-list">
             {medNotes.length === 0 && (
               <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 0' }}>None recorded.</div>
@@ -806,25 +788,21 @@ export default function ReportTab() {
               <button className="btn-add btn-add-b" onClick={handleAddMed}>+ Add</button>
             </div>
           )}
-        </div>
-      </div>
+      </Panel>
       </div>
 
       {/* Roster */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Roster</span></div>
+      <Panel
+        title="Roster"
+        flush
+        right={
           <input
-            type="text" placeholder="Search…" value={search}
+            type="text" placeholder="Search residents…" value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{
-              fontSize: '.78rem', padding: '4px 10px',
-              border: '1px solid var(--border-light)', borderRadius: 5,
-              background: '#fff', color: 'var(--text-primary)', outline: 'none', width: 160,
-            }}
+            className="px-3 py-1.5 text-sm text-gray-900 border border-gray-200 rounded-lg sm:w-56 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
           />
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
+        }
+      >
           <div className="roster-wrap">
             <table>
               <thead>
@@ -863,8 +841,7 @@ export default function ReportTab() {
               </tbody>
             </table>
           </div>
-        </div>
-      </div>
+      </Panel>
 
       {/* Quick action modals */}
       {quickModal === 'wellness' && (

@@ -1,10 +1,14 @@
-import { useMemo } from 'react'
-import Chart from 'react-apexcharts'
+import { useMemo, lazy, Suspense } from 'react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import {
   MapPin, DoorOpen, HeartPulse, AlertTriangle, FileText, Clock, Footprints,
 } from 'lucide-react'
+
+// ApexCharts is heavy (~135 kB gzip) and only used here — load it as a
+// separate async chunk so it doesn't bloat the main bundle.
+const Chart = lazy(() => import('react-apexcharts'))
+const ChartFallback = () => <div className="flex items-center justify-center h-[260px] text-sm text-gray-400">Loading chart…</div>
 
 // Resident status → label + chart color + badge tone
 const STATUS_META = {
@@ -142,6 +146,7 @@ export default function DashboardHome({ onNavigate }) {
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">Activity over the shift</h2>
           <p className="text-xs text-gray-400">Log entries per hour</p>
           {activity.series.length > 0 ? (
+            <Suspense fallback={<ChartFallback />}>
             <Chart
               type="area" height={260}
               series={[{ name: 'Log entries', data: activity.series }]}
@@ -157,6 +162,7 @@ export default function DashboardHome({ onNavigate }) {
                 tooltip: { theme: 'light' },
               }}
             />
+            </Suspense>
           ) : (
             <div className="flex items-center justify-center h-[260px] text-sm text-gray-400">No log activity yet this shift.</div>
           )}
@@ -166,6 +172,7 @@ export default function DashboardHome({ onNavigate }) {
           <h2 className="text-base font-semibold text-gray-900 dark:text-white">Census by status</h2>
           <p className="text-xs text-gray-400">{total} active residents</p>
           {donut.series.length > 0 ? (
+            <Suspense fallback={<ChartFallback />}>
             <Chart
               type="donut" height={260}
               series={donut.series}
@@ -179,6 +186,7 @@ export default function DashboardHome({ onNavigate }) {
                 tooltip: { theme: 'light' },
               }}
             />
+            </Suspense>
           ) : (
             <div className="flex items-center justify-center h-[260px] text-sm text-gray-400">No residents to chart.</div>
           )}

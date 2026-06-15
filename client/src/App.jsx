@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext.jsx'
 import { AuthGuard, ChangePasswordGuard, PermGuard } from './components/ProtectedRoute.jsx'
@@ -6,18 +6,21 @@ import AppShell from './components/AppShell.jsx'
 import Login from './pages/Login.jsx'
 import ChangePassword from './pages/ChangePassword.jsx'
 import Dashboard from './pages/Dashboard.jsx'
-import Admin from './pages/Admin.jsx'
-import About from './pages/About.jsx'
-import Mobile from './pages/Mobile.jsx'
 import ClinicalLayout, { ClinicalIndexRedirect } from './pages/clinical/ClinicalLayout.jsx'
-import ClinicalNotes from './pages/clinical/ClinicalNotes.jsx'
-import TreatmentPlans from './pages/clinical/TreatmentPlans.jsx'
-import Assessments from './pages/clinical/Assessments.jsx'
-import GroupNotes from './pages/clinical/GroupNotes.jsx'
-import DischargeSummaries from './pages/clinical/DischargeSummaries.jsx'
-import IncidentsTab from './pages/tabs/IncidentsTab.jsx'
-import MilestonesTab from './pages/tabs/MilestonesTab.jsx'
 import { CLINICAL_SECTION_PERMS } from './pages/clinical/clinicalShared.jsx'
+
+// Heavy / less-frequent routes are code-split so they don't bloat the main
+// bundle — each becomes its own async chunk loaded on navigation.
+const Admin              = lazy(() => import('./pages/Admin.jsx'))
+const About              = lazy(() => import('./pages/About.jsx'))
+const Mobile             = lazy(() => import('./pages/Mobile.jsx'))
+const ClinicalNotes      = lazy(() => import('./pages/clinical/ClinicalNotes.jsx'))
+const TreatmentPlans     = lazy(() => import('./pages/clinical/TreatmentPlans.jsx'))
+const Assessments        = lazy(() => import('./pages/clinical/Assessments.jsx'))
+const GroupNotes         = lazy(() => import('./pages/clinical/GroupNotes.jsx'))
+const DischargeSummaries = lazy(() => import('./pages/clinical/DischargeSummaries.jsx'))
+const IncidentsTab       = lazy(() => import('./pages/tabs/IncidentsTab.jsx'))
+const MilestonesTab      = lazy(() => import('./pages/tabs/MilestonesTab.jsx'))
 
 function LoadingScreen() {
   return (
@@ -85,6 +88,7 @@ export default function App() {
   return (
     <>
       <MobileAutoRedirect />
+      <Suspense fallback={<LoadingScreen />}>
       <Routes>
         <Route path="/login" element={<Login />} />
 
@@ -118,6 +122,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </>
   )
 }

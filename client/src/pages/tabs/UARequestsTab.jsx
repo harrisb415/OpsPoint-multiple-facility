@@ -1,8 +1,11 @@
 import { useState, useMemo, useRef } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import { FlaskConical, CheckCircle, XCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
+import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, TextCell, MutedCell, MonoCell, BadgeCell, ActionsCell, Badge, rowCls } from '../../components/console.jsx'
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -21,6 +24,7 @@ const REASON_LABEL = {
   cm_request:       'CM request',
   other:            'Other',
 }
+const RESULT_TONE = { pending: 'gray', pass: 'green', fail: 'red', dilute: 'yellow', refused: 'red', invalid: 'gray' }
 
 function RecordResultBadge({ result }) {
   const styles = {
@@ -43,6 +47,7 @@ export default function UARequestsTab() {
   const canAck     = hasPerm('ua.acknowledge')
   const canRecord  = hasPerm('ua.record')
   const canDelete  = hasPerm('ua.delete')
+  const { globalSearch = '' } = useOutletContext() || {}
 
   const uaRequests = data?.ua_requests || []
   const uaRecords  = data?.ua_records  || []
@@ -56,6 +61,7 @@ export default function UARequestsTab() {
 
   // Conduct UA modal (inline, styled like ReportTab UA modal)
   const [conductModal, setConductModal] = useState(null) // null | { req } | { clientId }
+  const [menuId, setMenuId] = useState(null)
 
   // Sort/filter for records section
   const [filterClient, setFilterClient] = useState('')
@@ -77,9 +83,11 @@ export default function UARequestsTab() {
   const acknowledged = uaRequests.filter(r => r.acknowledged)
 
   const filteredRecords = useMemo(() => {
+    const gq = globalSearch.toLowerCase().trim()
     let rows = [...uaRecords]
     if (filterClient) rows = rows.filter(r => String(r.client_id) === filterClient)
     if (filterResult) rows = rows.filter(r => r.result === filterResult)
+    if (gq) rows = rows.filter(r => (r.client_name || '').toLowerCase().includes(gq) || String(r.room || '').includes(gq))
     rows.sort((a, b) => {
       let cmp = 0
       if (recSortKey === 'tested_at') cmp = String(a.tested_at||'').localeCompare(String(b.tested_at||''))
@@ -88,7 +96,7 @@ export default function UARequestsTab() {
       return cmp * recSortDir
     })
     return rows
-  }, [uaRecords, filterClient, filterResult, recSortKey, recSortDir])
+  }, [uaRecords, filterClient, filterResult, recSortKey, recSortDir, globalSearch])
 
   function openModal() {
     setForm({ client_id: '', is_interview: false, interview_name: '' })
@@ -195,212 +203,107 @@ export default function UARequestsTab() {
 
   return (
     <div>
-      {/* ── Pending UA Requests ─────────────────────────────────── */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Pending UA Requests</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {pending.length > 0 && (
-              <span style={{
-                background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5',
-                fontSize: '.73rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-              }}>
-                {pending.length} pending
-              </span>
-            )}
-            {canRequest && (
-              <button className="btn btn-sm btn-primary" onClick={openModal}>+ Request UA</button>
-            )}
-          </div>
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
+      <Header
+        crumb={['Health & Compliance', 'UA']}
+        title="Urinalysis"
+        sub="UA requests, results, and chain-of-custody records"
+        actions={[
+          { Icon: Printer, label: 'Print', onClick: printUARecords },
+          ...(canRequest ? [{ Icon: Plus, label: 'Request UA', primary: true, onClick: openModal }] : []),
+        ]}
+      />
+
+      <KpiRow>
+        <Kpi label="Pending Requests" value={pending.length} sub="awaiting collection" Icon={FlaskConical} accent="primary" />
+        <Kpi label="Records" value={uaRecords.length} sub="on file" Icon={FlaskConical} accent="sky" />
+        <Kpi label="Negative" value={uaRecords.filter(r => r.result === 'pass').length} sub="clear" Icon={CheckCircle} accent="green" />
+        <Kpi label="Positive" value={uaRecords.filter(r => r.result === 'fail').length} sub="flagged" Icon={XCircle} accent="red" />
+      </KpiRow>
+
+      {/* Pending requests */}
+      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Pending requests</h3>
+      <div className="mb-6">
+        <Table headers={[{ label: 'Resident' }, { label: 'Type' }, { label: 'Requested By' }, { label: 'Requested At' }, { label: '', right: true }]}>
           {pending.length === 0 ? (
-            <div className="empty-state">No pending UA requests.</div>
-          ) : (
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rm</th><th>Name</th><th>Type</th>
-                    <th>Requested By</th><th>Requested At</th>
-                    {(canAck || canRecord) && <th className="tc">Action</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pending.map(req => (
-                    <tr key={req.id}>
-                      <td className="rm">{req.room}</td>
-                      <td className="name-cell">{req.is_interview ? (req.interview_name || req.client_name) : req.client_name}</td>
-                      <td>
-                        <span style={{
-                          fontSize: '.73rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                          background: req.is_interview ? '#fef3c7' : '#fee2e2',
-                          color: req.is_interview ? '#92400e' : '#991b1b',
-                          border: `1px solid ${req.is_interview ? '#fde68a' : '#fca5a5'}`,
-                        }}>
-                          {req.is_interview ? 'Pre-Intake' : 'UA Request'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{req.requested_by || '—'}</td>
-                      <td className="date-cell">{fmtDT(req.requested_at)}</td>
-                      {(canAck || canRecord) && (
-                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                          {canRecord && (
-                            <button className="btn btn-sm btn-primary" style={{ marginRight: 4 }} onClick={() => setConductModal({ req })}>🧪 Conduct UA</button>
-                          )}
-                          {canAck && (
-                            <button className="btn btn-sm btn-green" style={{ marginRight: 4 }} onClick={() => acknowledge(req)}>Acknowledge</button>
-                          )}
-                          {(canAck || canRecord) && (
-                            <button className="btn-danger-sm" title="Cancel request" onClick={() => dismissRequest(req)}>✕</button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+            <tr><td colSpan={5} className="p-8 text-sm text-center text-gray-400">No pending UA requests.</td></tr>
+          ) : pending.map((req, i) => (
+            <tr key={req.id} className={rowCls(i)}>
+              <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} sub={`Rm ${req.room}`} />
+              <BadgeCell tone={req.is_interview ? 'yellow' : 'red'} label={req.is_interview ? 'Pre-Intake' : 'UA Request'} />
+              <MutedCell>{req.requested_by || '—'}</MutedCell>
+              <MonoCell>{fmtDT(req.requested_at)}</MonoCell>
+              <ActionsCell>
+                <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                  {canRecord && <button onClick={() => setConductModal({ req })} className="px-2.5 py-1 text-xs font-semibold text-white rounded-md bg-primary-600 hover:bg-primary-700">Conduct UA</button>}
+                  {canAck && <button onClick={() => acknowledge(req)} className="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Ack</button>}
+                  {(canAck || canRecord) && <button onClick={() => dismissRequest(req)} title="Cancel request" className="p-1.5 text-gray-400 rounded-md hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"><MoreHorizontal className="w-4 h-4" /></button>}
+                </div>
+              </ActionsCell>
+            </tr>
+          ))}
+        </Table>
       </div>
 
-      {/* ── Acknowledged ────────────────────────────────────────── */}
       {acknowledged.length > 0 && (
-        <div className="section">
-          <div className="section-head">
-            <div className="sh-left"><span className="sh-dot" /><span>Acknowledged</span></div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{acknowledged.length}</span>
-          </div>
-          <div className="section-body" style={{ padding: 0 }}>
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Rm</th><th>Name</th><th>Type</th>
-                    <th>Requested By</th><th>Requested At</th>
-                    <th>Acknowledged By</th><th>Acknowledged At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {acknowledged.slice(0, 20).map(req => (
-                    <tr key={req.id} style={{ opacity: .7 }}>
-                      <td className="rm">{req.room}</td>
-                      <td className="name-cell">{req.is_interview ? (req.interview_name || req.client_name) : req.client_name}</td>
-                      <td>
-                        <span style={{
-                          fontSize: '.73rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                          background: '#f1f5f9', color: '#64748b', border: '1px solid #cbd5e1',
-                        }}>
-                          {req.is_interview ? 'Pre-Intake' : 'UA Request'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{req.requested_by || '—'}</td>
-                      <td className="date-cell">{fmtDT(req.requested_at)}</td>
-                      <td style={{ fontSize: '.82rem', color: '#475569' }}>{req.acknowledged_by || '—'}</td>
-                      <td className="date-cell">{fmtDT(req.acknowledged_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div className="mb-6">
+          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Acknowledged</h3>
+          <Table headers={[{ label: 'Resident' }, { label: 'Type' }, { label: 'Requested By' }, { label: 'Requested At' }, { label: 'Acknowledged By' }, { label: 'Acknowledged At' }]}>
+            {acknowledged.slice(0, 20).map((req, i) => (
+              <tr key={req.id} className={`${rowCls(i)} opacity-70`}>
+                <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} sub={`Rm ${req.room}`} />
+                <BadgeCell tone="gray" label={req.is_interview ? 'Pre-Intake' : 'UA Request'} />
+                <MutedCell>{req.requested_by || '—'}</MutedCell>
+                <MonoCell>{fmtDT(req.requested_at)}</MonoCell>
+                <MutedCell>{req.acknowledged_by || '—'}</MutedCell>
+                <MonoCell>{fmtDT(req.acknowledged_at)}</MonoCell>
+              </tr>
+            ))}
+          </Table>
         </div>
       )}
 
-      {/* ── UA Records (formal log) ────────────────────────────── */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>UA Records</span></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <select value={filterClient} onChange={e=>setFilterClient(e.target.value)}
-              style={{ fontSize: '.78rem', padding: '4px 8px' }}>
-              <option value="">All residents</option>
-              {activeClients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-            </select>
-            <select value={filterResult} onChange={e=>setFilterResult(e.target.value)}
-              style={{ fontSize: '.78rem', padding: '4px 8px' }}>
-              <option value="">All results</option>
-              {Object.entries(RESULT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>
-              {filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''}
-            </span>
-            <button className="btn btn-sm" onClick={printUARecords}
-              style={{ background:'#f1f5f9', color:'#475569', border:'1px solid #e2e8f0' }}>
-              🖨 Print
-            </button>
-            {canRecord && (
-              <button className="btn btn-sm btn-primary" onClick={() => setConductModal({ clientId: '' })}>+ New UA</button>
-            )}
-          </div>
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
-          {filteredRecords.length === 0 ? (
-            <div className="empty-state">No UA records on file. Click "Conduct UA" next to a request, or "+ New UA" to add one.</div>
-          ) : (
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <SortableTh label="Tested"   k="tested_at" curKey={recSortKey} dir={recSortDir} onSort={toggleRecSort} />
-                    <SortableTh label="Rm"       k="room"      curKey={recSortKey} dir={recSortDir} onSort={toggleRecSort} />
-                    <th>Resident</th>
-                    <th>Reason</th>
-                    <th>Method</th>
-                    <SortableTh label="Result"   k="result"    curKey={recSortKey} dir={recSortDir} onSort={toggleRecSort} />
-                    <th>Substances</th>
-                    <th>Conducted By</th>
-                    {canRecord && <th className="tc">Photo</th>}
-                    {canDelete && <th className="tc">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecords.map(r => {
-                    const pr = r.panel_results || {}
-                    const posSubs = Object.entries(pr).filter(([, v]) => v === 'pos').map(([k]) => k)
-                    return (
-                      <tr key={r.id} style={{ background: r.result === 'fail' ? '#fff5f5' : 'transparent' }}>
-                        <td className="date-cell">{fmtDT(r.tested_at)}</td>
-                        <td className="rm">{r.room}</td>
-                        <td className="name-cell">{r.client_name}</td>
-                        <td style={{ fontSize: '.78rem', color: '#64748b' }}>{REASON_LABEL[r.reason] || r.reason || '—'}</td>
-                        <td style={{ fontSize: '.82rem', color: '#475569' }}>{r.collection_method || '—'}</td>
-                        <td><RecordResultBadge result={r.result}/></td>
-                        <td style={{ fontSize: '.78rem', color: '#475569', maxWidth: 200 }}>
-                          {posSubs.length > 0
-                            ? <span style={{ color: '#991b1b', fontWeight: 700 }}>POS: {posSubs.join(', ')}</span>
-                            : (r.result === 'pass' ? 'NEG all' : '—')}
-                        </td>
-                        <td style={{ fontSize: '.8rem', color: '#64748b' }}>{r.witnessed_by_name || '—'}</td>
-                        {canRecord && (
-                          <td style={{ textAlign: 'center' }}>
-                            {r.log_entry_id
-                              ? <UAPhotoBtn
-                                  logEntryId={r.log_entry_id}
-                                  hasPhoto={!!r.has_log_photo}
-                                  onSaved={loadData}
-                                />
-                              : <span style={{ color:'#cbd5e1', fontSize:'.72rem' }}>—</span>
-                            }
-                          </td>
-                        )}
-                        {canDelete && (
-                          <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                            {r.locked_at
-                              ? <span title="Locked (24h immutability)">🔒</span>
-                              : <button className="btn-danger-sm" onClick={() => delRecord(r)} title="Delete">✕</button>}
-                          </td>
-                        )}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* UA records */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">UA records</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+            <option value="">All residents</option>
+            {activeClients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
+          </select>
+          <select value={filterResult} onChange={e => setFilterResult(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+            <option value="">All results</option>
+            {Object.entries(RESULT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <span className="text-sm text-gray-400">{filteredRecords.length} records</span>
+          {canRecord && <button onClick={() => setConductModal({ clientId: '' })} className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-primary-600 hover:bg-primary-700"><Plus className="w-3.5 h-3.5" /> New UA</button>}
         </div>
       </div>
+      <Table headers={[{ label: 'Resident' }, { label: 'Tested' }, { label: 'Reason' }, { label: 'Result' }, { label: 'Substances' }, { label: 'Observed By' }, { label: '', right: true }]}>
+        {filteredRecords.length === 0 ? (
+          <tr><td colSpan={7} className="p-8 text-sm text-center text-gray-400">No UA records on file. Use “Conduct UA” on a request, or “New UA”.</td></tr>
+        ) : filteredRecords.map((r, i) => {
+          const pr = r.panel_results || {}
+          const posSubs = Object.entries(pr).filter(([, v]) => v === 'pos').map(([k]) => k)
+          return (
+            <tr key={r.id} className={r.result === 'fail' ? 'bg-red-50 dark:bg-red-900/20' : rowCls(i)}>
+              <NameCell name={r.client_name} sub={`Rm ${r.room}`} />
+              <MonoCell>{fmtDT(r.tested_at)}</MonoCell>
+              <MutedCell>{REASON_LABEL[r.reason] || r.reason || '—'}</MutedCell>
+              <BadgeCell tone={RESULT_TONE[r.result] || 'gray'} label={RESULT_LABEL[r.result] || r.result} />
+              <MutedCell>{posSubs.length > 0 ? <span className="font-semibold text-red-700 dark:text-red-400">POS: {posSubs.join(', ')}</span> : (r.result === 'pass' ? 'NEG all' : '—')}</MutedCell>
+              <MutedCell>{r.witnessed_by_name || '—'}</MutedCell>
+              <ActionsCell>
+                <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                  {canRecord && r.log_entry_id && <UAPhotoBtn logEntryId={r.log_entry_id} hasPhoto={!!r.has_log_photo} onSaved={loadData} />}
+                  {canDelete && (r.locked_at
+                    ? <span title="Locked (24h immutability)">🔒</span>
+                    : <button onClick={() => delRecord(r)} title="Delete" className="p-1.5 text-gray-400 rounded-md hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"><MoreHorizontal className="w-4 h-4" /></button>)}
+                </div>
+              </ActionsCell>
+            </tr>
+          )
+        })}
+      </Table>
 
       {/* ── Request UA Modal ─────────────────────────────────────── */}
       {modal && (

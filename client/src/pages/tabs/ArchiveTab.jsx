@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react'
+import { useOutletContext } from 'react-router-dom'
+import { Archive, CheckCircle, FileText, ChevronLeft, ChevronRight, Printer, Trash2 } from 'lucide-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { CARD, Header, Kpi, KpiRow, Table, MonoCell, TextCell, MutedCell, StrongCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
 
 const PAGE_SIZE = 20
 
@@ -43,14 +46,17 @@ export default function ArchiveTab() {
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState(null)
   const canDelete = hasPerm('reports.delete')
+  const { globalSearch = '' } = useOutletContext() || {}
 
-  const sorted = useMemo(() =>
-    [...(data?.reports || [])]
+  const sorted = useMemo(() => {
+    const q = globalSearch.trim().toLowerCase()
+    return [...(data?.reports || [])]
       .filter(r => r.id !== data?.active_report_id)
-      .sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '') || (b.updated_at || '').localeCompare(a.updated_at || '')),
-    [data?.reports, data?.active_report_id]
-  )
+      .filter(r => !q || `${r.shift} ${r.mod_name} ${r.report_date}`.toLowerCase().includes(q))
+      .sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '') || (b.updated_at || '').localeCompare(a.updated_at || ''))
+  }, [data?.reports, data?.active_report_id, globalSearch])
 
+  const closedCount = sorted.filter(r => r.is_closed).length
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
@@ -66,57 +72,63 @@ export default function ArchiveTab() {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Archive</span></div>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>
-            {sorted.length} reports
-          </span>
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
-          {sorted.length === 0 ? (
-            <div className="empty-state">No archived reports yet.</div>
-          ) : (
-            <>
-              <div className="report-list" style={{ padding: '12px 14px' }}>
-                {paged.map(r => {
-                  const snapshotCount = (r.roster_snapshot || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT').length
-                  const censusCount   = r.census ? Object.values(r.census).reduce((a, b) => a + b, 0) : 0
-                  const tot = snapshotCount || censusCount || '—'
-                  return (
-                    <div key={r.id} className="report-card" onClick={() => setSelected(r)}>
-                      <div className="rc-date">{fmtDateShort(r.report_date)}</div>
-                      <div className="rc-shift">{r.shift || '—'}</div>
-                      <div className="rc-mod">MOD: {r.mod_name || '—'}</div>
-                      {r.is_closed && (
-                        <span style={{ fontSize: '.67rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '2px 7px', borderRadius: 10 }}>
-                          Closed
-                        </span>
-                      )}
-                      <div className="rc-total">{tot} residents</div>
-                      <button className="btn btn-outline btn-sm" style={{ marginLeft: 'auto' }}>View</button>
+      <Header
+        crumb={['Records', 'Archive']}
+        title="Archive"
+        sub="Past shift reports — read-only snapshots"
+      />
+
+      <KpiRow>
+        <Kpi label="Total Reports" value={sorted.length} sub="archived" Icon={Archive} accent="primary" />
+        <Kpi label="Closed" value={closedCount} sub="signed off" Icon={CheckCircle} accent="green" />
+        <Kpi label="Open" value={sorted.length - closedCount} sub="not yet closed" Icon={FileText} accent="yellow" />
+      </KpiRow>
+
+      {sorted.length === 0 ? (
+        <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No archived reports yet.</div>
+      ) : (
+        <>
+          <Table headers={[{ label: 'Date' }, { label: 'Shift' }, { label: 'MOD' }, { label: 'Residents' }, { label: 'Status' }, { label: '', right: true }]}>
+            {paged.map((r, i) => {
+              const snapshotCount = (r.roster_snapshot || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT').length
+              const censusCount   = r.census ? Object.values(r.census).reduce((a, b) => a + b, 0) : 0
+              const tot = snapshotCount || censusCount || '—'
+              return (
+                <tr key={r.id} className={rowCls(i, true)} onClick={() => setSelected(r)}>
+                  <MonoCell>{fmtDateShort(r.report_date)}</MonoCell>
+                  <StrongCell>{r.shift || '—'}</StrongCell>
+                  <MutedCell>{r.mod_name || '—'}</MutedCell>
+                  <TextCell>{tot}{tot !== '—' ? ' residents' : ''}</TextCell>
+                  <BadgeCell tone={r.is_closed ? 'green' : 'yellow'} label={r.is_closed ? 'Closed' : 'Open'} />
+                  <ActionsCell>
+                    <div className="inline-flex items-center justify-end gap-1">
+                      <button onClick={e => { e.stopPropagation(); setSelected(r) }} className="px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">View</button>
                       {canDelete && (
-                        <button className="rc-del" onClick={e => deleteReport(r, e)} title="Delete report">&times;</button>
+                        <button onClick={e => deleteReport(r, e)} title="Delete report" className="p-1.5 text-gray-400 rounded-lg hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"><Trash2 className="w-4 h-4" /></button>
                       )}
                     </div>
-                  )
-                })}
-              </div>
-              {totalPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', fontSize: '.82rem', borderTop: '1px solid var(--line)' }}>
-                  <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }}
-                    disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-                  <span style={{ color: '#475569' }}>
-                    {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
-                  </span>
-                  <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }}
-                    disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-                </div>
-              )}
-            </>
+                  </ActionsCell>
+                </tr>
+              )
+            })}
+          </Table>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-3 mt-3 text-sm">
+              <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                <ChevronLeft className="w-4 h-4" /> Prev
+              </button>
+              <span className="text-gray-500 dark:text-gray-400">
+                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
+              </span>
+              <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
+                Next <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
     </div>
   )
 }
@@ -241,6 +253,18 @@ function printArchivedReport(r, data) {
   }, 250)
 }
 
+function Panel({ title, count, children }) {
+  return (
+    <div className={`${CARD} mb-4`}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+        {count != null && <span className="font-mono text-xs text-gray-400">{count}</span>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function ReportDetail({ report: r, data, onBack }) {
   const clients = r.roster_snapshot || data?.clients || []
   const logEntries = [...(r.log_entries || [])].sort((a, b) => parseTimeMins(a.time) - parseTimeMins(b.time))
@@ -250,137 +274,119 @@ function ReportDetail({ report: r, data, onBack }) {
 
   return (
     <div>
-      <div style={{ marginBottom: 14, display: 'flex', gap: 8 }}>
-        <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }}
-          onClick={onBack}>← Back to Archive</button>
-        <button className="btn btn-sm" style={{ background: 'var(--teal-700)', color: '#fff', border: 'none' }}
-          onClick={() => printArchivedReport(r, data)}>🖨 Print</button>
-      </div>
+      <Header
+        crumb={['Records', 'Archive']}
+        title={`Report #${r.id}`}
+        sub={`${fmtDate(r.report_date)} · ${r.shift || '—'}${r.mod_name ? ' · MOD: ' + r.mod_name : ''}`}
+        actions={[
+          { Icon: ChevronLeft, label: 'Back', onClick: onBack },
+          { Icon: Printer, label: 'Print', onClick: () => printArchivedReport(r, data) },
+        ]}
+      />
 
       {/* Meta */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left">
-            <span className="sh-dot" />
-            <span>Report #{r.id}</span>
-          </div>
-          {r.is_closed && <span style={{ fontSize: '.72rem', color: '#dc2626', fontWeight: 600, letterSpacing: '.05em' }}>CLOSED</span>}
+      <Panel title="Report Details">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Date</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{fmtDate(r.report_date)}</div></div>
+          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Shift</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{r.shift || '—'}</div></div>
+          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">MOD</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{r.mod_name || '—'}</div></div>
+          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Status</div><div className="mt-1"><BadgeInline tone={r.is_closed ? 'green' : 'yellow'} label={r.is_closed ? 'Closed' : 'Open'} /></div></div>
         </div>
-        <div className="section-body">
-          <div className="meta-grid">
-            <div><label style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#475569' }}>Date</label>
-              <div style={{ marginTop: 4, fontWeight: 600 }}>{fmtDate(r.report_date)}</div></div>
-            <div><label style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#475569' }}>Shift</label>
-              <div style={{ marginTop: 4, fontWeight: 600 }}>{r.shift || '—'}</div></div>
-            <div><label style={{ fontSize: '.7rem', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#475569' }}>MOD</label>
-              <div style={{ marginTop: 4, fontWeight: 600 }}>{r.mod_name || '—'}</div></div>
-          </div>
-        </div>
-      </div>
+      </Panel>
 
       {/* Census */}
       {Object.keys(census).length > 0 && (
-        <div className="section">
-          <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Census</span></div></div>
-          <div className="section-body">
-            <div className="census-grid">
-              {[['building','In Building'],['work','Work'],['pass','Pass'],['bhc','BHC'],['efc','EFC'],['hospital','Hospital'],['out','Out/Other']].map(([k, l]) => (
-                <div key={k} className={`census-card${(census[k] || 0) > 0 ? ' hi' : ''}`}>
-                  <div className="count">{census[k] || 0}</div>
-                  <div className="clabel">{l}</div>
-                </div>
-              ))}
-              <div className="census-card hi">
-                <div className="count">{Object.values(census).reduce((a, b) => a + b, 0)}</div>
-                <div className="clabel">Total</div>
+        <Panel title="Census">
+          <div className="census-grid">
+            {[['building','In Building'],['work','Work'],['pass','Pass'],['bhc','BHC'],['efc','EFC'],['hospital','Hospital'],['out','Out/Other']].map(([k, l]) => (
+              <div key={k} className={`census-card${(census[k] || 0) > 0 ? ' hi' : ''}`}>
+                <div className="count">{census[k] || 0}</div>
+                <div className="clabel">{l}</div>
               </div>
+            ))}
+            <div className="census-card hi">
+              <div className="count">{Object.values(census).reduce((a, b) => a + b, 0)}</div>
+              <div className="clabel">Total</div>
             </div>
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* Log */}
       {logEntries.length > 0 && (
-        <div className="section">
-          <div className="section-head">
-            <div className="sh-left"><span className="sh-dot" /><span>Activity Log</span></div>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{logEntries.length} entries</span>
+        <Panel title="Activity Log" count={`${logEntries.length} entries`}>
+          <div className="log-entries">
+            {logEntries.map((e, i) => (
+              <div key={i} className="log-entry" style={e.text && /POS:/.test(e.text) ? { borderLeft: '4px solid #DC2626', background: '#fff5f5' } : {}}>
+                <span className="ts">{e.time}</span>
+                <span className="msg">{e.text}</span>
+              </div>
+            ))}
           </div>
-          <div className="section-body">
-            <div className="log-entries">
-              {logEntries.map((e, i) => (
-                <div key={i} className="log-entry" style={e.text && /POS:/.test(e.text) ? { borderLeft: '4px solid #DC2626', background: '#fff5f5' } : {}}>
-                  <span className="ts">{e.time}</span>
-                  <span className="msg">{e.text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        </Panel>
       )}
 
       {/* Issues */}
       {(r.issues || []).length > 0 && (
-        <div className="section">
-          <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Issues & Concerns</span></div></div>
-          <div className="section-body">
-            <div className="issues-list">
-              {r.issues.map((v, i) => (
-                <div key={i} className="issue-item"><span className="issue-text">{v}</span></div>
-              ))}
-            </div>
+        <Panel title="Issues & Concerns">
+          <div className="issues-list">
+            {r.issues.map((v, i) => (
+              <div key={i} className="issue-item"><span className="issue-text">{v}</span></div>
+            ))}
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* Med Notes */}
       {(r.med_notes || []).length > 0 && (
-        <div className="section">
-          <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Medical Notes</span></div></div>
-          <div className="section-body">
-            <div className="issues-list">
-              {r.med_notes.map((v, i) => (
-                <div key={i} className="issue-item" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
-                  <span className="issue-text">{v}</span>
-                </div>
-              ))}
-            </div>
+        <Panel title="Medical Notes">
+          <div className="issues-list">
+            {r.med_notes.map((v, i) => (
+              <div key={i} className="issue-item" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
+                <span className="issue-text">{v}</span>
+              </div>
+            ))}
           </div>
-        </div>
+        </Panel>
       )}
 
       {/* Roster */}
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Roster</span></div></div>
-        <div className="section-body" style={{ padding: 0 }}>
-          <div className="roster-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Rm</th><th>Name</th><th>Status</th><th>Comment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clients.filter(c => c.is_active).map(c => {
-                  const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
-                  const opt = stOpt(cur)
-                  return (
-                    <tr key={c.id} className={c.is_special ? 'srow' : ''}>
-                      <td className="rm">{c.room}</td>
-                      <td className="name-cell">{c.name}</td>
-                      <td>
-                        {c.is_special ? <span style={{ color: '#cbd5e1' }}>—</span>
-                          : <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>}
-                      </td>
-                      <td style={{ fontSize: '.84rem', color: '#475569' }}>{comments[c.id] || ''}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+      <Panel title="Roster">
+        <div className="roster-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rm</th><th>Name</th><th>Status</th><th>Comment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clients.filter(c => c.is_active).map(c => {
+                const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
+                const opt = stOpt(cur)
+                return (
+                  <tr key={c.id} className={c.is_special ? 'srow' : ''}>
+                    <td className="rm">{c.room}</td>
+                    <td className="name-cell">{c.name}</td>
+                    <td>
+                      {c.is_special ? <span style={{ color: '#cbd5e1' }}>—</span>
+                        : <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>}
+                    </td>
+                    <td style={{ fontSize: '.84rem', color: '#475569' }}>{comments[c.id] || ''}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </Panel>
     </div>
   )
+}
+
+function BadgeInline({ tone, label }) {
+  const map = {
+    green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+    yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  }
+  return <span className={`${map[tone] || map.yellow} text-xs font-medium px-2.5 py-0.5 rounded-md`}>{label}</span>
 }

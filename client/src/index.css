@@ -5,13 +5,30 @@
 /* Class-based dark mode (Console redesign — toggle adds .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Dark-mode overrides for legacy inline-styled form controls (clinical inp/lbl).
-   Inline styles read these vars, so flipping them here flips the controls. */
+/* Dark-mode token overrides — flip the neutral surface/border/text tokens that the
+   remaining legacy CSS (Admin panels, ReportTab roster/census, Violations by-client,
+   Archive detail, clinical inp/lbl) is built on, so those surfaces go dark too.
+   Brand/accent tokens (primary blue ramp) are intentionally NOT flipped. */
 .dark {
   --inp-bg:     #374151;
   --inp-border: #4b5563;
   --inp-text:   #f9fafb;
   --inp-label:  #9ca3af;
+
+  --card-bg:        #1f2937;
+  --page-bg:        #111827;
+  --raised-bg:      #374151;
+  --table-row-alt:  #1f2937;
+  --border-light:   #374151;
+  --line:           #374151;
+  --text-primary:   #f9fafb;
+  --text-muted:     #9ca3af;
+  --bg:             #111827;
+  --white:          #1f2937;
+  --sky:            #374151;
+  --steel:          #9ca3af;
+  --teal-50:        #374151;   /* legacy hover bg */
+  --teal-200:       #374151;   /* legacy light borders */
 }
 
 /* Console redesign — blue primary ramp (gray/green/red/etc. are TW defaults) */
@@ -759,4 +776,43 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
   .notif-bell-btn, .notif-overlay, .notif-panel { display: none !important; }
   .app-content { margin-left: 0 !important; background: #fff !important; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Dark-mode overrides for legacy component CSS that hardcodes light colors
+   (the token flips in .dark above handle the token-driven rest). Covers the
+   interactive cores still on legacy CSS: Admin panels, ReportTab roster/census,
+   Violations by-client, Archive detail. Colored status pills (s-, pill-,
+   badge-, vbadge- families) intentionally keep their pastel look.
+   ───────────────────────────────────────────────────────────────────────── */
+.dark input:not([type=checkbox]):not([type=radio]):not([type=range]),
+.dark textarea,
+.dark select,
+.dark .field input:not([type=checkbox]):not([type=radio]),
+.dark .field select,
+.dark .field textarea { background: #374151; color: #f9fafb; }
+
+.dark .section { background: #1f2937; }
+.dark .section-head,
+.dark .section-head .sh-left > span:not(.sh-dot) { color: #e5e7eb; }
+.dark thead th { color: #9ca3af; }
+.dark th.sortable:hover { color: #93c5fd; }
+.dark .census-card { background: #1f2937; }
+.dark .issue-item { background: #1f2937; }
+.dark .log-entry { background: #1f2937; }
+.dark .report-card { background: #1f2937; }
+.dark .report-card:hover { border-color: #60a5fa; }
+.dark .empty-state { color: #9ca3af; }
+
+/* Admin shell hardcodes light hex (overrides token flips) — restate for dark */
+.dark .admin-shell .section { background: #1f2937; border-color: #374151; }
+.dark .admin-shell .section-head { background: #1f2937; border-bottom-color: #374151; }
+.dark .admin-shell .section-head .sh-left > span:not(.sh-dot) { color: #f9fafb; }
+.dark .admin-shell .field > label { color: #9ca3af; }
+.dark .admin-shell .field input:not([type=checkbox]):not([type=radio]),
+.dark .admin-shell .field select,
+.dark .admin-shell .field textarea { border-color: #4b5563; }
+.dark .admin-shell table thead th { color: #9ca3af; background: #374151; border-bottom-color: #4b5563; }
+.dark .admin-shell table tbody tr { border-bottom-color: #374151; }
+.dark .admin-shell table tbody tr:nth-child(even) { background: #1f2937; }
+.dark .admin-shell table tbody tr:hover { background: #374151; }
 

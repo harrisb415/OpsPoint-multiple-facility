@@ -16,7 +16,12 @@
  *   • If req provided, acknowledges the pending request
  */
 import { useState, useMemo } from 'react'
+import {
+  Button, Modal, ModalHeader, ModalBody, ModalFooter,
+  TextInput, Select, Textarea, Checkbox, Label, Alert,
+} from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
+import { Field } from './ui.jsx'
 
 // ── Drug label map ────────────────────────────────────────────────────────
 const UA_LABELS = {
@@ -215,150 +220,94 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 640 }}>
-        <div className="modal-head">
-          <h2>🧪 Conduct UA</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-
-        <div className="modal-body">
-          {err && <div className="auth-error">{err}</div>}
+    <Modal show size="2xl" onClose={onClose}>
+      <ModalHeader>🧪 Conduct UA</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          {err && <Alert color="failure">{err}</Alert>}
 
           {/* Interview / Non-Resident toggle — hidden when from a pending request */}
           {!req && (
-            <div
-              onClick={() => setIsInterview(v => !v)}
-              style={{
-                display:'flex', alignItems:'center', gap:10, padding:'9px 12px',
-                background: isInterview ? '#dbeafe' : '#f8fafc',
-                border: `1.5px solid ${isInterview ? '#93c5fd' : 'var(--line)'}`,
-                borderRadius:8, cursor:'pointer', userSelect:'none', transition:'all .12s',
-                marginBottom:10,
-              }}>
-              <input type="checkbox" checked={isInterview} onChange={() => {}}
-                style={{ pointerEvents:'none', accentColor:'#3b82f6', flexShrink:0, width:16, height:16 }} />
-              <span style={{ fontSize:'.84rem', fontWeight: isInterview ? 600 : 400,
-                color: isInterview ? '#1e40af' : '#475569' }}>
-                Interview / Non-Resident
-              </span>
-            </div>
+            <Label className="flex items-center gap-2.5 p-2.5 text-sm border rounded-lg cursor-pointer border-gray-200 dark:border-gray-700">
+              <Checkbox checked={isInterview} onChange={() => setIsInterview(v => !v)} />
+              Interview / Non-Resident
+            </Label>
           )}
 
           {/* Resident selector or interview name */}
           {isInterview ? (
-            <div className="field">
-              <label>Name</label>
-              <input type="text" value={interviewName} onChange={e => setInterviewName(e.target.value)}
-                placeholder="Interviewee name" autoFocus disabled={!!req} />
-            </div>
+            <Field label="Name">
+              <TextInput value={interviewName} onChange={e => setInterviewName(e.target.value)} placeholder="Interviewee name" autoFocus disabled={!!req} />
+            </Field>
           ) : (
-            <div className="field">
-              <label>Resident</label>
-              <select value={clientId} onChange={e => setClientId(e.target.value)} disabled={!!req}>
+            <Field label="Resident">
+              <Select value={clientId} onChange={e => setClientId(e.target.value)} disabled={!!req}>
                 <option value="">— Select resident —</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>Rm. {c.room} — {c.name}</option>
-                ))}
-              </select>
-            </div>
+                {clients.map(c => <option key={c.id} value={c.id}>Rm. {c.room} — {c.name}</option>)}
+              </Select>
+            </Field>
           )}
 
-          {/* Conducted by + Time (row) */}
-          <div style={{ display:'flex', gap:10 }}>
-            <div className="field" style={{ flex:2 }}>
-              <label>Conducted by</label>
-              <input type="text" value={staff} onChange={e => setStaff(e.target.value)}
-                placeholder="Staff name" />
-            </div>
-            <div className="field" style={{ flex:1 }}>
-              <label>Time</label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-            </div>
+          {/* Conducted by + Time */}
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Conducted by" className="col-span-2"><TextInput value={staff} onChange={e => setStaff(e.target.value)} placeholder="Staff name" /></Field>
+            <Field label="Time"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
           </div>
 
-          {/* Reason + Collection method (row) */}
-          <div style={{ display:'flex', gap:10 }}>
+          {/* Reason + Collection method */}
+          <div className="grid grid-cols-2 gap-3">
             {!isInterview && (
-              <div className="field" style={{ flex:1 }}>
-                <label>Reason</label>
-                <select value={reason} onChange={e => setReason(e.target.value)}>
+              <Field label="Reason">
+                <Select value={reason} onChange={e => setReason(e.target.value)}>
                   <option value="">— Select reason —</option>
-                  {REASON_OPTS.map(o => (
-                    <option key={o.v} value={o.v}>{o.l}</option>
-                  ))}
-                </select>
-              </div>
+                  {REASON_OPTS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                </Select>
+              </Field>
             )}
-            <div className="field" style={{ flex:1 }}>
-              <label>Collection method</label>
-              <select value={collMethod} onChange={e => setCollMethod(e.target.value)}>
+            <Field label="Collection method">
+              <Select value={collMethod} onChange={e => setCollMethod(e.target.value)}>
                 <option value="observed">Observed</option>
                 <option value="unobserved">Unobserved</option>
                 <option value="lab">Lab</option>
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
 
           {/* Substance tiles */}
-          <div className="field">
-            <label>
-              Results{' '}
-              <span style={{ fontWeight:400, fontSize:'.7rem', color:'#94A3B8' }}>
-                — tap each to cycle: NEG → POS → NT
-              </span>
-            </label>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:6, marginTop:4 }}>
+          <Field label="Results" hint="Tap each to cycle: NEG → POS → NT">
+            <div className="grid grid-cols-5 gap-1.5 mt-1">
               {panel.map(code => {
                 const res = results[code]
                 const { bg, color, border } = resultColor(res)
                 return (
                   <button key={code} type="button" onClick={() => cycleResult(code)}
-                    style={{
-                      background:bg, color, border:`1.5px solid ${border}`,
-                      borderRadius:8, padding:'7px 4px', cursor:'pointer',
-                      textAlign:'center', fontFamily:'var(--sans)',
-                      display:'flex', flexDirection:'column', alignItems:'center',
-                      justifyContent:'center', transition:'all .15s', userSelect:'none',
-                    }}>
-                    <div style={{ fontSize:'.78rem', fontWeight:800, color:'#0F172A' }}>{code}</div>
-                    <div style={{ fontSize:'.62rem', color:'#64748B', lineHeight:1.2, marginBottom:2 }}>
-                      {UA_LABELS[code] || code}
-                    </div>
-                    <div style={{ fontSize:'.7rem', fontWeight:700, color }}>{res}</div>
+                    style={{ background:bg, color, border:`1.5px solid ${border}` }}
+                    className="flex flex-col items-center justify-center px-1 py-1.5 text-center rounded-lg cursor-pointer select-none">
+                    <div className="text-xs font-extrabold text-gray-900">{code}</div>
+                    <div className="text-[10px] text-gray-500 leading-tight mb-0.5">{UA_LABELS[code] || code}</div>
+                    <div className="text-xs font-bold" style={{ color }}>{res}</div>
                   </button>
                 )
               })}
             </div>
-          </div>
+          </Field>
 
           {/* Notes */}
-          <div className="field">
-            <label>
-              Notes{' '}
-              <span style={{ fontWeight:400, fontSize:'.7rem', color:'#94A3B8' }}>(optional)</span>
-            </label>
-            <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} />
-          </div>
+          <Field label="Notes (optional)"><Textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></Field>
 
           {/* Hint when no active report is open */}
           {!activeReportId && (
-            <p style={{ margin:'4px 0 0', fontSize:'.75rem', color:'#94A3B8' }}>
-              No open shift report — UA record will be saved without a log entry.
-            </p>
+            <p className="text-xs text-gray-400">No open shift report — UA record will be saved without a log entry.</p>
           )}
         </div>
-
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button
-            className="btn btn-primary"
-            onClick={handleSubmit}
-            disabled={saving || (!isInterview && !clientId) || !staff.trim() || (!isInterview && !reason)}>
-            {saving ? 'Saving…' : 'Save UA Record'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving}
+          disabled={saving || (!isInterview && !clientId) || !staff.trim() || (!isInterview && !reason)}>
+          Save UA Record
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }

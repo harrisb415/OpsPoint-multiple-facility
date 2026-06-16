@@ -4,11 +4,13 @@ import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search }
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell, TextInput,
+  Select, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
 import { initials } from '../../utils/ui.js'
+import { Field } from '../../components/ui.jsx'
 
 // Shift-status badge color (flowbite Badge colors)
 const STATUS_BADGE = { green: 'success', blue: 'info', yellow: 'warning', red: 'failure', purple: 'purple', orange: 'warning' }
@@ -481,39 +483,25 @@ export default function ClientsTab() {
 
       {/* Edit Modal */}
       {editModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setEditModal(null)}>
-          <div className="modal">
-            <div className="modal-head">
-              <h2>Edit Client — Rm. {editModal.room}</h2>
-              <button className="xbtn" onClick={() => setEditModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {editError && <div className="auth-error">{editError}</div>}
-              <div className="field">
-                <label>Photo</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Modal show size="xl" onClose={() => setEditModal(null)}>
+          <ModalHeader>Edit Client — Rm. {editModal.room}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {editError && <Alert color="failure">{editError}</Alert>}
+              <Field label="Photo">
+                <div className="flex items-center gap-3">
                   {(editPhoto && editPhoto !== 'REMOVE')
-                    ? <img src={editPhoto} alt="Client photo"
-                        style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: '50%', border: '2px solid var(--line)', flexShrink: 0 }} />
+                    ? <img src={editPhoto} alt="Client photo" className="object-cover w-16 h-16 border-2 border-gray-200 rounded-full shrink-0 dark:border-gray-600" />
                     : (editModal?.photo && editPhoto !== 'REMOVE')
-                      ? <img src={editModal.photo} alt="Client photo"
-                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: '50%', border: '2px solid var(--line)', flexShrink: 0 }} />
-                      : <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#e2e8f0',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '1.6rem', flexShrink: 0 }}>👤</div>
+                      ? <img src={editModal.photo} alt="Client photo" className="object-cover w-16 h-16 border-2 border-gray-200 rounded-full shrink-0 dark:border-gray-600" />
+                      : <div className="flex items-center justify-center w-16 h-16 text-2xl bg-gray-200 rounded-full shrink-0 dark:bg-gray-700">👤</div>
                   }
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <button type="button" className="btn btn-sm"
-                      onClick={() => photoRef.current?.click()}
-                      style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}>
+                  <div className="flex flex-col gap-1.5">
+                    <Button type="button" size="xs" color="light" onClick={() => photoRef.current?.click()}>
                       📷 {((editModal?.photo && editPhoto !== 'REMOVE') || (editPhoto && editPhoto !== 'REMOVE')) ? 'Change Photo' : 'Add Photo'}
-                    </button>
+                    </Button>
                     {((editPhoto && editPhoto !== 'REMOVE') || (editModal?.photo && editPhoto !== 'REMOVE')) && (
-                      <button type="button" className="btn btn-sm"
-                        onClick={() => setEditPhoto('REMOVE')}
-                        style={{ background: 'none', border: '1px solid #fca5a5', color: '#dc2626', fontSize: '.75rem' }}>
-                        Remove
-                      </button>
+                      <Button type="button" size="xs" color="light" className="text-red-600" onClick={() => setEditPhoto('REMOVE')}>Remove</Button>
                     )}
                   </div>
                   <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }}
@@ -530,169 +518,134 @@ export default function ClientsTab() {
                       ev.target.value = ''
                     }} />
                 </div>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Room"><TextInput value={editForm.room} onChange={e => setEditForm(f => ({ ...f, room: e.target.value }))} /></Field>
+                <Field label="Name"><TextInput value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></Field>
+                <Field label="Case Manager"><TextInput value={editForm.case_manager} onChange={e => setEditForm(f => ({ ...f, case_manager: e.target.value }))} /></Field>
+                <Field label="Phone"><TextInput value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></Field>
+                <Field label="Intake Date"><TextInput type="date" value={editForm.intake_date} onChange={e => setEditForm(f => ({ ...f, intake_date: e.target.value }))} /></Field>
+                <Field label="Discharge Date"><TextInput type="date" value={editForm.discharge_date} onChange={e => setEditForm(f => ({ ...f, discharge_date: e.target.value }))} /></Field>
               </div>
-              <div className="field"><label>Room</label>
-                <input type="text" value={editForm.room} onChange={e => setEditForm(f => ({ ...f, room: e.target.value }))} /></div>
-              <div className="field"><label>Name</label>
-                <input type="text" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} /></div>
-              <div className="field"><label>Case Manager</label>
-                <input type="text" value={editForm.case_manager} onChange={e => setEditForm(f => ({ ...f, case_manager: e.target.value }))} /></div>
-              <div className="field"><label>Phone</label>
-                <input type="text" value={editForm.phone} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} /></div>
-              <div className="field"><label>Intake Date</label>
-                <input type="date" value={editForm.intake_date} onChange={e => setEditForm(f => ({ ...f, intake_date: e.target.value }))} /></div>
-              <div className="field"><label>Discharge Date</label>
-                <input type="date" value={editForm.discharge_date} onChange={e => setEditForm(f => ({ ...f, discharge_date: e.target.value }))} /></div>
-              <div className="field"><label>Referral source</label>
-                <input type="text" placeholder="Referring agency / person"
-                  value={editForm.referral_source} onChange={e => setEditForm(f => ({ ...f, referral_source: e.target.value }))} /></div>
-              <div className="field"><label>Program track</label>
-                <select value={editForm.program_track} onChange={e => setEditForm(f => ({ ...f, program_track: e.target.value }))}>
+              <Field label="Referral source"><TextInput placeholder="Referring agency / person" value={editForm.referral_source} onChange={e => setEditForm(f => ({ ...f, referral_source: e.target.value }))} /></Field>
+              <Field label="Program track">
+                <Select value={editForm.program_track} onChange={e => setEditForm(f => ({ ...f, program_track: e.target.value }))}>
                   <option value="">— select —</option>
                   {programTracks.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label>Emergency contacts</label>
-                {(editForm.emergency_contacts||[]).map((c, idx) => (
-                  <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
-                    <input placeholder="Name"         value={c.name||''}         onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'name', e.target.value)} style={{ flex:2 }}/>
-                    <input placeholder="Relationship" value={c.relationship||''} onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'relationship', e.target.value)} style={{ flex:1 }}/>
-                    <input placeholder="Phone"        value={c.phone||''}        onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'phone', e.target.value)} style={{ flex:1 }}/>
-                    <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeEmergencyContact(setEditForm, editForm, idx)}>×</button>
-                  </div>
-                ))}
-                <button type="button" className="btn btn-sm" onClick={()=>addEmergencyContact(setEditForm, editForm)}>+ Add contact</button>
-              </div>
-              <div className="field"><label>Intake notes</label>
-                <textarea rows={3} value={editForm.intake_notes} onChange={e => setEditForm(f => ({ ...f, intake_notes: e.target.value }))} /></div>
+                </Select>
+              </Field>
+              <Field label="Emergency contacts">
+                <div className="space-y-1.5">
+                  {(editForm.emergency_contacts||[]).map((c, idx) => (
+                    <div key={idx} className="flex gap-1.5">
+                      <TextInput sizing="sm" className="flex-[2]" placeholder="Name" value={c.name||''} onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'name', e.target.value)} />
+                      <TextInput sizing="sm" className="flex-1" placeholder="Relationship" value={c.relationship||''} onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'relationship', e.target.value)} />
+                      <TextInput sizing="sm" className="flex-1" placeholder="Phone" value={c.phone||''} onChange={e=>updateEmergencyContact(setEditForm, editForm, idx, 'phone', e.target.value)} />
+                      <Button type="button" size="xs" color="red" onClick={()=>removeEmergencyContact(setEditForm, editForm, idx)}>×</Button>
+                    </div>
+                  ))}
+                  <Button type="button" size="xs" color="light" onClick={()=>addEmergencyContact(setEditForm, editForm)}>+ Add contact</Button>
+                </div>
+              </Field>
+              <Field label="Intake notes"><Textarea rows={3} value={editForm.intake_notes} onChange={e => setEditForm(f => ({ ...f, intake_notes: e.target.value }))} /></Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setEditModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveEdit} disabled={editSaving}>{editSaving ? 'Saving…' : 'Save Changes'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setEditModal(null)}>Cancel</Button>
+            <Button onClick={saveEdit} isProcessing={editSaving} disabled={editSaving}>Save Changes</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Reactivate Modal */}
       {reactivateModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setReactivateModal(null)}>
-          <div className="modal" style={{ maxWidth: 420 }}>
-            <div className="modal-head">
-              <h2>Reactivate {reactivateModal.name}</h2>
-              <button className="xbtn" onClick={() => setReactivateModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              <p style={{ fontSize: '.88rem', color: '#475569', marginBottom: 14 }}>
-                Assign a room and reactivate <strong>{reactivateModal.name}</strong>.
-              </p>
-              <div className="field">
-                <label>Room Assignment</label>
+        <Modal show size="md" onClose={() => setReactivateModal(null)}>
+          <ModalHeader>Reactivate {reactivateModal.name}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Assign a room and reactivate <strong className="text-gray-900 dark:text-white">{reactivateModal.name}</strong>.</p>
+              <Field label="Room Assignment">
                 {vacantRooms.length > 0 ? (
-                  <select value={reactRoom} onChange={e => setReactRoom(e.target.value)}
-                    style={{ fontFamily: 'var(--sans)', fontSize: '.9rem', padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', width: '100%' }}>
-                    {vacantRooms.map(r => (
-                      <option key={r} value={r}>Room {r} (vacant)</option>
-                    ))}
+                  <Select value={reactRoom} onChange={e => setReactRoom(e.target.value)}>
+                    {vacantRooms.map(r => <option key={r} value={r}>Room {r} (vacant)</option>)}
                     <option value={reactivateModal.room}>Room {reactivateModal.room} (previous)</option>
-                  </select>
+                  </Select>
                 ) : (
-                  <div>
-                    <p style={{ fontSize: '.8rem', color: '#C8500A', marginBottom: 6 }}>No VACANT rooms available. Enter room number manually:</p>
-                    <input type="text" value={reactRoom} onChange={e => setReactRoom(e.target.value)}
-                      placeholder="Room number" style={{ width: '100%', fontFamily: 'var(--sans)', fontSize: '.9rem', padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none' }} />
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-amber-600">No VACANT rooms available. Enter room number manually:</p>
+                    <TextInput value={reactRoom} onChange={e => setReactRoom(e.target.value)} placeholder="Room number" />
                   </div>
                 )}
-              </div>
+              </Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setReactivateModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={confirmReactivate} disabled={reactSaving || !reactRoom}>
-                {reactSaving ? 'Saving…' : 'Reactivate'}
-              </button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setReactivateModal(null)}>Cancel</Button>
+            <Button onClick={confirmReactivate} isProcessing={reactSaving} disabled={reactSaving || !reactRoom}>Reactivate</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Add Client Modal */}
       {addModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setAddModal(false)}>
-          <div className="modal" style={{ maxWidth: 460 }}>
-            <div className="modal-head">
-              <h2>Add Client</h2>
-              <button className="xbtn" onClick={() => setAddModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {addError && <div className="auth-error">{addError}</div>}
-              <div className="field"><label>Room <span style={{ color: '#DC2626' }}>*</span></label>
+        <Modal show size="lg" onClose={() => setAddModal(false)}>
+          <ModalHeader>Add Client</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {addError && <Alert color="failure">{addError}</Alert>}
+              <Field label="Room *">
                 {vacantRooms.length > 0 ? (
-                  <select value={addForm.room} autoFocus
-                    onChange={e => setAddForm(f => ({ ...f, room: e.target.value }))}
-                    style={{ fontFamily: 'var(--sans)', fontSize: '.9rem', padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', width: '100%' }}>
+                  <Select value={addForm.room} autoFocus onChange={e => setAddForm(f => ({ ...f, room: e.target.value }))}>
                     {vacantRooms.map(r => <option key={r} value={r}>Room {r} (vacant)</option>)}
-                  </select>
+                  </Select>
                 ) : (
-                  <div style={{ fontSize: '.84rem', color: '#C8500A', padding: '8px 0' }}>
-                    No vacant rooms available. Add VACANT rooms via facility management first.
-                  </div>
+                  <div className="py-2 text-sm text-amber-600">No vacant rooms available. Add VACANT rooms via facility management first.</div>
                 )}
+              </Field>
+              <Field label="Name *"><TextInput value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" /></Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Case Manager (optional)"><TextInput value={addForm.case_manager} onChange={e => setAddForm(f => ({ ...f, case_manager: e.target.value }))} /></Field>
+                <Field label="Phone (optional)"><TextInput value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" /></Field>
               </div>
-              <div className="field"><label>Name <span style={{ color: '#DC2626' }}>*</span></label>
-                <input type="text" value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" /></div>
-              <div className="field"><label>Case Manager <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                <input type="text" value={addForm.case_manager} onChange={e => setAddForm(f => ({ ...f, case_manager: e.target.value }))} /></div>
-              <div className="field"><label>Phone <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                <input type="text" value={addForm.phone} onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" /></div>
-              <div className="field"><label>Intake Date <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                <input type="date" value={addForm.intake_date} onChange={e => setAddForm(f => ({ ...f, intake_date: e.target.value }))} /></div>
-              <div className="field"><label>Referral source <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                <input type="text" placeholder="Referring agency / person"
-                  value={addForm.referral_source} onChange={e => setAddForm(f => ({ ...f, referral_source: e.target.value }))} /></div>
-              <div className="field"><label>Program track <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                <select value={addForm.program_track} onChange={e => setAddForm(f => ({ ...f, program_track: e.target.value }))}>
+              <Field label="Intake Date (optional)"><TextInput type="date" value={addForm.intake_date} onChange={e => setAddForm(f => ({ ...f, intake_date: e.target.value }))} /></Field>
+              <Field label="Referral source (optional)"><TextInput placeholder="Referring agency / person" value={addForm.referral_source} onChange={e => setAddForm(f => ({ ...f, referral_source: e.target.value }))} /></Field>
+              <Field label="Program track (optional)">
+                <Select value={addForm.program_track} onChange={e => setAddForm(f => ({ ...f, program_track: e.target.value }))}>
                   <option value="">— select —</option>
                   {programTracks.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label>Emergency contacts <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                {(addForm.emergency_contacts||[]).map((c, idx) => (
-                  <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
-                    <input placeholder="Name"         value={c.name||''}         onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'name', e.target.value)} style={{ flex:2 }}/>
-                    <input placeholder="Relationship" value={c.relationship||''} onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'relationship', e.target.value)} style={{ flex:1 }}/>
-                    <input placeholder="Phone"        value={c.phone||''}        onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'phone', e.target.value)} style={{ flex:1 }}/>
-                    <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeEmergencyContact(setAddForm, addForm, idx)}>×</button>
-                  </div>
-                ))}
-                <button type="button" className="btn btn-sm" onClick={()=>addEmergencyContact(setAddForm, addForm)}>+ Add contact</button>
-              </div>
-              <div className="field"><label>Intake notes <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-                <textarea rows={3} value={addForm.intake_notes} onChange={e => setAddForm(f => ({ ...f, intake_notes: e.target.value }))} /></div>
+                </Select>
+              </Field>
+              <Field label="Emergency contacts (optional)">
+                <div className="space-y-1.5">
+                  {(addForm.emergency_contacts||[]).map((c, idx) => (
+                    <div key={idx} className="flex gap-1.5">
+                      <TextInput sizing="sm" className="flex-[2]" placeholder="Name" value={c.name||''} onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'name', e.target.value)} />
+                      <TextInput sizing="sm" className="flex-1" placeholder="Relationship" value={c.relationship||''} onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'relationship', e.target.value)} />
+                      <TextInput sizing="sm" className="flex-1" placeholder="Phone" value={c.phone||''} onChange={e=>updateEmergencyContact(setAddForm, addForm, idx, 'phone', e.target.value)} />
+                      <Button type="button" size="xs" color="red" onClick={()=>removeEmergencyContact(setAddForm, addForm, idx)}>×</Button>
+                    </div>
+                  ))}
+                  <Button type="button" size="xs" color="light" onClick={()=>addEmergencyContact(setAddForm, addForm)}>+ Add contact</Button>
+                </div>
+              </Field>
+              <Field label="Intake notes (optional)"><Textarea rows={3} value={addForm.intake_notes} onChange={e => setAddForm(f => ({ ...f, intake_notes: e.target.value }))} /></Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setAddModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveAdd} disabled={addSaving}>{addSaving ? 'Saving…' : 'Add Client'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setAddModal(false)}>Cancel</Button>
+            <Button onClick={saveAdd} isProcessing={addSaving} disabled={addSaving}>Add Client</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Photo Popout */}
       {photoPopout && (
-        <div className="modal-overlay open" onClick={() => setPhotoPopout(null)} style={{ zIndex: 2000 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 16, maxWidth: '92vw',
-            display: 'flex', flexDirection: 'column', gap: 10, boxShadow: '0 20px 60px rgba(0,0,0,.4)' }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-              <span style={{ fontWeight: 600, fontSize: '.9rem', color: '#0f172a' }}>{photoPopout.name}</span>
-              <button className="xbtn" onClick={() => setPhotoPopout(null)}>&times;</button>
-            </div>
-            <img src={photoPopout.src} alt={photoPopout.name}
-              style={{ maxWidth: '80vw', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
-          </div>
-        </div>
+        <Modal show size="lg" onClose={() => setPhotoPopout(null)}>
+          <ModalHeader>{photoPopout.name}</ModalHeader>
+          <ModalBody>
+            <img src={photoPopout.src} alt={photoPopout.name} className="object-contain mx-auto rounded-lg max-h-[70vh]" />
+          </ModalBody>
+        </Modal>
       )}
 
       {/* Client Report Builder */}
@@ -702,67 +655,48 @@ export default function ClientsTab() {
 
       {/* Discharge Modal — creates a formal discharge_record and marks client inactive */}
       {dischargeModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setDischargeModal(null)}>
-          <div className="modal" style={{ maxWidth:580 }}>
-            <div className="modal-head">
-              <h2>Discharge {dischargeModal.name}</h2>
-              <button className="xbtn" onClick={() => setDischargeModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {dischargeErr && <div className="auth-error">{dischargeErr}</div>}
-              <p style={{ fontSize: '.85rem', color: '#475569', marginBottom: 12 }}>
-                A discharge record is created and is <strong>immutable</strong> after submission.
-                The client will be marked inactive.
+        <Modal show size="2xl" onClose={() => setDischargeModal(null)}>
+          <ModalHeader>Discharge {dischargeModal.name}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {dischargeErr && <Alert color="failure">{dischargeErr}</Alert>}
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                A discharge record is created and is <strong className="text-gray-900 dark:text-white">immutable</strong> after submission. The client will be marked inactive.
               </p>
-              <div style={{ display:'flex', gap:12 }}>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Discharge date</label>
-                  <input type="date" value={dischargeForm.discharge_date}
-                    onChange={e => setDischargeForm(f => ({ ...f, discharge_date: e.target.value }))} />
-                </div>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Reason</label>
-                  <select value={dischargeForm.reason}
-                    onChange={e => setDischargeForm(f => ({ ...f, reason: e.target.value }))}>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Discharge date"><TextInput type="date" value={dischargeForm.discharge_date} onChange={e => setDischargeForm(f => ({ ...f, discharge_date: e.target.value }))} /></Field>
+                <Field label="Reason">
+                  <Select value={dischargeForm.reason} onChange={e => setDischargeForm(f => ({ ...f, reason: e.target.value }))}>
                     <option value="graduate">Graduate / Successful completion</option>
                     <option value="ama">AMA (Against Medical Advice)</option>
                     <option value="therapeutic">Therapeutic discharge</option>
                     <option value="administrative">Administrative discharge</option>
-                  </select>
+                  </Select>
+                </Field>
+              </div>
+              <Field label="Narrative"><Textarea rows={3} value={dischargeForm.narrative} onChange={e => setDischargeForm(f => ({ ...f, narrative: e.target.value }))} /></Field>
+              <Field label="Aftercare plan"><Textarea rows={3} value={dischargeForm.aftercare_plan} onChange={e => setDischargeForm(f => ({ ...f, aftercare_plan: e.target.value }))} /></Field>
+              <Field label="Referrals made">
+                <div className="space-y-1.5">
+                  {(dischargeForm.referrals_made||[]).map((r, idx) => (
+                    <div key={idx} className="flex gap-1.5">
+                      <TextInput sizing="sm" className="flex-[2]" placeholder="Agency" value={r.agency||''} onChange={e=>updateReferral(idx,'agency', e.target.value)} />
+                      <TextInput sizing="sm" className="flex-[2]" placeholder="Contact" value={r.contact||''} onChange={e=>updateReferral(idx,'contact',e.target.value)} />
+                      <TextInput sizing="sm" className="flex-1" type="date" value={r.date||''} onChange={e=>updateReferral(idx,'date', e.target.value)} />
+                      <TextInput sizing="sm" className="flex-1" placeholder="Type" value={r.type||''} onChange={e=>updateReferral(idx,'type', e.target.value)} />
+                      <Button type="button" size="xs" color="red" onClick={()=>removeReferral(idx)}>×</Button>
+                    </div>
+                  ))}
+                  <Button type="button" size="xs" color="light" onClick={addReferral}>+ Add referral</Button>
                 </div>
-              </div>
-              <div className="field">
-                <label>Narrative</label>
-                <textarea rows={3} value={dischargeForm.narrative}
-                  onChange={e => setDischargeForm(f => ({ ...f, narrative: e.target.value }))} />
-              </div>
-              <div className="field">
-                <label>Aftercare plan</label>
-                <textarea rows={3} value={dischargeForm.aftercare_plan}
-                  onChange={e => setDischargeForm(f => ({ ...f, aftercare_plan: e.target.value }))} />
-              </div>
-              <div className="field">
-                <label>Referrals made</label>
-                {(dischargeForm.referrals_made||[]).map((r, idx) => (
-                  <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
-                    <input placeholder="Agency"  value={r.agency||''}  onChange={e=>updateReferral(idx,'agency', e.target.value)} style={{ flex:2 }}/>
-                    <input placeholder="Contact" value={r.contact||''} onChange={e=>updateReferral(idx,'contact',e.target.value)} style={{ flex:2 }}/>
-                    <input type="date" value={r.date||''}              onChange={e=>updateReferral(idx,'date',   e.target.value)} style={{ flex:1 }}/>
-                    <input placeholder="Type"    value={r.type||''}    onChange={e=>updateReferral(idx,'type',   e.target.value)} style={{ flex:1 }}/>
-                    <button type="button" className="btn btn-sm btn-danger" onClick={()=>removeReferral(idx)}>×</button>
-                  </div>
-                ))}
-                <button type="button" className="btn btn-sm" onClick={addReferral}>+ Add referral</button>
-              </div>
+              </Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setDischargeModal(null)}>Cancel</button>
-              <button className="btn btn-red" onClick={discharge} disabled={dischargeSaving}>
-                {dischargeSaving ? 'Saving…' : 'Discharge & Save Record'}
-              </button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setDischargeModal(null)}>Cancel</Button>
+            <Button color="red" onClick={discharge} isProcessing={dischargeSaving} disabled={dischargeSaving}>Discharge &amp; Save Record</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

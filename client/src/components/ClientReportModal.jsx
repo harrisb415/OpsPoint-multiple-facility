@@ -8,6 +8,8 @@
  */
 
 import { useState } from 'react'
+import { Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput } from 'flowbite-react'
+import { Field } from './ui.jsx'
 import { classifyLogEntry } from '../utils/printLog.js'
 
 // ── Pure helpers (no React) ───────────────────────────────────────────────
@@ -462,20 +464,14 @@ export default function ClientReportModal({ data, onClose }) {
   const showLimit = SECTION_OPTS.some(s => LIMIT_SECTIONS.has(s.key) && sections[s.key])
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 540 }}>
-        <div className="modal-head">
-          <h2>📊 Build Client Report</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-
-        <div className="modal-body">
+    <Modal show size="lg" onClose={onClose}>
+      <ModalHeader>📊 Build Client Report</ModalHeader>
+      <ModalBody>
 
           {/* Report title */}
-          <div className="field">
-            <label>Report Title</label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)} />
-          </div>
+          <Field label="Report Title" className="mb-3">
+            <TextInput value={title} onChange={e => setTitle(e.target.value)} />
+          </Field>
 
           {/* Client selection */}
           <div className="field">
@@ -556,23 +552,18 @@ export default function ClientReportModal({ data, onClose }) {
                 <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 4 }}>(UA, Meds, Incident Reports, Passes)</span>
               </label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <input type="number" min={1} max={50} value={limit}
-                  onChange={e => setLimit(Math.max(1, Math.min(50, parseInt(e.target.value) || 5)))}
-                  style={{ width: 70 }} />
+                <TextInput type="number" min={1} max={50} value={limit} className="w-20"
+                  onChange={e => setLimit(Math.max(1, Math.min(50, parseInt(e.target.value) || 5)))} />
                 <span style={{ fontSize: '.78rem', color: '#64748b' }}>most recent per resident</span>
               </div>
             </div>
           )}
 
-        </div>
-
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={generate}>
-            🖨 Generate &amp; Print
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={generate}>🖨 Generate &amp; Print</Button>
+      </ModalFooter>
+    </Modal>
   )
 }

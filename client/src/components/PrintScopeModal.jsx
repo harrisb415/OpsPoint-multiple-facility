@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput } from 'flowbite-react'
+import { Field } from './ui.jsx'
 
 // Reusable print-scope picker. Two modes:
 //   - 'shift'  : print only the currently-active report
@@ -30,56 +32,28 @@ export default function PrintScopeModal({
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 440 }}>
-        <div className="modal-head">
-          <h2>🖨 {title}</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div className="field">
-            <label>Scope</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <button type="button" onClick={() => setMode('shift')} style={btnStyle(mode === 'shift')}>
-                📋 {shiftLabel}
-              </button>
-              <button type="button" onClick={() => setMode('range')} style={btnStyle(mode === 'range')}>
-                📅 Date range
-              </button>
+    <Modal show size="md" onClose={onClose}>
+      <ModalHeader>🖨 {title}</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          <Field label="Scope">
+            <div className="flex gap-2">
+              <Button type="button" className="flex-1" color={mode === 'shift' ? 'default' : 'light'} onClick={() => setMode('shift')}>📋 {shiftLabel}</Button>
+              <Button type="button" className="flex-1" color={mode === 'range' ? 'default' : 'light'} onClick={() => setMode('range')}>📅 Date range</Button>
             </div>
-          </div>
-
+          </Field>
           {mode === 'range' && (
-            <div className="field" style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <label>Start date</label>
-                <input type="date" value={startDate} max={endDate || today}
-                  onChange={e => setStartDate(e.target.value)} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <label>End date</label>
-                <input type="date" value={endDate} min={startDate} max={today}
-                  onChange={e => setEndDate(e.target.value)} />
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Start date"><TextInput type="date" value={startDate} max={endDate || today} onChange={e => setStartDate(e.target.value)} /></Field>
+              <Field label="End date"><TextInput type="date" value={endDate} min={startDate} max={today} onChange={e => setEndDate(e.target.value)} /></Field>
             </div>
           )}
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={confirm}>Print</button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={confirm}>Print</Button>
+      </ModalFooter>
+    </Modal>
   )
-}
-
-function btnStyle(active) {
-  return {
-    flex: 1, padding: '10px 0', borderRadius: 8, cursor: 'pointer',
-    fontSize: '.85rem', fontWeight: 700,
-    border: `2px solid ${active ? 'var(--crimson)' : 'var(--line)'}`,
-    background: active ? 'var(--crimson)' : 'transparent',
-    color: active ? '#fff' : 'var(--steel)',
-    transition: 'all .12s',
-  }
 }

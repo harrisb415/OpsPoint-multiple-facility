@@ -1,8 +1,12 @@
 import { useState, useMemo } from 'react'
 import { Users, CalendarCheck, ListChecks, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { Breadcrumb, BreadcrumbItem, Button, TextInput } from 'flowbite-react'
+import {
+  Breadcrumb, BreadcrumbItem, Button, TextInput, Select, Checkbox, Label,
+  Modal, ModalHeader, ModalBody, ModalFooter, Alert,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -28,6 +32,7 @@ export default function GroupsTab() {
   const { hasPerm } = usePermission()
   const canView = hasPerm('groups.view') || hasPerm('groups.log') || hasPerm('clinical.groups')
   const canLog  = hasPerm('groups.log') || hasPerm('clinical.groups')
+  const confirmDialog = useConfirm()
 
   const masterGroups = useMemo(() => data?.master_groups || [], [data?.master_groups])
   const clients = useMemo(() =>
@@ -65,7 +70,7 @@ export default function GroupsTab() {
   const isToday = viewDate === todayStr()
 
   async function deleteSession(id) {
-    if (!confirm('Delete this group record?')) return
+    if (!await confirmDialog({ title: 'Delete this group record?', confirmText: 'Delete', color: 'red' })) return
     const r = await fetch(`/api/clinical/group-notes/${id}`, { method: 'DELETE', credentials: 'include' })
     if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || 'Delete failed'); return }
     loadData()
@@ -220,69 +225,56 @@ function AttendanceModal({ record, clients, masterGroups, viewDate, onClose, onS
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 540 }}>
-        <div className="modal-head">
-          <h2>{isEdit ? 'Edit Group Attendance' : 'Log Group Attendance'}</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          {err && <div className="auth-error">{err}</div>}
-          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1e40af', fontSize: '.76rem', borderRadius: 6, padding: '7px 11px', marginBottom: 12 }}>
-            Record who attended. A clinician adds the session note and signs it under <strong>Clinical → Group Notes</strong>.
-          </div>
+    <Modal show size="lg" onClose={onClose}>
+      <ModalHeader>{isEdit ? 'Edit Group Attendance' : 'Log Group Attendance'}</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          {err && <Alert color="failure">{err}</Alert>}
+          <Alert color="info">Record who attended. A clinician adds the session note and signs it under <strong>Clinical → Group Notes</strong>.</Alert>
 
-          <div style={{ display: 'flex', gap: 12 }}>
-            <div className="field" style={{ flex: 2 }}>
-              <label>Group <span style={{ color: '#DC2626' }}>*</span></label>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Group *" className="col-span-2">
               {masterGroups.length > 0
-                ? <select value={groupName} onChange={e => setGroupName(e.target.value)}
-                    style={{ fontFamily: 'var(--sans)', fontSize: '.9rem', padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', width: '100%' }}>
+                ? <Select value={groupName} onChange={e => setGroupName(e.target.value)}>
                     <option value="">— Select group —</option>
                     {masterGroups.map((g, i) => <option key={i} value={g}>{g}</option>)}
-                  </select>
-                : <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name" />}
-            </div>
-            <div className="field" style={{ flex: 1 }}>
-              <label>Date</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-            </div>
+                  </Select>
+                : <TextInput value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name" />}
+            </Field>
+            <Field label="Date"><TextInput type="date" value={date} onChange={e => setDate(e.target.value)} /></Field>
           </div>
 
-          <div className="field">
-            <label>Topic <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-            <input type="text" value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Relapse prevention" />
-          </div>
+          <Field label="Topic (optional)"><TextInput value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Relapse prevention" /></Field>
 
-          <div className="field">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <label style={{ marginBottom: 0 }}>Attendance</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" className="btn btn-sm" style={pillBtn} onClick={() => setAll(true)}>All Present</button>
-                <button type="button" className="btn btn-sm" style={pillBtn} onClick={() => setAll(false)}>All Absent</button>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Attendance</label>
+              <div className="flex gap-1.5">
+                <Button type="button" size="xs" color="light" onClick={() => setAll(true)}>All Present</Button>
+                <Button type="button" size="xs" color="light" onClick={() => setAll(false)}>All Absent</Button>
               </div>
             </div>
-            <div style={{ border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden', maxHeight: 260, overflowY: 'auto' }}>
+            <div className="overflow-hidden overflow-y-auto border border-gray-200 rounded-lg max-h-64 dark:border-gray-700">
               {clients.length === 0
-                ? <div style={{ padding: '12px 14px', color: '#94a3b8', fontSize: '.84rem' }}>No active residents.</div>
+                ? <div className="px-3.5 py-3 text-sm text-gray-400">No active residents.</div>
                 : clients.map(c => (
-                  <label key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', background: present[c.id] ? '#f0fdf4' : '#fff' }}>
-                    <input type="checkbox" checked={!!present[c.id]} onChange={() => toggle(c.id)} style={{ width: 15, height: 15, accentColor: 'var(--accent)', cursor: 'pointer' }} />
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#64748b', width: 30 }}>{c.room}</span>
-                    <span style={{ fontSize: '.88rem', fontWeight: 600, color: present[c.id] ? '#15803d' : '#94a3b8' }}>{c.name}</span>
-                    {present[c.id] && <span style={{ marginLeft: 'auto', fontSize: '.68rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '1px 6px', borderRadius: 10 }}>Present</span>}
+                  <label key={c.id} className={`flex items-center gap-2.5 px-3.5 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-700 ${present[c.id] ? 'bg-green-50 dark:bg-green-900/20' : 'bg-white dark:bg-gray-800'}`}>
+                    <Checkbox checked={!!present[c.id]} onChange={() => toggle(c.id)} />
+                    <span className="font-mono text-xs text-gray-500 w-7">{c.room}</span>
+                    <span className={`text-sm font-semibold ${present[c.id] ? 'text-green-700 dark:text-green-400' : 'text-gray-400'}`}>{c.name}</span>
+                    {present[c.id] && <span className="px-1.5 py-px ml-auto text-[10px] font-bold text-green-700 bg-green-100 rounded-full dark:bg-green-900/40 dark:text-green-300">Present</span>}
                   </label>
                 ))}
             </div>
-            {clients.length > 0 && <div style={{ fontSize: '.75rem', color: '#64748b', marginTop: 6 }}>{presentCount} of {clients.length} marked present</div>}
+            {clients.length > 0 && <div className="mt-1.5 text-xs text-gray-500">{presentCount} of {clients.length} marked present</div>}
           </div>
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : (isEdit ? 'Save Attendance' : 'Log Attendance')}</button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={save} isProcessing={saving} disabled={saving}>{isEdit ? 'Save Attendance' : 'Log Attendance'}</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 

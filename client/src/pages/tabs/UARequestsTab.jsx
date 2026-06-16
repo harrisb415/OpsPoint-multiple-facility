@@ -456,12 +456,12 @@ function UAPhotoBtn({ logEntryId, hasPhoto, onSaved }) {
       <input ref={fileRef} type="file" accept="image/*"
         style={{ display:'none' }} onChange={handleFile} />
       {showPhoto && photoSrc && (
-        <div className="modal-overlay open" onClick={() => setShowPhoto(false)} style={{ zIndex:2000 }}>
-          <div style={{ background:'#fff', borderRadius:12, padding:16, maxWidth:'90vw', boxShadow:'0 25px 60px rgba(0,0,0,.4)' }} onClick={e => e.stopPropagation()}>
-            <img src={photoSrc} alt="UA chain-of-custody" style={{ maxWidth:'100%', maxHeight:'80vh', display:'block', borderRadius:6 }} />
-            <button onClick={() => setShowPhoto(false)} style={{ marginTop:10, background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, padding:'6px 16px', cursor:'pointer', fontFamily:'var(--sans)' }}>Close</button>
-          </div>
-        </div>
+        <Modal show size="lg" onClose={() => setShowPhoto(false)}>
+          <ModalHeader>Chain-of-custody photo</ModalHeader>
+          <ModalBody>
+            <img src={photoSrc} alt="UA chain-of-custody" className="block object-contain mx-auto rounded-lg max-h-[70vh]" />
+          </ModalBody>
+        </Modal>
       )}
     </>
   )

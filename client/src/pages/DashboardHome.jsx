@@ -201,7 +201,7 @@ export default function DashboardHome({ onNavigate }) {
       </div>
 
       {/* Roster + activity */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-start">
         {/* Roster */}
         <div className={`${cardCls} lg:col-span-2 overflow-hidden`}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">

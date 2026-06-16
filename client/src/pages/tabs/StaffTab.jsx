@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { UserPlus, MoreHorizontal, Users, UserCog, ClipboardList } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card,
+  Badge, Breadcrumb, BreadcrumbItem, Button, Card,
   Dropdown, DropdownItem, Label, Modal, ModalHeader, ModalBody, ModalFooter,
   Select,
   TextInput, Textarea, Alert,
@@ -11,7 +11,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { useConfirm } from '../../components/ui.jsx'
+import { ColoredAvatar, useConfirm } from '../../components/ui.jsx'
 
 function formatPhone(raw) {
   if (!raw) return ''
@@ -166,7 +166,7 @@ export default function StaffTab() {
             <TableRow key={s.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <Avatar placeholderInitials={initials(s.name)} rounded size="sm" />
+                  <ColoredAvatar name={s.name} />
                   <span className="font-semibold text-gray-900 whitespace-nowrap dark:text-white">{s.name}</span>
                 </div>
               </TableCell>

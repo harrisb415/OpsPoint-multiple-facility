@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react'
+import { initials, avatarColor } from '../utils/ui.js'
 
 // ── Form field: label + control (dark-aware) ───────────────────────────────
 export function Field({ label, hint, htmlFor, children, className = '' }) {
@@ -49,3 +50,13 @@ export function ConfirmProvider({ children }) {
 }
 
 export const useConfirm = () => useContext(ConfirmCtx)
+
+// ── Colored initials avatar (matches the design prototype) ─────────────────
+export function ColoredAvatar({ name, size = 'sm' }) {
+  const dim = size === 'lg' ? 'w-11 h-11 text-sm' : 'w-9 h-9 text-xs'
+  return (
+    <span className={`flex items-center justify-center font-semibold rounded-full shrink-0 ${dim} ${avatarColor(name)}`}>
+      {initials(name)}
+    </span>
+  )
+}

@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search } from 'lucide-react'
+import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   TextInput,
   Select, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
@@ -11,10 +11,38 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
 import { initials } from '../../utils/ui.js'
-import { Field } from '../../components/ui.jsx'
+import { Field, ColoredAvatar } from '../../components/ui.jsx'
 
-// Shift-status badge color (flowbite Badge colors)
-const STATUS_BADGE = { green: 'success', blue: 'info', yellow: 'warning', red: 'failure', purple: 'purple', orange: 'warning' }
+// Prototype-style status badge class strings (rounded-md pill, not rounded-full)
+const BADGE_CLS = {
+  green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  blue:   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  red:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  orange: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+  gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+}
+
+function DeltaRow({ delta, label }) {
+  if (!delta) return (
+    <div className="pt-3 mt-4 border-t border-gray-100 dark:border-gray-700">
+      <span className="inline-flex items-center text-sm font-medium text-gray-400">
+        <Minus className="w-4 h-4 mr-1" />{label}
+      </span>
+    </div>
+  )
+  const up = delta > 0
+  return (
+    <div className="pt-3 mt-4 border-t border-gray-100 dark:border-gray-700">
+      <span className={`inline-flex items-center text-sm font-medium ${up ? 'text-green-500' : 'text-red-500'}`}>
+        {up ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
+        {up ? '+' : ''}{delta}
+        <span className="ml-1.5 font-normal text-gray-400">{label}</span>
+      </span>
+    </div>
+  )
+}
 
 const PAGE_SIZE = 50
 
@@ -402,10 +430,10 @@ export default function ClientsTab() {
       {/* KPIs */}
       <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: 'Total Residents', value: active, sub: `${vacant} beds open`, Icon: Users, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
-          { label: 'On Site', value: onSite, sub: `${pct}% of census`, Icon: Home, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
-          { label: 'New Intakes', value: newIntakes, sub: 'last 7 days', Icon: UserPlus, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
-          { label: 'Avg Tenure', value: avgTenure, sub: 'days in program', Icon: CalendarDays, tint: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' },
+          { label: 'Total Residents', value: active, sub: `${vacant} beds open`, delta: newIntakes, dl: 'new this week', Icon: Users, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'On Site', value: onSite, sub: `${pct}% of census`, delta: 0, dl: 'this shift', Icon: Home, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+          { label: 'New Intakes', value: newIntakes, sub: 'last 7 days', delta: newIntakes, dl: 'this week', Icon: UserPlus, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
+          { label: 'Avg Tenure', value: avgTenure, sub: 'days in program', delta: 0, dl: 'this session', Icon: CalendarDays, tint: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' },
         ].map(k => (
           <Card key={k.label}>
             <div className="flex items-start justify-between">
@@ -416,6 +444,7 @@ export default function ClientsTab() {
               </div>
               <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
             </div>
+            <DeltaRow delta={k.delta} label={k.dl} />
           </Card>
         ))}
       </div>
@@ -424,7 +453,15 @@ export default function ClientsTab() {
       <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {['All', 'In Building', 'At Work', 'On Pass', 'Hospital'].map((f, i) => (
-            <Button key={f} size="xs" color={i === statusFilter ? 'default' : 'light'} onClick={() => setStatusFilter(i)}>{f}</Button>
+            <button
+              key={f}
+              onClick={() => setStatusFilter(i)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                i === statusFilter
+                  ? 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-800'
+                  : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700'
+              }`}
+            >{f}</button>
           ))}
         </div>
         <div className="flex items-center gap-3">
@@ -455,14 +492,16 @@ export default function ClientsTab() {
               <TableRow key={c.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <Avatar placeholderInitials={initials(c.name)} rounded size="sm" />
+                    <ColoredAvatar name={c.name} />
                     <div>
                       <button onClick={() => openProfile(c.id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{c.name}</button>
                       <p className="font-mono text-xs text-gray-400">Rm {c.room}</p>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell><Badge color={STATUS_BADGE[st.tone] || 'gray'} className="inline-flex w-fit">{st.label}</Badge></TableCell>
+                <TableCell>
+                  <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${BADGE_CLS[st.tone] || BADGE_CLS.gray}`}>{st.label}</span>
+                </TableCell>
                 <TableCell>{c.program_track || '—'}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">
                   {days != null ? <><span className="font-mono font-semibold text-gray-900 dark:text-white">{days}</span> <span className="text-xs text-gray-400">days</span></> : '—'}

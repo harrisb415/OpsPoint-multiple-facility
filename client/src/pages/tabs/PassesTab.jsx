@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Pagination,
   Textarea, TextInput, Select, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
@@ -10,7 +10,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
 const PASS_BADGE = { Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
@@ -103,7 +103,7 @@ export default function PassesTab() {
   const NameCell = ({ p }) => (
     <TableCell>
       <div className="flex items-center gap-3">
-        <Avatar placeholderInitials={initials(p.name)} rounded size="sm" />
+        <ColoredAvatar name={p.name} />
         <div>
           {p.client_id
             ? <button onClick={() => openProfile(p.client_id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{p.name}</button>

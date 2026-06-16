@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { FlaskConical, CheckCircle, XCircle, Plus, Printer, X } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Select, Checkbox, Label,
+  Badge, Breadcrumb, BreadcrumbItem, Button, Card, Select, Checkbox, Label,
   TextInput, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
@@ -11,7 +11,7 @@ import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -37,7 +37,7 @@ function NameCell({ name, room }) {
   return (
     <TableCell>
       <div className="flex items-center gap-3">
-        <Avatar placeholderInitials={initials(name)} rounded size="sm" />
+        <ColoredAvatar name={name} />
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">{name}</p>
           <p className="font-mono text-xs text-gray-400">Rm {room}</p>

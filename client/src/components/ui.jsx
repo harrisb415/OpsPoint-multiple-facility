@@ -60,3 +60,45 @@ export function ColoredAvatar({ name, size = 'sm' }) {
     </span>
   )
 }
+
+// Prototype badge class map — accepts both flowbite color names and direct tone names.
+const _BADGE_CLS = {
+  success: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  info:    'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  failure: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  purple:  'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+  pink:    'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300',
+  gray:    'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  green:   'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  blue:    'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  yellow:  'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  red:     'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  sky:     'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
+  orange:  'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+}
+
+// ── Prototype-style status badge (rounded-md pill, replaces flowbite Badge) ──
+export function StatusBadge({ color = 'gray', children, className = '' }) {
+  return (
+    <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${_BADGE_CLS[color] || _BADGE_CLS.gray} ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+// ── Prototype-style filter chip (replaces flowbite Button size="xs" filters) ─
+export function FilterChip({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+        active
+          ? 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-800'
+          : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}

@@ -4,7 +4,7 @@
 // consistency with the rest of OpsPoint.
 // ════════════════════════════════════════════════════════════════════════
 import { NotebookPen, Target, Award, ClipboardList, Users, Siren, DoorOpen } from 'lucide-react'
-import { Badge, Modal as FbModal, ModalHeader, ModalBody, ModalFooter } from 'flowbite-react'
+import { Modal as FbModal, ModalHeader, ModalBody, ModalFooter } from 'flowbite-react'
 
 // Navigation entries for the clinical section. `perm` (single) or `perms`
 // (any-of) controls visibility. `icon` is a lucide-react component.
@@ -86,9 +86,10 @@ const STATUS_BADGE = {
   active: 'success', completed: 'info', discontinued: 'gray',
   signed: 'success', pending: 'warning', reviewed: 'info',
 }
+const _SB_CLS = { success:'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300', warning:'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300', info:'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300', gray:'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' }
 export function StatusBadge({ status }) {
   const label = String(status || '')
-  return <Badge color={STATUS_BADGE[status] || 'gray'} className="inline-flex w-fit">{label.charAt(0).toUpperCase() + label.slice(1)}</Badge>
+  return <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${_SB_CLS[STATUS_BADGE[status]] || _SB_CLS.gray}`}>{label.charAt(0).toUpperCase() + label.slice(1)}</span>
 }
 
 // ── Generic chip badge ─────────────────────────────────────────────────────

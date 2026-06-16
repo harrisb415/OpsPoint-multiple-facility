@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { FlaskConical, CheckCircle, XCircle, Plus, Printer, X } from 'lucide-react'
 import {
-  Badge, Breadcrumb, BreadcrumbItem, Button, Card, Select, Checkbox, Label,
+  Breadcrumb, BreadcrumbItem, Button, Card, Select, Checkbox, Label,
   TextInput, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
@@ -11,7 +11,7 @@ import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -256,7 +256,7 @@ export default function UARequestsTab() {
             ) : pending.map(req => (
               <TableRow key={req.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                 <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} room={req.room} />
-                <TableCell><Badge color={req.is_interview ? 'warning' : 'failure'} className="inline-flex w-fit">{req.is_interview ? 'Pre-Intake' : 'UA Request'}</Badge></TableCell>
+                <TableCell><StatusBadge color={req.is_interview ? 'warning' : 'failure'}>{req.is_interview ? 'Pre-Intake' : 'UA Request'}</StatusBadge></TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{req.requested_by || '—'}</TableCell>
                 <TableCell className="font-mono">{fmtDT(req.requested_at)}</TableCell>
                 <TableCell className="text-right">
@@ -290,7 +290,7 @@ export default function UARequestsTab() {
               {acknowledged.slice(0, 20).map(req => (
                 <TableRow key={req.id} className="bg-white opacity-70 dark:border-gray-700 dark:bg-gray-800">
                   <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} room={req.room} />
-                  <TableCell><Badge color="gray" className="inline-flex w-fit">{req.is_interview ? 'Pre-Intake' : 'UA Request'}</Badge></TableCell>
+                  <TableCell><StatusBadge color="gray">{req.is_interview ? 'Pre-Intake' : 'UA Request'}</StatusBadge></TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400">{req.requested_by || '—'}</TableCell>
                   <TableCell className="font-mono">{fmtDT(req.requested_at)}</TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400">{req.acknowledged_by || '—'}</TableCell>
@@ -341,7 +341,7 @@ export default function UARequestsTab() {
                 <NameCell name={r.client_name} room={r.room} />
                 <TableCell className="font-mono">{fmtDT(r.tested_at)}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{REASON_LABEL[r.reason] || r.reason || '—'}</TableCell>
-                <TableCell><Badge color={RESULT_BADGE[r.result] || 'gray'} className="inline-flex w-fit">{RESULT_LABEL[r.result] || r.result}</Badge></TableCell>
+                <TableCell><StatusBadge color={RESULT_BADGE[r.result] || 'gray'}>{RESULT_LABEL[r.result] || r.result}</StatusBadge></TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{posSubs.length > 0 ? <span className="font-semibold text-red-700 dark:text-red-400">POS: {posSubs.join(', ')}</span> : (r.result === 'pass' ? 'NEG all' : '—')}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{r.witnessed_by_name || '—'}</TableCell>
                 <TableCell className="text-right">

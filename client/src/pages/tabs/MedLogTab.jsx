@@ -2,14 +2,14 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Pill, Clock, Lock, Plus } from 'lucide-react'
 import {
-  Avatar, Breadcrumb, BreadcrumbItem, Button, Select,
+  Breadcrumb, BreadcrumbItem, Button, Select,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
@@ -201,7 +201,7 @@ export default function MedLogTab() {
                   <TableCell className="font-mono">{fmtDT(r.administered_at)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar placeholderInitials={initials(r.client_name)} rounded size="sm" />
+                      <ColoredAvatar name={r.client_name} />
                       <div>
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">{r.client_name}</p>
                         <p className="font-mono text-xs text-gray-400">Rm {r.room}</p>

@@ -2,12 +2,12 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
 import {
-  Badge, Breadcrumb, BreadcrumbItem, Button, Pagination,
+  Breadcrumb, BreadcrumbItem, Button, Pagination,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { useConfirm } from '../../components/ui.jsx'
+import { StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -135,7 +135,7 @@ export default function ArchiveTab() {
                     <TableCell className="font-semibold text-gray-900 dark:text-white">{r.shift || '—'}</TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{r.mod_name || '—'}</TableCell>
                     <TableCell>{tot}{tot !== '—' ? ' residents' : ''}</TableCell>
-                    <TableCell><Badge color={r.is_closed ? 'success' : 'warning'} className="inline-flex w-fit">{r.is_closed ? 'Closed' : 'Open'}</Badge></TableCell>
+                    <TableCell><StatusBadge color={r.is_closed ? 'success' : 'warning'}>{r.is_closed ? 'Closed' : 'Open'}</StatusBadge></TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center justify-end gap-1">
                         <Button size="xs" color="light" onClick={e => { e.stopPropagation(); setSelected(r) }}>View</Button>
@@ -322,7 +322,7 @@ function ReportDetail({ report: r, data, onBack }) {
           <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Date</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{fmtDate(r.report_date)}</div></div>
           <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Shift</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{r.shift || '—'}</div></div>
           <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">MOD</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{r.mod_name || '—'}</div></div>
-          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Status</div><div className="mt-1"><Badge color={r.is_closed ? 'success' : 'warning'} className="inline-flex w-fit">{r.is_closed ? 'Closed' : 'Open'}</Badge></div></div>
+          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Status</div><div className="mt-1"><StatusBadge color={r.is_closed ? 'success' : 'warning'}>{r.is_closed ? 'Closed' : 'Open'}</StatusBadge></div></div>
         </div>
       </Panel>
 

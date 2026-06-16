@@ -3,12 +3,12 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { ShieldCheck, FileCheck, Share2, Plus } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select, Checkbox, Label,
+  Breadcrumb, BreadcrumbItem, Button, Select, Checkbox, Label,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
@@ -204,7 +204,7 @@ export default function ConsentTab() {
                       <TableRow key={c.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <Avatar placeholderInitials={initials(c.recipient_name)} size="sm" />
+                            <ColoredAvatar name={c.recipient_name} />
                             <div>
                               <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.recipient_name}</p>
                               {c.recipient_org && <p className="font-mono text-xs text-gray-400">{c.recipient_org}</p>}
@@ -215,7 +215,7 @@ export default function ConsentTab() {
                         <TableCell className="text-gray-500 dark:text-gray-400">{INFO_LABEL[c.information_type] || c.information_type}</TableCell>
                         <TableCell className="font-mono">{fmtDate(c.effective_date)}</TableCell>
                         <TableCell className="font-mono">{c.expiration_date ? fmtDate(c.expiration_date) : '—'}</TableCell>
-                        <TableCell><Badge color={st.color} className="inline-flex w-fit">{st.label}</Badge></TableCell>
+                        <TableCell><StatusBadge color={st.color}>{st.label}</StatusBadge></TableCell>
                         <TableCell className="text-right">
                           {!c.revoked && canManage
                             ? <Button size="xs" color="light" className="text-red-600" onClick={() => revoke(c)}>Revoke</Button>

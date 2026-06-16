@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Mail as MailIcon, Inbox, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Pagination,
   Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
@@ -12,7 +12,7 @@ import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
-import { useConfirm } from '../../components/ui.jsx'
+import { ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 30
 const MAIL_BADGE = { pending: 'warning', approved: 'info', delivered: 'success' }
@@ -206,9 +206,9 @@ export default function MailTab() {
       <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {FILTERS.map(f => (
-            <Button key={f.key} size="xs" color={f.key === filter ? 'default' : 'light'} onClick={() => { setFilter(f.key); setPage(0) }}>
+            <FilterChip key={f.key} active={f.key === filter} onClick={() => { setFilter(f.key); setPage(0) }}>
               {f.label} ({counts[f.key]})
-            </Button>
+            </FilterChip>
           ))}
         </div>
         <span className="text-sm text-gray-400">{filtered.length} records</span>
@@ -233,7 +233,7 @@ export default function MailTab() {
             <TableRow key={m.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <Avatar placeholderInitials={initials(m.client_name)} rounded size="sm" />
+                  <ColoredAvatar name={m.client_name} />
                   <div>
                     {m.client_id
                       ? <button onClick={() => openProfile(m.client_id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{m.client_name}</button>
@@ -245,7 +245,7 @@ export default function MailTab() {
               <TableCell>{(m.mail_type || '').split(',').filter(Boolean).map(t => t[0].toUpperCase() + t.slice(1)).join(', ') || '—'}</TableCell>
               <TableCell className="text-gray-500 dark:text-gray-400">{m.logged_by || '—'}</TableCell>
               <TableCell className="font-mono">{fmtDT(m.logged_at)}</TableCell>
-              <TableCell><Badge color={MAIL_BADGE[m.status] || 'gray'} className="inline-flex w-fit">{MAIL_LABEL[m.status] || m.status}</Badge></TableCell>
+              <TableCell><StatusBadge color={MAIL_BADGE[m.status] || 'gray'}>{MAIL_LABEL[m.status] || m.status}</StatusBadge></TableCell>
               <TableCell className="text-right">
                 {(canApprove || canDeliver || canDelete) && (
                   <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>

@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react'
 import { Plus, Lock } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
+  Breadcrumb, BreadcrumbItem, Button, Select,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 const MS_BADGE = { in_progress: 'warning', completed: 'success', waived: 'gray' }
@@ -33,8 +33,9 @@ function completedOn(m) {
   return m.completion_date || (m.signed_off_at ? String(m.signed_off_at).slice(0, 10) : null)
 }
 
+const _MS_CLS = { warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300', success: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300', gray: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' }
 function StatusBadge({ status }) {
-  return <Badge color={MS_BADGE[status] || 'gray'} className="inline-flex w-fit">{MS_LABEL[status] || status}</Badge>
+  return <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${_MS_CLS[MS_BADGE[status]] || _MS_CLS.gray}`}>{MS_LABEL[status] || status}</span>
 }
 
 const BLANK = { client_id: '', client_name: '', phase: '', objective: '', target_date: '', notes: '', goal_ref: '' }
@@ -245,7 +246,7 @@ export default function MilestonesTab() {
                 <TableRow key={m.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar placeholderInitials={initials(m.client_name)} rounded size="sm" />
+                      <ColoredAvatar name={m.client_name} />
                       <span className="text-sm font-semibold text-gray-900 whitespace-nowrap dark:text-white">{m.client_name}</span>
                     </div>
                   </TableCell>
@@ -253,7 +254,7 @@ export default function MilestonesTab() {
                   <TableCell className="text-gray-500 dark:text-gray-400">{m.objective}</TableCell>
                   <TableCell className="font-mono">{fmtDate(m.target_date)}</TableCell>
                   <TableCell className="font-mono">{m.status === 'completed' ? fmtDate(completedOn(m)) : '—'}</TableCell>
-                  <TableCell><Badge color={MS_BADGE[m.status] || 'gray'} className="inline-flex w-fit">{MS_LABEL[m.status] || m.status}</Badge></TableCell>
+                  <TableCell><StatusBadge status={m.status} /></TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400">{m.counselor_name || '—'}</TableCell>
                   <TableCell className="font-mono">{fmtLogged(m.created_at)}</TableCell>
                   <TableCell className="text-right">

@@ -11,7 +11,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { ColoredAvatar, useConfirm } from '../../components/ui.jsx'
+import { ColoredAvatar, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 function formatPhone(raw) {
   if (!raw) return ''
@@ -141,7 +141,7 @@ export default function StaffTab() {
       <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           {filters.map(f => (
-            <Button key={f} size="xs" color={f === filterCat ? 'default' : 'light'} onClick={() => setFilterCat(f)}>{f}</Button>
+            <FilterChip key={f} active={f === filterCat} onClick={() => setFilterCat(f)}>{f}</FilterChip>
           ))}
         </div>
         <span className="text-sm text-gray-400">{filtered.length} records</span>

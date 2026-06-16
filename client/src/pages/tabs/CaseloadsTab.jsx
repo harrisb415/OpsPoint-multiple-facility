@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Users, UserCheck, UserX, Calendar } from 'lucide-react'
-import { Badge, Breadcrumb, BreadcrumbItem } from 'flowbite-react'
+import { Breadcrumb, BreadcrumbItem } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
+import { StatusBadge } from '../../components/ui.jsx'
 
 const STATUS_LABEL = {
   building: 'In Building', work: 'Work', pass: 'Weekend Pass',
@@ -42,7 +43,7 @@ function ResidentCard({ c, status }) {
     <div className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-700">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</p>
-        <Badge color={STATUS_BADGE[status] || 'gray'} className="inline-flex shrink-0 w-fit">{STATUS_LABEL[status] || status}</Badge>
+        <StatusBadge color={STATUS_BADGE[status] || 'gray'} className="shrink-0">{STATUS_LABEL[status] || status}</StatusBadge>
       </div>
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Rm {c.room}{phone ? ' · ' + phone : ''}</p>
       {c.intake_date && (

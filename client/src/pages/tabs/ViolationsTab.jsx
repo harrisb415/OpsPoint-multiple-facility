@@ -2,16 +2,16 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Ban, Flame, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem, Select, Checkbox, Label,
-  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem, Select, Checkbox, Label,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -23,7 +23,7 @@ function fmtDate(d) {
   catch { return d }
 }
 
-function StatusBadge({ status }) {
+function VioStatusBadge({ status }) {
   const cls = {
     pending:   'vbadge vbadge-pending',
     assigned:  'vbadge vbadge-assigned',
@@ -261,7 +261,7 @@ export default function ViolationsTab() {
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {['All', 'Pending', 'Assigned', 'Waived', 'Completed'].map((f, i) => (
-          <Button key={f} size="xs" color={i === statusFilter ? 'default' : 'light'} onClick={() => setStatusFilter(i)}>{f}</Button>
+          <FilterChip key={f} active={i === statusFilter} onClick={() => setStatusFilter(i)}>{f}</FilterChip>
         ))}
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
@@ -270,7 +270,7 @@ export default function ViolationsTab() {
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <div className="flex gap-1">
           {['list', 'by_client'].map(m => (
-            <Button key={m} size="xs" color={viewMode === m ? 'default' : 'light'} onClick={() => setViewMode(m)}>{m === 'list' ? 'List' : 'By Client'}</Button>
+            <FilterChip key={m} active={viewMode === m} onClick={() => setViewMode(m)}>{m === 'list' ? 'List' : 'By Client'}</FilterChip>
           ))}
         </div>
         <Select sizing="sm" value={sort} onChange={e => setSort(e.target.value)}>
@@ -314,7 +314,7 @@ export default function ViolationsTab() {
                   <TableRow key={v.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <Avatar placeholderInitials={initials(v.client_name)} rounded size="sm" />
+                        <ColoredAvatar name={v.client_name} />
                         <div>
                           <p className="text-sm font-semibold text-gray-900 dark:text-white">{v.client_name}</p>
                           <p className="font-mono text-xs text-gray-400">Rm {v.room}</p>
@@ -323,7 +323,7 @@ export default function ViolationsTab() {
                     </TableCell>
                     <TableCell className="font-mono">{fmtDate(v.violation_date)}</TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.description}</TableCell>
-                    <TableCell><Badge color={VIO_BADGE[v.status] || 'gray'} className="inline-flex w-fit">{VIO_LABEL[v.status] || v.status}</Badge></TableCell>
+                    <TableCell><StatusBadge color={VIO_BADGE[v.status] || 'gray'}>{VIO_LABEL[v.status] || v.status}</StatusBadge></TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0, 10))}</span>}</TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.logged_by || '—'}</TableCell>
                     <TableCell className="text-right">
@@ -549,7 +549,7 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
       {!compact && <td className="name-cell">{v.client_name}</td>}
       <td className="date-cell">{fmtDate(v.violation_date)}</td>
       <td style={{ fontSize: '.84rem', maxWidth: 220 }}>{v.description}</td>
-      <td><StatusBadge status={v.status} /></td>
+      <td><VioStatusBadge status={v.status} /></td>
       <td style={{ fontSize: '.82rem', color: '#475569', maxWidth: 180 }}>
         {v.consequence || (v.status === 'waived' ? '—' : '')}
         {v.consequence && v.consequence_by && (

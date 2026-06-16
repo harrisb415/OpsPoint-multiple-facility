@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
 import {
-  Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Pagination,
   Textarea, TextInput, Select, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
@@ -10,7 +10,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
 const PASS_BADGE = { Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
@@ -193,7 +193,7 @@ export default function PassesTab() {
             ) : active.map(p => (
               <TableRow key={p.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                 <NameCell p={p} />
-                <TableCell><Badge color={PASS_BADGE[p.status] || 'gray'} className="inline-flex w-fit">{p.status}</Badge></TableCell>
+                <TableCell><StatusBadge color={PASS_BADGE[p.status] || 'gray'}>{p.status}</StatusBadge></TableCell>
                 <TableCell className="font-mono">{fmtDT(p.departure)}</TableCell>
                 <TableCell className="font-mono">{fmtDT(p.return_date)}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{notesOf(p)}</TableCell>

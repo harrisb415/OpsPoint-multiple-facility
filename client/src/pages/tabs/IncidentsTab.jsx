@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react'
 import { Plus, Lock } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
+  Breadcrumb, BreadcrumbItem, Button, Select,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 const SEV_BADGE = { low: 'info', medium: 'warning', high: 'pink', critical: 'failure' }
@@ -221,21 +221,21 @@ export default function IncidentsTab() {
                   <TableCell className="font-mono whitespace-nowrap">{fmtDate(i.incident_date)} {i.incident_time}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar placeholderInitials={initials(i.client_name)} rounded size="sm" />
+                      <ColoredAvatar name={i.client_name} />
                       <div>
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">{i.client_name}</p>
                         <p className="font-mono text-xs text-gray-400">Rm {i.room}</p>
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell><Badge color={SEV_BADGE[i.severity] || 'gray'} className="inline-flex w-fit">{SEVERITY_LABEL[i.severity] || i.severity}</Badge></TableCell>
+                  <TableCell><StatusBadge color={SEV_BADGE[i.severity] || 'gray'}>{SEVERITY_LABEL[i.severity] || i.severity}</StatusBadge></TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400" style={{ maxWidth: 340 }}>
                     <div className="overflow-hidden whitespace-nowrap text-ellipsis">{i.narrative}</div>
                     {i.notifications_required?.length > 0 && (
                       <div className="mt-1 text-xs text-gray-400">Notify: {i.notifications_required.join(', ')}</div>
                     )}
                   </TableCell>
-                  <TableCell><Badge color={STATUS_BADGE[i.status] || 'gray'} className="inline-flex w-fit">{i.status.charAt(0).toUpperCase() + i.status.slice(1)}</Badge></TableCell>
+                  <TableCell><StatusBadge color={STATUS_BADGE[i.status] || 'gray'}>{i.status.charAt(0).toUpperCase() + i.status.slice(1)}</StatusBadge></TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400">{i.supervisor_name || '—'}</TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex items-center justify-end gap-1">

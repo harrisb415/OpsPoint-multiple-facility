@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Alert, Button, Label, TextInput } from 'flowbite-react'
+import { AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
 export default function ChangePassword() {
@@ -32,55 +34,40 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <div className="auth-card-top">
-          <div className="auth-org">OpsPoint &bull; Secure Access</div>
-          <img src="/static/icons/icon-192.png" alt="OpsPoint" className="auth-app-icon" />
-          <h1>Change Password</h1>
-          <div className="auth-sub">You must set a new password before continuing</div>
+    <div className="flex flex-col items-center justify-center min-h-screen px-4 py-10 bg-gray-50 dark:bg-gray-900">
+      <div className="w-full max-w-sm overflow-hidden bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700">
+        <div className="flex flex-col items-center px-6 pt-8 pb-6 text-center">
+          <p className="text-[11px] font-semibold tracking-wide text-gray-400 uppercase">OpsPoint · Secure Access</p>
+          <img src="/static/icons/icon-192.png" alt="OpsPoint" className="w-16 h-16 mt-2 rounded-xl shadow-sm" />
+          <h1 className="mt-3 text-xl font-bold text-gray-900 dark:text-white">Change Password</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">You must set a new password before continuing</p>
         </div>
-        <div className="auth-orange-bar" />
-        <div className="auth-card-body">
-          {error && <div className="auth-error">&#9888; {error}</div>}
-          <form onSubmit={handleSubmit}>
-            <div className="auth-field">
-              <label htmlFor="pw1">New Password</label>
-              <input
-                id="pw1"
-                type="password"
-                autoFocus
-                autoComplete="new-password"
-                placeholder="Enter new password"
-                value={pw1}
-                onChange={e => setPw1(e.target.value)}
-                disabled={busy}
-              />
+        <div className="h-1 bg-primary-600" />
+        <div className="px-6 py-6">
+          {error && <Alert color="failure" icon={AlertCircle} className="mb-4">{error}</Alert>}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <Label htmlFor="pw1" className="block mb-1">New Password</Label>
+              <TextInput id="pw1" type="password" autoFocus autoComplete="new-password"
+                placeholder="Enter new password" value={pw1} onChange={e => setPw1(e.target.value)} disabled={busy} />
             </div>
-            <div className="auth-field">
-              <label htmlFor="pw2">Confirm Password</label>
-              <input
-                id="pw2"
-                type="password"
-                autoComplete="new-password"
-                placeholder="Confirm new password"
-                value={pw2}
-                onChange={e => setPw2(e.target.value)}
-                disabled={busy}
-              />
+            <div>
+              <Label htmlFor="pw2" className="block mb-1">Confirm Password</Label>
+              <TextInput id="pw2" type="password" autoComplete="new-password"
+                placeholder="Confirm new password" value={pw2} onChange={e => setPw2(e.target.value)} disabled={busy} />
             </div>
-            <div className="pw-rules">
+            <div className="p-3 text-xs text-gray-500 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700 dark:text-gray-400">
               Password must be at least 8 characters and include:
-              <ul>
+              <ul className="mt-1 ml-4 list-disc">
                 <li>An uppercase letter</li>
                 <li>A lowercase letter</li>
                 <li>A number</li>
                 <li>A symbol (!@#$%^&amp;* etc.)</li>
               </ul>
             </div>
-            <button type="submit" className="auth-btn" disabled={busy} style={{ marginTop: 16 }}>
-              {busy ? 'Saving…' : 'Set New Password →'}
-            </button>
+            <Button type="submit" className="w-full" isProcessing={busy} disabled={busy}>
+              {busy ? 'Saving…' : <>Set New Password <ArrowRight className="w-4 h-4 ml-2" /></>}
+            </Button>
           </form>
         </div>
       </div>

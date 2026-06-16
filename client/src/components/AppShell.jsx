@@ -8,6 +8,7 @@ import ClientProfile from './ClientProfile.jsx'
 import { Field } from './ui.jsx'
 import {
   Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput, Select, Textarea, Alert,
+  Badge, Drawer, DrawerHeader, DrawerItems,
 } from 'flowbite-react'
 import JSZip from 'jszip'
 import {
@@ -72,6 +73,33 @@ function esc(s) {
 }
 
 // ── Notification Panel ────────────────────────────────────────────────
+function NotifSection({ title, count, children }) {
+  return (
+    <div className="border-b border-gray-100 dark:border-gray-700">
+      <div className="flex items-center gap-2 px-4 pt-3 pb-1.5 text-[11px] font-bold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+        {title}
+        <span className="px-1.5 py-px text-[10px] font-bold rounded-full text-primary-700 bg-primary-100 dark:bg-primary-900/40 dark:text-primary-300">{count}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+function NotifRow({ icon, name, meta, actions, children, wrap }) {
+  return (
+    <div className="px-4 py-2.5 border-t border-gray-50 dark:border-gray-700/50 first:border-t-0">
+      <div className={`flex gap-2.5 ${wrap ? 'items-start' : 'items-center'}`}>
+        <span className="text-base shrink-0">{icon}</span>
+        <div className="flex-1 min-w-0">
+          <div className={`text-sm text-gray-900 dark:text-white ${wrap ? '' : 'truncate'}`}>{name}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">{meta}</div>
+        </div>
+        {actions && <div className="flex gap-1 shrink-0">{actions}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIncident, onAckUA, onGoTab, dismissedDrawIds, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence }) {
   const perm = session?.permissions || []
 
@@ -92,175 +120,107 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
     || ((notif.incidents || []).length > 0 && perm.includes('incidents.review'))
 
   return (
-    <>
-      <div className={`notif-overlay${open ? ' open' : ''}`} onClick={onClose} />
-      <div className={`notif-panel${open ? ' open' : ''}`}>
-        <div className="notif-panel-head">
-          <span>Notifications</span>
-          <button className="xbtn" style={{ color: '#fff' }} onClick={onClose}>✕</button>
-        </div>
-        <div className="notif-panel-body">
+    <Drawer open={open} onClose={onClose} position="right" className="w-full max-w-sm p-0">
+      <DrawerHeader title="Notifications" titleIcon={() => null} className="px-4 py-3 border-b border-gray-200 dark:border-gray-700" />
+      <DrawerItems className="overflow-y-auto">
+        {notif.uaRequests.length > 0 && perm.includes('ua.acknowledge') && (
+          <NotifSection title="UA Requests" count={notif.uaRequests.length}>
+            {notif.uaRequests.map(r => (
+              <NotifRow key={r.id} icon="🧪"
+                name={r.interview_name || r.client_name || 'Interview'}
+                meta={`${r.room ? `Rm. ${r.room} · ` : ''}${timeAgo(r.requested_at)}`}
+                actions={<Button size="xs" color="light" onClick={() => onAckUA(r.id)}>✔ Ack</Button>} />
+            ))}
+          </NotifSection>
+        )}
 
-          {notif.uaRequests.length > 0 && perm.includes('ua.acknowledge') && (
-            <div className="notif-section">
-              <div className="notif-section-head">
-                UA Requests
-                <span className="notif-badge-sm">{notif.uaRequests.length}</span>
-              </div>
-              {notif.uaRequests.map(r => (
-                <div key={r.id} className="notif-item">
-                  <span className="notif-item-icon">🧪</span>
-                  <div className="notif-item-body">
-                    <div className="notif-item-name">{r.interview_name || r.client_name || 'Interview'}</div>
-                    <div className="notif-item-meta">{r.room ? `Rm. ${r.room} · ` : ''}{timeAgo(r.requested_at)}</div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    <button className="notif-item-action" onClick={() => onAckUA(r.id)}>✔ Ack</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')) && (
+          <NotifSection title="UA Draws (24h)" count={draws24h.length}>
+            {draws24h.map(d => {
+              const cnt = Array.isArray(d.residents) ? d.residents.length : 0
+              return (
+                <NotifRow key={d.id} icon="📋"
+                  name={`${cnt} resident${cnt !== 1 ? 's' : ''} drawn`}
+                  meta={`By ${d.drawn_by_name || 'Staff'} · ${timeAgo(d.created_at)}`}
+                  actions={dismissDraw && <Button size="xs" color="light" onClick={() => dismissDraw(d.id)} title="Dismiss">✕</Button>}>
+                  {Array.isArray(d.residents) && d.residents.length > 0 && (
+                    <p className="pl-8 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {d.residents.slice(0, 5).map(r => `Rm.${r.room} ${r.name}`).join(', ')}{d.residents.length > 5 ? '…' : ''}
+                    </p>
+                  )}
+                </NotifRow>
+              )
+            })}
+          </NotifSection>
+        )}
 
-          {draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')) && (
-            <div className="notif-section">
-              <div className="notif-section-head">
-                UA Draws (24h)
-                <span className="notif-badge-sm">{draws24h.length}</span>
-              </div>
-              {draws24h.map(d => {
-                const cnt = Array.isArray(d.residents) ? d.residents.length : 0
-                return (
-                  <div key={d.id} className="notif-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 3 }}>
-                    <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: 8 }}>
-                      <span className="notif-item-icon">📋</span>
-                      <div className="notif-item-body">
-                        <div className="notif-item-name">{cnt} resident{cnt !== 1 ? 's' : ''} drawn</div>
-                        <div className="notif-item-meta">By {d.drawn_by_name || 'Staff'} · {timeAgo(d.created_at)}</div>
-                      </div>
-                      {dismissDraw && (
-                        <button className="notif-item-action" onClick={() => dismissDraw(d.id)} title="Dismiss">✕</button>
-                      )}
-                    </div>
-                    {Array.isArray(d.residents) && d.residents.length > 0 && (
-                      <div style={{ fontSize: '11px', color: '#475569', paddingLeft: 32 }}>
-                        {d.residents.slice(0, 5).map(r => `Rm.${r.room} ${r.name}`).join(', ')}
-                        {d.residents.length > 5 ? '…' : ''}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
+        {notif.violReview > 0 && notif.violReview > (dismissedViolReview || 0) && perm.includes('violations.notify_review') && (
+          <NotifSection title="Infractions: Pending Review" count={notif.violReview}>
+            <NotifRow icon="⚠️"
+              name={`${notif.violReview} violation${notif.violReview !== 1 ? 's' : ''} awaiting review`}
+              meta="Case conference needed"
+              actions={<>
+                <Button size="xs" color="light" onClick={() => { onGoTab('violations'); onClose() }}>View</Button>
+                <Button size="xs" color="light" onClick={() => dismissViolReview(notif.violReview)} title="Dismiss">✕</Button>
+              </>} />
+          </NotifSection>
+        )}
 
-          {notif.violReview > 0 && notif.violReview > (dismissedViolReview || 0) && perm.includes('violations.notify_review') && (
-            <div className="notif-section">
-              <div className="notif-section-head">
-                Infractions: Pending Review
-                <span className="notif-badge-sm">{notif.violReview}</span>
-              </div>
-              <div className="notif-item">
-                <span className="notif-item-icon">⚠️</span>
-                <div className="notif-item-body">
-                  <div className="notif-item-name">{notif.violReview} violation{notif.violReview !== 1 ? 's' : ''} awaiting review</div>
-                  <div className="notif-item-meta">Case conference needed</div>
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button className="notif-item-action" onClick={() => { onGoTab('violations'); onClose() }}>View</button>
-                  <button className="notif-item-action" onClick={() => dismissViolReview(notif.violReview)} title="Dismiss">✕</button>
-                </div>
-              </div>
-            </div>
-          )}
+        {notif.violConsequence > 0 && notif.violConsequence > (dismissedViolConsequence || 0) && perm.includes('violations.notify_consequence') && (
+          <NotifSection title="Consequence Assigned" count={notif.violConsequence}>
+            <NotifRow icon="📌"
+              name={`${notif.violConsequence} consequence${notif.violConsequence !== 1 ? 's' : ''} need completion`}
+              meta="Action required"
+              actions={<>
+                <Button size="xs" color="light" onClick={() => { onGoTab('violations'); onClose() }}>View</Button>
+                <Button size="xs" color="light" onClick={() => dismissViolConsequence(notif.violConsequence)} title="Dismiss">✕</Button>
+              </>} />
+          </NotifSection>
+        )}
 
-          {notif.violConsequence > 0 && notif.violConsequence > (dismissedViolConsequence || 0) && perm.includes('violations.notify_consequence') && (
-            <div className="notif-section">
-              <div className="notif-section-head">
-                Consequence Assigned
-                <span className="notif-badge-sm">{notif.violConsequence}</span>
-              </div>
-              <div className="notif-item">
-                <span className="notif-item-icon">📌</span>
-                <div className="notif-item-body">
-                  <div className="notif-item-name">{notif.violConsequence} consequence{notif.violConsequence !== 1 ? 's' : ''} need completion</div>
-                  <div className="notif-item-meta">Action required</div>
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  <button className="notif-item-action" onClick={() => { onGoTab('violations'); onClose() }}>View</button>
-                  <button className="notif-item-action" onClick={() => dismissViolConsequence(notif.violConsequence)} title="Dismiss">✕</button>
-                </div>
-              </div>
-            </div>
-          )}
+        {(notif.incidents || []).length > 0 && perm.includes('incidents.review') && (
+          <NotifSection title="New Incident Reports" count={notif.incidents.length}>
+            {notif.incidents.map(inc => (
+              <NotifRow key={inc.id} icon="🚨"
+                name={`${inc.client_name}${inc.room ? ` · Rm. ${inc.room}` : ''}`}
+                meta={<span className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-[11px] px-1.5 py-px rounded capitalize" style={{ background: SEV_BG[inc.severity]||'#f1f5f9', color: SEV_COLOR[inc.severity]||'#475569' }}>{inc.severity}</span>
+                  {inc.incident_type && <span>{inc.incident_type}</span>}
+                  <span>by {inc.logged_by}</span>
+                </span>}
+                actions={<>
+                  <Button size="xs" color="light" onClick={() => { onGoTab('incidents'); onClose() }}>View</Button>
+                  <Button size="xs" color="light" onClick={() => dismissIncident(inc.id)} title="Dismiss">✕</Button>
+                </>} />
+            ))}
+          </NotifSection>
+        )}
 
-          {(notif.incidents || []).length > 0 && perm.includes('incidents.review') && (
-            <div className="notif-section">
-              <div className="notif-section-head">
-                New Incident Reports
-                <span className="notif-badge-sm">{notif.incidents.length}</span>
-              </div>
-              {notif.incidents.map(inc => (
-                <div key={inc.id} className="notif-item">
-                  <span className="notif-item-icon">🚨</span>
-                  <div className="notif-item-body">
-                    <div className="notif-item-name">
-                      {inc.client_name}{inc.room ? ` · Rm. ${inc.room}` : ''}
-                    </div>
-                    <div className="notif-item-meta" style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
-                      <span style={{ fontWeight:700, fontSize:'11px', padding:'1px 7px', borderRadius:8,
-                        background: SEV_BG[inc.severity]||'#f1f5f9', color: SEV_COLOR[inc.severity]||'#475569',
-                        textTransform:'capitalize' }}>{inc.severity}</span>
-                      {inc.incident_type && <span>{inc.incident_type}</span>}
-                      <span>by {inc.logged_by}</span>
-                    </div>
-                  </div>
-                  <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                    <button className="notif-item-action" onClick={() => { onGoTab('incidents'); onClose() }}>View</button>
-                    <button className="notif-item-action" onClick={() => dismissIncident(inc.id)} title="Dismiss">✕</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {notif.broadcasts.length > 0 && perm.includes('broadcast.receive') && (
+          <NotifSection title="Announcements" count={notif.broadcasts.length}>
+            {notif.broadcasts.map(b => {
+              const bcTs       = b.created_at ? new Date(b.created_at.replace(' ','T')+'Z').getTime() : 0
+              const canDismiss = bcTs > 0 && (Date.now() - bcTs) > 12 * 3600000
+              return (
+                <NotifRow key={b.id} icon="📢" wrap
+                  name={<span className="font-medium">{b.message}</span>}
+                  meta={`From ${b.sender_name} · ${timeAgo(b.created_at)}`}
+                  actions={canDismiss
+                    ? <Button size="xs" color="light" onClick={() => dismissBroadcast(b.id)} title="Dismiss">✕</Button>
+                    : <span className="text-[10px] text-gray-400 text-center leading-tight shrink-0">dismissable<br/>after 12h</span>} />
+              )
+            })}
+          </NotifSection>
+        )}
 
-          {notif.broadcasts.length > 0 && perm.includes('broadcast.receive') && (
-            <div className="notif-section">
-              <div className="notif-section-head">
-                Announcements
-                <span className="notif-badge-sm">{notif.broadcasts.length}</span>
-              </div>
-              {notif.broadcasts.map(b => {
-                const bcTs       = b.created_at ? new Date(b.created_at.replace(' ','T')+'Z').getTime() : 0
-                const canDismiss = bcTs > 0 && (Date.now() - bcTs) > 12 * 3600000
-                return (
-                  <div key={b.id} className="notif-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                    <div style={{ display: 'flex', width: '100%', alignItems: 'flex-start', gap: 8 }}>
-                      <span className="notif-item-icon">📢</span>
-                      <div className="notif-item-body" style={{ flex: 1 }}>
-                        <div className="notif-item-name" style={{ whiteSpace: 'normal', fontWeight: 500 }}>{b.message}</div>
-                        <div className="notif-item-meta">From {b.sender_name} · {timeAgo(b.created_at)}</div>
-                      </div>
-                      {canDismiss
-                        ? <button className="notif-item-action" onClick={() => dismissBroadcast(b.id)} title="Dismiss">✕</button>
-                        : <span style={{ fontSize: '10px', color: '#94a3b8', flexShrink: 0, textAlign: 'center', lineHeight: 1.3 }}>dismissable<br/>after 12h</span>
-                      }
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {!hasAny && (
-            <div className="notif-all-clear">
-              <span style={{ fontSize: '2rem' }}>✅</span>
-              <span>All clear — no pending notifications</span>
-            </div>
-          )}
-        </div>
-      </div>
-    </>
+        {!hasAny && (
+          <div className="flex flex-col items-center gap-2 py-16 text-sm text-gray-400">
+            <span className="text-3xl">✅</span>
+            <span>All clear — no pending notifications</span>
+          </div>
+        )}
+      </DrawerItems>
+    </Drawer>
   )
 }
 

@@ -5,6 +5,10 @@ import { usePermission } from '../hooks/usePermission.js'
 import { DataProvider, useData } from '../contexts/DataContext.jsx'
 import { CLINICAL_SECTION_PERMS } from '../pages/clinical/clinicalShared.jsx'
 import ClientProfile from './ClientProfile.jsx'
+import { Field } from './ui.jsx'
+import {
+  Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput, Select, Textarea, Alert,
+} from 'flowbite-react'
 import JSZip from 'jszip'
 import {
   Users, UserCheck, ClipboardList,
@@ -284,29 +288,23 @@ function BroadcastModal({ open, onClose }) {
 
   if (!open) return null
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 460 }}>
-        <div className="modal-head">
-          <h2>Send Announcement</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
+    <Modal show size="md" onClose={onClose}>
+      <ModalHeader>Send Announcement</ModalHeader>
+      <ModalBody>
+        <div className="space-y-1.5">
+          {err && <Alert color="failure">{err}</Alert>}
+          <Field label="Message">
+            <Textarea rows={4} maxLength={500} value={text}
+              onChange={e => setText(e.target.value)} placeholder="Type your announcement…" />
+            <div className="text-[11px] text-right text-gray-400">{text.length} / 500</div>
+          </Field>
         </div>
-        <div className="modal-body">
-          {err && <div className="auth-error">{err}</div>}
-          <div className="field">
-            <label>Message</label>
-            <textarea rows={4} maxLength={500} value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="Type your announcement…"
-              style={{ resize: 'vertical', width: '100%' }} />
-            <div style={{ textAlign: 'right', fontSize: '11px', color: '#94a3b8' }}>{text.length} / 500</div>
-          </div>
-        </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={send} disabled={saving}>{saving ? 'Sending…' : 'Send'}</button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={send} isProcessing={saving} disabled={saving}>Send</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -380,99 +378,71 @@ function UADrawModal({ open, onClose, clients, statuses }) {
 
   if (!open) return null
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && handleClose()}>
-      <div className="modal" style={{ maxWidth: 500 }}>
-        <div className="modal-head">
-          <h2>Random UA Draw</h2>
-          <button className="xbtn" onClick={handleClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          {err && <div className="auth-error">{err}</div>}
+    <Modal show size="lg" onClose={handleClose}>
+      <ModalHeader>Random UA Draw</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          {err && <Alert color="failure">{err}</Alert>}
 
-          <div className="field">
-            <label>Method</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <button type="button" onClick={() => setMethod('random')} style={{
-                flex: 1, padding: '9px 0', borderRadius: 6, cursor: 'pointer', fontSize: '13px', fontWeight: 700,
-                border: `2px solid ${method === 'random' ? 'var(--accent)' : 'var(--border-light)'}`,
-                background: method === 'random' ? 'var(--accent)' : 'transparent',
-                color: method === 'random' ? '#fff' : 'var(--text-muted)',
-                transition: 'all .12s',
-              }}>True Random</button>
-              <button type="button" onClick={() => setMethod('smart')} style={{
-                flex: 1, padding: '9px 0', borderRadius: 6, cursor: 'pointer', fontSize: '13px', fontWeight: 700,
-                border: `2px solid ${method === 'smart' ? 'var(--accent)' : 'var(--border-light)'}`,
-                background: method === 'smart' ? 'var(--accent)' : 'transparent',
-                color: method === 'smart' ? '#fff' : 'var(--text-muted)',
-                transition: 'all .12s',
-              }}>Smart (exclude recent)</button>
+          <Field label="Method">
+            <div className="flex gap-2">
+              <Button type="button" className="flex-1" color={method === 'random' ? 'default' : 'light'} onClick={() => setMethod('random')}>True Random</Button>
+              <Button type="button" className="flex-1" color={method === 'smart' ? 'default' : 'light'} onClick={() => setMethod('smart')}>Smart (exclude recent)</Button>
             </div>
-          </div>
+          </Field>
 
           {method === 'smart' && (
-            <div className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <label style={{ whiteSpace: 'nowrap', marginBottom: 0 }}>Exclude if drawn within</label>
-              <input type="number" value={lookback} min={1} max={365}
-                onChange={e => setLookback(Math.min(365, Math.max(1, parseInt(e.target.value)||30)))}
-                style={{ width: 60, padding: '4px 8px', border: '1px solid var(--border-light)', borderRadius: 5 }}
-              />
-              <span style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: '13px' }}>days</span>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 whitespace-nowrap dark:text-gray-300">Exclude if drawn within</label>
+              <TextInput type="number" sizing="sm" className="w-20" value={lookback} min={1} max={365}
+                onChange={e => setLookback(Math.min(365, Math.max(1, parseInt(e.target.value)||30)))} />
+              <span className="text-sm text-gray-500">days</span>
             </div>
           )}
 
-          <div className="field" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <label style={{ marginBottom: 0 }}>Draw</label>
-            <input type="number" value={drawCount} min={1} max={50}
-              onChange={e => setDrawCount(Math.min(50, Math.max(1, parseInt(e.target.value)||5)))}
-              style={{ width: 60, padding: '4px 8px', border: '1px solid var(--border-light)', borderRadius: 5 }}
-            />
-            <label style={{ marginBottom: 0 }}>residents</label>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-700 dark:text-gray-300">Draw</label>
+            <TextInput type="number" sizing="sm" className="w-20" value={drawCount} min={1} max={50}
+              onChange={e => setDrawCount(Math.min(50, Math.max(1, parseInt(e.target.value)||5)))} />
+            <label className="text-sm text-gray-700 dark:text-gray-300">residents</label>
           </div>
 
           {poolInfo && (
-            <div style={{ fontSize: '12px', color: '#475569', background: '#f8fafc', border: '1px solid var(--border-light)', borderRadius: 6, padding: '7px 12px', marginBottom: 8 }}>
-              {poolInfo}
-            </div>
+            <div className="px-3 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700 dark:text-gray-300">{poolInfo}</div>
           )}
 
           {preview !== null && (
             preview.length === 0
-              ? <div style={{ color: 'var(--danger)', fontSize: '13px' }}>No eligible residents in the pool.</div>
+              ? <div className="text-sm text-red-600">No eligible residents in the pool.</div>
               : (
-                <div style={{ border: '1px solid var(--border-light)', borderRadius: 8, overflow: 'hidden' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', padding: '8px 12px', background: '#f8fafc', borderBottom: '1px solid var(--border-light)', letterSpacing: '.06em', textTransform: 'uppercase' }}>
+                <div className="overflow-hidden border border-gray-200 rounded-lg dark:border-gray-700">
+                  <div className="px-3 py-2 text-[11px] font-bold tracking-wide text-gray-500 uppercase border-b border-gray-200 bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700">
                     {preview.length} residents selected
                   </div>
                   {preview.map((c, i) => (
-                    <div key={c.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                      borderBottom: i < preview.length - 1 ? '1px solid var(--border-light)' : 'none',
-                      background: '#fff',
-                    }}>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: '12px', fontWeight: 700, background: 'var(--sky)', color: 'var(--dark)', padding: '2px 8px', borderRadius: 10, minWidth: 50, textAlign: 'center' }}>
-                        Rm {c.room}
-                      </span>
-                      <span style={{ fontWeight: 600, fontSize: '13px' }}>{c.name}</span>
+                    <div key={c.id} className={`flex items-center gap-2.5 px-3 py-2 bg-white dark:bg-gray-800 ${i < preview.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+                      <span className="px-2 py-px font-mono text-xs font-bold text-center rounded-full bg-primary-100 text-primary-700 min-w-[50px] dark:bg-primary-900/40 dark:text-primary-300">Rm {c.room}</span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</span>
                     </div>
                   ))}
                 </div>
               )
           )}
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={handleClose}>Cancel</button>
-          {preview === null || preview.length === 0
-            ? <button className="btn btn-primary" onClick={runPreview}>Preview Draw</button>
-            : (
-              <>
-                <button className="btn btn-secondary" onClick={() => { setPreview(null); setPoolInfo('') }}>Re-draw</button>
-                <button className="btn btn-primary" onClick={confirmDraw} disabled={saving}>{saving ? 'Sending…' : 'Confirm & Send'}</button>
-              </>
-            )
-          }
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={handleClose}>Cancel</Button>
+        {preview === null || preview.length === 0
+          ? <Button onClick={runPreview}>Preview Draw</Button>
+          : (
+            <>
+              <Button color="light" onClick={() => { setPreview(null); setPoolInfo('') }}>Re-draw</Button>
+              <Button onClick={confirmDraw} isProcessing={saving} disabled={saving}>Confirm &amp; Send</Button>
+            </>
+          )
+        }
+      </ModalFooter>
+    </Modal>
   )
 }
 

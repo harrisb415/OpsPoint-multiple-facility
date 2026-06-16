@@ -5,8 +5,10 @@ import {
   Tag, DoorOpen, MonitorCog, Map, FlaskConical, ClipboardList,
   AlertTriangle, ScrollText,
 } from 'lucide-react'
+import { Button, Modal, ModalHeader, ModalBody, ModalFooter, Checkbox, Label, Alert } from 'flowbite-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
+import { useConfirm } from '../components/ui.jsx'
 
 // ── Admin sections (clinical-style left rail) ─────────────────────
 // Each item maps to a single content panel — no nested sub-tabs. Grouped and
@@ -305,6 +307,7 @@ function UserManagementTab({ panel }) {
 
 function CurrentStaff({ users, groups, reload }) {
   const { session } = useAuth()
+  const confirm = useConfirm()
   const [groupModal, setGroupModal] = useState(null)
   const [memberOf, setMemberOf] = useState([])
   const [saving, setSaving] = useState(false)
@@ -342,7 +345,7 @@ function CurrentStaff({ users, groups, reload }) {
   }
 
   async function del(u) {
-    if (!window.confirm(`Remove ${u.displayName || u.display_name || u.username}?`)) return
+    if (!await confirm({ title: `Remove ${u.displayName || u.display_name || u.username}?`, confirmText: 'Remove', color: 'red' })) return
     const r = await apiFetch(`/api/users/${u.id}`, { method: 'DELETE' })
     if (!r.ok) { const j = await r.json(); alert(j.error || 'Delete failed') }
     else reload()
@@ -408,48 +411,38 @@ function CurrentStaff({ users, groups, reload }) {
       </div>
 
       {groupModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setGroupModal(null)}>
-          <div className="modal" style={{ maxWidth: 460 }}>
-            <div className="modal-head">
-              <h2>Groups — {groupModal.displayName || groupModal.display_name}</h2>
-              <button className="xbtn" onClick={() => setGroupModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {error && <div className="auth-error">{error}</div>}
-              <p style={{ fontSize: '.82rem', color: '#475569', marginBottom: 12 }}>
-                Effective permissions = union of all assigned groups.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, border: '1.5px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
+        <Modal show size="md" onClose={() => setGroupModal(null)}>
+          <ModalHeader>Groups — {groupModal.displayName || groupModal.display_name}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-3">
+              {error && <Alert color="failure">{error}</Alert>}
+              <p className="text-sm text-gray-500 dark:text-gray-400">Effective permissions = union of all assigned groups.</p>
+              <div className="overflow-hidden border border-gray-200 rounded-lg dark:border-gray-700">
                 {groups.map(g => {
                   const isMember = memberOf.includes(g.id)
                   return (
-                    <label key={g.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                      cursor: 'pointer', background: isMember ? '#eff6ff' : 'transparent',
-                      borderBottom: '1px solid var(--line)',
-                    }}>
-                      <input type="checkbox" checked={isMember}
-                        onChange={() => setMemberOf(prev => prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id])}
-                        style={{ width: 15, height: 15, flexShrink: 0 }} />
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: '.84rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label key={g.id} className={`flex items-center gap-3 px-3.5 py-2.5 cursor-pointer border-b border-gray-100 last:border-0 dark:border-gray-700 ${isMember ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}>
+                      <Checkbox checked={isMember}
+                        onChange={() => setMemberOf(prev => prev.includes(g.id) ? prev.filter(x => x !== g.id) : [...prev, g.id])} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5 text-sm font-semibold text-gray-900 dark:text-white">
                           {g.label}
-                          {g.is_protected && <span style={{ color: '#f59e0b' }}>🔒</span>}
-                          {isMember && <span style={{ fontSize: '.68rem', background: '#dbeafe', color: '#1e40af', padding: '1px 6px', borderRadius: 8, fontWeight: 700 }}>Member</span>}
+                          {g.is_protected && <span className="text-amber-500">🔒</span>}
+                          {isMember && <span className="text-[10px] font-bold text-primary-700 bg-primary-100 px-1.5 py-px rounded-full dark:bg-primary-900/40 dark:text-primary-300">Member</span>}
                         </div>
-                        <div style={{ fontSize: '.72rem', color: '#94a3b8' }}>{(g.permissions || []).length} permissions · {g.memberCount ?? 0} member{g.memberCount !== 1 ? 's' : ''}</div>
+                        <div className="text-xs text-gray-400">{(g.permissions || []).length} permissions · {g.memberCount ?? 0} member{g.memberCount !== 1 ? 's' : ''}</div>
                       </div>
                     </label>
                   )
                 })}
               </div>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setGroupModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveGroups} disabled={saving}>{saving ? 'Saving…' : 'Save Groups'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setGroupModal(null)}>Cancel</Button>
+            <Button onClick={saveGroups} isProcessing={saving} disabled={saving}>Save Groups</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )
@@ -707,6 +700,7 @@ function GroupCard({ g, onSave, onDelete }) {
 }
 
 function GroupsManager({ groups, reload }) {
+  const confirm = useConfirm()
   const [newLabel, setNewLabel] = useState('')
   const [creating, setCreating] = useState(false)
   const [createErr, setCreateErr] = useState('')
@@ -728,7 +722,7 @@ function GroupsManager({ groups, reload }) {
   }
 
   async function deleteGroup(g) {
-    if (!window.confirm(`Delete group "${g.label}"? Members will lose these permissions.`)) return
+    if (!await confirm({ title: `Delete group "${g.label}"?`, body: 'Members will lose these permissions.', confirmText: 'Delete', color: 'red' })) return
     const r = await apiFetch(`/api/groups/${g.id}`, { method: 'DELETE' })
     if (!r.ok) { const j = await r.json(); alert(j.error || 'Delete failed') }
     else reload()
@@ -1019,6 +1013,7 @@ function FacilityName({ settings, onSave, saving }) {
 // ── Rooms Manager (with drag-to-reorder + bulk import) ────────────
 
 function RoomsManager() {
+  const confirm = useConfirm()
   const [rooms, setRooms] = useState([])
   const [loading, setLoading] = useState(true)
   const [addForm, setAddForm] = useState({ room: '', type: 'resident', label: '' })
@@ -1053,7 +1048,7 @@ function RoomsManager() {
   }
 
   async function deleteRoom(r) {
-    if (!window.confirm(`Remove room ${r.room}?`)) return
+    if (!await confirm({ title: `Remove room ${r.room}?`, confirmText: 'Remove', color: 'red' })) return
     await apiFetch(`/api/facility/rooms/${r.id}`, { method: 'DELETE' })
     load()
   }
@@ -1114,7 +1109,7 @@ function RoomsManager() {
     const parsed = parseBulk(bulkText)
     if (!parsed.length) { setBulkMsg('No valid rooms to import.'); return }
     if (replace) {
-      if (!window.confirm(`⚠ This will REPLACE the entire roster with ${parsed.length} room${parsed.length !== 1 ? 's' : ''}. Are you sure?`)) return
+      if (!await confirm({ title: 'Replace the entire roster?', body: `This will REPLACE the entire roster with ${parsed.length} room${parsed.length !== 1 ? 's' : ''}.`, confirmText: 'Replace', color: 'red' })) return
       const r = await apiFetch('/api/facility/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rooms: parsed }) })
       if (!r.ok) { const j = await r.json(); setBulkMsg('Error: ' + (j.error || 'Failed')); return }
       setBulkMsg(`✓ Roster replaced with ${parsed.length} rooms.`); setBulkText(''); setBulkParsed([]); load()
@@ -1816,6 +1811,7 @@ function AuditLogTab() {
 // ══════════════════════════════════════════════════════════════════
 
 function SystemTab() {
+  const confirm = useConfirm()
   const [restarting, setRestarting] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -1905,7 +1901,7 @@ function SystemTab() {
     } catch { setCErr('Network error reaching HQ.') } finally { setCBusy(false) }
   }
   async function centralDisconnect() {
-    if (!window.confirm('Disconnect this facility from HQ? It will stop syncing until reconnected.')) return
+    if (!await confirm({ title: 'Disconnect this facility from HQ?', body: 'It will stop syncing until reconnected.', confirmText: 'Disconnect', color: 'red' })) return
     setCBusy(true); setCErr(''); setCMsg('')
     try {
       const r = await apiFetch('/api/central/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -1967,7 +1963,7 @@ function SystemTab() {
   }
 
   async function restart() {
-    if (!window.confirm('Restart the server? All active sessions will briefly disconnect.')) return
+    if (!await confirm({ title: 'Restart the server?', body: 'All active sessions will briefly disconnect.', confirmText: 'Restart', color: 'red' })) return
     setRestarting(true); setMsg('⏱ Restarting…')
     await apiFetch('/api/admin/restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
     // Poll until back online

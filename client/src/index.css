@@ -5,6 +5,15 @@
 /* Class-based dark mode (Console redesign — toggle adds .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Dark-mode overrides for legacy inline-styled form controls (clinical inp/lbl).
+   Inline styles read these vars, so flipping them here flips the controls. */
+.dark {
+  --inp-bg:     #374151;
+  --inp-border: #4b5563;
+  --inp-text:   #f9fafb;
+  --inp-label:  #9ca3af;
+}
+
 /* Console redesign — blue primary ramp (gray/green/red/etc. are TW defaults) */
 @theme {
   /* Type system (matches prototype): Inter for UI, JetBrains Mono for numbers.
@@ -28,6 +37,12 @@
 
 /* - Design Tokens ----------------------------------------------- */
 :root {
+  /* -- Legacy inline-styled form controls (clinical inp/lbl) — flip in dark -- */
+  --inp-bg:     #ffffff;
+  --inp-border: #cbd5e1;
+  --inp-text:   #111827;
+  --inp-label:  #64748b;
+
   /* -- Brand (Console rebrand: names kept, values now blue/sky/gray) -- */
   --sidebar-bg:       #1e40af;
   --sidebar-active:   #2563eb;

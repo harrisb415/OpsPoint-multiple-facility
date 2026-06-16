@@ -121,14 +121,16 @@ export function Modal({ title, onClose, children, footer, maxWidth = 580 }) {
 }
 
 // ── Shared inline styles for form controls ─────────────────────────────────
+// Colors use --inp-* CSS variables that flip under .dark (defined in index.css),
+// so these inline-styled controls stay dark-correct inside flowbite Modals.
 export const inp = {
   width: '100%', padding: '7px 10px', fontSize: '.85rem',
-  border: '1px solid var(--line, #cbd5e1)', borderRadius: 6,
-  fontFamily: 'var(--sans)', background: '#fff',
+  border: '1px solid var(--inp-border)', borderRadius: 6,
+  fontFamily: 'var(--sans)', background: 'var(--inp-bg)', color: 'var(--inp-text)',
 }
 export const lbl = {
   display: 'block', fontSize: '.72rem', fontWeight: 700, letterSpacing: '.04em',
-  textTransform: 'uppercase', color: '#64748b', marginBottom: 4,
+  textTransform: 'uppercase', color: 'var(--inp-label)', marginBottom: 4,
 }
 export const field = { marginBottom: 14 }
 

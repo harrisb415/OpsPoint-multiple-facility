@@ -90,13 +90,17 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
   const [saving,         setSaving]         = useState(false)
   const [err,            setErr]            = useState('')
 
-  // Find today's unclosed report for log-entry stamping
+  // The report to stamp the log entry / last_ua against MUST be the server's
+  // authoritative active report — the PATCH /api/data route rejects (403) any
+  // reportId that isn't exactly active_report_id. Recomputing it client-side by
+  // date breaks for overnight shifts / multiple same-day reports, silently
+  // dropping the log entry + last_ua. Use the server value directly.
   const activeReportId = useMemo(() => {
-    const reports = data?.reports || []
-    return reports
-      .filter(r => r.report_date === todayStr() && !r.is_closed)
-      .sort((a, b) => b.id - a.id)[0]?.id ?? null
-  }, [data?.reports])
+    const id = data?.active_report_id
+    if (!id) return null
+    const r = (data?.reports || []).find(x => x.id === id)
+    return (r && !r.is_closed) ? id : null
+  }, [data?.active_report_id, data?.reports])
 
   function cycleResult(code) {
     setResults(prev => {
@@ -163,6 +167,10 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           body: JSON.stringify(patch),
         })
         const pj = await pr.json().catch(() => ({}))
+        // Don't fail silently: a UA must always produce its log entry + last_ua
+        // stamp. If the PATCH is rejected, surface it instead of saving a UA
+        // record with no log trail.
+        if (!pr.ok) { setErr(pj.error || 'Could not write the log entry — UA not saved.'); setSaving(false); return }
         logEntryId = pj.log_entry_id || null
       }
 

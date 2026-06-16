@@ -3,9 +3,10 @@ import { useOutletContext } from 'react-router-dom'
 import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
-  Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  Pagination,
   Textarea, TextInput, Select, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'

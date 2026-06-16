@@ -3,9 +3,10 @@ import { useOutletContext } from 'react-router-dom'
 import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
-  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell, TextInput,
+  TextInput,
   Select, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'

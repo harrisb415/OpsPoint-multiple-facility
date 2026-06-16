@@ -4,9 +4,9 @@ import { usePermission } from '../../hooks/usePermission.js'
 import { ShieldCheck, FileCheck, Share2, Plus } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select, Checkbox, Label,
-  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { initials } from '../../utils/ui.js'
 import { Field, useConfirm } from '../../components/ui.jsx'
 

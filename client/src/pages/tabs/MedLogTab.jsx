@@ -3,9 +3,9 @@ import { useOutletContext } from 'react-router-dom'
 import { Pill, Clock, Lock, Plus } from 'lucide-react'
 import {
   Avatar, Breadcrumb, BreadcrumbItem, Button, Select,
-  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'

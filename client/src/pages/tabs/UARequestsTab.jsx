@@ -3,9 +3,9 @@ import { useOutletContext } from 'react-router-dom'
 import { FlaskConical, CheckCircle, XCircle, Plus, Printer, X } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Select, Checkbox, Label,
-  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
   TextInput, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'

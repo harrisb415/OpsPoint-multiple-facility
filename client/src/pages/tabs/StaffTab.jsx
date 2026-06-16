@@ -4,9 +4,10 @@ import { UserPlus, MoreHorizontal, Users, UserCog, ClipboardList } from 'lucide-
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card,
   Dropdown, DropdownItem, Label, Modal, ModalHeader, ModalBody, ModalFooter,
-  Select, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  Select,
   TextInput, Textarea, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'

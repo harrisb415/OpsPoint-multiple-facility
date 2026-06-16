@@ -3,9 +3,10 @@ import { useOutletContext } from 'react-router-dom'
 import { Mail as MailIcon, Inbox, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
-  Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  Pagination,
   Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'

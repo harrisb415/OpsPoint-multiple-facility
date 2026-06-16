@@ -211,10 +211,10 @@ export default function DashboardHome({ onNavigate }) {
           <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700">
-                <tr className="text-[11px] uppercase tracking-wider text-gray-500 dark:text-gray-300">
-                  <th className="px-5 py-2.5 font-semibold text-left">Resident</th>
-                  <th className="px-3 py-2.5 font-semibold text-left">Case Manager</th>
-                  <th className="px-5 py-2.5 font-semibold text-left">Status</th>
+                <tr>
+                  <th className="px-5 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">Resident</th>
+                  <th className="px-3 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">Case Manager</th>
+                  <th className="px-5 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">

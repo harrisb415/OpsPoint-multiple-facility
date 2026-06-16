@@ -394,12 +394,14 @@
 .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; }
 
 /* - Tables ------------------------------------------------------- */
-.roster-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* Bordered, rounded card around every legacy/raw table — matches the design
+   prototype's table wrapper (border border-gray-200 rounded-xl). */
+.roster-wrap { overflow-x: auto; border: 1px solid var(--border-light); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
 thead th {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--teal-700); padding: 10px 12px;
-  border-bottom: 1px solid var(--teal-200); background: var(--raised-bg);
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .05em; color: #6b7280; padding: 12px;
+  border-bottom: 1px solid var(--border-light); background: var(--raised-bg);
   text-align: left; white-space: nowrap;
 }
 thead th.tc { text-align: center; }
@@ -455,9 +457,9 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
 .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .log-th {
   position: sticky; top: 0; z-index: 1;
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: .05em; color: var(--teal-700); padding: 10px 12px;
-  border-bottom: 1px solid var(--teal-200); background: var(--raised-bg); text-align: left;
+  font-size: 12px; font-weight: 500; text-transform: uppercase;
+  letter-spacing: .05em; color: #6b7280; padding: 12px;
+  border-bottom: 1px solid var(--border-light); background: var(--raised-bg); text-align: left;
 }
 .log-td-time {
   font-family: var(--mono); font-size: 12px; font-weight: 600;
@@ -794,7 +796,8 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
 .dark .section { background: #1f2937; }
 .dark .section-head,
 .dark .section-head .sh-left > span:not(.sh-dot) { color: #e5e7eb; }
-.dark thead th { color: #9ca3af; }
+.dark thead th,
+.dark .log-th { color: #d1d5db; }
 .dark th.sortable:hover { color: #93c5fd; }
 .dark .census-card { background: #1f2937; }
 .dark .issue-item { background: #1f2937; }

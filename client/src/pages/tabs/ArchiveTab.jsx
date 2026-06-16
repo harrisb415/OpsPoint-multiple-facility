@@ -3,8 +3,8 @@ import { useOutletContext } from 'react-router-dom'
 import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
 import {
   Badge, Breadcrumb, BreadcrumbItem, Button, Pagination,
-  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
 } from 'flowbite-react'
+import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { useConfirm } from '../../components/ui.jsx'

@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
 import { Plus, ClipboardList } from 'lucide-react'
-import { Breadcrumb, BreadcrumbItem, Button } from 'flowbite-react'
+import {
+  Breadcrumb, BreadcrumbItem, Button, Modal, ModalHeader, ModalBody, ModalFooter,
+  TextInput, Select, Textarea, Checkbox, Label, Alert,
+} from 'flowbite-react'
+import { Field, useConfirm } from '../components/ui.jsx'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
@@ -140,6 +144,7 @@ function getMostRecentLogTime(entries, keyword) {
 export default function ReportTab() {
   const { data, patchData, saveData, loadData } = useData()
   const { hasPerm } = usePermission()
+  const confirm = useConfirm()
 
   const clients  = data?.clients  || []
   const reports  = data?.reports  || []
@@ -353,7 +358,7 @@ export default function ReportTab() {
 
   // New report
   const handleNewReport = useCallback(async () => {
-    if (!window.confirm('Start a new shift report?\n\nIssues and current statuses will carry over.')) return
+    if (!await confirm({ title: 'Start a new shift report?', body: 'Issues and current statuses will carry over.', confirmText: 'Start' })) return
     setCreating(true)
     try {
       const s = stateRef.current
@@ -376,7 +381,7 @@ export default function ReportTab() {
     const report = dataRef.current?.reports?.find(r => r.id === activeId)
     if (!report) return
     const s = stateRef.current
-    if (!window.confirm(`Close ${s.shift || 'this shift'}? This will lock the report.`)) return
+    if (!await confirm({ title: `Close ${s.shift || 'this shift'}?`, body: 'This will lock the report.', confirmText: 'Close Shift', color: 'red' })) return
     await saveData({
       reports: [{
         ...report, report_date: s.reportDate, shift: s.shift, mod_name: s.modName,
@@ -439,7 +444,7 @@ export default function ReportTab() {
 
   // Delete log entry
   const handleDelLog = useCallback(async (entryId) => {
-    if (!window.confirm('Delete this log entry?')) return
+    if (!await confirm({ title: 'Delete this log entry?', confirmText: 'Delete', color: 'red' })) return
     await fetch(`/api/log/${entryId}`, { method: 'DELETE', credentials: 'include' })
     await loadData()
   }, [loadData])
@@ -478,7 +483,7 @@ export default function ReportTab() {
 
   // UA request from roster
   const handleUARequest = useCallback(async (clientId, clientName, room) => {
-    if (!window.confirm(`Request UA for ${clientName} (Room ${room})?`)) return
+    if (!await confirm({ title: `Request UA for ${clientName}?`, body: `Room ${room}`, confirmText: 'Request UA' })) return
     await fetch('/api/ua-requests', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
       body: JSON.stringify({ client_id: clientId, client_name: clientName, room }),
@@ -1115,35 +1120,21 @@ function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-head">
-          <h2>✓ Wellness Check</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div className="field">
-            <label>Conducted by</label>
-            <input ref={byRef} type="text" value={by} onChange={e => setBy(e.target.value)}
+    <Modal show size="lg" onClose={onClose}>
+      <ModalHeader>✓ Wellness Check</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          <Field label="Conducted by">
+            <TextInput ref={byRef} value={by} onChange={e => setBy(e.target.value)}
               placeholder="PA name" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
-          </div>
-          <div className="field">
-            <label>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
+          </Field>
+          <Field label="Time"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
           {activeClients.length > 0 && (
-            <div className="field">
-              <label>
-                Not Located
-                <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 6 }}>
-                  (check anyone not found)
-                </span>
+            <div>
+              <label className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Not Located <span className="font-normal text-gray-400">(check anyone not found)</span>
               </label>
-              <div style={{
-                maxHeight: 240, overflowY: 'auto', overflowX: 'hidden',
-                border: '1.5px solid var(--line)', borderRadius: 6,
-                background: '#fff',
-              }}>
+              <div className="overflow-y-auto overflow-x-hidden border border-gray-200 rounded-lg max-h-60 dark:border-gray-700">
                 {activeClients.map((c, i) => {
                   const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'
                   const marked = notLocated.has(c.id)
@@ -1178,21 +1169,19 @@ function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose
                 })}
               </div>
               {notLocated.size > 0 && (
-                <div style={{ fontSize: '.75rem', color: '#dc2626', fontWeight: 600, marginTop: 4 }}>
+                <div className="mt-1 text-xs font-semibold text-red-600">
                   {notLocated.size} resident{notLocated.size !== 1 ? 's' : ''} not located
                 </div>
               )}
             </div>
           )}
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Logging…' : 'Log Entry'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving} disabled={saving}>Log Entry</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1225,39 +1214,21 @@ function WalkthroughModal({ areas, onClose, onSubmit }) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 520 }}>
-        <div className="modal-head">
-          <h2>⊕ Building Walkthrough</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div className="field">
-            <label>Conducted by</label>
-            <input type="text" value={by} onChange={e => setBy(e.target.value)} placeholder="PA name" autoFocus />
-          </div>
-          <div className="field">
-            <label>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
-          <div className="field">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <label style={{ marginBottom: 0 }}>Areas Checked</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" onClick={() => setAll(true)}
-                  style={{ fontSize: '.7rem', padding: '2px 8px', border: '1px solid #86efac', borderRadius: 4, cursor: 'pointer', background: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
-                  All ✓
-                </button>
-                <button type="button" onClick={() => setAll(false)}
-                  style={{ fontSize: '.7rem', padding: '2px 8px', border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer', background: '#f8fafc' }}>
-                  None
-                </button>
+    <Modal show size="lg" onClose={onClose}>
+      <ModalHeader>⊕ Building Walkthrough</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          <Field label="Conducted by"><TextInput value={by} onChange={e => setBy(e.target.value)} placeholder="PA name" autoFocus /></Field>
+          <Field label="Time"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Areas Checked</label>
+              <div className="flex gap-1.5">
+                <Button type="button" size="xs" color="light" onClick={() => setAll(true)}>All ✓</Button>
+                <Button type="button" size="xs" color="light" onClick={() => setAll(false)}>None</Button>
               </div>
             </div>
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4,
-              border: '1.5px solid var(--line)', borderRadius: 7, padding: '8px', background: '#f8fafc',
-            }}>
+            <div className="grid grid-cols-2 gap-1 p-2 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700">
               {areas.map(a => (
                 <div key={a} onClick={() => toggleArea(a)} style={{
                   display: 'flex', alignItems: 'center', gap: 8,
@@ -1280,20 +1251,16 @@ function WalkthroughModal({ areas, onClose, onSubmit }) {
               ))}
             </div>
           </div>
-          <div className="field">
-            <label>Issues <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-            <input type="text" value={issues} onChange={e => setIssues(e.target.value)}
-              placeholder="All is well, nothing to report." />
-          </div>
+          <Field label="Issues (optional)">
+            <TextInput value={issues} onChange={e => setIssues(e.target.value)} placeholder="All is well, nothing to report." />
+          </Field>
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Logging…' : 'Log Entry'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving} disabled={saving}>Log Entry</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1316,50 +1283,28 @@ function LunchModal({ onClose, onSubmit }) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 400 }}>
-        <div className="modal-head">
-          <h2>🍕 Lunch Break</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div className="field">
-            <label>Direction</label>
-            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <button type="button" onClick={() => setDirection('out')} style={{
-                flex: 1, padding: '9px 0', borderRadius: 8, cursor: 'pointer', fontSize: '.85rem', fontWeight: 700,
-                border: `2px solid ${direction === 'out' ? '#16a34a' : '#CBD5E1'}`,
-                background: direction === 'out' ? '#dcfce7' : '#F1F5F9',
-                color: direction === 'out' ? '#15803d' : '#475569',
-                transition: 'all .12s',
-              }}>🚪 Out — took lunch</button>
-              <button type="button" onClick={() => setDirection('in')} style={{
-                flex: 1, padding: '9px 0', borderRadius: 8, cursor: 'pointer', fontSize: '.85rem', fontWeight: 700,
-                border: `2px solid ${direction === 'in' ? '#FCD34D' : '#CBD5E1'}`,
-                background: direction === 'in' ? '#FEF3C7' : '#F1F5F9',
-                color: direction === 'in' ? '#92400E' : '#475569',
-                transition: 'all .12s',
-              }}>↩ In — returned</button>
+    <Modal show size="md" onClose={onClose}>
+      <ModalHeader>🍕 Lunch Break</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          <Field label="Direction">
+            <div className="flex gap-2">
+              <Button type="button" className="flex-1" color={direction === 'out' ? 'success' : 'light'} onClick={() => setDirection('out')}>🚪 Out — took lunch</Button>
+              <Button type="button" className="flex-1" color={direction === 'in' ? 'warning' : 'light'} onClick={() => setDirection('in')}>↩ In — returned</Button>
             </div>
-          </div>
-          <div className="field">
-            <label>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>PA name</label>
-            <input ref={nameRef} type="text" value={name} onChange={e => setName(e.target.value)}
+          </Field>
+          <Field label="Time"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
+          <Field label="PA name">
+            <TextInput ref={nameRef} value={name} onChange={e => setName(e.target.value)}
               placeholder="Name" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
-          </div>
+          </Field>
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Logging…' : 'Log Entry'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving} disabled={saving}>Log Entry</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1382,45 +1327,28 @@ function RoomSearchModal({ clients, onClose, onSubmit }) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 440 }}>
-        <div className="modal-head">
-          <h2>🔎 Room Search</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div className="field">
-            <label>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>Resident</label>
-            <select value={clientId} onChange={e => setClientId(e.target.value)} autoFocus>
+    <Modal show size="md" onClose={onClose}>
+      <ModalHeader>🔎 Room Search</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          <Field label="Time"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
+          <Field label="Resident">
+            <Select value={clientId} onChange={e => setClientId(e.target.value)} autoFocus>
               <option value="">— Select resident —</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>Rm. {c.room} — {c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Conducted by</label>
-            <input type="text" value={staff} onChange={e => setStaff(e.target.value)} placeholder="Staff name" />
-          </div>
-          <div className="field">
-            <label>Findings</label>
-            <input type="text" value={findings} onChange={e => setFindings(e.target.value)}
-              placeholder="Describe findings…"
-              onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
-          </div>
+              {clients.map(c => <option key={c.id} value={c.id}>Rm. {c.room} — {c.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Conducted by"><TextInput value={staff} onChange={e => setStaff(e.target.value)} placeholder="Staff name" /></Field>
+          <Field label="Findings">
+            <TextInput value={findings} onChange={e => setFindings(e.target.value)} placeholder="Describe findings…" onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+          </Field>
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || !clientId || !staff.trim() || !findings.trim()}>
-            {saving ? 'Logging…' : 'Log Entry'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving} disabled={saving || !clientId || !staff.trim() || !findings.trim()}>Log Entry</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1476,25 +1404,16 @@ function MailQuickModal({ clients, onClose }) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-head">
-          <h2>✉ Mail</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          <div className="field">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-              <label style={{ marginBottom: 0 }}>Recipients</label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button type="button" onClick={selectAll}
-                  style={{ fontSize: '.68rem', padding: '2px 7px', border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer', background: '#f8fafc' }}>
-                  All
-                </button>
-                <button type="button" onClick={clearAll}
-                  style={{ fontSize: '.68rem', padding: '2px 7px', border: '1px solid var(--line)', borderRadius: 4, cursor: 'pointer', background: '#f8fafc' }}>
-                  None
-                </button>
+    <Modal show size="lg" onClose={onClose}>
+      <ModalHeader>✉ Mail</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Recipients</label>
+              <div className="flex gap-1.5">
+                <Button type="button" size="xs" color="light" onClick={selectAll}>All</Button>
+                <Button type="button" size="xs" color="light" onClick={clearAll}>None</Button>
               </div>
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', overflowX: 'hidden', border: '1.5px solid var(--line)', borderRadius: 6, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -1559,19 +1478,16 @@ function MailQuickModal({ clients, onClose }) {
               </div>
             )}
           </div>
-          <div className="field" style={{ maxWidth: 180 }}>
-            <label>Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} />
-          </div>
+          <Field label="Time" className="max-w-[180px]"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving || selectedIds.size === 0}>
-            {saving ? 'Logging…' : `Log Mail${selectedIds.size > 1 ? ` (${selectedIds.size})` : ''}`}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving} disabled={saving || selectedIds.size === 0}>
+          {`Log Mail${selectedIds.size > 1 ? ` (${selectedIds.size})` : ''}`}
+        </Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1615,46 +1531,29 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
   }
 
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
-        <div className="modal-head">
-          <h2>⚠ Log Infraction</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body">
-          {err && <div className="auth-error" style={{ marginBottom: 10 }}>{err}</div>}
-          <div className="field">
-            <label>Resident</label>
-            <select value={form.client_id} onChange={e => handleClientSelect(e.target.value)} autoFocus>
+    <Modal show size="lg" onClose={onClose}>
+      <ModalHeader>⚠ Log Infraction</ModalHeader>
+      <ModalBody>
+        <div className="space-y-4">
+          {err && <Alert color="failure">{err}</Alert>}
+          <Field label="Resident">
+            <Select value={form.client_id} onChange={e => handleClientSelect(e.target.value)} autoFocus>
               <option value="">— Select resident —</option>
               {clients.map(c => <option key={c.id} value={c.id}>Rm. {c.room} — {c.name}</option>)}
-            </select>
-          </div>
-          <div className="field">
-            <label>Date</label>
-            <input type="date" value={form.violation_date} onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} />
-          </div>
-          <div className="field">
-            <label>Description</label>
-            <textarea rows={3} value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-              placeholder="Describe the infraction…"
-              style={{ resize: 'vertical', width: '100%', fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', boxSizing: 'border-box' }} />
-          </div>
-          <div className="field">
-            <label>Notes <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
-            <input type="text" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Additional context…" />
-          </div>
+            </Select>
+          </Field>
+          <Field label="Date"><TextInput type="date" value={form.violation_date} onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} /></Field>
+          <Field label="Description">
+            <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the infraction…" />
+          </Field>
+          <Field label="Notes (optional)"><TextInput value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional context…" /></Field>
         </div>
-        <div className="modal-foot">
-          <button className="btn-cancel" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Saving…' : 'Log Infraction'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </ModalBody>
+      <ModalFooter className="justify-end">
+        <Button color="light" onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSubmit} isProcessing={saving} disabled={saving}>Log Infraction</Button>
+      </ModalFooter>
+    </Modal>
   )
 }
 
@@ -1814,18 +1713,12 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
       </tr>
       {showPhoto && photoSrc && (
         <tr><td colSpan={3} style={{ padding: 0, border: 'none' }}>
-          <div className="modal-overlay open" onClick={() => setShowPhoto(false)} style={{ zIndex: 2000 }}>
-            <div style={{ background: '#fff', borderRadius: 12, padding: 16, maxWidth: '92vw',
-              display: 'flex', flexDirection: 'column', gap: 10, boxShadow: '0 20px 60px rgba(0,0,0,.4)' }}
-              onClick={ev => ev.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 600, fontSize: '.9rem', color: '#0f172a' }}>UA Photo</span>
-                <button className="xbtn" onClick={() => setShowPhoto(false)}>&times;</button>
-              </div>
-              <img src={photoSrc} alt="UA photo"
-                style={{ maxWidth: '80vw', maxHeight: '70vh', objectFit: 'contain', borderRadius: 8 }} />
-            </div>
-          </div>
+          <Modal show size="lg" onClose={() => setShowPhoto(false)}>
+            <ModalHeader>UA Photo</ModalHeader>
+            <ModalBody>
+              <img src={photoSrc} alt="UA photo" className="object-contain mx-auto rounded-lg max-h-[70vh]" />
+            </ModalBody>
+          </Modal>
         </td></tr>
       )}
     </>

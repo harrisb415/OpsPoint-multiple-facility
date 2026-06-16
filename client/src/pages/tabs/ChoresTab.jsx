@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ListChecks, CheckCircle, Users, Printer, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Breadcrumb, BreadcrumbItem, Button, TextInput } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Kpi, KpiRow } from '../../components/console.jsx'
+
+const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
 function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 
@@ -213,24 +215,46 @@ export default function ChoresTab() {
 
   const isThisWeek = weekStart === getWeekStart(today)
 
-  const navBtn = 'inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+  const completionTint = weekStats.pct >= 80
+    ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300'
+    : weekStats.pct >= 50
+      ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300'
+      : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'
 
   return (
     <div>
-      <Header
-        crumb={['Daily Ops', 'Chores']}
-        title="Chores"
-        sub="Weekly chore assignments and completion log"
-        actions={[
-          { Icon: Printer, label: 'Print List', onClick: () => printChoreAssignments(clients, weekStart) },
-        ]}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Daily Ops</BreadcrumbItem>
+            <BreadcrumbItem>Chores</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chores</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Weekly chore assignments and completion log</p>
+        </div>
+        <Button color="light" onClick={() => printChoreAssignments(clients, weekStart)}><Printer className="w-4 h-4 mr-2" /> Print List</Button>
+      </div>
 
-      <KpiRow>
-        <Kpi label="Week Completion" value={`${weekStats.pct}%`} sub={`${weekStats.done}/${weekStats.total} logged`} Icon={CheckCircle} accent={weekStats.pct >= 80 ? 'green' : weekStats.pct >= 50 ? 'yellow' : 'red'} />
-        <Kpi label="Active Residents" value={clients.length} sub="on the roster" Icon={Users} accent="primary" />
-        <Kpi label="Defined Chores" value={masterChores.length} sub="in master list" Icon={ListChecks} accent="sky" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          { label: 'Week Completion', value: `${weekStats.pct}%`, sub: `${weekStats.done}/${weekStats.total} logged`, Icon: CheckCircle, tint: completionTint },
+          { label: 'Active Residents', value: clients.length, sub: 'on the roster', Icon: Users, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Defined Chores', value: masterChores.length, sub: 'in master list', Icon: ListChecks, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
+        ].map(k => (
+          <div key={k.label} className={CARD}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Master Chore List */}
       <div className={`${CARD} mb-4`}>
@@ -248,11 +272,9 @@ export default function ChoresTab() {
         </div>
         {canAssign && (
           <div className="flex gap-2 mt-3">
-            <input type="text" value={newChore} onChange={e => setNewChore(e.target.value)}
-              placeholder="Add chore…" onKeyDown={e => e.key === 'Enter' && addMasterChore()}
-              className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-            <button onClick={addMasterChore} disabled={savingChores}
-              className="px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50">+ Add</button>
+            <TextInput className="flex-1" value={newChore} onChange={e => setNewChore(e.target.value)}
+              placeholder="Add chore…" onKeyDown={e => e.key === 'Enter' && addMasterChore()} />
+            <Button onClick={addMasterChore} isProcessing={savingChores} disabled={savingChores}>Add</Button>
           </div>
         )}
       </div>
@@ -265,14 +287,9 @@ export default function ChoresTab() {
             {loadingWeek && <span className="text-xs text-gray-400">Loading…</span>}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setWeekStart(w => offsetWeek(w, -1))} className={navBtn}><ChevronLeft className="w-4 h-4" /> Prev</button>
-            <button onClick={() => setWeekStart(getWeekStart(today))}
-              className={isThisWeek
-                ? 'inline-flex items-center px-3 py-1.5 text-xs font-medium text-white rounded-lg bg-primary-600'
-                : navBtn}>
-              This Week
-            </button>
-            <button onClick={() => setWeekStart(w => offsetWeek(w, 1))} className={navBtn}>Next <ChevronRight className="w-4 h-4" /></button>
+            <Button size="xs" color="light" onClick={() => setWeekStart(w => offsetWeek(w, -1))}><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+            <Button size="xs" color={isThisWeek ? 'default' : 'light'} onClick={() => setWeekStart(getWeekStart(today))}>This Week</Button>
+            <Button size="xs" color="light" onClick={() => setWeekStart(w => offsetWeek(w, 1))}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
           </div>
         </div>
 

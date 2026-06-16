@@ -1,11 +1,16 @@
 import { useState, useMemo } from 'react'
 import { Plus, Lock } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Badge, Table, NameCell, MonoCell, MutedCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
 
-const SEV_TONE = { low: 'blue', medium: 'yellow', high: 'orange', critical: 'red' }
-const STATUS_TONE = { open: 'yellow', reviewed: 'blue', closed: 'green' }
+const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
+const SEV_BADGE = { low: 'info', medium: 'warning', high: 'pink', critical: 'failure' }
+const STATUS_BADGE = { open: 'warning', reviewed: 'info', closed: 'success' }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function nowTime()  { const d = new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
@@ -17,12 +22,6 @@ function fmtDate(d) {
 }
 
 const SEVERITY_LABEL = { low:'Low', medium:'Medium', high:'High', critical:'Critical' }
-function SeverityBadge({ severity }) {
-  return <Badge tone={SEV_TONE[severity] || 'gray'}>{SEVERITY_LABEL[severity] || severity}</Badge>
-}
-function StatusBadge({ status }) {
-  return <Badge tone={STATUS_TONE[status] || 'gray'}>{status.charAt(0).toUpperCase() + status.slice(1)}</Badge>
-}
 
 const BLANK = {
   client_id: '', client_name: '', room: '',
@@ -165,72 +164,97 @@ export default function IncidentsTab() {
     })
   }, [incidents, filterClient, filterSev, filterStatus])
 
-  const actionBtn = 'px-2.5 py-1 text-xs font-medium rounded-lg'
-
   return (
     <div>
-      <Header
-        crumb={['Clinical', 'Incident Reports']}
-        title="Incident Reports"
-        sub="Behavioral incidents are formal regulatory documents — distinct from program-rule infractions; severity drives mandatory notifications"
-        actions={canLog ? [{ Icon: Plus, label: 'New Report', primary: true, onClick: openAdd }] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Clinical</BreadcrumbItem>
+            <BreadcrumbItem>Incident Reports</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Incident Reports</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Behavioral incidents are formal regulatory documents — distinct from program-rule infractions; severity drives mandatory notifications</p>
+        </div>
+        {canLog && <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> New Report</Button>}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <select value={filterClient} onChange={e=>setFilterClient(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        <Select sizing="sm" value={filterClient} onChange={e=>setFilterClient(e.target.value)}>
           <option value="">All residents</option>
           {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-        </select>
-        <select value={filterSev} onChange={e=>setFilterSev(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        </Select>
+        <Select sizing="sm" value={filterSev} onChange={e=>setFilterSev(e.target.value)}>
           <option value="">All severities</option>
           {Object.entries(SEVERITY_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        </Select>
+        <Select sizing="sm" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
           <option value="">All statuses</option>
           <option value="open">Open</option>
           <option value="reviewed">Reviewed</option>
           <option value="closed">Closed</option>
-        </select>
+        </Select>
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
 
       {filtered.length === 0
-        ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No incident reports.</div>
+        ? <div className={`${CARD} text-sm text-center text-gray-400`}>No incident reports.</div>
         : (
-          <Table headers={[{ label: 'Date' }, { label: 'Resident' }, { label: 'Severity' }, { label: 'Narrative' }, { label: 'Status' }, { label: 'Reviewer' }, { label: '', right: true }]}>
-            {filtered.map((i, idx) => (
-              <tr key={i.id} className={rowCls(idx)}>
-                <MonoCell>{fmtDate(i.incident_date)} {i.incident_time}</MonoCell>
-                <NameCell name={i.client_name} sub={`Rm ${i.room}`} />
-                <BadgeCell tone={SEV_TONE[i.severity] || 'gray'} label={SEVERITY_LABEL[i.severity] || i.severity} />
-                <td className="p-3 text-sm text-gray-500 dark:text-gray-400" style={{ maxWidth: 340 }}>
-                  <div className="overflow-hidden whitespace-nowrap text-ellipsis">{i.narrative}</div>
-                  {i.notifications_required?.length > 0 && (
-                    <div className="mt-1 text-xs text-gray-400">Notify: {i.notifications_required.join(', ')}</div>
-                  )}
-                </td>
-                <BadgeCell tone={STATUS_TONE[i.status] || 'gray'} label={i.status.charAt(0).toUpperCase() + i.status.slice(1)} />
-                <MutedCell>{i.supervisor_name || '—'}</MutedCell>
-                <ActionsCell>
-                  <div className="inline-flex items-center justify-end gap-1">
-                    {i.locked_at
-                      ? (canUnlock
-                          ? <button onClick={()=>{setUnlockReason(''); setUnlockModal(i)}} title="Unlock" className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><Lock className="w-4 h-4" /></button>
-                          : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
-                      : <>
-                          {canLog && <button onClick={()=>openEdit(i)} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Edit</button>}
-                          {canReview && i.status !== 'closed' && (
-                            <button onClick={()=>{ setReviewNotes(i.review_notes||''); setReviewStatus(i.status==='open'?'reviewed':'closed'); setReviewModal(i) }} className={`${actionBtn} text-primary-700 hover:bg-primary-50 dark:text-primary-300 dark:hover:bg-primary-900/30`}>
-                              {i.status === 'open' ? 'Review' : 'Close'}
-                            </button>
-                          )}
-                          {canDelete && <button onClick={()=>del(i)} className={`${actionBtn} text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30`}>Delete</button>}
-                        </>
-                    }
-                  </div>
-                </ActionsCell>
-              </tr>
-            ))}
+          <Table hoverable>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Date</TableHeadCell>
+                <TableHeadCell>Resident</TableHeadCell>
+                <TableHeadCell>Severity</TableHeadCell>
+                <TableHeadCell>Narrative</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell>Reviewer</TableHeadCell>
+                <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody className="divide-y">
+              {filtered.map(i => (
+                <TableRow key={i.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                  <TableCell className="font-mono whitespace-nowrap">{fmtDate(i.incident_date)} {i.incident_time}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar placeholderInitials={initials(i.client_name)} rounded size="sm" />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{i.client_name}</p>
+                        <p className="font-mono text-xs text-gray-400">Rm {i.room}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell><Badge color={SEV_BADGE[i.severity] || 'gray'} className="inline-flex w-fit">{SEVERITY_LABEL[i.severity] || i.severity}</Badge></TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400" style={{ maxWidth: 340 }}>
+                    <div className="overflow-hidden whitespace-nowrap text-ellipsis">{i.narrative}</div>
+                    {i.notifications_required?.length > 0 && (
+                      <div className="mt-1 text-xs text-gray-400">Notify: {i.notifications_required.join(', ')}</div>
+                    )}
+                  </TableCell>
+                  <TableCell><Badge color={STATUS_BADGE[i.status] || 'gray'} className="inline-flex w-fit">{i.status.charAt(0).toUpperCase() + i.status.slice(1)}</Badge></TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{i.supervisor_name || '—'}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="inline-flex items-center justify-end gap-1">
+                      {i.locked_at
+                        ? (canUnlock
+                            ? <Button size="xs" color="light" onClick={()=>{setUnlockReason(''); setUnlockModal(i)}} title="Unlock"><Lock className="w-4 h-4" /></Button>
+                            : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
+                        : <>
+                            {canLog && <Button size="xs" color="light" onClick={()=>openEdit(i)}>Edit</Button>}
+                            {canReview && i.status !== 'closed' && (
+                              <Button size="xs" color="light" className="text-primary-700 dark:text-primary-300" onClick={()=>{ setReviewNotes(i.review_notes||''); setReviewStatus(i.status==='open'?'reviewed':'closed'); setReviewModal(i) }}>
+                                {i.status === 'open' ? 'Review' : 'Close'}
+                              </Button>
+                            )}
+                            {canDelete && <Button size="xs" color="light" className="text-red-600" onClick={()=>del(i)}>Delete</Button>}
+                          </>
+                      }
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
           </Table>
         )
       }

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "flowbite-react/plugin/tailwindcss";
+@source "../.flowbite-react/class-list.json";
 
 /* Class-based dark mode (Console redesign — toggle adds .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));

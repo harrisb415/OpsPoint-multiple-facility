@@ -2,7 +2,13 @@ import { useState, useMemo, useEffect } from 'react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { ShieldCheck, FileCheck, Share2, Plus } from 'lucide-react'
-import { CARD, Header, Kpi, KpiRow, Table, NameCell, MonoCell, MutedCell, TextCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
+import { initials } from '../../utils/ui.js'
+
+const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function fmtDate(d) {
@@ -12,12 +18,12 @@ function fmtDate(d) {
 }
 
 function consentStatus(row) {
-  if (row.revoked) return { key: 'revoked', tone: 'gray', label: 'Revoked' }
+  if (row.revoked) return { key: 'revoked', color: 'gray', label: 'Revoked' }
   if (row.expiration_date) {
     const exp = new Date(row.expiration_date + 'T23:59:59')
-    if (exp < new Date()) return { key: 'expired', tone: 'gray', label: 'Expired' }
+    if (exp < new Date()) return { key: 'expired', color: 'gray', label: 'Expired' }
   }
-  return { key: 'active', tone: 'green', label: 'Active' }
+  return { key: 'active', color: 'success', label: 'Active' }
 }
 
 const BLANK = {
@@ -119,64 +125,103 @@ export default function ConsentTab() {
 
   return (
     <div>
-      <Header
-        crumb={['Records', 'Consents']}
-        title="Consents"
-        sub="42 CFR Part 2 — consent &amp; disclosure tracking"
-        actions={canManage && selectedClient ? [
-          { Icon: Plus, label: 'New Consent', primary: true, onClick: () => { setForm(BLANK); setModalErr(''); setModal(true) } },
-        ] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Records</BreadcrumbItem>
+            <BreadcrumbItem>Consents</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Consents</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">42 CFR Part 2 — consent &amp; disclosure tracking</p>
+        </div>
+        {canManage && selectedClient && (
+          <Button onClick={() => { setForm(BLANK); setModalErr(''); setModal(true) }}><Plus className="w-4 h-4 mr-2" /> New Consent</Button>
+        )}
+      </div>
 
       {/* Resident selector */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Resident:</span>
-        <select value={selectedClient} onChange={e => setSelectedClient(e.target.value)}
-          className="px-2.5 py-1.5 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        <Select sizing="sm" value={selectedClient} onChange={e => setSelectedClient(e.target.value)}>
           <option value="">— select resident —</option>
           {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-        </select>
+        </Select>
       </div>
 
       {!selectedClient ? (
-        <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>
+        <div className={`${CARD} text-sm text-center text-gray-400`}>
           Select a resident to view their consent records and disclosure history.
         </div>
       ) : loading ? (
-        <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>Loading…</div>
+        <div className={`${CARD} text-sm text-center text-gray-400`}>Loading…</div>
       ) : err ? (
-        <div className={`${CARD} p-8 text-sm text-center text-red-600`}>{err}</div>
+        <div className={`${CARD} text-sm text-center text-red-600`}>{err}</div>
       ) : (
         <>
-          <KpiRow>
-            <Kpi label="Active Consents" value={activeCount} sub="currently in force" Icon={ShieldCheck} accent="green" />
-            <Kpi label="Revoked / Expired" value={inactiveCount} sub="no longer valid" Icon={FileCheck} accent="primary" />
-            {canViewDisc && <Kpi label="Disclosures" value={disclosures.length} sub="external releases logged" Icon={Share2} accent="sky" />}
-          </KpiRow>
+          <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[
+              { label: 'Active Consents', value: activeCount, sub: 'currently in force', Icon: ShieldCheck, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+              { label: 'Revoked / Expired', value: inactiveCount, sub: 'no longer valid', Icon: FileCheck, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+              ...(canViewDisc ? [{ label: 'Disclosures', value: disclosures.length, sub: 'external releases logged', Icon: Share2, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' }] : []),
+            ].map(k => (
+              <div key={k.label} className="p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                    <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                    <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+                  </div>
+                  <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+                </div>
+              </div>
+            ))}
+          </div>
 
           <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Active &amp; historical consents</h3>
           {consents.length === 0
-            ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No consent records on file.</div>
+            ? <div className={`${CARD} text-sm text-center text-gray-400`}>No consent records on file.</div>
             : (
-              <Table headers={[{ label: 'Recipient' }, { label: 'Purpose' }, { label: 'Scope' }, { label: 'Effective' }, { label: 'Expires' }, { label: 'Status' }, { label: '', right: true }]}>
-                {consents.map((c, i) => {
-                  const st = consentStatus(c)
-                  return (
-                    <tr key={c.id} className={rowCls(i)}>
-                      <NameCell name={c.recipient_name} sub={c.recipient_org || ''} square />
-                      <MutedCell>{c.purpose}</MutedCell>
-                      <MutedCell>{INFO_LABEL[c.information_type] || c.information_type}</MutedCell>
-                      <MonoCell>{fmtDate(c.effective_date)}</MonoCell>
-                      <MonoCell>{c.expiration_date ? fmtDate(c.expiration_date) : '—'}</MonoCell>
-                      <BadgeCell tone={st.tone} label={st.label} />
-                      <ActionsCell>
-                        {!c.revoked && canManage
-                          ? <button onClick={() => revoke(c)} className="px-3 py-1.5 text-xs font-medium text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30">Revoke</button>
-                          : <span className="text-xs text-gray-300">—</span>}
-                      </ActionsCell>
-                    </tr>
-                  )
-                })}
+              <Table hoverable>
+                <TableHead>
+                  <TableRow>
+                    <TableHeadCell>Recipient</TableHeadCell>
+                    <TableHeadCell>Purpose</TableHeadCell>
+                    <TableHeadCell>Scope</TableHeadCell>
+                    <TableHeadCell>Effective</TableHeadCell>
+                    <TableHeadCell>Expires</TableHeadCell>
+                    <TableHeadCell>Status</TableHeadCell>
+                    <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody className="divide-y">
+                  {consents.map(c => {
+                    const st = consentStatus(c)
+                    return (
+                      <TableRow key={c.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar placeholderInitials={initials(c.recipient_name)} size="sm" />
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.recipient_name}</p>
+                              {c.recipient_org && <p className="font-mono text-xs text-gray-400">{c.recipient_org}</p>}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-gray-500 dark:text-gray-400">{c.purpose}</TableCell>
+                        <TableCell className="text-gray-500 dark:text-gray-400">{INFO_LABEL[c.information_type] || c.information_type}</TableCell>
+                        <TableCell className="font-mono">{fmtDate(c.effective_date)}</TableCell>
+                        <TableCell className="font-mono">{c.expiration_date ? fmtDate(c.expiration_date) : '—'}</TableCell>
+                        <TableCell><Badge color={st.color} className="inline-flex w-fit">{st.label}</Badge></TableCell>
+                        <TableCell className="text-right">
+                          {!c.revoked && canManage
+                            ? <Button size="xs" color="light" className="text-red-600" onClick={() => revoke(c)}>Revoke</Button>
+                            : <span className="text-xs text-gray-300">—</span>}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
               </Table>
             )
           }
@@ -185,19 +230,31 @@ export default function ConsentTab() {
             <>
               <h3 className="mt-6 mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Disclosure history</h3>
               {disclosures.length === 0
-                ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No external disclosures logged.</div>
+                ? <div className={`${CARD} text-sm text-center text-gray-400`}>No external disclosures logged.</div>
                 : (
-                  <Table headers={[{ label: 'When' }, { label: 'Recipient' }, { label: 'Scope' }, { label: 'Method' }, { label: 'By' }, { label: 'Consent' }]}>
-                    {disclosures.map((d, i) => (
-                      <tr key={d.id} className={rowCls(i)}>
-                        <MonoCell>{fmtDate((d.disclosed_at||'').slice(0,10))} {(d.disclosed_at||'').slice(11,16)}</MonoCell>
-                        <TextCell>{d.recipient}</TextCell>
-                        <MutedCell>{INFO_LABEL[d.information_type] || d.information_type}</MutedCell>
-                        <MutedCell>{d.method || '—'}</MutedCell>
-                        <MutedCell>{d.disclosed_by_name}</MutedCell>
-                        <MonoCell>{d.consent_id ? '✓ #' + d.consent_id : '—'}</MonoCell>
-                      </tr>
-                    ))}
+                  <Table hoverable>
+                    <TableHead>
+                      <TableRow>
+                        <TableHeadCell>When</TableHeadCell>
+                        <TableHeadCell>Recipient</TableHeadCell>
+                        <TableHeadCell>Scope</TableHeadCell>
+                        <TableHeadCell>Method</TableHeadCell>
+                        <TableHeadCell>By</TableHeadCell>
+                        <TableHeadCell>Consent</TableHeadCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody className="divide-y">
+                      {disclosures.map(d => (
+                        <TableRow key={d.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                          <TableCell className="font-mono">{fmtDate((d.disclosed_at||'').slice(0,10))} {(d.disclosed_at||'').slice(11,16)}</TableCell>
+                          <TableCell>{d.recipient}</TableCell>
+                          <TableCell className="text-gray-500 dark:text-gray-400">{INFO_LABEL[d.information_type] || d.information_type}</TableCell>
+                          <TableCell className="text-gray-500 dark:text-gray-400">{d.method || '—'}</TableCell>
+                          <TableCell className="text-gray-500 dark:text-gray-400">{d.disclosed_by_name}</TableCell>
+                          <TableCell className="font-mono">{d.consent_id ? '✓ #' + d.consent_id : '—'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
                   </Table>
                 )
               }

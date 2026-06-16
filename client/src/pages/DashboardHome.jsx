@@ -1,4 +1,5 @@
 import { useMemo, lazy, Suspense } from 'react'
+import { Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import {
@@ -124,12 +125,9 @@ export default function DashboardHome({ onNavigate }) {
             {report?.mod_name ? ` · PA ${report.mod_name}` : ''}
           </p>
         </div>
-        <button
-          onClick={() => onNavigate?.('report')}
-          className="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-white rounded-lg bg-primary-600 hover:bg-primary-700"
-        >
-          <FileText className="w-4 h-4" /> Open Report
-        </button>
+        <Button onClick={() => onNavigate?.('report')}>
+          <FileText className="w-4 h-4 mr-2" /> Open Report
+        </Button>
       </div>
 
       {/* KPI row */}

@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react'
 import { Plus, ClipboardList } from 'lucide-react'
+import { Breadcrumb, BreadcrumbItem, Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
-import { CARD, Header } from '../components/console.jsx'
 import { openPrintWindow, fmtDateFriendly, classifyLogEntry } from '../utils/printLog.js'
+
+const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
 function Panel({ title, right, flush, children }) {
   if (flush) {
@@ -533,7 +535,14 @@ export default function ReportTab() {
   if (!activeId && !creating) {
     return (
       <div>
-        <Header crumb={['Daily Ops', 'Shift Report']} title="Shift Report" sub="No active report for this shift" />
+        <div className="mb-5">
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Daily Ops</BreadcrumbItem>
+            <BreadcrumbItem>Shift Report</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Shift Report</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">No active report for this shift</p>
+        </div>
         <div className={`${CARD} flex flex-col items-center justify-center py-16 text-center`}>
           <div className="flex items-center justify-center mb-4 rounded-full w-14 h-14 bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300">
             <ClipboardList className="w-7 h-7" />
@@ -541,10 +550,7 @@ export default function ReportTab() {
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">No Active Shift Report</h2>
           <p className="mt-1 mb-5 text-sm text-gray-500 dark:text-gray-400">Start a new report to begin logging this shift.</p>
           {canCreate && (
-            <button onClick={handleNewReport}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700">
-              <Plus className="w-4 h-4" /> New Shift Report
-            </button>
+            <Button onClick={handleNewReport}><Plus className="w-4 h-4 mr-2" /> New Shift Report</Button>
           )}
         </div>
       </div>
@@ -562,15 +568,22 @@ export default function ReportTab() {
   return (
     <div>
       {/* Report Header */}
-      <Header
-        crumb={['Daily Ops', 'Shift Report']}
-        title={`${shift} Report`}
-        sub={`${reportDate} · ${shiftRange}${facilityName ? ' · ' + facilityName : ''}${activeId ? ' · #' + activeId : ''}${isClosed ? ' · Closed' : ''}`}
-        actions={[
-          ...(canClose && !isClosed && activeId ? [{ label: 'Close Shift', onClick: handleCloseShift }] : []),
-          ...(canCreate && isClosed ? [{ Icon: Plus, label: creating ? 'Creating…' : 'New Report', primary: true, onClick: handleNewReport }] : []),
-        ]}
-      />
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Daily Ops</BreadcrumbItem>
+            <BreadcrumbItem>Shift Report</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{shift} Report</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {reportDate} · {shiftRange}{facilityName ? ' · ' + facilityName : ''}{activeId ? ' · #' + activeId : ''}{isClosed ? ' · Closed' : ''}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canClose && !isClosed && activeId && <Button color="light" onClick={handleCloseShift}>Close Shift</Button>}
+          {canCreate && isClosed && <Button onClick={handleNewReport}><Plus className="w-4 h-4 mr-2" /> {creating ? 'Creating…' : 'New Report'}</Button>}
+        </div>
+      </div>
 
       {/* Shift Details */}
       <Panel title="Shift Details" right={activeId && <span className="text-xs text-gray-400">Report #{activeId} · {isClosed ? 'Closed' : 'Open'}</span>}>

@@ -1,11 +1,17 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Ban, Flame, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem, Select,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
-import { CARD, Header, Kpi, KpiRow, Toolbar, Table, NameCell, MonoCell, MutedCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
+
+const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -27,7 +33,7 @@ function StatusBadge({ status }) {
 }
 
 const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', notes: '' }
-const VIO_TONE = { pending: 'yellow', assigned: 'blue', waived: 'gray', completed: 'green' }
+const VIO_BADGE = { pending: 'warning', assigned: 'info', waived: 'gray', completed: 'success' }
 const VIO_LABEL = { pending: 'Pending Review', assigned: 'Consequence Assigned', waived: 'Waived', completed: 'Completed' }
 const VIO_STATUS_KEYS = [null, 'pending', 'assigned', 'waived', 'completed']
 
@@ -58,7 +64,6 @@ export default function ViolationsTab() {
   const [clientFilter, setClientFilter] = useState('')
   const [viewMode, setViewMode]       = useState('list')   // list | by_client
   const [statusFilter, setStatusFilter] = useState(0)
-  const [menuId, setMenuId]           = useState(null)
 
   const [modal, setModal]             = useState(null)     // null | 'add' | {violation}
   const [reviewModal, setReviewModal] = useState(null)     // null | {violation}
@@ -214,88 +219,122 @@ export default function ViolationsTab() {
 
   return (
     <div>
-      <Header
-        crumb={['Records', 'Infractions']}
-        title="Infractions"
-        sub="House rule infractions and actions taken"
-        actions={[
-          { Icon: Printer, label: 'Print', onClick: () => violations.length && setPrintOpen(true) },
-          ...(canLog ? [{ Icon: Plus, label: 'Log Infraction', primary: true, onClick: openAdd }] : []),
-        ]}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Records</BreadcrumbItem>
+            <BreadcrumbItem>Infractions</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Infractions</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">House rule infractions and actions taken</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button color="light" onClick={() => violations.length && setPrintOpen(true)}><Printer className="w-4 h-4 mr-2" /> Print</Button>
+          {canLog && <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> Log Infraction</Button>}
+        </div>
+      </div>
 
-      <KpiRow>
-        <Kpi label="Total" value={violations.length} sub="logged" Icon={Ban} accent="primary" />
-        <Kpi label="Pending Review" value={violations.filter(v => v.status === 'pending').length} sub="awaiting review" Icon={Flame} accent="red" />
-        <Kpi label="Resolved" value={violations.filter(v => v.status === 'completed' || v.status === 'waived').length} sub="completed or waived" Icon={CheckCircle} accent="green" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          { label: 'Total', value: violations.length, sub: 'logged', Icon: Ban, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Pending Review', value: violations.filter(v => v.status === 'pending').length, sub: 'awaiting review', Icon: Flame, tint: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' },
+          { label: 'Resolved', value: violations.filter(v => v.status === 'completed' || v.status === 'waived').length, sub: 'completed or waived', Icon: CheckCircle, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+        ].map(k => (
+          <Card key={k.label}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </Card>
+        ))}
+      </div>
 
-      <Toolbar
-        filters={['All', 'Pending', 'Assigned', 'Waived', 'Completed']}
-        active={statusFilter}
-        onFilter={setStatusFilter}
-        count={filtered.length}
-      />
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {['All', 'Pending', 'Assigned', 'Waived', 'Completed'].map((f, i) => (
+          <Button key={f} size="xs" color={i === statusFilter ? 'default' : 'light'} onClick={() => setStatusFilter(i)}>{f}</Button>
+        ))}
+        <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
+      </div>
 
       {/* Secondary filters */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <div className="inline-flex overflow-hidden border border-gray-200 rounded-lg dark:border-gray-700">
+        <div className="flex gap-1">
           {['list', 'by_client'].map(m => (
-            <button key={m} onClick={() => setViewMode(m)} className={`px-3 py-1.5 text-xs font-medium ${viewMode === m ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300'}`}>{m === 'list' ? 'List' : 'By Client'}</button>
+            <Button key={m} size="xs" color={viewMode === m ? 'default' : 'light'} onClick={() => setViewMode(m)}>{m === 'list' ? 'List' : 'By Client'}</Button>
           ))}
         </div>
-        <select value={sort} onChange={e => setSort(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        <Select sizing="sm" value={sort} onChange={e => setSort(e.target.value)}>
           <option value="newest">Newest First</option>
           <option value="oldest">Oldest First</option>
           <option value="room">By Room</option>
           <option value="name">By Name</option>
           <option value="status">By Status</option>
           {viewMode === 'by_client' && <option value="most">Most Violations</option>}
-        </select>
-        <select value={dateRange} onChange={e => setDateRange(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        </Select>
+        <Select sizing="sm" value={dateRange} onChange={e => setDateRange(e.target.value)}>
           <option value="all">All Time</option>
           <option value="this_month">This Month</option>
           <option value="this_week">This Week</option>
-        </select>
-        <select value={clientFilter} onChange={e => setClientFilter(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        </Select>
+        <Select sizing="sm" value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
           <option value="">All Residents</option>
           {clientOptions.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-        </select>
+        </Select>
       </div>
 
       {/* LIST VIEW */}
       {viewMode === 'list' && (
         filtered.length === 0
-          ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No violations found.</div>
+          ? <div className={`${CARD} text-sm text-center text-gray-400`}>No violations found.</div>
           : (
-            <Table headers={[{ label: 'Resident' }, { label: 'Date' }, { label: 'Description' }, { label: 'Status' }, { label: 'Consequence' }, { label: 'Logged By' }, { label: '', right: true }]}>
-              {filtered.map((v, i) => (
-                <tr key={v.id} className={rowCls(i)}>
-                  <NameCell name={v.client_name} sub={`Rm ${v.room}`} />
-                  <MonoCell>{fmtDate(v.violation_date)}</MonoCell>
-                  <MutedCell>{v.description}</MutedCell>
-                  <BadgeCell tone={VIO_TONE[v.status] || 'gray'} label={VIO_LABEL[v.status] || v.status} />
-                  <MutedCell>{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0, 10))}</span>}</MutedCell>
-                  <MutedCell>{v.logged_by || '—'}</MutedCell>
-                  <ActionsCell>
-                    {(canReview || canComplete || canDelete) && (
-                      <div className="relative inline-block text-left">
-                        <button onClick={() => setMenuId(menuId === v.id ? null : v.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>
-                        {menuId === v.id && (
-                          <>
-                            <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
-                            <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
-                              {canReview && v.status === 'pending' && <button onClick={() => { setMenuId(null); openReview(v) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Review</button>}
-                              {canComplete && v.status === 'assigned' && <button onClick={() => { setMenuId(null); markComplete(v) }} className="block w-full px-3 py-2 text-sm text-left text-green-700 rounded-md hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30">Mark Complete</button>}
-                              {canDelete && <button onClick={() => { setMenuId(null); del(v) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>}
-                            </div>
-                          </>
-                        )}
+            <Table hoverable>
+              <TableHead>
+                <TableRow>
+                  <TableHeadCell>Resident</TableHeadCell>
+                  <TableHeadCell>Date</TableHeadCell>
+                  <TableHeadCell>Description</TableHeadCell>
+                  <TableHeadCell>Status</TableHeadCell>
+                  <TableHeadCell>Consequence</TableHeadCell>
+                  <TableHeadCell>Logged By</TableHeadCell>
+                  <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+                </TableRow>
+              </TableHead>
+              <TableBody className="divide-y">
+                {filtered.map(v => (
+                  <TableRow key={v.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar placeholderInitials={initials(v.client_name)} rounded size="sm" />
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{v.client_name}</p>
+                          <p className="font-mono text-xs text-gray-400">Rm {v.room}</p>
+                        </div>
                       </div>
-                    )}
-                  </ActionsCell>
-                </tr>
-              ))}
+                    </TableCell>
+                    <TableCell className="font-mono">{fmtDate(v.violation_date)}</TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">{v.description}</TableCell>
+                    <TableCell><Badge color={VIO_BADGE[v.status] || 'gray'} className="inline-flex w-fit">{VIO_LABEL[v.status] || v.status}</Badge></TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0, 10))}</span>}</TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">{v.logged_by || '—'}</TableCell>
+                    <TableCell className="text-right">
+                      {(canReview || canComplete || canDelete) && (
+                        <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
+                          {canReview && v.status === 'pending' && <DropdownItem onClick={() => openReview(v)}>Review</DropdownItem>}
+                          {canComplete && v.status === 'assigned' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => markComplete(v)}>Mark Complete</DropdownItem>}
+                          {canDelete && <DropdownItem className="text-red-600" onClick={() => del(v)}>Delete</DropdownItem>}
+                        </Dropdown>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
             </Table>
           )
       )}

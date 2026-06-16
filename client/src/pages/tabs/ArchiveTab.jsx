@@ -1,9 +1,14 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Archive, CheckCircle, FileText, ChevronLeft, ChevronRight, Printer, Trash2 } from 'lucide-react'
+import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
+import {
+  Badge, Breadcrumb, BreadcrumbItem, Button, Pagination,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Kpi, KpiRow, Table, MonoCell, TextCell, MutedCell, StrongCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+
+const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
 const PAGE_SIZE = 20
 
@@ -72,59 +77,79 @@ export default function ArchiveTab() {
 
   return (
     <div>
-      <Header
-        crumb={['Records', 'Archive']}
-        title="Archive"
-        sub="Past shift reports — read-only snapshots"
-      />
+      {/* Header */}
+      <div className="mb-5">
+        <Breadcrumb className="mb-1">
+          <BreadcrumbItem>Records</BreadcrumbItem>
+          <BreadcrumbItem>Archive</BreadcrumbItem>
+        </Breadcrumb>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Archive</h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Past shift reports — read-only snapshots</p>
+      </div>
 
-      <KpiRow>
-        <Kpi label="Total Reports" value={sorted.length} sub="archived" Icon={Archive} accent="primary" />
-        <Kpi label="Closed" value={closedCount} sub="signed off" Icon={CheckCircle} accent="green" />
-        <Kpi label="Open" value={sorted.length - closedCount} sub="not yet closed" Icon={FileText} accent="yellow" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          { label: 'Total Reports', value: sorted.length, sub: 'archived', Icon: Archive, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Closed', value: closedCount, sub: 'signed off', Icon: CheckCircle, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+          { label: 'Open', value: sorted.length - closedCount, sub: 'not yet closed', Icon: FileText, tint: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' },
+        ].map(k => (
+          <div key={k.label} className={CARD}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {sorted.length === 0 ? (
-        <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No archived reports yet.</div>
+        <div className={`${CARD} text-sm text-center text-gray-400`}>No archived reports yet.</div>
       ) : (
         <>
-          <Table headers={[{ label: 'Date' }, { label: 'Shift' }, { label: 'MOD' }, { label: 'Residents' }, { label: 'Status' }, { label: '', right: true }]}>
-            {paged.map((r, i) => {
-              const snapshotCount = (r.roster_snapshot || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT').length
-              const censusCount   = r.census ? Object.values(r.census).reduce((a, b) => a + b, 0) : 0
-              const tot = snapshotCount || censusCount || '—'
-              return (
-                <tr key={r.id} className={rowCls(i, true)} onClick={() => setSelected(r)}>
-                  <MonoCell>{fmtDateShort(r.report_date)}</MonoCell>
-                  <StrongCell>{r.shift || '—'}</StrongCell>
-                  <MutedCell>{r.mod_name || '—'}</MutedCell>
-                  <TextCell>{tot}{tot !== '—' ? ' residents' : ''}</TextCell>
-                  <BadgeCell tone={r.is_closed ? 'green' : 'yellow'} label={r.is_closed ? 'Closed' : 'Open'} />
-                  <ActionsCell>
-                    <div className="inline-flex items-center justify-end gap-1">
-                      <button onClick={e => { e.stopPropagation(); setSelected(r) }} className="px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">View</button>
-                      {canDelete && (
-                        <button onClick={e => deleteReport(r, e)} title="Delete report" className="p-1.5 text-gray-400 rounded-lg hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"><Trash2 className="w-4 h-4" /></button>
-                      )}
-                    </div>
-                  </ActionsCell>
-                </tr>
-              )
-            })}
+          <Table hoverable>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Date</TableHeadCell>
+                <TableHeadCell>Shift</TableHeadCell>
+                <TableHeadCell>MOD</TableHeadCell>
+                <TableHeadCell>Residents</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody className="divide-y">
+              {paged.map(r => {
+                const snapshotCount = (r.roster_snapshot || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT').length
+                const censusCount   = r.census ? Object.values(r.census).reduce((a, b) => a + b, 0) : 0
+                const tot = snapshotCount || censusCount || '—'
+                return (
+                  <TableRow key={r.id} className="bg-white cursor-pointer dark:border-gray-700 dark:bg-gray-800" onClick={() => setSelected(r)}>
+                    <TableCell className="font-mono">{fmtDateShort(r.report_date)}</TableCell>
+                    <TableCell className="font-semibold text-gray-900 dark:text-white">{r.shift || '—'}</TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">{r.mod_name || '—'}</TableCell>
+                    <TableCell>{tot}{tot !== '—' ? ' residents' : ''}</TableCell>
+                    <TableCell><Badge color={r.is_closed ? 'success' : 'warning'} className="inline-flex w-fit">{r.is_closed ? 'Closed' : 'Open'}</Badge></TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center justify-end gap-1">
+                        <Button size="xs" color="light" onClick={e => { e.stopPropagation(); setSelected(r) }}>View</Button>
+                        {canDelete && (
+                          <Button size="xs" color="light" className="text-red-600" onClick={e => deleteReport(r, e)} title="Delete report"><Trash2 className="w-4 h-4" /></Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
           </Table>
           {totalPages > 1 && (
-            <div className="flex items-center gap-3 mt-3 text-sm">
-              <button disabled={page === 0} onClick={() => setPage(p => p - 1)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
-                <ChevronLeft className="w-4 h-4" /> Prev
-              </button>
-              <span className="text-gray-500 dark:text-gray-400">
-                {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)} of {sorted.length}
-              </span>
-              <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}
-                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700">
-                Next <ChevronRight className="w-4 h-4" />
-              </button>
+            <div className="flex justify-center mt-3">
+              <Pagination currentPage={page + 1} totalPages={totalPages} onPageChange={pg => setPage(pg - 1)} />
             </div>
           )}
         </>
@@ -274,15 +299,20 @@ function ReportDetail({ report: r, data, onBack }) {
 
   return (
     <div>
-      <Header
-        crumb={['Records', 'Archive']}
-        title={`Report #${r.id}`}
-        sub={`${fmtDate(r.report_date)} · ${r.shift || '—'}${r.mod_name ? ' · MOD: ' + r.mod_name : ''}`}
-        actions={[
-          { Icon: ChevronLeft, label: 'Back', onClick: onBack },
-          { Icon: Printer, label: 'Print', onClick: () => printArchivedReport(r, data) },
-        ]}
-      />
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Records</BreadcrumbItem>
+            <BreadcrumbItem>Archive</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Report #{r.id}</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{fmtDate(r.report_date)} · {r.shift || '—'}{r.mod_name ? ' · MOD: ' + r.mod_name : ''}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button color="light" onClick={onBack}><ChevronLeft className="w-4 h-4 mr-2" /> Back</Button>
+          <Button color="light" onClick={() => printArchivedReport(r, data)}><Printer className="w-4 h-4 mr-2" /> Print</Button>
+        </div>
+      </div>
 
       {/* Meta */}
       <Panel title="Report Details">
@@ -290,7 +320,7 @@ function ReportDetail({ report: r, data, onBack }) {
           <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Date</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{fmtDate(r.report_date)}</div></div>
           <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Shift</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{r.shift || '—'}</div></div>
           <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">MOD</div><div className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">{r.mod_name || '—'}</div></div>
-          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Status</div><div className="mt-1"><BadgeInline tone={r.is_closed ? 'green' : 'yellow'} label={r.is_closed ? 'Closed' : 'Open'} /></div></div>
+          <div><div className="text-xs font-medium tracking-wide text-gray-400 uppercase">Status</div><div className="mt-1"><Badge color={r.is_closed ? 'success' : 'warning'} className="inline-flex w-fit">{r.is_closed ? 'Closed' : 'Open'}</Badge></div></div>
         </div>
       </Panel>
 
@@ -383,10 +413,3 @@ function ReportDetail({ report: r, data, onBack }) {
   )
 }
 
-function BadgeInline({ tone, label }) {
-  const map = {
-    green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-    yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  }
-  return <span className={`${map[tone] || map.yellow} text-xs font-medium px-2.5 py-0.5 rounded-md`}>{label}</span>
-}

@@ -1,9 +1,15 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { UserPlus, MoreHorizontal, Users, UserCog, ClipboardList } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card,
+  Dropdown, DropdownItem, Label, Modal, ModalHeader, ModalBody, ModalFooter,
+  Select, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Textarea, Alert,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, TextCell, MonoCell, MutedCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
 
 function formatPhone(raw) {
   if (!raw) return ''
@@ -24,7 +30,6 @@ export default function StaffTab() {
   const categories = data?.staff_categories || ['Director', 'Case Manager', 'Program Assistant', 'Other']
 
   const [filterCat, setFilterCat] = useState('All')
-  const [menuId, setMenuId] = useState(null)
   const [modal, setModal] = useState(null) // null | 'add' | staffObject
   const [form, setForm] = useState(BLANK)
   const [error, setError] = useState('')
@@ -78,90 +83,146 @@ export default function StaffTab() {
 
   return (
     <div>
-      <Header
-        crumb={['People', 'Staff']}
-        title="Staff"
-        sub={`${staff.length} team member${staff.length === 1 ? '' : 's'}`}
-        actions={canEdit ? [{ Icon: UserPlus, label: 'Add Staff', primary: true, onClick: openAdd }] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>People</BreadcrumbItem>
+            <BreadcrumbItem>Staff</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Staff</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {staff.length} team member{staff.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        {canEdit && (
+          <Button onClick={openAdd}><UserPlus className="w-4 h-4 mr-2" /> Add Staff</Button>
+        )}
+      </div>
 
-      <KpiRow>
-        <Kpi label="Team Members" value={staff.length} sub={`across ${categories.length} categories`} Icon={Users} accent="primary" />
-        <Kpi label="Case Managers" value={caseMgrs} sub="active" Icon={UserCog} accent="sky" />
-        <Kpi label="Program Assistants" value={pas} sub="active" Icon={ClipboardList} accent="green" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">Team Members</h3>
+              <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{staff.length}</p>
+              <p className="mt-2 text-xs text-gray-400">across {categories.length} categories</p>
+            </div>
+            <div className="flex items-center justify-center rounded-lg w-11 h-11 bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300"><Users className="w-5 h-5" /></div>
+          </div>
+        </Card>
+        <Card>
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">Case Managers</h3>
+              <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{caseMgrs}</p>
+              <p className="mt-2 text-xs text-gray-400">active</p>
+            </div>
+            <div className="flex items-center justify-center rounded-lg w-11 h-11 bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300"><UserCog className="w-5 h-5" /></div>
+          </div>
+        </Card>
+        <Card>
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">Program Assistants</h3>
+              <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{pas}</p>
+              <p className="mt-2 text-xs text-gray-400">active</p>
+            </div>
+            <div className="flex items-center justify-center rounded-lg w-11 h-11 bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300"><ClipboardList className="w-5 h-5" /></div>
+          </div>
+        </Card>
+      </div>
 
-      <Toolbar
-        filters={filters}
-        active={Math.max(0, filters.indexOf(filterCat))}
-        onFilter={i => setFilterCat(filters[i])}
-        count={filtered.length}
-      />
+      {/* Toolbar */}
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {filters.map(f => (
+            <Button key={f} size="xs" color={f === filterCat ? 'default' : 'light'} onClick={() => setFilterCat(f)}>{f}</Button>
+          ))}
+        </div>
+        <span className="text-sm text-gray-400">{filtered.length} records</span>
+      </div>
 
-      <Table headers={[{ label: 'Name' }, { label: 'Role' }, { label: 'Phone' }, { label: 'Alt Phone' }, { label: 'Notes' }, { label: '', right: true }]}>
-        {filtered.length === 0 ? (
-          <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No staff members in this category.</td></tr>
-        ) : filtered.map((s, i) => (
-          <tr key={s.id} className={rowCls(i)}>
-            <NameCell name={s.name} />
-            <TextCell>{s.category || '—'}</TextCell>
-            <MonoCell>{formatPhone(s.phone) || '—'}</MonoCell>
-            <MonoCell>{formatPhone(s.phone2) || '—'}</MonoCell>
-            <MutedCell>{s.notes || '—'}</MutedCell>
-            <ActionsCell>
-              {canEdit && (
-                <div className="relative inline-block text-left">
-                  <button onClick={() => setMenuId(menuId === s.id ? null : s.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
-                  {menuId === s.id && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
-                      <div className="absolute right-0 z-50 w-36 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
-                        <button onClick={() => { setMenuId(null); openEdit(s) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Edit</button>
-                        <button onClick={() => { setMenuId(null); del(s) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Remove</button>
-                      </div>
-                    </>
-                  )}
+      {/* Table */}
+      <Table hoverable>
+        <TableHead>
+          <TableRow>
+            <TableHeadCell>Name</TableHeadCell>
+            <TableHeadCell>Role</TableHeadCell>
+            <TableHeadCell>Phone</TableHeadCell>
+            <TableHeadCell>Alt Phone</TableHeadCell>
+            <TableHeadCell>Notes</TableHeadCell>
+            <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+          </TableRow>
+        </TableHead>
+        <TableBody className="divide-y">
+          {filtered.length === 0 ? (
+            <TableRow><TableCell colSpan={6} className="text-sm text-center text-gray-400">No staff members in this category.</TableCell></TableRow>
+          ) : filtered.map(s => (
+            <TableRow key={s.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Avatar placeholderInitials={initials(s.name)} rounded size="sm" />
+                  <span className="font-semibold text-gray-900 whitespace-nowrap dark:text-white">{s.name}</span>
                 </div>
-              )}
-            </ActionsCell>
-          </tr>
-        ))}
+              </TableCell>
+              <TableCell>{s.category || '—'}</TableCell>
+              <TableCell className="font-mono">{formatPhone(s.phone) || '—'}</TableCell>
+              <TableCell className="font-mono">{formatPhone(s.phone2) || '—'}</TableCell>
+              <TableCell className="text-gray-500 dark:text-gray-400">{s.notes || '—'}</TableCell>
+              <TableCell className="text-right">
+                {canEdit && (
+                  <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
+                    <DropdownItem onClick={() => openEdit(s)}>Edit</DropdownItem>
+                    <DropdownItem className="text-red-600" onClick={() => del(s)}>Remove</DropdownItem>
+                  </Dropdown>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
       </Table>
 
       {/* Add/Edit Modal */}
-      {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal">
-            <div className="modal-head">
-              <h2>{modal === 'add' ? 'Add Staff Member' : `Edit — ${modal.name}`}</h2>
-              <button className="xbtn" onClick={() => setModal(null)}>&times;</button>
+      <Modal show={!!modal} onClose={() => setModal(null)}>
+        <ModalHeader>{modal === 'add' ? 'Add Staff Member' : `Edit — ${modal?.name}`}</ModalHeader>
+        <ModalBody>
+          <div className="space-y-4">
+            {error && <Alert color="failure">{error}</Alert>}
+            <div>
+              <Label htmlFor="staff-cat" className="block mb-1">Category</Label>
+              <Select id="staff-cat" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </Select>
             </div>
-            <div className="modal-body">
-              {error && <div className="auth-error">{error}</div>}
-              <div className="field"><label>Category</label>
-                <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="field"><label>Name</label>
-                <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Full name" /></div>
-              <div className="field"><label>Phone</label>
-                <input type="text" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="(555) 555-5555" /></div>
-              <div className="field"><label>Alt Phone</label>
-                <input type="text" value={form.phone2} onChange={e => setForm(f => ({ ...f, phone2: e.target.value }))} placeholder="Optional" /></div>
-              <div className="field"><label>Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  rows={3} style={{ resize: 'vertical' }} placeholder="Optional notes…" /></div>
+            <div>
+              <Label htmlFor="staff-name" className="block mb-1">Name</Label>
+              <TextInput id="staff-name" value={form.name} placeholder="Full name"
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+            <div>
+              <Label htmlFor="staff-phone" className="block mb-1">Phone</Label>
+              <TextInput id="staff-phone" value={form.phone} placeholder="(555) 555-5555"
+                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="staff-phone2" className="block mb-1">Alt Phone</Label>
+              <TextInput id="staff-phone2" value={form.phone2} placeholder="Optional"
+                onChange={e => setForm(f => ({ ...f, phone2: e.target.value }))} />
+            </div>
+            <div>
+              <Label htmlFor="staff-notes" className="block mb-1">Notes</Label>
+              <Textarea id="staff-notes" value={form.notes} rows={3} placeholder="Optional notes…"
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
           </div>
-        </div>
-      )}
+        </ModalBody>
+        <ModalFooter className="justify-end">
+          <Button color="light" onClick={() => setModal(null)}>Cancel</Button>
+          <Button onClick={submit} isProcessing={saving} disabled={saving}>Save</Button>
+        </ModalFooter>
+      </Modal>
     </div>
   )
 }

@@ -4,7 +4,7 @@
 // consistency with the rest of OpsPoint.
 // ════════════════════════════════════════════════════════════════════════
 import { NotebookPen, Target, Award, ClipboardList, Users, Siren, DoorOpen } from 'lucide-react'
-import { Badge } from '../../components/console.jsx'
+import { Badge } from 'flowbite-react'
 
 // Navigation entries for the clinical section. `perm` (single) or `perms`
 // (any-of) controls visibility. `icon` is a lucide-react component.
@@ -81,14 +81,14 @@ export function todayStr() {
 }
 
 // ── Status badge ─────────────────────────────────────────────────────────
-const STATUS_TONE = {
-  draft: 'yellow', final: 'green', amended: 'blue',
-  active: 'green', completed: 'blue', discontinued: 'gray',
-  signed: 'green', pending: 'yellow', reviewed: 'blue',
+const STATUS_BADGE = {
+  draft: 'warning', final: 'success', amended: 'info',
+  active: 'success', completed: 'info', discontinued: 'gray',
+  signed: 'success', pending: 'warning', reviewed: 'info',
 }
 export function StatusBadge({ status }) {
   const label = String(status || '')
-  return <Badge tone={STATUS_TONE[status] || 'gray'}>{label.charAt(0).toUpperCase() + label.slice(1)}</Badge>
+  return <Badge color={STATUS_BADGE[status] || 'gray'} className="inline-flex w-fit">{label.charAt(0).toUpperCase() + label.slice(1)}</Badge>
 }
 
 // ── Generic chip badge ─────────────────────────────────────────────────────

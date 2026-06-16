@@ -1,10 +1,15 @@
 import { useState, useMemo } from 'react'
-import { Award, Plus, Lock } from 'lucide-react'
+import { Plus, Lock } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Badge, Table, NameCell, MutedCell, MonoCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
 
-const MS_TONE  = { in_progress: 'yellow', completed: 'green', waived: 'gray' }
+const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
+const MS_BADGE = { in_progress: 'warning', completed: 'success', waived: 'gray' }
 const MS_LABEL = { in_progress: 'In Progress', completed: 'Completed', waived: 'Waived' }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
@@ -27,7 +32,7 @@ function completedOn(m) {
 }
 
 function StatusBadge({ status }) {
-  return <Badge tone={MS_TONE[status] || 'gray'}>{MS_LABEL[status] || status}</Badge>
+  return <Badge color={MS_BADGE[status] || 'gray'} className="inline-flex w-fit">{MS_LABEL[status] || status}</Badge>
 }
 
 const BLANK = { client_id: '', client_name: '', phase: '', objective: '', target_date: '', notes: '', goal_ref: '' }
@@ -184,62 +189,88 @@ export default function MilestonesTab() {
 
   return (
     <div>
-      <Header
-        crumb={['Clinical', 'Milestones']}
-        title="Milestones"
-        sub="Program milestones and phase objectives"
-        actions={canEdit ? [{ Icon: Plus, label: 'Add Milestone', primary: true, onClick: () => openAdd() }] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Clinical</BreadcrumbItem>
+            <BreadcrumbItem>Milestones</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Milestones</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Program milestones and phase objectives</p>
+        </div>
+        {canEdit && <Button onClick={() => openAdd()}><Plus className="w-4 h-4 mr-2" /> Add Milestone</Button>}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <select value={view} onChange={e=>setView(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        <Select sizing="sm" value={view} onChange={e=>setView(e.target.value)}>
           <option value="by_client">By Resident</option>
           <option value="list">All (list)</option>
-        </select>
-        <select value={filterClient} onChange={e=>setFilterClient(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        </Select>
+        <Select sizing="sm" value={filterClient} onChange={e=>setFilterClient(e.target.value)}>
           <option value="">All residents</option>
           {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="px-2.5 py-1.5 text-xs text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        </Select>
+        <Select sizing="sm" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
           <option value="">All statuses</option>
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed</option>
           <option value="waived">Waived</option>
-        </select>
+        </Select>
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
 
       {filtered.length === 0
-        ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No milestones.</div>
+        ? <div className={`${CARD} text-sm text-center text-gray-400`}>No milestones.</div>
         : view === 'list' ? (
-          <Table headers={[{ label: 'Resident' }, { label: 'Phase' }, { label: 'Objective' }, { label: 'Target' }, { label: 'Completed' }, { label: 'Status' }, { label: 'Signed Off By' }, { label: 'Logged' }, { label: '', right: true }]}>
-            {filtered.map((m, i) => (
-              <tr key={m.id} className={rowCls(i)}>
-                <NameCell name={m.client_name} />
-                <MutedCell>{m.phase}</MutedCell>
-                <MutedCell>{m.objective}</MutedCell>
-                <MonoCell>{fmtDate(m.target_date)}</MonoCell>
-                <MonoCell>{m.status === 'completed' ? fmtDate(completedOn(m)) : '—'}</MonoCell>
-                <BadgeCell tone={MS_TONE[m.status] || 'gray'} label={MS_LABEL[m.status] || m.status} />
-                <MutedCell>{m.counselor_name || '—'}</MutedCell>
-                <MonoCell>{fmtLogged(m.created_at)}</MonoCell>
-                <ActionsCell>
-                  <div className="inline-flex items-center justify-end gap-1">
-                    {m.locked_at
-                      ? (canUnlock
-                          ? <button onClick={()=>{setUnlockReason(''); setUnlockModal(m)}} title="Unlock" className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><Lock className="w-4 h-4" /></button>
-                          : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
-                      : <>
-                          {canEdit && <button onClick={()=>openEdit(m)} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Edit</button>}
-                          {m.status === 'in_progress' && canSignoff && <button onClick={()=>signoff(m)} className={`${actionBtn} text-green-700 hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30`}>✓ Complete</button>}
-                          {m.status === 'in_progress' && canEdit && <button onClick={()=>setStatus(m,'waived')} className={`${actionBtn} text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700`}>Waive</button>}
-                          {canEdit && <button onClick={()=>del(m)} className={`${actionBtn} text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30`}>Delete</button>}
-                        </>
-                    }
-                  </div>
-                </ActionsCell>
-              </tr>
-            ))}
+          <Table hoverable>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Resident</TableHeadCell>
+                <TableHeadCell>Phase</TableHeadCell>
+                <TableHeadCell>Objective</TableHeadCell>
+                <TableHeadCell>Target</TableHeadCell>
+                <TableHeadCell>Completed</TableHeadCell>
+                <TableHeadCell>Status</TableHeadCell>
+                <TableHeadCell>Signed Off By</TableHeadCell>
+                <TableHeadCell>Logged</TableHeadCell>
+                <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody className="divide-y">
+              {filtered.map(m => (
+                <TableRow key={m.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar placeholderInitials={initials(m.client_name)} rounded size="sm" />
+                      <span className="text-sm font-semibold text-gray-900 whitespace-nowrap dark:text-white">{m.client_name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{m.phase}</TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{m.objective}</TableCell>
+                  <TableCell className="font-mono">{fmtDate(m.target_date)}</TableCell>
+                  <TableCell className="font-mono">{m.status === 'completed' ? fmtDate(completedOn(m)) : '—'}</TableCell>
+                  <TableCell><Badge color={MS_BADGE[m.status] || 'gray'} className="inline-flex w-fit">{MS_LABEL[m.status] || m.status}</Badge></TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{m.counselor_name || '—'}</TableCell>
+                  <TableCell className="font-mono">{fmtLogged(m.created_at)}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="inline-flex items-center justify-end gap-1">
+                      {m.locked_at
+                        ? (canUnlock
+                            ? <Button size="xs" color="light" onClick={()=>{setUnlockReason(''); setUnlockModal(m)}} title="Unlock"><Lock className="w-4 h-4" /></Button>
+                            : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
+                        : <>
+                            {canEdit && <Button size="xs" color="light" onClick={()=>openEdit(m)}>Edit</Button>}
+                            {m.status === 'in_progress' && canSignoff && <Button size="xs" color="light" className="text-green-700 dark:text-green-400" onClick={()=>signoff(m)}>✓ Complete</Button>}
+                            {m.status === 'in_progress' && canEdit && <Button size="xs" color="light" onClick={()=>setStatus(m,'waived')}>Waive</Button>}
+                            {canEdit && <Button size="xs" color="light" className="text-red-600" onClick={()=>del(m)}>Delete</Button>}
+                          </>
+                      }
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
           </Table>
         ) : (
           <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>

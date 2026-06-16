@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react'
 import { Users, CalendarCheck, ListChecks, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { Breadcrumb, BreadcrumbItem, Button, TextInput } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Kpi, KpiRow } from '../../components/console.jsx'
+
+const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 
@@ -73,30 +75,51 @@ export default function GroupsTab() {
     return <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>You don't have permission to view group attendance.</div>
   }
 
-  const navBtnCls = 'inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
-
   const att = sessions.reduce((acc, s) => {
     const list = s.attendees || []
     return { present: acc.present + list.filter(a => a.participation === 'present').length, total: acc.total + list.length }
   }, { present: 0, total: 0 })
   const avgPct = att.total > 0 ? Math.round(att.present / att.total * 100) : 0
+  const avgTint = avgPct >= 80
+    ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300'
+    : avgPct >= 50
+      ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300'
+      : 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'
 
   return (
     <div>
-      <Header
-        crumb={['Daily Ops', 'Groups']}
-        title="Groups"
-        sub="Group attendance — clinicians add and sign session notes under Clinical"
-        actions={canLog ? [
-          { Icon: Plus, label: 'Log Attendance', primary: true, onClick: () => setModal({}) },
-        ] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Daily Ops</BreadcrumbItem>
+            <BreadcrumbItem>Groups</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Groups</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Group attendance — clinicians add and sign session notes under Clinical</p>
+        </div>
+        {canLog && <Button onClick={() => setModal({})}><Plus className="w-4 h-4 mr-2" /> Log Attendance</Button>}
+      </div>
 
-      <KpiRow>
-        <Kpi label="Sessions" value={sessions.length} sub="on selected date" Icon={CalendarCheck} accent="primary" />
-        <Kpi label="Avg Attendance" value={`${avgPct}%`} sub={`${att.present}/${att.total} present`} Icon={Users} accent={avgPct >= 80 ? 'green' : avgPct >= 50 ? 'yellow' : 'red'} />
-        <Kpi label="Defined Groups" value={masterGroups.length} sub="in master list" Icon={ListChecks} accent="sky" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          { label: 'Sessions', value: sessions.length, sub: 'on selected date', Icon: CalendarCheck, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Avg Attendance', value: `${avgPct}%`, sub: `${att.present}/${att.total} present`, Icon: Users, tint: avgTint },
+          { label: 'Defined Groups', value: masterGroups.length, sub: 'in master list', Icon: ListChecks, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
+        ].map(k => (
+          <div key={k.label} className={CARD}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Master Group List */}
       <div className={`${CARD} mb-4`}>
@@ -112,11 +135,9 @@ export default function GroupsTab() {
         </div>
         {canLog && (
           <div className="flex gap-2 mt-3">
-            <input type="text" value={newGroup} onChange={e => setNewGroup(e.target.value)}
-              placeholder="Add group…" onKeyDown={e => e.key === 'Enter' && addMasterGroup()}
-              className="flex-1 px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
-            <button onClick={addMasterGroup} disabled={savingGroup}
-              className="px-4 py-2 text-sm font-medium text-white rounded-lg shadow-sm bg-primary-600 hover:bg-primary-700 disabled:opacity-50">+ Add</button>
+            <TextInput className="flex-1" value={newGroup} onChange={e => setNewGroup(e.target.value)}
+              placeholder="Add group…" onKeyDown={e => e.key === 'Enter' && addMasterGroup()} />
+            <Button onClick={addMasterGroup} isProcessing={savingGroup} disabled={savingGroup}>Add</Button>
           </div>
         )}
       </div>
@@ -126,12 +147,9 @@ export default function GroupsTab() {
         <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Group Attendance</h3>
           <div className="flex items-center gap-2">
-            <button onClick={() => setViewDate(d => offsetDate(d, -1))} className={navBtnCls}><ChevronLeft className="w-4 h-4" /> Prev</button>
-            <button onClick={() => setViewDate(todayStr())}
-              className={isToday ? 'inline-flex items-center px-3 py-1.5 text-xs font-medium text-white rounded-lg bg-primary-600' : navBtnCls}>
-              Today
-            </button>
-            <button onClick={() => setViewDate(d => offsetDate(d, 1))} className={navBtnCls}>Next <ChevronRight className="w-4 h-4" /></button>
+            <Button size="xs" color="light" onClick={() => setViewDate(d => offsetDate(d, -1))}><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+            <Button size="xs" color={isToday ? 'default' : 'light'} onClick={() => setViewDate(todayStr())}>Today</Button>
+            <Button size="xs" color="light" onClick={() => setViewDate(d => offsetDate(d, 1))}>Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
           </div>
         </div>
 

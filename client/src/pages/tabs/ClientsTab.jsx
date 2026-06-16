@@ -1,10 +1,17 @@
 import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays } from 'lucide-react'
+import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell, TextInput,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
-import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, BadgeCell, TextCell, MutedCell, DaysCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
+
+// Shift-status badge color (flowbite Badge colors)
+const STATUS_BADGE = { green: 'success', blue: 'info', yellow: 'warning', red: 'failure', purple: 'purple', orange: 'warning' }
 
 const PAGE_SIZE = 50
 
@@ -36,7 +43,6 @@ function blankAdd(vacantRooms) {
   return { ...BLANK_ADD, room: vacantRooms[0] || '' }
 }
 
-// SortHeader now imported from components/console.jsx
 
 const BLANK_DISCHARGE = {
   discharge_date: todayStr(),
@@ -53,7 +59,6 @@ export default function ClientsTab() {
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(0)
-  const [menuId, setMenuId] = useState(null)
   const [showDischarged, setShowDischarged] = useState(false)
   const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState('room')
@@ -371,66 +376,107 @@ export default function ClientsTab() {
 
   return (
     <div>
-      <Header
-        crumb={['People', 'Clients']}
-        title="Clients"
-        sub={`${active} residents · ${data?.facility_name || 'Facility'}`}
-        actions={[
-          { Icon: Download, label: 'Export', onClick: () => setReportModal(true) },
-          ...(canEdit ? [{ Icon: UserPlus, label: 'New Intake', primary: true, onClick: () => { setAddForm(blankAdd(vacantRooms)); setAddError(''); setAddModal(true) } }] : []),
-        ]}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>People</BreadcrumbItem>
+            <BreadcrumbItem>Clients</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Clients</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{active} residents · {data?.facility_name || 'Facility'}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button color="light" onClick={() => setReportModal(true)}><Download className="w-4 h-4 mr-2" /> Export</Button>
+          {canEdit && (
+            <Button onClick={() => { setAddForm(blankAdd(vacantRooms)); setAddError(''); setAddModal(true) }}>
+              <UserPlus className="w-4 h-4 mr-2" /> New Intake
+            </Button>
+          )}
+        </div>
+      </div>
 
-      <KpiRow>
-        <Kpi label="Total Residents" value={active} sub={`${vacant} beds open`} deltaLabel="this week" Icon={Users} accent="primary" />
-        <Kpi label="On Site" value={onSite} sub={`${pct}% of census`} deltaLabel="now" Icon={Home} accent="green" />
-        <Kpi label="New Intakes" value={newIntakes} sub="last 7 days" deltaLabel="this week" Icon={UserPlus} accent="sky" />
-        <Kpi label="Avg Tenure" value={avgTenure} sub="days in program" deltaLabel="vs last mo" Icon={CalendarDays} accent="yellow" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Total Residents', value: active, sub: `${vacant} beds open`, Icon: Users, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'On Site', value: onSite, sub: `${pct}% of census`, Icon: Home, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+          { label: 'New Intakes', value: newIntakes, sub: 'last 7 days', Icon: UserPlus, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
+          { label: 'Avg Tenure', value: avgTenure, sub: 'days in program', Icon: CalendarDays, tint: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' },
+        ].map(k => (
+          <Card key={k.label}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </Card>
+        ))}
+      </div>
 
-      <Toolbar
-        filters={['All', 'In Building', 'At Work', 'On Pass', 'Hospital']}
-        active={statusFilter}
-        onFilter={setStatusFilter}
-        count={rows.length}
-        search={search}
-        onSearch={setSearch}
-      />
+      {/* Toolbar */}
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {['All', 'In Building', 'At Work', 'On Pass', 'Hospital'].map((f, i) => (
+            <Button key={f} size="xs" color={i === statusFilter ? 'default' : 'light'} onClick={() => setStatusFilter(i)}>{f}</Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{rows.length} records</span>
+          <TextInput sizing="sm" icon={Search} placeholder="Filter…" value={search} onChange={e => setSearch(e.target.value)} className="w-full sm:w-56" />
+        </div>
+      </div>
 
-      <Table headers={[{ label: 'Resident' }, { label: 'Status' }, { label: 'Phase' }, { label: 'Sobriety' }, { label: 'Case Manager' }, { label: '', right: true }]}>
-        {rows.length === 0 ? (
-          <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No residents found.</td></tr>
-        ) : rows.map((c, i) => {
-          const st = STATUS[statuses[c.id] || 'building'] || STATUS.building
-          const days = daysSince(c.intake_date)
-          return (
-            <tr key={c.id} className={rowCls(i)}>
-              <NameCell name={c.name} sub={`Rm ${c.room}`} onClick={() => openProfile(c.id)} />
-              <BadgeCell tone={st.tone} label={st.label} />
-              <TextCell>{c.program_track || '—'}</TextCell>
-              {days != null ? <DaysCell>{days}</DaysCell> : <MutedCell>—</MutedCell>}
-              <MutedCell>{c.case_manager || '—'}</MutedCell>
-              <ActionsCell>
-                {canEdit && (
-                  <div className="relative inline-block text-left">
-                    <button onClick={() => setMenuId(menuId === c.id ? null : c.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                    {menuId === c.id && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
-                        <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
-                          <button onClick={() => { setMenuId(null); openEdit(c) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Edit</button>
-                          <button onClick={() => { setMenuId(null); openDischarge(c) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Discharge</button>
-                        </div>
-                      </>
-                    )}
+      {/* Table */}
+      <Table hoverable>
+        <TableHead>
+          <TableRow>
+            <TableHeadCell>Resident</TableHeadCell>
+            <TableHeadCell>Status</TableHeadCell>
+            <TableHeadCell>Phase</TableHeadCell>
+            <TableHeadCell>Sobriety</TableHeadCell>
+            <TableHeadCell>Case Manager</TableHeadCell>
+            <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+          </TableRow>
+        </TableHead>
+        <TableBody className="divide-y">
+          {rows.length === 0 ? (
+            <TableRow><TableCell colSpan={6} className="text-sm text-center text-gray-400">No residents found.</TableCell></TableRow>
+          ) : rows.map(c => {
+            const st = STATUS[statuses[c.id] || 'building'] || STATUS.building
+            const days = daysSince(c.intake_date)
+            return (
+              <TableRow key={c.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    <Avatar placeholderInitials={initials(c.name)} rounded size="sm" />
+                    <div>
+                      <button onClick={() => openProfile(c.id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{c.name}</button>
+                      <p className="font-mono text-xs text-gray-400">Rm {c.room}</p>
+                    </div>
                   </div>
-                )}
-              </ActionsCell>
-            </tr>
-          )
-        })}
+                </TableCell>
+                <TableCell><Badge color={STATUS_BADGE[st.tone] || 'gray'} className="inline-flex w-fit">{st.label}</Badge></TableCell>
+                <TableCell>{c.program_track || '—'}</TableCell>
+                <TableCell className="text-gray-500 dark:text-gray-400">
+                  {days != null ? <><span className="font-mono font-semibold text-gray-900 dark:text-white">{days}</span> <span className="text-xs text-gray-400">days</span></> : '—'}
+                </TableCell>
+                <TableCell className="text-gray-500 dark:text-gray-400">{c.case_manager || '—'}</TableCell>
+                <TableCell className="text-right">
+                  {canEdit && (
+                    <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
+                      <DropdownItem onClick={() => openEdit(c)}>Edit</DropdownItem>
+                      <DropdownItem className="text-red-600" onClick={() => openDischarge(c)}>Discharge</DropdownItem>
+                    </Dropdown>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
       </Table>
 
       {/* Edit Modal */}

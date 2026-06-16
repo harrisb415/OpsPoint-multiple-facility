@@ -1,12 +1,16 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell, Textarea,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Kpi, KpiRow, Table, NameCell, BadgeCell, MonoCell, MutedCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
 
 const PAGE_SIZE = 25
-const PASS_TONE = { Out: 'yellow', Extended: 'red', In: 'green', Returned: 'gray' }
+const PASS_BADGE = { Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -33,7 +37,6 @@ export default function PassesTab() {
   const [noticeText, setNoticeText] = useState(data?.pass_notice || '')
   const [noticeSaving, setNoticeSaving] = useState(false)
   const [retPage, setRetPage] = useState(0)
-  const [menuId, setMenuId] = useState(null)
   const [modal, setModal] = useState(null)
   const [form, setForm] = useState(BLANK_PASS)
   const [error, setError] = useState('')
@@ -92,70 +95,108 @@ export default function PassesTab() {
   }
 
   const notesOf = p => [p.ua_notes ? `UA: ${p.ua_notes}` : '', p.notes || ''].filter(Boolean).join(' · ') || '—'
-  const nameCell = p => <NameCell name={p.name} sub={`Rm ${p.room}`} onClick={p.client_id ? () => openProfile(p.client_id) : undefined} />
 
-  function RowMenu({ p }) {
+  const NameCell = ({ p }) => (
+    <TableCell>
+      <div className="flex items-center gap-3">
+        <Avatar placeholderInitials={initials(p.name)} rounded size="sm" />
+        <div>
+          {p.client_id
+            ? <button onClick={() => openProfile(p.client_id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{p.name}</button>
+            : <p className="text-sm font-semibold text-gray-900 dark:text-white">{p.name}</p>}
+          <p className="font-mono text-xs text-gray-400">Rm {p.room}</p>
+        </div>
+      </div>
+    </TableCell>
+  )
+
+  const RowMenu = ({ p }) => {
     if (!canEdit && !canStatus) return null
     return (
-      <div className="relative inline-block text-left">
-        <button onClick={() => setMenuId(menuId === p.id ? null : p.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>
-        {menuId === p.id && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
-            <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
-              {canEdit && <button onClick={() => { setMenuId(null); openEdit(p) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Edit</button>}
-              {canStatus && p.status !== 'Returned' && <button onClick={() => { setMenuId(null); quickStatus(p, 'Returned') }} className="block w-full px-3 py-2 text-sm text-left text-green-700 rounded-md hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30">Mark Returned</button>}
-              {canStatus && p.status === 'Out' && <button onClick={() => { setMenuId(null); quickStatus(p, 'Extended') }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Mark Extended</button>}
-              {canEdit && <button onClick={() => { setMenuId(null); del(p) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>}
-            </div>
-          </>
-        )}
-      </div>
+      <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
+        {canEdit && <DropdownItem onClick={() => openEdit(p)}>Edit</DropdownItem>}
+        {canStatus && p.status !== 'Returned' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => quickStatus(p, 'Returned')}>Mark Returned</DropdownItem>}
+        {canStatus && p.status === 'Out' && <DropdownItem onClick={() => quickStatus(p, 'Extended')}>Mark Extended</DropdownItem>}
+        {canEdit && <DropdownItem className="text-red-600" onClick={() => del(p)}>Delete</DropdownItem>}
+      </Dropdown>
     )
   }
 
+  const kpis = [
+    { label: 'Currently Out', value: active.length, sub: 'on pass', Icon: Ticket, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+    { label: 'Extended', value: active.filter(p => p.status === 'Extended').length, sub: 'needs follow-up', Icon: AlertTriangle, tint: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' },
+    { label: 'Returned', value: returned.length, sub: 'total', Icon: LogIn, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+  ]
+
   return (
     <div>
-      <Header
-        crumb={['Daily Ops', 'Passes']}
-        title="Passes"
-        sub="Active and recent resident passes"
-        actions={canEdit ? [{ Icon: Plus, label: 'New Pass', primary: true, onClick: openAdd }] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Daily Ops</BreadcrumbItem>
+            <BreadcrumbItem>Passes</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Passes</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Active and recent resident passes</p>
+        </div>
+        {canEdit && <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> New Pass</Button>}
+      </div>
 
-      <KpiRow>
-        <Kpi label="Currently Out" value={active.length} sub="on pass" deltaLabel="now" Icon={Ticket} accent="primary" />
-        <Kpi label="Extended" value={active.filter(p => p.status === 'Extended').length} sub="needs follow-up" Icon={AlertTriangle} accent="red" />
-        <Kpi label="Returned" value={returned.length} sub="total" Icon={LogIn} accent="green" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {kpis.map(k => (
+          <Card key={k.label}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </Card>
+        ))}
+      </div>
 
       {/* Pass notice board */}
-      <div className={`${CARD} mb-4`}>
+      <Card className="mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">Pass Notice Board</h3>
-          {canEdit && <button onClick={saveNotice} disabled={noticeSaving} className="px-3 py-1.5 text-xs font-semibold text-white rounded-lg bg-primary-600 hover:bg-primary-700 disabled:opacity-50">{noticeSaving ? 'Saving…' : 'Save Notice'}</button>}
+          {canEdit && <Button size="xs" onClick={saveNotice} isProcessing={noticeSaving} disabled={noticeSaving}>Save Notice</Button>}
         </div>
-        <textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} rows={2} disabled={!canEdit}
-          placeholder="Enter any pass-related notices for this weekend…"
-          className="block w-full px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg resize-y bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
-      </div>
+        <Textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} rows={2} disabled={!canEdit}
+          placeholder="Enter any pass-related notices for this weekend…" />
+      </Card>
 
       {/* Active passes */}
       <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Active passes</h3>
       <div className="mb-6">
-        <Table headers={[{ label: 'Resident' }, { label: 'Status' }, { label: 'Departure' }, { label: 'Return' }, { label: 'Notes' }, { label: '', right: true }]}>
-          {active.length === 0 ? (
-            <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No active passes.</td></tr>
-          ) : active.map((p, i) => (
-            <tr key={p.id} className={rowCls(i)}>
-              {nameCell(p)}
-              <BadgeCell tone={PASS_TONE[p.status] || 'gray'} label={p.status} />
-              <MonoCell>{fmtDT(p.departure)}</MonoCell>
-              <MonoCell>{fmtDT(p.return_date)}</MonoCell>
-              <MutedCell>{notesOf(p)}</MutedCell>
-              <ActionsCell><RowMenu p={p} /></ActionsCell>
-            </tr>
-          ))}
+        <Table hoverable>
+          <TableHead>
+            <TableRow>
+              <TableHeadCell>Resident</TableHeadCell>
+              <TableHeadCell>Status</TableHeadCell>
+              <TableHeadCell>Departure</TableHeadCell>
+              <TableHeadCell>Return</TableHeadCell>
+              <TableHeadCell>Notes</TableHeadCell>
+              <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+            </TableRow>
+          </TableHead>
+          <TableBody className="divide-y">
+            {active.length === 0 ? (
+              <TableRow><TableCell colSpan={6} className="text-sm text-center text-gray-400">No active passes.</TableCell></TableRow>
+            ) : active.map(p => (
+              <TableRow key={p.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                <NameCell p={p} />
+                <TableCell><Badge color={PASS_BADGE[p.status] || 'gray'} className="inline-flex w-fit">{p.status}</Badge></TableCell>
+                <TableCell className="font-mono">{fmtDT(p.departure)}</TableCell>
+                <TableCell className="font-mono">{fmtDT(p.return_date)}</TableCell>
+                <TableCell className="text-gray-500 dark:text-gray-400">{notesOf(p)}</TableCell>
+                <TableCell className="text-right"><RowMenu p={p} /></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
         </Table>
       </div>
 
@@ -163,22 +204,33 @@ export default function PassesTab() {
       {returned.length > 0 && (
         <>
           <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Returned passes</h3>
-          <Table headers={[{ label: 'Resident' }, { label: 'Departure' }, { label: 'Returned' }, { label: 'Notes' }, { label: '', right: true }]}>
-            {retPaged.map((p, i) => (
-              <tr key={p.id} className={`${rowCls(i)} opacity-70`}>
-                {nameCell(p)}
-                <MonoCell>{fmtDT(p.departure)}</MonoCell>
-                <MonoCell>{fmtDT(p.return_date)}</MonoCell>
-                <MutedCell>{p.notes || '—'}</MutedCell>
-                <ActionsCell>{canEdit && <button onClick={() => del(p)} className="p-1.5 text-gray-400 rounded-lg hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/30"><MoreHorizontal className="w-4 h-4" /></button>}</ActionsCell>
-              </tr>
-            ))}
+          <Table hoverable>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Resident</TableHeadCell>
+                <TableHeadCell>Departure</TableHeadCell>
+                <TableHeadCell>Returned</TableHeadCell>
+                <TableHeadCell>Notes</TableHeadCell>
+                <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody className="divide-y">
+              {retPaged.map(p => (
+                <TableRow key={p.id} className="bg-white opacity-70 dark:border-gray-700 dark:bg-gray-800">
+                  <NameCell p={p} />
+                  <TableCell className="font-mono">{fmtDT(p.departure)}</TableCell>
+                  <TableCell className="font-mono">{fmtDT(p.return_date)}</TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{p.notes || '—'}</TableCell>
+                  <TableCell className="text-right">
+                    {canEdit && <Button size="xs" color="light" onClick={() => del(p)}>Delete</Button>}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
           </Table>
           {retPages > 1 && (
-            <div className="flex items-center gap-3 mt-3">
-              <button disabled={retPage === 0} onClick={() => setRetPage(p => p - 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">← Prev</button>
-              <span className="text-sm text-gray-500 dark:text-gray-400 font-mono tabular-nums">{retPage * PAGE_SIZE + 1}–{Math.min((retPage + 1) * PAGE_SIZE, returned.length)} of {returned.length}</span>
-              <button disabled={retPage + 1 >= retPages} onClick={() => setRetPage(p => p + 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Next →</button>
+            <div className="flex justify-center mt-3">
+              <Pagination currentPage={retPage + 1} totalPages={retPages} onPageChange={pg => setRetPage(pg - 1)} />
             </div>
           )}
         </>

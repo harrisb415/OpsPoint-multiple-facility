@@ -1,14 +1,18 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Mail as MailIcon, Inbox, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
+import {
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
+  Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
-import { Header, Kpi, KpiRow, Toolbar, Table, NameCell, TextCell, MutedCell, MonoCell, BadgeCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
 
 const PAGE_SIZE = 30
-const MAIL_TONE = { pending: 'yellow', approved: 'blue', delivered: 'green' }
+const MAIL_BADGE = { pending: 'warning', approved: 'info', delivered: 'success' }
 const MAIL_LABEL = { pending: 'Pending', approved: 'Approved', delivered: 'Delivered' }
 
 function fmtDT(s) {
@@ -18,23 +22,6 @@ function fmtDT(s) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
       d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   } catch { return s }
-}
-
-function StatusBadge({ status }) {
-  const cfg = {
-    pending:   { bg: '#fef9c3', color: '#854d0e', border: '#fde047', label: 'Pending' },
-    approved:  { bg: '#dbeafe', color: '#1e40af', border: '#93c5fd', label: 'Approved' },
-    delivered: { bg: '#dcfce7', color: '#15803d', border: '#86efac', label: 'Delivered' },
-  }
-  const s = cfg[status] || cfg.pending
-  return (
-    <span style={{
-      background: s.bg, color: s.color, border: `1px solid ${s.border}`,
-      fontSize: '.73rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10, whiteSpace: 'nowrap',
-    }}>
-      {s.label}
-    </span>
-  )
 }
 
 export default function MailTab() {
@@ -50,7 +37,6 @@ export default function MailTab() {
   const clients = data?.clients || []
 
   const [filter, setFilter] = useState('all') // all | pending | approved | delivered
-  const [menuId, setMenuId] = useState(null)
   const [page, setPage] = useState(0)
   const [modal, setModal] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
@@ -176,65 +162,103 @@ export default function MailTab() {
 
   return (
     <div>
-      <Header
-        crumb={['Daily Ops', 'Mail']}
-        title="Mail Log"
-        sub="Incoming mail and packages"
-        actions={[
-          { Icon: Printer, label: 'Print', onClick: () => mail.length && setPrintOpen(true) },
-          ...(canLog ? [{ Icon: Plus, label: 'Log Mail', primary: true, onClick: openModal }] : []),
-        ]}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Daily Ops</BreadcrumbItem>
+            <BreadcrumbItem>Mail</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mail Log</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Incoming mail and packages</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button color="light" onClick={() => mail.length && setPrintOpen(true)}><Printer className="w-4 h-4 mr-2" /> Print</Button>
+          {canLog && <Button onClick={openModal}><Plus className="w-4 h-4 mr-2" /> Log Mail</Button>}
+        </div>
+      </div>
 
-      <KpiRow>
-        <Kpi label="Logged Today" value={loggedToday} sub="items" Icon={MailIcon} accent="primary" />
-        <Kpi label="Pending" value={counts.pending} sub="awaiting approval" Icon={Inbox} accent="yellow" />
-        <Kpi label="Delivered" value={counts.delivered} sub="completed" Icon={CheckCircle} accent="green" />
-      </KpiRow>
-
-      <Toolbar
-        filters={FILTERS.map(f => `${f.label} (${counts[f.key]})`)}
-        active={Math.max(0, FILTERS.findIndex(f => f.key === filter))}
-        onFilter={i => { setFilter(FILTERS[i].key); setPage(0) }}
-        count={filtered.length}
-      />
-
-      <Table headers={[{ label: 'Recipient' }, { label: 'Type' }, { label: 'Logged By' }, { label: 'Time' }, { label: 'Status' }, { label: '', right: true }]}>
-        {paged.length === 0 ? (
-          <tr><td colSpan={6} className="p-8 text-sm text-center text-gray-400">No mail records{filter !== 'all' ? ` with status "${filter}"` : ''}.</td></tr>
-        ) : paged.map((m, i) => (
-          <tr key={m.id} className={rowCls(i)}>
-            <NameCell name={m.client_name} sub={`Rm ${m.room}`} onClick={m.client_id ? () => openProfile(m.client_id) : undefined} />
-            <TextCell>{(m.mail_type || '').split(',').filter(Boolean).map(t => t[0].toUpperCase() + t.slice(1)).join(', ') || '—'}</TextCell>
-            <MutedCell>{m.logged_by || '—'}</MutedCell>
-            <MonoCell>{fmtDT(m.logged_at)}</MonoCell>
-            <BadgeCell tone={MAIL_TONE[m.status] || 'gray'} label={MAIL_LABEL[m.status] || m.status} />
-            <ActionsCell>
-              {(canApprove || canDeliver || canDelete) && (
-                <div className="relative inline-block text-left">
-                  <button onClick={() => setMenuId(menuId === m.id ? null : m.id)} className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><MoreHorizontal className="w-4 h-4" /></button>
-                  {menuId === m.id && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setMenuId(null)} />
-                      <div className="absolute right-0 z-50 w-40 p-1 mt-1 text-left bg-white border border-gray-200 shadow-lg rounded-lg dark:bg-gray-800 dark:border-gray-700">
-                        {canApprove && m.status === 'pending' && <button onClick={() => { setMenuId(null); approve(m) }} className="block w-full px-3 py-2 text-sm text-left text-gray-700 rounded-md hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700">Approve</button>}
-                        {canDeliver && m.status === 'approved' && <button onClick={() => { setMenuId(null); deliver(m) }} className="block w-full px-3 py-2 text-sm text-left text-green-700 rounded-md hover:bg-green-50 dark:text-green-400 dark:hover:bg-green-900/30">Deliver</button>}
-                        {canDelete && <button onClick={() => { setMenuId(null); del(m) }} className="block w-full px-3 py-2 text-sm text-left text-red-600 rounded-md hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </ActionsCell>
-          </tr>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          { label: 'Logged Today', value: loggedToday, sub: 'items', Icon: MailIcon, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Pending', value: counts.pending, sub: 'awaiting approval', Icon: Inbox, tint: 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-300' },
+          { label: 'Delivered', value: counts.delivered, sub: 'completed', Icon: CheckCircle, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+        ].map(k => (
+          <Card key={k.label}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </Card>
         ))}
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {FILTERS.map(f => (
+            <Button key={f.key} size="xs" color={f.key === filter ? 'default' : 'light'} onClick={() => { setFilter(f.key); setPage(0) }}>
+              {f.label} ({counts[f.key]})
+            </Button>
+          ))}
+        </div>
+        <span className="text-sm text-gray-400">{filtered.length} records</span>
+      </div>
+
+      {/* Table */}
+      <Table hoverable>
+        <TableHead>
+          <TableRow>
+            <TableHeadCell>Recipient</TableHeadCell>
+            <TableHeadCell>Type</TableHeadCell>
+            <TableHeadCell>Logged By</TableHeadCell>
+            <TableHeadCell>Time</TableHeadCell>
+            <TableHeadCell>Status</TableHeadCell>
+            <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+          </TableRow>
+        </TableHead>
+        <TableBody className="divide-y">
+          {paged.length === 0 ? (
+            <TableRow><TableCell colSpan={6} className="text-sm text-center text-gray-400">No mail records{filter !== 'all' ? ` with status "${filter}"` : ''}.</TableCell></TableRow>
+          ) : paged.map(m => (
+            <TableRow key={m.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Avatar placeholderInitials={initials(m.client_name)} rounded size="sm" />
+                  <div>
+                    {m.client_id
+                      ? <button onClick={() => openProfile(m.client_id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{m.client_name}</button>
+                      : <p className="text-sm font-semibold text-gray-900 dark:text-white">{m.client_name}</p>}
+                    <p className="font-mono text-xs text-gray-400">Rm {m.room}</p>
+                  </div>
+                </div>
+              </TableCell>
+              <TableCell>{(m.mail_type || '').split(',').filter(Boolean).map(t => t[0].toUpperCase() + t.slice(1)).join(', ') || '—'}</TableCell>
+              <TableCell className="text-gray-500 dark:text-gray-400">{m.logged_by || '—'}</TableCell>
+              <TableCell className="font-mono">{fmtDT(m.logged_at)}</TableCell>
+              <TableCell><Badge color={MAIL_BADGE[m.status] || 'gray'} className="inline-flex w-fit">{MAIL_LABEL[m.status] || m.status}</Badge></TableCell>
+              <TableCell className="text-right">
+                {(canApprove || canDeliver || canDelete) && (
+                  <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
+                    {canApprove && m.status === 'pending' && <DropdownItem onClick={() => approve(m)}>Approve</DropdownItem>}
+                    {canDeliver && m.status === 'approved' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => deliver(m)}>Deliver</DropdownItem>}
+                    {canDelete && <DropdownItem className="text-red-600" onClick={() => del(m)}>Delete</DropdownItem>}
+                  </Dropdown>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
       </Table>
 
       {totalPages > 1 && (
-        <div className="flex items-center gap-3 mt-3">
-          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">← Prev</button>
-          <span className="text-sm text-gray-500 dark:text-gray-400 font-mono tabular-nums">{page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
-          <button disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Next →</button>
+        <div className="flex justify-center mt-3">
+          <Pagination currentPage={page + 1} totalPages={totalPages} onPageChange={pg => setPage(pg - 1)} />
         </div>
       )}
 
@@ -329,25 +353,6 @@ export default function MailTab() {
         </div>
       )}
     </div>
-  )
-}
-
-// ── Sortable column header ────────────────────────────────────────────
-function SortableTh({ label, k, curKey, dir, onSort, className }) {
-  const active = curKey === k
-  return (
-    <th
-      className={className}
-      onClick={() => onSort(k)}
-      style={{
-        cursor: 'pointer', userSelect: 'none',
-        background: active ? 'rgba(217,119,6,.15)' : undefined,
-      }}
-      title={`Sort by ${label}`}
-    >
-      {label}
-      {active && <span style={{ marginLeft: 4, fontSize: '.7rem' }}>{dir > 0 ? '↑' : '↓'}</span>}
-    </th>
   )
 }
 

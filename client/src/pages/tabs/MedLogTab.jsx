@@ -1,9 +1,15 @@
 import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Pill, Clock, Lock, Plus } from 'lucide-react'
+import {
+  Avatar, Breadcrumb, BreadcrumbItem, Button, Select,
+  Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+} from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CARD, Header, Kpi, KpiRow, Table, NameCell, MonoCell, MutedCell, TextCell, ActionsCell, rowCls } from '../../components/console.jsx'
+import { initials } from '../../utils/ui.js'
+
+const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
 function nowDT() {
   const d = new Date(), p = n => String(n).padStart(2, '0')
@@ -129,58 +135,95 @@ export default function MedLogTab() {
 
   return (
     <div>
-      <Header
-        crumb={['Health & Compliance', 'Med Log']}
-        title="Med Log"
-        sub="Witnessed self-administration — residents self-administer, staff witness; entries lock after 24 hours"
-        actions={canWitness ? [
-          { Icon: Plus, label: 'Log Dose', primary: true, onClick: openAdd },
-        ] : []}
-      />
+      {/* Header */}
+      <div className="flex flex-col gap-4 mb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <Breadcrumb className="mb-1">
+            <BreadcrumbItem>Health &amp; Compliance</BreadcrumbItem>
+            <BreadcrumbItem>Med Log</BreadcrumbItem>
+          </Breadcrumb>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Med Log</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Witnessed self-administration — residents self-administer, staff witness; entries lock after 24 hours</p>
+        </div>
+        {canWitness && <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> Log Dose</Button>}
+      </div>
 
-      <KpiRow>
-        <Kpi label="Total Doses" value={records.length} sub="logged" Icon={Pill} accent="primary" />
-        <Kpi label="Today" value={todayCount} sub="administered today" Icon={Clock} accent="sky" />
-        <Kpi label="Locked" value={lockedCount} sub="past 24h window" Icon={Lock} accent="gray" />
-      </KpiRow>
+      {/* KPIs */}
+      <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          { label: 'Total Doses', value: records.length, sub: 'logged', Icon: Pill, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Today', value: todayCount, sub: 'administered today', Icon: Clock, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
+          { label: 'Locked', value: lockedCount, sub: 'past 24h window', Icon: Lock, tint: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300' },
+        ].map(k => (
+          <div key={k.label} className="p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-sm font-normal text-gray-500 dark:text-gray-400">{k.label}</h3>
+                <p className="mt-1 text-3xl font-bold leading-none text-gray-900 dark:text-white">{k.value}</p>
+                <p className="mt-2 text-xs text-gray-400">{k.sub}</p>
+              </div>
+              <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Resident filter */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Resident:</span>
-        <select value={filterClient} onChange={e => setFilterClient(e.target.value)}
-          className="px-2.5 py-1.5 text-sm text-gray-700 border border-gray-200 rounded-lg bg-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+        <Select sizing="sm" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
           <option value="">All residents</option>
           {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-        </select>
+        </Select>
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
 
       {filtered.length === 0
-        ? <div className={`${CARD} p-8 text-sm text-center text-gray-400`}>No dose entries.</div>
+        ? <div className={`${CARD} text-sm text-center text-gray-400`}>No dose entries.</div>
         : (
-          <Table headers={[{ label: 'Time' }, { label: 'Resident' }, { label: 'Medication' }, { label: 'Dose' }, { label: 'Witness' }, { label: '', right: true }]}>
-            {filtered.map((r, i) => (
-              <tr key={r.id} className={rowCls(i)}>
-                <MonoCell>{fmtDT(r.administered_at)}</MonoCell>
-                <NameCell name={r.client_name} sub={`Rm ${r.room}`} />
-                <TextCell>{r.medication}</TextCell>
-                <MutedCell>{r.dose || '—'}</MutedCell>
-                <MutedCell>{r.witnessed_by_name}</MutedCell>
-                <ActionsCell>
-                  <div className="inline-flex items-center justify-end gap-1">
-                    {r.locked_at
-                      ? (canUnlock
-                          ? <button onClick={() => { setUnlockReason(''); setUnlockModal(r) }} title="Unlock" className="p-1.5 text-gray-400 rounded-lg hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"><Lock className="w-4 h-4" /></button>
-                          : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
-                      : <button onClick={() => openEdit(r)} className="px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700">Edit</button>
-                    }
-                    {canDelete && !r.locked_at && (
-                      <button onClick={() => del(r)} className="px-3 py-1.5 text-xs font-medium text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30">Delete</button>
-                    )}
-                  </div>
-                </ActionsCell>
-              </tr>
-            ))}
+          <Table hoverable>
+            <TableHead>
+              <TableRow>
+                <TableHeadCell>Time</TableHeadCell>
+                <TableHeadCell>Resident</TableHeadCell>
+                <TableHeadCell>Medication</TableHeadCell>
+                <TableHeadCell>Dose</TableHeadCell>
+                <TableHeadCell>Witness</TableHeadCell>
+                <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+              </TableRow>
+            </TableHead>
+            <TableBody className="divide-y">
+              {filtered.map(r => (
+                <TableRow key={r.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                  <TableCell className="font-mono">{fmtDT(r.administered_at)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar placeholderInitials={initials(r.client_name)} rounded size="sm" />
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{r.client_name}</p>
+                        <p className="font-mono text-xs text-gray-400">Rm {r.room}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>{r.medication}</TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{r.dose || '—'}</TableCell>
+                  <TableCell className="text-gray-500 dark:text-gray-400">{r.witnessed_by_name}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="inline-flex items-center justify-end gap-1">
+                      {r.locked_at
+                        ? (canUnlock
+                            ? <Button size="xs" color="light" onClick={() => { setUnlockReason(''); setUnlockModal(r) }} title="Unlock"><Lock className="w-4 h-4" /></Button>
+                            : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
+                        : <Button size="xs" color="light" onClick={() => openEdit(r)}>Edit</Button>
+                      }
+                      {canDelete && !r.locked_at && (
+                        <Button size="xs" color="light" className="text-red-600" onClick={() => del(r)}>Delete</Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
           </Table>
         )}
 

@@ -8,8 +8,11 @@
 /* Dark-mode token overrides — flip the neutral surface/border/text tokens that the
    remaining legacy CSS (Admin panels, ReportTab roster/census, Violations by-client,
    Archive detail, clinical inp/lbl) is built on, so those surfaces go dark too.
-   Brand/accent tokens (primary blue ramp) are intentionally NOT flipped. */
-.dark {
+   Brand/accent tokens (primary blue ramp) are intentionally NOT flipped.
+   Selector is :root.dark (not .dark) so these win over the :root block below
+   — both match <html>, and source order would otherwise let :root clobber
+   these flips, leaving dark mode on the light token values. */
+:root.dark {
   --inp-bg:     #374151;
   --inp-border: #4b5563;
   --inp-text:   #f9fafb;
@@ -18,7 +21,7 @@
   --card-bg:        #1f2937;
   --page-bg:        #111827;
   --raised-bg:      #374151;
-  --table-row-alt:  #1f2937;
+  --table-row-alt:  rgba(55, 65, 81, .35);  /* subtle gray-700/35 stripe over gray-800 */
   --border-light:   #374151;
   --line:           #374151;
   --text-primary:   #f9fafb;

@@ -3,9 +3,30 @@ import { Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
+import { classifyLogEntry } from '../utils/printLog.js'
 import {
-  MapPin, DoorOpen, HeartPulse, AlertTriangle, FileText, Clock, Footprints,
+  MapPin, DoorOpen, HeartPulse, AlertTriangle, FileText, Footprints,
 } from 'lucide-react'
+
+// Activity-feed styling (matches the design prototype's timeline). Each log
+// entry is classified by type → a tone that drives the dot + badge colors.
+const FEED_TONE = {
+  Wellness: 'green', Walkthrough: 'blue', UA: 'yellow', Lunch: 'gray',
+  'Room Search': 'sky', Mail: 'blue', Infraction: 'red', Group: 'blue',
+  Intake: 'green', Discharge: 'gray', Note: 'gray',
+}
+const FEED_DOT = {
+  green: 'bg-green-500', blue: 'bg-blue-500', yellow: 'bg-yellow-400',
+  red: 'bg-red-500', sky: 'bg-sky-500', gray: 'bg-gray-400',
+}
+const FEED_BADGE = {
+  green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  blue:   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  red:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  sky:    'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
+  gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+}
 
 // ApexCharts is heavy (~135 kB gzip) and only used here — load it as a
 // separate async chunk so it doesn't bloat the main bundle.
@@ -263,18 +284,26 @@ export default function DashboardHome({ onNavigate }) {
 
           <div className={`${cardCls} p-4 sm:p-5`}>
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">Recent activity</h2>
-            <div className="mt-3 space-y-3">
-              {recent.length === 0 && <p className="text-sm text-gray-400">No entries yet.</p>}
-              {recent.map(l => (
-                <div key={l.id} className="flex gap-2.5">
-                  <Clock className="w-3.5 h-3.5 mt-0.5 text-gray-300 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-200">{l.text}</p>
-                    <p className="text-xs text-gray-400 font-mono">{l.time}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {recent.length === 0
+              ? <p className="mt-3 text-sm text-gray-400">No entries yet.</p>
+              : (
+                <ol className="relative mt-4 ml-2 border-l border-gray-200 dark:border-gray-700">
+                  {recent.map(l => {
+                    const type = classifyLogEntry(l.text)
+                    const tone = FEED_TONE[type] || 'gray'
+                    return (
+                      <li key={l.id} className="mb-4 ml-5 last:mb-0">
+                        <span className={`absolute w-3 h-3 -left-1.5 mt-1.5 rounded-full ring-4 ring-white dark:ring-gray-800 ${FEED_DOT[tone]}`}></span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-gray-400">{l.time}</span>
+                          <span className={`text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${FEED_BADGE[tone]}`}>{type}</span>
+                        </div>
+                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{l.text}</p>
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
           </div>
         </div>
       </div>

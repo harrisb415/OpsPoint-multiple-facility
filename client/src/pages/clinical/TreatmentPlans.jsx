@@ -5,6 +5,7 @@ import {
   StatusBadge, Chip, Modal, EmptyState, inp, lbl, field,
 } from './clinicalShared.jsx'
 import { Header, card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
+import { useConfirm } from '../../components/ui.jsx'
 
 const api = clinicalApi('treatment-plans')
 const STATUSES = ['active', 'completed', 'discontinued']
@@ -13,6 +14,7 @@ function emptyGoal() { return { goal: '', objectives: [''], interventions: [''] 
 
 export default function TreatmentPlans() {
   const { treatmentPlans, data, refresh } = useData()
+  const confirm = useConfirm()
   const clients = data?.clients || []
   const milestones = data?.milestones || []
   const [filter, setFilter] = useState('all')
@@ -25,11 +27,11 @@ export default function TreatmentPlans() {
   }, [treatmentPlans, filter])
 
   async function finalise(id) {
-    if (!window.confirm('Sign this treatment plan?')) return
+    if (!await confirm({ title: 'Sign this treatment plan?', confirmText: 'Sign' })) return
     try { await api.sign(id); await refresh() } catch (e) { alert(e.message) }
   }
   async function remove(id) {
-    if (!window.confirm('Delete this treatment plan? This cannot be undone.')) return
+    if (!await confirm({ title: 'Delete this treatment plan?', body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
     try { await api.remove(id); await refresh() } catch (e) { alert(e.message) }
   }
 

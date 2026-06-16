@@ -5,6 +5,7 @@ import {
   clinicalApi, fmtDate, activeClients, clientLabel, todayStr,
   StatusBadge, Chip, Modal, EmptyState, SignedLine, inp, lbl, field,
 } from './clinicalShared.jsx'
+import { useConfirm } from '../../components/ui.jsx'
 
 const api = clinicalApi('notes')
 const NOTE_TYPES = ['progress', 'intake', 'medical', 'psychosocial', 'other']
@@ -18,6 +19,7 @@ const TYPE_COLORS = {
 
 export default function ClinicalNotes() {
   const { clinicalNotes, data, refresh } = useData()
+  const confirm = useConfirm()
   const clients = data?.clients || []
   const [filter, setFilter] = useState('all')
   const [editing, setEditing] = useState(null) // null | {} (new) | record
@@ -29,11 +31,11 @@ export default function ClinicalNotes() {
   }, [clinicalNotes, filter])
 
   async function finalise(id) {
-    if (!window.confirm('Finalise this note? Once signed it can no longer be edited or deleted.')) return
+    if (!await confirm({ title: 'Finalise this note?', body: 'Once signed it can no longer be edited or deleted.', confirmText: 'Finalise' })) return
     try { await api.sign(id); await refresh() } catch (e) { alert(e.message) }
   }
   async function remove(id) {
-    if (!window.confirm('Delete this draft note? This cannot be undone.')) return
+    if (!await confirm({ title: 'Delete this draft note?', body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
     try { await api.remove(id); await refresh() } catch (e) { alert(e.message) }
   }
 

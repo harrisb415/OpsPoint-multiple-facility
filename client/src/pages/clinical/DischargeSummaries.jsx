@@ -5,6 +5,7 @@ import {
   StatusBadge, Chip, Modal, EmptyState, SignedLine, inp, lbl, field,
 } from './clinicalShared.jsx'
 import { Header, card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
+import { useConfirm } from '../../components/ui.jsx'
 
 // Nav path is /clinical/discharge, but the REST segment is discharge-summaries.
 const dapi = clinicalApi('discharge-summaries')
@@ -28,6 +29,7 @@ const SECTIONS = [
 
 export default function DischargeSummaries() {
   const { dischargeSummaries, data, refresh } = useData()
+  const confirm = useConfirm()
   const clients = data?.clients || []
   const [filter, setFilter] = useState('all')
   const [editing, setEditing] = useState(null)
@@ -40,11 +42,11 @@ export default function DischargeSummaries() {
   }, [dischargeSummaries, filter])
 
   async function finalise(id) {
-    if (!window.confirm('Finalise this discharge summary? Once signed it can no longer be edited or deleted.')) return
+    if (!await confirm({ title: 'Finalise this discharge summary?', body: 'Once signed it can no longer be edited or deleted.', confirmText: 'Finalise' })) return
     try { await dapi.sign(id); await refresh() } catch (e) { alert(e.message) }
   }
   async function remove(id) {
-    if (!window.confirm('Delete this draft discharge summary? This cannot be undone.')) return
+    if (!await confirm({ title: 'Delete this draft discharge summary?', body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
     try { await dapi.remove(id); await refresh() } catch (e) { alert(e.message) }
   }
 

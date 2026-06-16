@@ -5,6 +5,7 @@ import {
   StatusBadge, Chip, Modal, EmptyState, SignedLine, inp, lbl, field,
 } from './clinicalShared.jsx'
 import { Header, card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
+import { useConfirm } from '../../components/ui.jsx'
 
 const api = clinicalApi('group-notes')
 const PARTICIPATION = ['present', 'absent', 'excused']
@@ -12,6 +13,7 @@ const PART_COLORS = { present: ['#dcfce7', '#15803d'], absent: ['#fee2e2', '#991
 
 export default function GroupNotes() {
   const { groupNotes, data, refresh } = useData()
+  const confirm = useConfirm()
   const clients = data?.clients || []
   const [editing, setEditing] = useState(null)
   const [viewing, setViewing] = useState(null)
@@ -23,11 +25,11 @@ export default function GroupNotes() {
   )
 
   async function finalise(id) {
-    if (!window.confirm('Finalise this group note?')) return
+    if (!await confirm({ title: 'Finalise this group note?', confirmText: 'Finalise' })) return
     try { await api.sign(id); await refresh() } catch (e) { alert(e.message) }
   }
   async function remove(id) {
-    if (!window.confirm('Delete this group note? This cannot be undone.')) return
+    if (!await confirm({ title: 'Delete this group note?', body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
     try { await api.remove(id); await refresh() } catch (e) { alert(e.message) }
   }
 

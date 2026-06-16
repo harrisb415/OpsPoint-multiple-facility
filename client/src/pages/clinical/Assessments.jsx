@@ -5,6 +5,7 @@ import {
   StatusBadge, Chip, Modal, EmptyState, SignedLine, inp, lbl, field,
 } from './clinicalShared.jsx'
 import { Header, card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
+import { useConfirm } from '../../components/ui.jsx'
 
 const api = clinicalApi('assessments')
 
@@ -66,6 +67,7 @@ function buildContent(type, existing) {
 
 export default function Assessments() {
   const { assessments, data, refresh } = useData()
+  const confirm = useConfirm()
   const clients = data?.clients || []
   const [filter, setFilter] = useState('all')
   const [editing, setEditing] = useState(null)
@@ -78,11 +80,11 @@ export default function Assessments() {
   }, [assessments, filter])
 
   async function finalise(id) {
-    if (!window.confirm('Finalise this assessment?')) return
+    if (!await confirm({ title: 'Finalise this assessment?', confirmText: 'Finalise' })) return
     try { await api.sign(id); await refresh() } catch (e) { alert(e.message) }
   }
   async function remove(id) {
-    if (!window.confirm('Delete this assessment? This cannot be undone.')) return
+    if (!await confirm({ title: 'Delete this assessment?', body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
     try { await api.remove(id); await refresh() } catch (e) { alert(e.message) }
   }
 

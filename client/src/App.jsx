@@ -2,6 +2,7 @@ import { useEffect, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext.jsx'
 import { AuthGuard, ChangePasswordGuard, PermGuard } from './components/ProtectedRoute.jsx'
+import { ConfirmProvider } from './components/ui.jsx'
 import AppShell from './components/AppShell.jsx'
 import Login from './pages/Login.jsx'
 import ChangePassword from './pages/ChangePassword.jsx'
@@ -86,7 +87,7 @@ export default function App() {
   if (loading) return <LoadingScreen />
 
   return (
-    <>
+    <ConfirmProvider>
       <MobileAutoRedirect />
       <Suspense fallback={<LoadingScreen />}>
       <Routes>
@@ -123,6 +124,6 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       </Suspense>
-    </>
+    </ConfirmProvider>
   )
 }

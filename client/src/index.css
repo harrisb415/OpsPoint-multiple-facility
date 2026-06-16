@@ -7,6 +7,12 @@
 
 /* Console redesign — blue primary ramp (gray/green/red/etc. are TW defaults) */
 @theme {
+  /* Type system (matches prototype): Inter for UI, JetBrains Mono for numbers.
+     Setting these makes Tailwind's font-sans/font-mono — and every flowbite-react
+     component that inherits them — use the loaded fonts. */
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+
   --color-primary-50:  #eff6ff;
   --color-primary-100: #dbeafe;
   --color-primary-200: #bfdbfe;
@@ -50,8 +56,8 @@
   --sky:        #f3f4f6;  --steel:   #6b7280;  --text: #111827;
   --red:        #d62828;  --amber:   #d97706;  --green: #15a34a;
   --navy:       #1e3a8a;  --blue:    #2563eb;
-  --mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, Consolas, 'Liberation Mono', monospace;
-  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SFMono-Regular', ui-monospace, Consolas, 'Liberation Mono', monospace;
+  --sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   /* -- Primary blue scale (names kept as --teal-* for back-compat) -- */
   --teal-900: #1e3a8a;  --teal-800: #1e40af;  --teal-700: #1d4ed8;

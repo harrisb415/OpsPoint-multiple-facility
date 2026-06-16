@@ -4,7 +4,7 @@
 // consistency with the rest of OpsPoint.
 // ════════════════════════════════════════════════════════════════════════
 import { NotebookPen, Target, Award, ClipboardList, Users, Siren, DoorOpen } from 'lucide-react'
-import { Badge } from 'flowbite-react'
+import { Badge, Modal as FbModal, ModalHeader, ModalBody, ModalFooter } from 'flowbite-react'
 
 // Navigation entries for the clinical section. `perm` (single) or `perms`
 // (any-of) controls visibility. `icon` is a lucide-react component.
@@ -101,19 +101,22 @@ export function Chip({ children, bg = '#f1f5f9', fg = '#475569' }) {
   )
 }
 
-// ── Modal (reuses .modal* classes from index.css) ──────────────────────────
+// ── Modal (flowbite Modal; dark-aware) ─────────────────────────────────────
+// Parents conditionally mount this (`{open && <Modal .../>}`), so `show` is true
+// whenever it's rendered. maxWidth maps to the closest flowbite size token.
+function sizeFor(maxWidth) {
+  if (maxWidth <= 440) return 'md'
+  if (maxWidth <= 520) return 'lg'
+  if (maxWidth <= 640) return 'xl'
+  return '2xl'
+}
 export function Modal({ title, onClose, children, footer, maxWidth = 580 }) {
   return (
-    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth, width: '100%' }}>
-        <div className="modal-head">
-          <h2>{title}</h2>
-          <button className="xbtn" onClick={onClose}>&times;</button>
-        </div>
-        <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>{children}</div>
-        {footer && <div className="modal-foot">{footer}</div>}
-      </div>
-    </div>
+    <FbModal show size={sizeFor(maxWidth)} onClose={onClose}>
+      <ModalHeader>{title}</ModalHeader>
+      <ModalBody>{children}</ModalBody>
+      {footer && <ModalFooter className="justify-end">{footer}</ModalFooter>}
+    </FbModal>
   )
 }
 

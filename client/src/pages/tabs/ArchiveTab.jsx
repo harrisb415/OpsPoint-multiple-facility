@@ -7,6 +7,7 @@ import {
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -52,6 +53,7 @@ export default function ArchiveTab() {
   const [selected, setSelected] = useState(null)
   const canDelete = hasPerm('reports.delete')
   const { globalSearch = '' } = useOutletContext() || {}
+  const confirm = useConfirm()
 
   const sorted = useMemo(() => {
     const q = globalSearch.trim().toLowerCase()
@@ -67,7 +69,7 @@ export default function ArchiveTab() {
 
   async function deleteReport(r, e) {
     e.stopPropagation()
-    if (!window.confirm(`Delete report #${r.id} (${r.shift}, ${r.report_date})? This cannot be undone.`)) return
+    if (!await confirm({ title: `Delete report #${r.id}?`, body: `${r.shift}, ${r.report_date} — this cannot be undone.`, confirmText: 'Delete', color: 'red' })) return
     await fetch(`/api/reports/${r.id}`, { method: 'DELETE', credentials: 'include' })
   }
 

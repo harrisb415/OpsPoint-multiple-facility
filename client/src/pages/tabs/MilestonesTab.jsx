@@ -3,10 +3,12 @@ import { Plus, Lock } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 const MS_BADGE = { in_progress: 'warning', completed: 'success', waived: 'gray' }
@@ -43,6 +45,7 @@ export default function MilestonesTab() {
   const canEdit    = hasPerm('milestones.edit')
   const canSignoff = hasPerm('milestones.signoff')
   const canUnlock  = hasPerm('records.unlock')
+  const confirm = useConfirm()
 
   const milestones = data?.milestones || []
   const clients = useMemo(() =>
@@ -134,7 +137,7 @@ export default function MilestonesTab() {
   }
 
   async function signoff(m) {
-    if (!window.confirm(`Mark "${m.objective}" as completed for ${m.client_name}?`)) return
+    if (!await confirm({ title: `Mark milestone completed for ${m.client_name}?`, body: m.objective, confirmText: 'Mark Complete' })) return
     const r = await fetch(`/api/milestones/${m.id}/signoff`, {
       method:'PUT', credentials:'include',
     })
@@ -151,7 +154,7 @@ export default function MilestonesTab() {
     loadData()
   }
   async function del(m) {
-    if (!window.confirm('Delete milestone? This is audit-logged.')) return
+    if (!await confirm({ title: 'Delete milestone?', body: 'This is audit-logged.', confirmText: 'Delete', color: 'red' })) return
     const res = await fetch(`/api/milestones/${m.id}`, { method:'DELETE', credentials:'include' })
     if (!res.ok) { const j = await res.json().catch(()=>({})); alert(j.error||'Delete failed'); return }
     loadData()
@@ -299,39 +302,33 @@ export default function MilestonesTab() {
       }
 
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal" style={{ maxWidth:520 }}>
-            <div className="modal-head">
-              <h2>{modal.record ? 'Edit Milestone' : 'New Milestone'}</h2>
-              <button className="xbtn" onClick={()=>setModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {err && <div className="auth-error">{err}</div>}
-              <div className="field">
-                <label>Resident</label>
-                <select value={form.client_id} onChange={e=>handleClient(e.target.value)} disabled={!!modal.record}>
+        <Modal show size="lg" onClose={() => setModal(null)}>
+          <ModalHeader>{modal.record ? 'Edit Milestone' : 'New Milestone'}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {err && <Alert color="failure">{err}</Alert>}
+              <Field label="Resident">
+                <Select value={form.client_id} onChange={e=>handleClient(e.target.value)} disabled={!!modal.record}>
                   <option value="">— select —</option>
                   {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label>Phase</label>
-                <select value={form.phase} onChange={e=>pickPhase(e.target.value)}>
+                </Select>
+              </Field>
+              <Field label="Phase">
+                <Select value={form.phase} onChange={e=>pickPhase(e.target.value)}>
                   <option value="">— select —</option>
                   {phases.map(p => <option key={p.key} value={p.label}>{p.label}</option>)}
-                </select>
-              </div>
-              <div className="field">
-                <label>Objective</label>
+                </Select>
+              </Field>
+              <Field label="Objective">
                 {(() => {
                   const p = phases.find(p => p.label === form.phase)
                   const opts = p?.objectives || []
                   if (opts.length === 0) {
-                    return <input value={form.objective} onChange={e=>setForm({...form, objective:e.target.value})}/>
+                    return <TextInput value={form.objective} onChange={e=>setForm({...form, objective:e.target.value})}/>
                   }
                   return (
-                    <>
-                      <select
+                    <div className="space-y-1.5">
+                      <Select
                         value={customObj ? '__custom__' : form.objective}
                         onChange={e => {
                           const v = e.target.value
@@ -341,65 +338,53 @@ export default function MilestonesTab() {
                         <option value="">— select —</option>
                         {opts.map(o => <option key={o} value={o}>{o}</option>)}
                         <option value="__custom__">Custom…</option>
-                      </select>
+                      </Select>
                       {customObj && (
-                        <input autoFocus style={{ marginTop:6 }} placeholder="Custom objective"
+                        <TextInput autoFocus placeholder="Custom objective"
                           value={form.objective}
                           onChange={e=>setForm(f => ({ ...f, objective: e.target.value }))}/>
                       )}
-                    </>
+                    </div>
                   )
                 })()}
-              </div>
-              <div className="field">
-                <label>Target date</label>
-                <input type="date" value={form.target_date} onChange={e=>setForm({...form, target_date:e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Notes</label>
-                <textarea rows={2} value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Advances treatment-plan goal <span style={{ fontWeight:400, color:'#94a3b8' }}>(optional)</span></label>
+              </Field>
+              <Field label="Target date"><TextInput type="date" value={form.target_date} onChange={e=>setForm({...form, target_date:e.target.value})}/></Field>
+              <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/></Field>
+              <Field label="Advances treatment-plan goal (optional)">
                 {(() => {
-                  if (!form.client_id) return <div style={{ fontSize:'.8rem', color:'#94a3b8' }}>Select a resident first.</div>
+                  if (!form.client_id) return <div className="text-xs text-gray-400">Select a resident first.</div>
                   const plans = (treatmentPlans || []).filter(p => String(p.client_id) === String(form.client_id))
                   const opts = []
                   plans.forEach(p => (Array.isArray(p.goals) ? p.goals : []).forEach(g => { if (g && g.id) opts.push({ v: `${p.id}::${g.id}`, l: g.goal || '(untitled goal)' }) }))
-                  if (opts.length === 0) return <div style={{ fontSize:'.8rem', color:'#94a3b8' }}>No treatment-plan goals for this resident yet.</div>
+                  if (opts.length === 0) return <div className="text-xs text-gray-400">No treatment-plan goals for this resident yet.</div>
                   return (
-                    <select value={form.goal_ref} onChange={e=>setForm({...form, goal_ref:e.target.value})}>
+                    <Select value={form.goal_ref} onChange={e=>setForm({...form, goal_ref:e.target.value})}>
                       <option value="">— none —</option>
                       {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-                    </select>
+                    </Select>
                   )
                 })()}
-              </div>
+              </Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?'Saving…':'Save'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setModal(null)}>Cancel</Button>
+            <Button disabled={saving} isProcessing={saving} onClick={save}>Save</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {unlockModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setUnlockModal(null)}>
-          <div className="modal" style={{ maxWidth:440 }}>
-            <div className="modal-head"><h2>Unlock Milestone</h2></div>
-            <div className="modal-body">
-              <div className="field">
-                <label>Reason (audit-logged)</label>
-                <textarea rows={3} value={unlockReason} onChange={e=>setUnlockReason(e.target.value)}/>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setUnlockModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitUnlock}>Unlock</button>
-            </div>
-          </div>
-        </div>
+        <Modal show size="md" onClose={() => setUnlockModal(null)}>
+          <ModalHeader>Unlock Milestone</ModalHeader>
+          <ModalBody>
+            <Field label="Reason (audit-logged)"><Textarea rows={3} value={unlockReason} onChange={e=>setUnlockReason(e.target.value)}/></Field>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setUnlockModal(null)}>Cancel</Button>
+            <Button onClick={submitUnlock}>Unlock</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

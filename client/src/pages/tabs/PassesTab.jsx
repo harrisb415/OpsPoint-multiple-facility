@@ -3,11 +3,13 @@ import { useOutletContext } from 'react-router-dom'
 import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
-  Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell, Textarea,
+  Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  Textarea, TextInput, Select, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
 const PASS_BADGE = { Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
@@ -30,6 +32,7 @@ export default function PassesTab() {
   const canEdit   = hasPerm('passes.edit')
   const canStatus = hasPerm('passes.status') || canEdit
   const { globalSearch = '' } = useOutletContext() || {}
+  const confirm = useConfirm()
 
   const passes = data?.passes || []
   const clients = data?.clients || []
@@ -89,7 +92,7 @@ export default function PassesTab() {
     if (r.ok) loadData()
   }
   async function del(p) {
-    if (!window.confirm(`Delete pass for ${p.name}?`)) return
+    if (!await confirm({ title: `Delete pass for ${p.name}?`, confirmText: 'Delete', color: 'red' })) return
     const r = await fetch(`/api/passes/${p.id}`, { method: 'DELETE', credentials: 'include' })
     if (r.ok) loadData()
   }
@@ -238,50 +241,41 @@ export default function PassesTab() {
 
       {/* Add/Edit Modal */}
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal" style={{ maxWidth: 520 }}>
-            <div className="modal-head">
-              <h2>{modal === 'add' ? 'Add Weekend Pass' : `Edit Pass — ${modal.name}`}</h2>
-              <button className="xbtn" onClick={() => setModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {error && <div className="auth-error">{error}</div>}
+        <Modal show size="lg" onClose={() => setModal(null)}>
+          <ModalHeader>{modal === 'add' ? 'Add Weekend Pass' : `Edit Pass — ${modal.name}`}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {error && <Alert color="failure">{error}</Alert>}
               {modal === 'add' && (
-                <div className="field"><label>Select Resident</label>
-                  <select value={form.client_id} onChange={e => handleClientSelect(e.target.value)}>
+                <Field label="Select Resident">
+                  <Select value={form.client_id} onChange={e => handleClientSelect(e.target.value)}>
                     <option value="">— Select or type below —</option>
                     {activeClients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
               )}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div className="field"><label>Room</label>
-                  <input type="text" value={form.room} onChange={e => setForm(f => ({ ...f, room: e.target.value }))} /></div>
-                <div className="field"><label>Name</label>
-                  <input type="text" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></div>
-                <div className="field"><label>Departure</label>
-                  <input type="datetime-local" value={form.departure} onChange={e => setForm(f => ({ ...f, departure: e.target.value }))} /></div>
-                <div className="field"><label>Expected Return</label>
-                  <input type="datetime-local" value={form.return_date} onChange={e => setForm(f => ({ ...f, return_date: e.target.value }))} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Room"><TextInput value={form.room} onChange={e => setForm(f => ({ ...f, room: e.target.value }))} /></Field>
+                <Field label="Name"><TextInput value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} /></Field>
+                <Field label="Departure"><TextInput type="datetime-local" value={form.departure} onChange={e => setForm(f => ({ ...f, departure: e.target.value }))} /></Field>
+                <Field label="Expected Return"><TextInput type="datetime-local" value={form.return_date} onChange={e => setForm(f => ({ ...f, return_date: e.target.value }))} /></Field>
               </div>
-              <div className="field"><label>Status</label>
-                <select value={form.status} disabled={!canStatus} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+              <Field label="Status">
+                <Select value={form.status} disabled={!canStatus} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                   <option value="Out">Out</option>
                   <option value="Extended">Extended</option>
                   <option value="In">In</option>
-                </select>
-              </div>
-              <div className="field"><label>UA Requirements / Notes</label>
-                <input type="text" value={form.ua_notes} onChange={e => setForm(f => ({ ...f, ua_notes: e.target.value }))} placeholder="e.g. UA required on return" /></div>
-              <div className="field"><label>Notes</label>
-                <textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: 'vertical' }} /></div>
+                </Select>
+              </Field>
+              <Field label="UA Requirements / Notes"><TextInput value={form.ua_notes} onChange={e => setForm(f => ({ ...f, ua_notes: e.target.value }))} placeholder="e.g. UA required on return" /></Field>
+              <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Save Pass'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setModal(null)}>Cancel</Button>
+            <Button onClick={submit} isProcessing={saving} disabled={saving}>Save Pass</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

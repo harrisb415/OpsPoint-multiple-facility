@@ -2,6 +2,7 @@ import { useMemo, lazy, Suspense } from 'react'
 import { Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
+import { useIsDark } from '../hooks/useIsDark.js'
 import {
   MapPin, DoorOpen, HeartPulse, AlertTriangle, FileText, Clock, Footprints,
 } from 'lucide-react'
@@ -63,6 +64,12 @@ function Kpi({ label, value, sub, Icon, tone }) {
 export default function DashboardHome({ onNavigate }) {
   const { data, notif } = useData()
   const { hasPerm } = usePermission()
+  const dark = useIsDark()
+  // Dark-aware chart colors (ApexCharts is JS-rendered — no Tailwind dark: here)
+  const axisColor = '#9ca3af'                       // gray-400, legible on both
+  const gridColor = dark ? '#374151' : '#e5e7eb'    // gray-700 / gray-200
+  const labelColor = dark ? '#9ca3af' : '#6b7280'
+  const chartTheme = dark ? 'dark' : 'light'
 
   const report   = data?.reports?.find(r => r.id === data?.active_report_id)
   const statuses = report?.statuses || {}
@@ -149,15 +156,16 @@ export default function DashboardHome({ onNavigate }) {
               type="area" height={260}
               series={[{ name: 'Log entries', data: activity.series }]}
               options={{
-                chart: { toolbar: { show: false }, fontFamily: 'inherit', sparkline: { enabled: false } },
+                chart: { toolbar: { show: false }, fontFamily: 'inherit', sparkline: { enabled: false }, background: 'transparent' },
+                theme: { mode: chartTheme },
                 colors: ['#2563eb'],
                 dataLabels: { enabled: false },
                 stroke: { curve: 'smooth', width: 2 },
                 fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.4, opacityTo: 0.05 } },
-                grid: { borderColor: '#e5e7eb', strokeDashArray: 4 },
-                xaxis: { categories: activity.cats, labels: { style: { colors: '#9ca3af' } }, axisBorder: { show: false }, axisTicks: { show: false } },
-                yaxis: { labels: { style: { colors: '#9ca3af' } }, min: 0, forceNiceScale: true },
-                tooltip: { theme: 'light' },
+                grid: { borderColor: gridColor, strokeDashArray: 4 },
+                xaxis: { categories: activity.cats, labels: { style: { colors: axisColor } }, axisBorder: { show: false }, axisTicks: { show: false } },
+                yaxis: { labels: { style: { colors: axisColor } }, min: 0, forceNiceScale: true },
+                tooltip: { theme: chartTheme },
               }}
             />
             </Suspense>
@@ -176,12 +184,13 @@ export default function DashboardHome({ onNavigate }) {
               series={donut.series}
               options={{
                 labels: donut.labels, colors: donut.colors,
-                chart: { fontFamily: 'inherit' },
-                legend: { position: 'bottom', labels: { colors: '#6b7280' } },
+                chart: { fontFamily: 'inherit', background: 'transparent' },
+                theme: { mode: chartTheme },
+                legend: { position: 'bottom', labels: { colors: labelColor } },
                 dataLabels: { enabled: false },
                 stroke: { width: 0 },
-                plotOptions: { pie: { donut: { size: '72%', labels: { show: true, total: { show: true, label: 'Total', color: '#6b7280', formatter: () => String(total) } } } } },
-                tooltip: { theme: 'light' },
+                plotOptions: { pie: { donut: { size: '72%', labels: { show: true, total: { show: true, label: 'Total', color: labelColor, formatter: () => String(total) } } } } },
+                tooltip: { theme: chartTheme },
               }}
             />
             </Suspense>

@@ -4,10 +4,12 @@ import { Pill, Clock, Lock, Plus } from 'lucide-react'
 import {
   Avatar, Breadcrumb, BreadcrumbItem, Button, Select,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
@@ -37,6 +39,7 @@ export default function MedLogTab() {
   const canWitness = hasPerm('med.witness')
   const canDelete  = hasPerm('med.delete')
   const canUnlock  = hasPerm('records.unlock')
+  const confirm = useConfirm()
 
   const records = data?.med_log || []
   const clients = useMemo(() =>
@@ -115,7 +118,7 @@ export default function MedLogTab() {
   }
 
   async function del(r) {
-    if (!window.confirm(`Delete med admin entry (${r.medication}) for ${r.client_name}?`)) return
+    if (!await confirm({ title: `Delete med entry for ${r.client_name}?`, body: r.medication, confirmText: 'Delete', color: 'red' })) return
     const res = await fetch(`/api/med-log/${r.id}`, { method:'DELETE', credentials:'include' })
     if (!res.ok) { const j = await res.json().catch(()=>({})); alert(j.error||'Delete failed'); return }
     loadData()
@@ -228,68 +231,46 @@ export default function MedLogTab() {
         )}
 
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal" style={{ maxWidth:520 }}>
-            <div className="modal-head">
-              <h2>{modal.record ? 'Edit Dose Entry' : 'Log Witnessed Dose'}</h2>
-              <button className="xbtn" onClick={()=>setModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {err && <div className="auth-error">{err}</div>}
-              <div className="field">
-                <label>Resident</label>
-                <select value={form.client_id} onChange={e=>handleClient(e.target.value)} disabled={!!modal.record}>
+        <Modal show size="lg" onClose={() => setModal(null)}>
+          <ModalHeader>{modal.record ? 'Edit Dose Entry' : 'Log Witnessed Dose'}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {err && <Alert color="failure">{err}</Alert>}
+              <Field label="Resident">
+                <Select value={form.client_id} onChange={e=>handleClient(e.target.value)} disabled={!!modal.record}>
                   <option value="">— select —</option>
                   {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-                </select>
+                </Select>
+              </Field>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Medication (name only)" className="col-span-2"><TextInput value={form.medication} onChange={e=>setForm({...form, medication:e.target.value})}/></Field>
+                <Field label="Dose (as labeled)"><TextInput value={form.dose} onChange={e=>setForm({...form, dose:e.target.value})}/></Field>
               </div>
-              <div style={{ display:'flex', gap:12 }}>
-                <div className="field" style={{ flex:2 }}>
-                  <label>Medication (name only — no clinical advice)</label>
-                  <input value={form.medication} onChange={e=>setForm({...form, medication:e.target.value})}/>
-                </div>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Dose (as labeled)</label>
-                  <input value={form.dose} onChange={e=>setForm({...form, dose:e.target.value})}/>
-                </div>
-              </div>
-              <div className="field">
-                <label>Administered at</label>
-                <input type="datetime-local" value={form.administered_at}
-                  onChange={e=>setForm({...form, administered_at:e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Notes</label>
-                <textarea rows={2} value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/>
-              </div>
+              <Field label="Administered at"><TextInput type="datetime-local" value={form.administered_at} onChange={e=>setForm({...form, administered_at:e.target.value})}/></Field>
+              <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})}/></Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?'Saving…':'Save'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setModal(null)}>Cancel</Button>
+            <Button disabled={saving} isProcessing={saving} onClick={save}>Save</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {unlockModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setUnlockModal(null)}>
-          <div className="modal" style={{ maxWidth:440 }}>
-            <div className="modal-head"><h2>Unlock Dose Entry</h2></div>
-            <div className="modal-body">
-              <p style={{ fontSize:'.88em', color:'#475569' }}>
-                Provide a reason — override is audit-logged.
-              </p>
-              <div className="field">
-                <label>Reason</label>
-                <textarea rows={3} value={unlockReason} onChange={e=>setUnlockReason(e.target.value)}/>
-              </div>
+        <Modal show size="md" onClose={() => setUnlockModal(null)}>
+          <ModalHeader>Unlock Dose Entry</ModalHeader>
+          <ModalBody>
+            <div className="space-y-3">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Provide a reason — override is audit-logged.</p>
+              <Field label="Reason"><Textarea rows={3} value={unlockReason} onChange={e=>setUnlockReason(e.target.value)}/></Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setUnlockModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitUnlock}>Unlock</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setUnlockModal(null)}>Cancel</Button>
+            <Button onClick={submitUnlock}>Unlock</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

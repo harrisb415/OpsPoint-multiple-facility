@@ -3,10 +3,12 @@ import { Plus, Lock } from 'lucide-react'
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 const SEV_BADGE = { low: 'info', medium: 'warning', high: 'pink', critical: 'failure' }
@@ -38,6 +40,7 @@ export default function IncidentsTab() {
   const canReview = hasPerm('incidents.review')
   const canDelete = hasPerm('incidents.delete')
   const canUnlock = hasPerm('records.unlock')
+  const confirm = useConfirm()
 
   const incidents = data?.incidents || []
   const clients = useMemo(() =>
@@ -137,7 +140,7 @@ export default function IncidentsTab() {
   }
 
   async function del(i) {
-    if (!window.confirm('Delete incident report? This is audit-logged.')) return
+    if (!await confirm({ title: 'Delete incident report?', body: 'This is audit-logged.', confirmText: 'Delete', color: 'red' })) return
     const res = await fetch(`/api/incidents/${i.id}`, { method:'DELETE', credentials:'include' })
     if (!res.ok) { const j = await res.json().catch(()=>({})); alert(j.error||'Delete failed'); return }
     loadData()
@@ -260,125 +263,87 @@ export default function IncidentsTab() {
       }
 
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal" style={{ maxWidth:620 }}>
-            <div className="modal-head">
-              <h2>{modal.record ? 'Edit Incident Report' : 'New Incident Report'}</h2>
-              <button className="xbtn" onClick={()=>setModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {err && <div className="auth-error">{err}</div>}
-              <div className="field">
-                <label>Resident</label>
-                <select value={form.client_id} onChange={e=>handleClient(e.target.value)} disabled={!!modal.record}>
+        <Modal show size="2xl" onClose={() => setModal(null)}>
+          <ModalHeader>{modal.record ? 'Edit Incident Report' : 'New Incident Report'}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {err && <Alert color="failure">{err}</Alert>}
+              <Field label="Resident">
+                <Select value={form.client_id} onChange={e=>handleClient(e.target.value)} disabled={!!modal.record}>
                   <option value="">— select —</option>
                   {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-                </select>
-              </div>
-              <div style={{ display:'flex', gap:12 }}>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Date</label>
-                  <input type="date" value={form.incident_date} onChange={e=>setForm({...form, incident_date:e.target.value})}/>
-                </div>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Time</label>
-                  <input type="time" value={form.incident_time} onChange={e=>setForm({...form, incident_time:e.target.value})}/>
-                </div>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Severity</label>
-                  <select value={form.severity} onChange={e=>pickSeverity(e.target.value)}>
+                </Select>
+              </Field>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Date"><TextInput type="date" value={form.incident_date} onChange={e=>setForm({...form, incident_date:e.target.value})}/></Field>
+                <Field label="Time"><TextInput type="time" value={form.incident_time} onChange={e=>setForm({...form, incident_time:e.target.value})}/></Field>
+                <Field label="Severity">
+                  <Select value={form.severity} onChange={e=>pickSeverity(e.target.value)}>
                     {Object.entries(SEVERITY_LABEL).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
+                  </Select>
+                </Field>
               </div>
-              <div className="field">
-                <label>Narrative — observed behavior and immediate response</label>
-                <textarea rows={4} value={form.narrative} onChange={e=>setForm({...form, narrative:e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Corrective action</label>
-                <textarea rows={2} value={form.corrective_action} onChange={e=>setForm({...form, corrective_action:e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Required notifications</label>
-                <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              <Field label="Narrative — observed behavior and immediate response"><Textarea rows={4} value={form.narrative} onChange={e=>setForm({...form, narrative:e.target.value})}/></Field>
+              <Field label="Corrective action"><Textarea rows={2} value={form.corrective_action} onChange={e=>setForm({...form, corrective_action:e.target.value})}/></Field>
+              <Field label="Required notifications" hint="Asterisk = required at the selected severity (cannot be unset).">
+                <div className="flex flex-wrap gap-1.5">
                   {['supervisor','case_manager','licensing','guardian','doh','insurance','law_enforcement'].map(key => {
                     const minReq = (policy[form.severity]||[]).includes(key)
                     const on = (form.notifications_required||[]).includes(key) || minReq
                     return (
-                      <button key={key} type="button"
-                        onClick={()=>toggleNotif(key)}
-                        disabled={minReq}
-                        title={minReq ? 'Required at this severity' : ''}
-                        style={{
-                          padding:'4px 10px', borderRadius:6, border:'1px solid var(--line)',
-                          background: on ? 'var(--crimson)' : 'transparent',
-                          color: on ? '#fff' : 'var(--steel)',
-                          fontSize:'.78em', fontWeight:700, cursor: minReq ? 'not-allowed' : 'pointer',
-                          opacity: minReq ? 0.85 : 1,
-                        }}>
+                      <Button key={key} size="xs" type="button" color={on ? 'default' : 'light'}
+                        onClick={()=>toggleNotif(key)} disabled={minReq} title={minReq ? 'Required at this severity' : ''}
+                        className="capitalize">
                         {key.replace(/_/g,' ')}{minReq && ' *'}
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>
-                <div style={{ fontSize:'.7em', color:'#64748b', marginTop:4 }}>
-                  Asterisk = required at the selected severity (cannot be unset).
-                </div>
-              </div>
+              </Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?'Saving…':'Save'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setModal(null)}>Cancel</Button>
+            <Button disabled={saving} isProcessing={saving} onClick={save}>Save</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {reviewModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setReviewModal(null)}>
-          <div className="modal" style={{ maxWidth:480 }}>
-            <div className="modal-head"><h2>Supervisor Review</h2></div>
-            <div className="modal-body">
-              <div style={{ fontSize:'.85em', marginBottom:8 }}>
-                <strong>{reviewModal.client_name}</strong> — {fmtDate(reviewModal.incident_date)}
+        <Modal show size="lg" onClose={() => setReviewModal(null)}>
+          <ModalHeader>Supervisor Review</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                <strong className="text-gray-900 dark:text-white">{reviewModal.client_name}</strong> — {fmtDate(reviewModal.incident_date)}
               </div>
-              <div className="field">
-                <label>Review notes</label>
-                <textarea rows={4} value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)}/>
-              </div>
-              <div className="field">
-                <label>New status</label>
-                <select value={reviewStatus} onChange={e=>setReviewStatus(e.target.value)}>
+              <Field label="Review notes"><Textarea rows={4} value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)}/></Field>
+              <Field label="New status">
+                <Select value={reviewStatus} onChange={e=>setReviewStatus(e.target.value)}>
                   <option value="reviewed">Reviewed (open follow-up)</option>
                   <option value="closed">Closed</option>
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setReviewModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitReview}>Submit Review</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setReviewModal(null)}>Cancel</Button>
+            <Button onClick={submitReview}>Submit Review</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {unlockModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setUnlockModal(null)}>
-          <div className="modal" style={{ maxWidth:440 }}>
-            <div className="modal-head"><h2>Unlock Incident Report</h2></div>
-            <div className="modal-body">
-              <div className="field">
-                <label>Reason (audit-logged)</label>
-                <textarea rows={3} value={unlockReason} onChange={e=>setUnlockReason(e.target.value)}/>
-              </div>
-            </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setUnlockModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitUnlock}>Unlock</button>
-            </div>
-          </div>
-        </div>
+        <Modal show size="md" onClose={() => setUnlockModal(null)}>
+          <ModalHeader>Unlock Incident Report</ModalHeader>
+          <ModalBody>
+            <Field label="Reason (audit-logged)"><Textarea rows={3} value={unlockReason} onChange={e=>setUnlockReason(e.target.value)}/></Field>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setUnlockModal(null)}>Cancel</Button>
+            <Button onClick={submitUnlock}>Unlock</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

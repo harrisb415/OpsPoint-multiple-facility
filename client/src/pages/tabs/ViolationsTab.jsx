@@ -2,14 +2,16 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Ban, Flame, CheckCircle, Plus, Printer, MoreHorizontal } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem, Select,
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem, Select, Checkbox, Label,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -46,6 +48,7 @@ export default function ViolationsTab() {
   const canComplete = hasPerm('violations.complete')
   const canDelete   = hasPerm('violations.delete')
   const { globalSearch = '' } = useOutletContext() || {}
+  const confirm = useConfirm()
 
   const clients = useMemo(() =>
     (data?.clients || [])
@@ -195,7 +198,7 @@ export default function ViolationsTab() {
   }
 
   async function markComplete(v) {
-    if (!window.confirm(`Mark consequence completed for ${v.client_name}?`)) return
+    if (!await confirm({ title: `Mark consequence completed for ${v.client_name}?`, confirmText: 'Mark Complete' })) return
     await fetch(`/api/violations/${v.id}/complete`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: '{}'
     })
@@ -203,7 +206,7 @@ export default function ViolationsTab() {
   }
 
   async function del(v) {
-    if (!window.confirm(`Permanently delete this violation record for ${v.client_name}?`)) return
+    if (!await confirm({ title: `Delete this violation record for ${v.client_name}?`, body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
     await fetch(`/api/violations/${v.id}`, { method: 'DELETE', credentials: 'include' })
     await loadViolations()
   }
@@ -401,89 +404,55 @@ export default function ViolationsTab() {
 
       {/* Add Modal */}
       {modal === 'add' && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal" style={{ maxWidth: 500 }}>
-            <div className="modal-head">
-              <h2>Log Violation</h2>
-              <button className="xbtn" onClick={() => setModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {err && <div className="auth-error">{err}</div>}
-              <div className="field"><label>Resident</label>
-                <select value={form.client_id} onChange={e => handleClientSelect(e.target.value)}>
+        <Modal show size="lg" onClose={() => setModal(null)}>
+          <ModalHeader>Log Violation</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {err && <Alert color="failure">{err}</Alert>}
+              <Field label="Resident">
+                <Select value={form.client_id} onChange={e => handleClientSelect(e.target.value)}>
                   <option value="">— Select resident —</option>
                   {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-                </select>
-              </div>
-              <div className="field"><label>Date</label>
-                <input type="date" value={form.violation_date}
-                  onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} />
-              </div>
-              <div className="field"><label>Description / Behavior</label>
-                <textarea rows={3} value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Describe the violation…"
-                  style={{ resize: 'vertical', width: '100%' }} />
-              </div>
-              <div className="field"><label>Notes (optional)</label>
-                <input type="text" value={form.notes}
-                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  placeholder="Additional context…" />
-              </div>
+                </Select>
+              </Field>
+              <Field label="Date"><TextInput type="date" value={form.violation_date} onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} /></Field>
+              <Field label="Description / Behavior"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the violation…" /></Field>
+              <Field label="Notes (optional)"><TextInput value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional context…" /></Field>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitAdd} disabled={saving}>{saving ? 'Saving…' : 'Log Violation'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setModal(null)}>Cancel</Button>
+            <Button onClick={submitAdd} isProcessing={saving} disabled={saving}>Log Violation</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Review Modal */}
       {reviewModal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setReviewModal(null)}>
-          <div className="modal" style={{ maxWidth: 460 }}>
-            <div className="modal-head">
-              <h2>Review Violation — {reviewModal.client_name}</h2>
-              <button className="xbtn" onClick={() => setReviewModal(null)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {err && <div className="auth-error">{err}</div>}
-              <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: 6, padding: 10, marginBottom: 14 }}>
-                <div style={{ fontSize: '.78rem', color: '#64748b', marginBottom: 4 }}>
-                  {fmtDate(reviewModal.violation_date)} · Rm. {reviewModal.room}
-                </div>
-                <div style={{ fontSize: '.88rem', fontWeight: 600 }}>{reviewModal.description}</div>
-                {reviewModal.notes && <div style={{ fontSize: '.8rem', color: '#475569', marginTop: 4 }}>{reviewModal.notes}</div>}
+        <Modal show size="md" onClose={() => setReviewModal(null)}>
+          <ModalHeader>Review Violation — {reviewModal.client_name}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {err && <Alert color="failure">{err}</Alert>}
+              <div className="p-3 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700">
+                <div className="mb-1 text-xs text-gray-500 dark:text-gray-400">{fmtDate(reviewModal.violation_date)} · Rm. {reviewModal.room}</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">{reviewModal.description}</div>
+                {reviewModal.notes && <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">{reviewModal.notes}</div>}
               </div>
-              <div onClick={() => setWaive(v => !v)} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
-                background: waive ? '#fef9c3' : '#f8fafc',
-                border: `1.5px solid ${waive ? '#fde047' : 'var(--line)'}`,
-                borderRadius: 8, cursor: 'pointer', userSelect: 'none',
-              }}>
-                <input type="checkbox" checked={waive} onChange={() => {}}
-                  style={{ pointerEvents: 'none', accentColor: '#b45309', flexShrink: 0, width: 16, height: 16 }} />
-                <span style={{ fontSize: '.84rem', fontWeight: waive ? 700 : 400, color: waive ? '#854d0e' : '#475569' }}>
-                  Waive — No Consequence
-                </span>
-              </div>
+              <Label className="flex items-center gap-2.5 p-2.5 text-sm border rounded-lg cursor-pointer border-gray-200 dark:border-gray-700">
+                <Checkbox checked={waive} onChange={() => setWaive(v => !v)} />
+                Waive — No Consequence
+              </Label>
               {!waive && (
-                <div className="field" style={{ marginTop: 12 }}>
-                  <label>Consequence</label>
-                  <textarea rows={3} value={consequence}
-                    onChange={e => setConsequence(e.target.value)}
-                    placeholder="Describe the assigned consequence…"
-                    style={{ resize: 'vertical', width: '100%' }} />
-                </div>
+                <Field label="Consequence"><Textarea rows={3} value={consequence} onChange={e => setConsequence(e.target.value)} placeholder="Describe the assigned consequence…" /></Field>
               )}
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setReviewModal(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitReview} disabled={saving}>{saving ? 'Saving…' : waive ? 'Waive' : 'Assign Consequence'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setReviewModal(null)}>Cancel</Button>
+            <Button onClick={submitReview} isProcessing={saving} disabled={saving}>{waive ? 'Waive' : 'Assign Consequence'}</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       <PrintScopeModal

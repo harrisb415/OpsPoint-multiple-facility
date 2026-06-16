@@ -4,12 +4,14 @@ import { Mail as MailIcon, Inbox, CheckCircle, Plus, Printer, MoreHorizontal } f
 import {
   Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Pagination, Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
+import { useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 30
 const MAIL_BADGE = { pending: 'warning', approved: 'info', delivered: 'success' }
@@ -32,6 +34,7 @@ export default function MailTab() {
   const canDeliver = hasPerm('mail.deliver')
   const canDelete  = hasPerm('mail.delete')
   const { globalSearch = '' } = useOutletContext() || {}
+  const confirm = useConfirm()
 
   const mail = data?.mail || []
   const clients = data?.clients || []
@@ -148,7 +151,7 @@ export default function MailTab() {
   }
 
   async function del(m) {
-    if (!window.confirm(`Delete mail record for ${m.client_name}?`)) return
+    if (!await confirm({ title: `Delete mail record for ${m.client_name}?`, confirmText: 'Delete', color: 'red' })) return
     await fetch(`/api/mail/${m.id}`, { method: 'DELETE', credentials: 'include' })
     await loadData()
   }
@@ -291,14 +294,10 @@ export default function MailTab() {
 
       {/* Log Mail Modal */}
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal" style={{ maxWidth: 560 }}>
-            <div className="modal-head">
-              <h2>Log Incoming Mail</h2>
-              <button className="xbtn" onClick={() => setModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {error && <div className="auth-error">{error}</div>}
+        <Modal show size="lg" onClose={() => setModal(false)}>
+          <ModalHeader>Log Incoming Mail</ModalHeader>
+          <ModalBody>
+              {error && <Alert color="failure" className="mb-3">{error}</Alert>}
               <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 12 }}>
                 Select one or more residents who received mail. Optionally add notes per resident.
               </p>
@@ -344,13 +343,12 @@ export default function MailTab() {
                   {selectedIds.length} resident{selectedIds.length !== 1 ? 's' : ''} selected
                 </p>
               )}
-            </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitLog} disabled={saving}>{saving ? 'Saving…' : 'Log Mail'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setModal(false)}>Cancel</Button>
+            <Button onClick={submitLog} isProcessing={saving} disabled={saving}>Log Mail</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

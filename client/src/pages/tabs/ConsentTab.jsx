@@ -3,10 +3,12 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { ShieldCheck, FileCheck, Share2, Plus } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select,
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Select, Checkbox, Label,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
@@ -49,6 +51,7 @@ export default function ConsentTab() {
   const { hasPerm } = usePermission()
   const canManage   = hasPerm('consent.manage')
   const canViewDisc = hasPerm('disclosures.view')
+  const confirm = useConfirm()
 
   const clients = useMemo(() =>
     (data?.clients || [])
@@ -114,7 +117,7 @@ export default function ConsentTab() {
   }
 
   async function revoke(c) {
-    if (!window.confirm(`Revoke consent to ${c.recipient_name}? This cannot be undone.`)) return
+    if (!await confirm({ title: `Revoke consent to ${c.recipient_name}?`, body: 'This cannot be undone.', confirmText: 'Revoke', color: 'red' })) return
     const r = await fetch(`/api/consent-records/${c.id}/revoke`, { method:'PUT', credentials:'include' })
     if (!r.ok) { const j = await r.json().catch(()=>({})); alert(j.error||'Revoke failed'); return }
     loadConsents(selectedClient)
@@ -264,64 +267,44 @@ export default function ConsentTab() {
       )}
 
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal" style={{ maxWidth:560 }}>
-            <div className="modal-head">
-              <h2>New Consent — {clients.find(c=>String(c.id)===selectedClient)?.name || ''}</h2>
-              <button className="xbtn" onClick={()=>setModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {modalErr && <div className="auth-error">{modalErr}</div>}
-              <p style={{ fontSize:'.8em', color:'#64748b', marginBottom:10 }}>
+        <Modal show size="xl" onClose={() => setModal(false)}>
+          <ModalHeader>New Consent — {clients.find(c=>String(c.id)===selectedClient)?.name || ''}</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {modalErr && <Alert color="failure">{modalErr}</Alert>}
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 Per 42 CFR Part 2 §2.31, consent must specify the recipient, purpose,
                 information scope, effective date, expiration, and the patient's right to revoke.
               </p>
-              <div style={{ display:'flex', gap:12 }}>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Recipient name</label>
-                  <input value={form.recipient_name} onChange={e=>setForm({...form, recipient_name:e.target.value})}/>
-                </div>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Recipient organization</label>
-                  <input value={form.recipient_org} onChange={e=>setForm({...form, recipient_org:e.target.value})}/>
-                </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Recipient name"><TextInput value={form.recipient_name} onChange={e=>setForm({...form, recipient_name:e.target.value})}/></Field>
+                <Field label="Recipient organization"><TextInput value={form.recipient_org} onChange={e=>setForm({...form, recipient_org:e.target.value})}/></Field>
               </div>
-              <div className="field">
-                <label>Purpose of disclosure</label>
-                <textarea rows={2} value={form.purpose} onChange={e=>setForm({...form, purpose:e.target.value})}/>
-              </div>
-              <div className="field">
-                <label>Information scope</label>
-                <select value={form.information_type} onChange={e=>setForm({...form, information_type:e.target.value})}>
+              <Field label="Purpose of disclosure"><Textarea rows={2} value={form.purpose} onChange={e=>setForm({...form, purpose:e.target.value})}/></Field>
+              <Field label="Information scope">
+                <Select value={form.information_type} onChange={e=>setForm({...form, information_type:e.target.value})}>
                   {INFO_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                </select>
+                </Select>
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Effective date"><TextInput type="date" value={form.effective_date} onChange={e=>setForm({...form, effective_date:e.target.value})}/></Field>
+                <Field label="Expiration date (blank = none)"><TextInput type="date" value={form.expiration_date} onChange={e=>setForm({...form, expiration_date:e.target.value})}/></Field>
               </div>
-              <div style={{ display:'flex', gap:12 }}>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Effective date</label>
-                  <input type="date" value={form.effective_date} onChange={e=>setForm({...form, effective_date:e.target.value})}/>
-                </div>
-                <div className="field" style={{ flex:1 }}>
-                  <label>Expiration date (blank = none)</label>
-                  <input type="date" value={form.expiration_date} onChange={e=>setForm({...form, expiration_date:e.target.value})}/>
-                </div>
-              </div>
-              <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:'.85em', marginTop:6 }}>
-                <input type="checkbox" checked={!!form.signature_on_file}
-                  onChange={e=>setForm({...form, signature_on_file:e.target.checked})}/>
+              <Label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={!!form.signature_on_file} onChange={e=>setForm({...form, signature_on_file:e.target.checked})}/>
                 Patient signature is on file (paper form scanned to records)
-              </label>
-              <p style={{ fontSize:'.75em', color:'#64748b', marginTop:10 }}>
+              </Label>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 The patient retains the right to revoke this consent at any time. Once revoked,
                 this record will be marked revoked and the consent gate will block further disclosures.
               </p>
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={()=>setModal(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?'Saving…':'Save Consent'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={()=>setModal(false)}>Cancel</Button>
+            <Button disabled={saving} isProcessing={saving} onClick={save}>Save Consent</Button>
+          </ModalFooter>
+        </Modal>
       )}
     </div>
   )

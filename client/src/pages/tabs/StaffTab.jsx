@@ -10,6 +10,7 @@ import {
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
+import { useConfirm } from '../../components/ui.jsx'
 
 function formatPhone(raw) {
   if (!raw) return ''
@@ -25,6 +26,7 @@ export default function StaffTab() {
   const { hasPerm } = usePermission()
   const canEdit = hasPerm('staff.edit')
   const { globalSearch = '' } = useOutletContext() || {}
+  const confirm = useConfirm()
 
   const staff = data?.staff || []
   const categories = data?.staff_categories || ['Director', 'Case Manager', 'Program Assistant', 'Other']
@@ -73,7 +75,7 @@ export default function StaffTab() {
   }
 
   async function del(s) {
-    if (!window.confirm(`Remove ${s.name} from the directory?`)) return
+    if (!await confirm({ title: `Remove ${s.name} from the directory?`, confirmText: 'Remove', color: 'red' })) return
     await fetch(`/api/staff/${s.id}`, { method: 'DELETE', credentials: 'include' })
   }
 

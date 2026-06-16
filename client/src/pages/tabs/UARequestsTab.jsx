@@ -2,14 +2,16 @@ import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { FlaskConical, CheckCircle, XCircle, Plus, Printer, X } from 'lucide-react'
 import {
-  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Select,
+  Avatar, Badge, Breadcrumb, BreadcrumbItem, Button, Card, Select, Checkbox, Label,
   Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell,
+  TextInput, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
+import { Field, useConfirm } from '../../components/ui.jsx'
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -53,6 +55,7 @@ export default function UARequestsTab() {
   const canRecord  = hasPerm('ua.record')
   const canDelete  = hasPerm('ua.delete')
   const { globalSearch = '' } = useOutletContext() || {}
+  const confirm = useConfirm()
 
   const uaRequests = data?.ua_requests || []
   const uaRecords  = data?.ua_records  || []
@@ -129,7 +132,7 @@ export default function UARequestsTab() {
   }
 
   async function dismissRequest(req) {
-    if (!window.confirm(`Cancel the pending UA request for ${req.client_name}?`)) return
+    if (!await confirm({ title: `Cancel the pending UA request for ${req.client_name}?`, confirmText: 'Cancel request', color: 'red' })) return
     await fetch(`/api/ua-requests/${req.id}`, { method: 'DELETE', credentials: 'include' })
     await loadData()
   }
@@ -187,7 +190,7 @@ export default function UARequestsTab() {
   }
 
   async function delRecord(r) {
-    if (!window.confirm(`Delete UA record for ${r.client_name}? This is audit-logged.`)) return
+    if (!await confirm({ title: `Delete UA record for ${r.client_name}?`, body: 'This is audit-logged.', confirmText: 'Delete', color: 'red' })) return
     const res = await fetch(`/api/ua-records/${r.id}`, { method:'DELETE', credentials:'include' })
     if (!res.ok) { const j = await res.json().catch(()=>({})); alert(j.error||'Delete failed'); return }
     loadData()
@@ -357,38 +360,33 @@ export default function UARequestsTab() {
 
       {/* ── Request UA Modal ─────────────────────────────────────── */}
       {modal && (
-        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setModal(false)}>
-          <div className="modal" style={{ maxWidth: 440 }}>
-            <div className="modal-head">
-              <h2>Request UA</h2>
-              <button className="xbtn" onClick={() => setModal(false)}>&times;</button>
-            </div>
-            <div className="modal-body">
-              {error && <div className="auth-error">{error}</div>}
-              <div className="field"><label>Resident</label>
-                <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
+        <Modal show size="md" onClose={() => setModal(false)}>
+          <ModalHeader>Request UA</ModalHeader>
+          <ModalBody>
+            <div className="space-y-4">
+              {error && <Alert color="failure">{error}</Alert>}
+              <Field label="Resident">
+                <Select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}>
                   <option value="">— Select resident —</option>
                   {activeClients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
-                </select>
-              </div>
-              <div className="field" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input type="checkbox" id="ua-interview" checked={form.is_interview}
-                  onChange={e => setForm(f => ({ ...f, is_interview: e.target.checked }))} />
-                <label htmlFor="ua-interview" style={{ cursor: 'pointer' }}>Pre-Intake / Interview UA</label>
-              </div>
+                </Select>
+              </Field>
+              <Label className="flex items-center gap-2 text-sm">
+                <Checkbox checked={form.is_interview} onChange={e => setForm(f => ({ ...f, is_interview: e.target.checked }))} />
+                Pre-Intake / Interview UA
+              </Label>
               {form.is_interview && (
-                <div className="field"><label>Interview Name (if different)</label>
-                  <input type="text" value={form.interview_name} placeholder="Optional"
-                    onChange={e => setForm(f => ({ ...f, interview_name: e.target.value }))} />
-                </div>
+                <Field label="Interview Name (if different)">
+                  <TextInput value={form.interview_name} placeholder="Optional" onChange={e => setForm(f => ({ ...f, interview_name: e.target.value }))} />
+                </Field>
               )}
             </div>
-            <div className="modal-foot">
-              <button className="btn-cancel" onClick={() => setModal(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submit} disabled={saving}>{saving ? 'Saving…' : 'Submit Request'}</button>
-            </div>
-          </div>
-        </div>
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setModal(false)}>Cancel</Button>
+            <Button onClick={submit} isProcessing={saving} disabled={saving}>Submit Request</Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* ── Conduct UA Modal ─────────────────────────────────────── */}

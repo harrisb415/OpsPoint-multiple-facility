@@ -108,8 +108,12 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
     return ts >= Date.now() - 24 * 3600000 && !dismissedDrawIds?.has(d.id)
   })
 
-  const SEV_COLOR = { low:'#1e40af', medium:'#92400e', high:'#9a3412', critical:'#7c2d12' }
-  const SEV_BG    = { low:'#dbeafe', medium:'#fef3c7', high:'#fee2e2', critical:'#fce7f3' }
+  const SEV_CLS = {
+    low:      'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
+    medium:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300',
+    high:     'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300',
+    critical: 'bg-pink-100 text-pink-900 dark:bg-pink-900/20 dark:text-pink-300',
+  }
 
   const hasAny =
     (notif.uaRequests.length > 0 && perm.includes('ua.acknowledge'))
@@ -184,7 +188,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
               <NotifRow key={inc.id} icon="🚨"
                 name={`${inc.client_name}${inc.room ? ` · Rm. ${inc.room}` : ''}`}
                 meta={<span className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-bold text-[11px] px-1.5 py-px rounded capitalize" style={{ background: SEV_BG[inc.severity]||'#f1f5f9', color: SEV_COLOR[inc.severity]||'#475569' }}>{inc.severity}</span>
+                  <span className={`font-bold text-[11px] px-1.5 py-px rounded capitalize ${SEV_CLS[inc.severity]||'bg-gray-100 text-gray-500'}`}>{inc.severity}</span>
                   {inc.incident_type && <span>{inc.incident_type}</span>}
                   <span>by {inc.logged_by}</span>
                 </span>}
@@ -830,7 +834,7 @@ function Header({ onGoTab, offset = true, search = '', onSearch }) {
   return (
     <>
       {serverRestarting && (
-        <div style={{ background: '#DC2626', color: '#fff', textAlign: 'center', padding: '6px 12px', fontSize: '13px', fontWeight: 700, position: 'fixed', top: 0, left: 0, right: 0, zIndex: 40 }}>
+        <div className="fixed top-0 left-0 right-0 z-40 bg-red-600 text-white text-center px-3 py-1.5 text-[13px] font-bold">
           Server is restarting — page will reload in a moment…
         </div>
       )}

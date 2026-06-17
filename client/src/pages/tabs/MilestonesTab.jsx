@@ -277,7 +277,7 @@ export default function MilestonesTab() {
             </TableBody>
           </Table>
         ) : (
-          <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>
+          <div className={`${CARD} !p-0 overflow-hidden`}>
             {grouped.map(g => (
               <div key={g.id} className="p-4 border-b border-gray-200 dark:border-gray-700">
                 <div className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">{g.name}</div>

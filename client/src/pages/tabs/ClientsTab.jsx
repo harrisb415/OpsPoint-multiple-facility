@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { Download, UserPlus, MoreHorizontal, Users, Home, CalendarDays, Search } from 'lucide-react'
 import {
   Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   TextInput,
@@ -11,7 +11,7 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
 import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, DeltaRow } from '../../components/ui.jsx'
 
 // Prototype-style status badge class strings (rounded-md pill, not rounded-full)
 const BADGE_CLS = {
@@ -22,26 +22,6 @@ const BADGE_CLS = {
   purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
   orange: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-}
-
-function DeltaRow({ delta, label }) {
-  if (!delta) return (
-    <div className="pt-3 mt-4 border-t border-gray-100 dark:border-gray-700">
-      <span className="inline-flex items-center text-sm font-medium text-gray-400">
-        <Minus className="w-4 h-4 mr-1" />{label}
-      </span>
-    </div>
-  )
-  const up = delta > 0
-  return (
-    <div className="pt-3 mt-4 border-t border-gray-100 dark:border-gray-700">
-      <span className={`inline-flex items-center text-sm font-medium ${up ? 'text-green-500' : 'text-red-500'}`}>
-        {up ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
-        {up ? '+' : ''}{delta}
-        <span className="ml-1.5 font-normal text-gray-400">{label}</span>
-      </span>
-    </div>
-  )
 }
 
 const PAGE_SIZE = 50
@@ -544,7 +524,7 @@ export default function ClientsTab() {
                       <Button type="button" size="xs" color="light" className="text-red-600" onClick={() => setEditPhoto('REMOVE')}>Remove</Button>
                     )}
                   </div>
-                  <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }}
+                  <input ref={photoRef} type="file" accept="image/*" className="hidden"
                     onChange={async ev => {
                       const file = ev.target.files?.[0]
                       if (!file) return

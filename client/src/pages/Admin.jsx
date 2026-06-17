@@ -5,10 +5,66 @@ import {
   Tag, DoorOpen, MonitorCog, Map, FlaskConical, ClipboardList,
   AlertTriangle, ScrollText,
 } from 'lucide-react'
-import { Button, Modal, ModalHeader, ModalBody, ModalFooter, Checkbox, Label, Alert } from 'flowbite-react'
+import {
+  Alert, Badge, Button, Checkbox, Label, Modal, ModalHeader, ModalBody, ModalFooter,
+  Select, Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow,
+  Textarea, TextInput,
+} from 'flowbite-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
+
+// ── Shared card section wrapper ───────────────────────────────────
+function Section({ title, right, noPad = false, className = '', children }) {
+  return (
+    <div className={`mb-5 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700 ${className}`}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-white">
+          <span className="w-2 h-2 rounded-full bg-primary-500 shrink-0" />
+          {title}
+        </div>
+        {right && <div className="flex items-center gap-2">{right}</div>}
+      </div>
+      <div className={noPad ? '' : 'p-4'}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function SaveMsg({ ok }) {
+  return ok ? <span className="text-sm font-semibold text-green-600 dark:text-green-400">✓ Saved</span> : null
+}
+
+// Group badge Tailwind classes keyed by group key
+const GROUP_BADGE_CLS = {
+  admin:        'bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800',
+  supervisor:   'bg-violet-100 text-violet-700 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-400 dark:border-violet-800',
+  pa:           'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800',
+  case_manager: 'bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800',
+}
+const GROUP_BADGE_DEFAULT = 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'
+
+// Audit action badge Tailwind classes keyed by action prefix
+const ACT_CLS = {
+  auth:     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  report:   'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  log:      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  status:   'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  client:   'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  passes:   'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  mail:     'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+  staff:    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
+  ua:       'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  facility: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  user:     'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  group:    'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  server:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+}
+const ACT_CLS_DEFAULT = 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+function actionBadgeCls(action) {
+  return ACT_CLS[(action || '').split('.')[0]] || ACT_CLS_DEFAULT
+}
 
 // ── Admin sections (clinical-style left rail) ─────────────────────
 // Each item maps to a single content panel — no nested sub-tabs. Grouped and
@@ -104,7 +160,7 @@ export default function Admin() {
       </aside>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 px-6 py-5 overflow-y-auto admin-shell bg-gray-50 dark:bg-gray-900">
+      <div className="flex-1 min-w-0 px-6 py-5 overflow-y-auto bg-gray-50 dark:bg-gray-900">
         {renderPanel()}
       </div>
     </div>
@@ -187,7 +243,7 @@ function TriCheck({ checked, indeterminate, disabled, onChange }) {
   return (
     <input ref={ref} type="checkbox" checked={checked} disabled={disabled}
       onClick={e => e.stopPropagation()} onChange={onChange}
-      style={{ width: 14, height: 14, flexShrink: 0, cursor: disabled ? 'default' : 'pointer' }} />
+      className={`w-3.5 h-3.5 shrink-0 rounded border-gray-300 text-primary-600 dark:border-gray-600 dark:bg-gray-700 ${disabled ? 'cursor-default' : 'cursor-pointer'}`} />
   )
 }
 
@@ -216,14 +272,14 @@ function PermEditor({ value, onChange, disabled }) {
   }
 
   return (
-    <div style={{ border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', background: '#f1f5f9', borderBottom: '1px solid var(--line)' }}>
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search permissions…"
-          style={{ flex: 1, padding: '4px 8px', fontSize: '.78rem', border: '1px solid var(--line)', borderRadius: 4, fontFamily: 'var(--sans)' }} />
-        <button type="button" onClick={() => setOpenDomains(allOpen ? new Set() : new Set(PERM_DOMAINS.map(d => d.label)))}
-          style={{ fontSize: '.72rem', fontWeight: 700, color: '#475569', background: '#fff', border: '1px solid var(--line)', borderRadius: 4, padding: '4px 9px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+    <div className="border border-gray-200 rounded-lg overflow-hidden dark:border-gray-600">
+      <div className="flex gap-2 items-center px-2.5 py-2 bg-gray-100 border-b border-gray-200 dark:bg-gray-700 dark:border-gray-600">
+        <TextInput sizing="sm" type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search permissions…" className="flex-1" />
+        <Button size="xs" color="light" type="button"
+          onClick={() => setOpenDomains(allOpen ? new Set() : new Set(PERM_DOMAINS.map(d => d.label)))}>
           {allOpen ? 'Collapse all' : 'Expand all'}
-        </button>
+        </Button>
       </div>
 
       {PERM_DOMAINS.map(d => {
@@ -235,12 +291,12 @@ function PermEditor({ value, onChange, disabled }) {
         const isOpen = searching || openDomains.has(d.label)
 
         return (
-          <div key={d.label} style={{ borderBottom: '1px solid var(--line)' }}>
+          <div key={d.label} className="border-b border-gray-200 last:border-0 dark:border-gray-600">
             <div onClick={() => !searching && toggleDomain(d.label)}
-              style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 12px', background: '#eef2f6', cursor: searching ? 'default' : 'pointer' }}>
-              <span style={{ color: '#94a3b8', fontSize: '.8rem', width: 12, flexShrink: 0 }}>{isOpen ? '▾' : '▸'}</span>
-              <span style={{ fontWeight: 800, fontSize: '.8rem', flex: 1, color: '#334155' }}>{d.label}</span>
-              <span style={{ fontSize: '.7rem', fontWeight: 700, color: granted ? '#0f766e' : '#94a3b8', background: '#fff', border: '1px solid var(--line)', borderRadius: 20, padding: '1px 8px' }}>
+              className={`flex items-center gap-2.5 px-3 py-2 bg-gray-50 dark:bg-gray-700/50 ${!searching ? 'cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700' : 'cursor-default'}`}>
+              <span className="text-gray-400 text-xs w-3 shrink-0">{isOpen ? '▾' : '▸'}</span>
+              <span className="font-bold text-xs flex-1 text-gray-700 dark:text-gray-200">{d.label}</span>
+              <span className={`text-[10px] font-bold px-2 py-px rounded-full border bg-white dark:bg-gray-800 dark:border-gray-600 ${granted ? 'text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-700' : 'text-gray-400 border-gray-200'}`}>
                 {granted} / {all.length}
               </span>
               <TriCheck checked={allGranted} indeterminate={granted > 0 && !allGranted} disabled={disabled}
@@ -253,17 +309,16 @@ function PermEditor({ value, onChange, disabled }) {
               if (vp.length === 0) return null
               return (
                 <div key={cl}>
-                  <div style={{ padding: '4px 12px 4px 30px', background: '#f8fafc', fontSize: '.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em' }}>{cl}</div>
+                  <div className="px-3 py-1 pl-7 bg-gray-50/60 text-[10px] font-bold text-gray-400 uppercase tracking-wide dark:bg-gray-700/30 dark:text-gray-500">{cl}</div>
                   {vp.map(p => (
-                    <label key={p} style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '5px 12px 5px 34px',
-                      borderTop: '1px solid #f1f5f9', cursor: disabled ? 'default' : 'pointer',
-                      background: value.includes(p) ? '#eff6ff' : 'transparent', opacity: disabled ? .6 : 1,
-                    }}>
+                    <label key={p}
+                      className={`flex items-center gap-2.5 px-3 py-1.5 pl-8 border-t border-gray-100 dark:border-gray-700 transition-colors
+                        ${disabled ? 'opacity-60 cursor-default' : 'cursor-pointer'}
+                        ${value.includes(p) ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}`}>
                       <input type="checkbox" checked={value.includes(p)} disabled={disabled}
-                        onChange={() => toggle(p)} style={{ width: 13, height: 13, flexShrink: 0 }} />
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: '.71rem', color: '#475569', minWidth: 190 }}>{p}</span>
-                      <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>{PERM_LABELS[p] || ''}</span>
+                        onChange={() => toggle(p)} className="w-3 h-3 shrink-0 rounded border-gray-300 text-primary-600 dark:border-gray-600 dark:bg-gray-700" />
+                      <span className="font-mono text-[11px] text-gray-500 min-w-[190px] dark:text-gray-400">{p}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{PERM_LABELS[p] || ''}</span>
                     </label>
                   ))}
                 </div>
@@ -351,64 +406,58 @@ function CurrentStaff({ users, groups, reload }) {
     else reload()
   }
 
-  const GROUP_COLORS = { admin: '#dc2626', supervisor: '#7c3aed', pa: '#2563eb', case_manager: '#059669' }
-
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Current Staff</span></div>
-          <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{users.length} account{users.length !== 1 ? 's' : ''}</span>
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
-          <div className="roster-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Username</th><th>Display Name</th><th>Member Of</th><th>Created</th><th className="tc">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map(u => (
-                  <tr key={u.id}>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: '.82rem' }}>
-                      {u.username}
-                      {u.is_protected && <span title="Protected" style={{ marginLeft: 5, color: '#f59e0b' }}>🔒</span>}
-                      {u.must_change_pw && <span style={{ marginLeft: 4, fontSize: '.7rem', background: '#fee2e2', color: '#991b1b', padding: '1px 5px', borderRadius: 8 }}>pw reset</span>}
-                    </td>
-                    <td style={{ fontWeight: 600 }}>{u.displayName || u.display_name}</td>
-                    <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                        {(u.groups || []).map(g => (
-                          <span key={g.id} style={{
-                            fontSize: '.7rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-                            background: GROUP_COLORS[g.key] ? GROUP_COLORS[g.key] + '22' : '#e2e8f0',
-                            color: GROUP_COLORS[g.key] || '#475569',
-                            border: `1px solid ${GROUP_COLORS[g.key] ? GROUP_COLORS[g.key] + '55' : '#cbd5e1'}`,
-                          }}>{g.label}</span>
-                        ))}
-                        {(!u.groups || !u.groups.length) && <span style={{ fontSize: '.76rem', color: '#94a3b8' }}>No groups</span>}
-                      </div>
-                    </td>
-                    <td className="date-cell">{fmtDate(u.createdAt)}</td>
-                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', marginRight: 4 }}
-                        onClick={() => openGroups(u)}>Groups</button>
+      <Section title="Current Staff" noPad
+        right={<span className="font-mono text-xs text-gray-400">{users.length} account{users.length !== 1 ? 's' : ''}</span>}>
+        <div className="overflow-x-auto">
+          <Table hoverable>
+            <TableHead>
+              <TableHeadCell>Username</TableHeadCell>
+              <TableHeadCell>Display Name</TableHeadCell>
+              <TableHeadCell>Member Of</TableHeadCell>
+              <TableHeadCell>Created</TableHeadCell>
+              <TableHeadCell className="text-center">Actions</TableHeadCell>
+            </TableHead>
+            <TableBody>
+              {users.map(u => (
+                <TableRow key={u.id}>
+                  <TableCell className="font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                    {u.username}
+                    {u.is_protected && <span title="Protected" className="ml-1.5 text-amber-500">🔒</span>}
+                    {u.must_change_pw && <span className="ml-1.5 text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-px rounded-full dark:bg-red-900/30 dark:text-red-400">pw reset</span>}
+                  </TableCell>
+                  <TableCell className="font-semibold text-gray-800 dark:text-white">{u.displayName || u.display_name}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {(u.groups || []).map(g => (
+                        <span key={g.id} className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${GROUP_BADGE_CLS[g.key] || GROUP_BADGE_DEFAULT}`}>
+                          {g.label}
+                        </span>
+                      ))}
+                      {(!u.groups || !u.groups.length) && <span className="text-xs text-gray-400">No groups</span>}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs text-gray-500 whitespace-nowrap dark:text-gray-400">{fmtDate(u.createdAt)}</TableCell>
+                  <TableCell className="text-center whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <Button size="xs" color="light" onClick={() => openGroups(u)}>Groups</Button>
                       {u.id !== session?.id && (
-                        <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', marginRight: 4 }}
-                          onClick={() => toggleProtect(u)}>{u.is_protected ? 'Unprotect' : 'Protect'}</button>
+                        <Button size="xs" color="light" onClick={() => toggleProtect(u)}>
+                          {u.is_protected ? 'Unprotect' : 'Protect'}
+                        </Button>
                       )}
                       {u.id !== session?.id && !u.is_protected && (
-                        <button className="btn-danger-sm" onClick={() => del(u)}>Remove</button>
+                        <Button size="xs" color="failure" onClick={() => del(u)}>Remove</Button>
                       )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
-      </div>
+      </Section>
 
       {groupModal && (
         <Modal show size="md" onClose={() => setGroupModal(null)}>
@@ -478,61 +527,60 @@ function AddStaff({ groups, reload }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Add Staff Member</span></div></div>
-        <div className="section-body">
-          {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
-          {success && <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', padding: '9px 13px', borderRadius: 8, fontSize: '.84rem', marginBottom: 12 }}>{success}</div>}
-          <form onSubmit={submit}>
-            <div className="adm-row">
-              <div className="field"><label>Username</label>
-                <input type="text" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="e.g. jsmith" />
-              </div>
-              <div className="field"><label>Display Name</label>
-                <input type="text" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="e.g. Jane Smith" />
-              </div>
-              <div className="field"><label>Password</label>
-                <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" />
-              </div>
-              <div className="field"><label>Confirm Password</label>
-                <input type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} placeholder="Repeat password" />
-              </div>
+      <Section title="Add Staff Member">
+        {error && <Alert color="failure" className="mb-3">{error}</Alert>}
+        {success && <Alert color="success" className="mb-3">{success}</Alert>}
+        <form onSubmit={submit}>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <Label htmlFor="as-username" className="mb-1 block">Username</Label>
+              <TextInput id="as-username" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} placeholder="e.g. jsmith" />
             </div>
-            {groups.length > 0 && (
-              <div className="field">
-                <label>Group Membership</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, border: '1.5px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-                  {groups.map(g => {
-                    const isMember = form.groupIds.includes(g.id)
-                    return (
-                      <label key={g.id} style={{
-                        display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                        cursor: 'pointer', background: isMember ? '#eff6ff' : 'transparent',
-                        borderBottom: '1px solid var(--line)',
-                      }}>
-                        <input type="checkbox" checked={isMember}
-                          onChange={() => setForm(f => ({ ...f, groupIds: f.groupIds.includes(g.id) ? f.groupIds.filter(x => x !== g.id) : [...f.groupIds, g.id] }))}
-                          style={{ width: 15, height: 15, flexShrink: 0 }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, fontSize: '.84rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {g.label}
-                            {isMember && <span style={{ fontSize: '.68rem', background: '#dbeafe', color: '#1e40af', padding: '1px 6px', borderRadius: 8, fontWeight: 700 }}>Selected</span>}
-                          </div>
-                          <div style={{ fontSize: '.72rem', color: '#94a3b8' }}>{(g.permissions || []).length} permissions</div>
+            <div>
+              <Label htmlFor="as-display" className="mb-1 block">Display Name</Label>
+              <TextInput id="as-display" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="e.g. Jane Smith" />
+            </div>
+            <div>
+              <Label htmlFor="as-pw" className="mb-1 block">Password</Label>
+              <TextInput id="as-pw" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" />
+            </div>
+            <div>
+              <Label htmlFor="as-pw2" className="mb-1 block">Confirm Password</Label>
+              <TextInput id="as-pw2" type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} placeholder="Repeat password" />
+            </div>
+          </div>
+          {groups.length > 0 && (
+            <div className="mb-3">
+              <Label className="mb-1 block">Group Membership</Label>
+              <div className="border border-gray-200 rounded-lg overflow-hidden dark:border-gray-700">
+                {groups.map(g => {
+                  const isMember = form.groupIds.includes(g.id)
+                  return (
+                    <label key={g.id}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 cursor-pointer border-b border-gray-100 last:border-0 dark:border-gray-700 ${isMember ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}`}>
+                      <Checkbox checked={isMember}
+                        onChange={() => setForm(f => ({ ...f, groupIds: f.groupIds.includes(g.id) ? f.groupIds.filter(x => x !== g.id) : [...f.groupIds, g.id] }))} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5 text-sm font-bold text-gray-900 dark:text-white">
+                          {g.label}
+                          {isMember && <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-px rounded-full dark:bg-blue-900/40 dark:text-blue-300">Selected</span>}
                         </div>
-                      </label>
-                    )
-                  })}
-                </div>
+                        <div className="text-xs text-gray-400">{(g.permissions || []).length} permissions</div>
+                      </div>
+                    </label>
+                  )
+                })}
               </div>
-            )}
-            <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: 6, padding: '10px 14px', fontSize: '.78rem', color: '#475569', marginBottom: 14 }}>
-              <strong>Password requirements:</strong> 8+ characters · Uppercase · Lowercase · Number · Symbol (!@#$%^&amp;*)
             </div>
-            <button type="submit" className="btn btn-primary" style={{ maxWidth: 280, width: '100%' }} disabled={saving}>{saving ? 'Creating…' : 'Create Account'}</button>
-          </form>
-        </div>
-      </div>
+          )}
+          <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2.5 mb-3 dark:bg-gray-700/50 dark:border-gray-600 dark:text-gray-400">
+            <strong>Password requirements:</strong> 8+ characters · Uppercase · Lowercase · Number · Symbol (!@#$%^&amp;*)
+          </p>
+          <Button type="submit" className="w-full max-w-xs" isProcessing={saving} disabled={saving}>
+            {saving ? 'Creating…' : 'Create Account'}
+          </Button>
+        </form>
+      </Section>
     </div>
   )
 }
@@ -591,54 +639,58 @@ function ResetPassword({ users }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Reset Staff Password</span></div></div>
-        <div className="section-body">
-          {error && <div className="auth-error" style={{ marginBottom: 12 }}>{error}</div>}
-          {success && <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', padding: '9px 13px', borderRadius: 8, fontSize: '.84rem', marginBottom: 12 }}>{success}</div>}
-          <form onSubmit={resetOther}>
-            <div className="adm-row">
-              <div className="field"><label>Select Staff Member</label>
-                <select value={targetId} onChange={e => setTargetId(e.target.value)}>
-                  <option value="">— Select staff member —</option>
-                  {users.filter(u => u.id !== session?.id).map(u => (
-                    <option key={u.id} value={u.id}>{u.displayName || u.display_name} ({u.username})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field"><label>New Password</label>
-                <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Min 8 chars" />
-              </div>
-              <div className="field"><label>Confirm Password</label>
-                <input type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="Repeat password" />
-              </div>
+      <Section title="Reset Staff Password">
+        {error && <Alert color="failure" className="mb-3">{error}</Alert>}
+        {success && <Alert color="success" className="mb-3">{success}</Alert>}
+        <form onSubmit={resetOther}>
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            <div>
+              <Label htmlFor="rp-target" className="mb-1 block">Select Staff Member</Label>
+              <Select id="rp-target" value={targetId} onChange={e => setTargetId(e.target.value)}>
+                <option value="">— Select staff member —</option>
+                {users.filter(u => u.id !== session?.id).map(u => (
+                  <option key={u.id} value={u.id}>{u.displayName || u.display_name} ({u.username})</option>
+                ))}
+              </Select>
             </div>
-            <button type="submit" className="btn btn-primary" style={{ maxWidth: 280, width: '100%' }} disabled={saving}>{saving ? 'Saving…' : 'Set New Password'}</button>
-          </form>
-          <button onClick={() => setShowSelf(s => !s)} className="btn btn-sm"
-            style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', maxWidth: 280, width: '100%', marginTop: 16 }}>
-            {showSelf ? '▲ Hide' : '▼ Change My Own Password'}
-          </button>
-        </div>
-      </div>
+            <div>
+              <Label htmlFor="rp-pw" className="mb-1 block">New Password</Label>
+              <TextInput id="rp-pw" type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Min 8 chars" />
+            </div>
+            <div>
+              <Label htmlFor="rp-pw2" className="mb-1 block">Confirm Password</Label>
+              <TextInput id="rp-pw2" type="password" value={pw2} onChange={e => setPw2(e.target.value)} placeholder="Repeat password" />
+            </div>
+          </div>
+          <Button type="submit" className="w-full max-w-xs" isProcessing={saving} disabled={saving}>
+            {saving ? 'Saving…' : 'Set New Password'}
+          </Button>
+        </form>
+        <Button color="light" size="xs" className="mt-4" onClick={() => setShowSelf(s => !s)}>
+          {showSelf ? '▲ Hide' : '▼ Change My Own Password'}
+        </Button>
+      </Section>
 
       {showSelf && (
-        <div className="section">
-          <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Change My Password</span></div></div>
-          <div className="section-body">
-            {selfErr && <div className="auth-error" style={{ marginBottom: 12 }}>{selfErr}</div>}
-            {selfOk && <div style={{ background: '#dcfce7', border: '1px solid #86efac', color: '#15803d', padding: '9px 13px', borderRadius: 8, fontSize: '.84rem', marginBottom: 12 }}>{selfOk}</div>}
-            <form onSubmit={changeSelf}>
-              <div className="field"><label>Current Password</label>
-                <input type="password" value={selfCur} onChange={e => setSelfCur(e.target.value)} /></div>
-              <div className="field"><label>New Password</label>
-                <input type="password" value={selfPw} onChange={e => setSelfPw(e.target.value)} /></div>
-              <div className="field"><label>Confirm New Password</label>
-                <input type="password" value={selfPw2} onChange={e => setSelfPw2(e.target.value)} /></div>
-              <button type="submit" className="btn btn-primary" style={{ maxWidth: 280, width: '100%' }}>Change My Password</button>
-            </form>
-          </div>
-        </div>
+        <Section title="Change My Password">
+          {selfErr && <Alert color="failure" className="mb-3">{selfErr}</Alert>}
+          {selfOk && <Alert color="success" className="mb-3">{selfOk}</Alert>}
+          <form onSubmit={changeSelf} className="max-w-xs space-y-3">
+            <div>
+              <Label htmlFor="sp-cur" className="mb-1 block">Current Password</Label>
+              <TextInput id="sp-cur" type="password" value={selfCur} onChange={e => setSelfCur(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="sp-new" className="mb-1 block">New Password</Label>
+              <TextInput id="sp-new" type="password" value={selfPw} onChange={e => setSelfPw(e.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="sp-new2" className="mb-1 block">Confirm New Password</Label>
+              <TextInput id="sp-new2" type="password" value={selfPw2} onChange={e => setSelfPw2(e.target.value)} />
+            </div>
+            <Button type="submit" className="w-full">Change My Password</Button>
+          </form>
+        </Section>
       )}
     </div>
   )
@@ -666,31 +718,33 @@ function GroupCard({ g, onSave, onDelete }) {
   }
 
   return (
-    <div style={{ border: '1.5px solid var(--line)', borderRadius: 8, overflow: 'hidden', marginBottom: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', cursor: 'pointer', background: open ? '#f8fafc' : '#fff' }}
-        onClick={() => setOpen(o => !o)}>
-        <span style={{ color: '#94a3b8', fontSize: '.8rem', width: 14, flexShrink: 0 }}>{open ? '▾' : '▸'}</span>
-        <span style={{ fontWeight: 700, fontSize: '.9rem', flex: 1 }}>{g.label}</span>
-        {g.is_protected && <span title="Protected" style={{ color: '#f59e0b' }}>🔒</span>}
-        <code style={{ fontFamily: 'var(--mono)', fontSize: '.72rem', color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>{g.key}</code>
-        <span style={{ fontSize: '.76rem', color: '#64748b' }}>{(g.permissions || []).length} perms · {g.memberCount ?? 0} member{g.memberCount !== 1 ? 's' : ''}</span>
+    <div className="border border-gray-200 rounded-lg overflow-hidden mb-2 dark:border-gray-700">
+      <button type="button" onClick={() => setOpen(o => !o)}
+        className="flex items-center w-full gap-2.5 px-3.5 py-2.5 text-left bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700/50 transition-colors">
+        <span className="text-gray-400 text-xs w-3.5 shrink-0">{open ? '▾' : '▸'}</span>
+        <span className="font-bold text-sm flex-1 text-gray-900 dark:text-white">{g.label}</span>
+        {g.is_protected && <span title="Protected" className="text-amber-500">🔒</span>}
+        <code className="font-mono text-xs text-gray-400 bg-gray-100 px-1.5 py-px rounded dark:bg-gray-700 dark:text-gray-500">{g.key}</code>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{(g.permissions || []).length} perms · {g.memberCount ?? 0} member{g.memberCount !== 1 ? 's' : ''}</span>
         {!g.is_protected && (
-          <button className="btn-danger-sm" onClick={e => { e.stopPropagation(); onDelete(g) }}>Delete</button>
+          <Button size="xs" color="failure" onClick={e => { e.stopPropagation(); onDelete(g) }}>Delete</Button>
         )}
-      </div>
+      </button>
 
       {open && (
-        <div style={{ borderTop: '1px solid var(--line)', padding: 16 }}>
+        <div className="border-t border-gray-200 p-4 dark:border-gray-700">
           {g.is_protected && (
-            <div style={{ background: '#fef9c3', border: '1px solid #fde047', color: '#854d0e', padding: '8px 12px', borderRadius: 6, fontSize: '.78rem', marginBottom: 12 }}>
+            <Alert color="warning" className="mb-3">
               🔒 This group is protected. Permissions are managed via server ROLE_PRESETS and cannot be edited here.
-            </div>
+            </Alert>
           )}
           <PermEditor value={perms} onChange={setPerms} disabled={!!g.is_protected} />
           {!g.is_protected && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</button>
-              {msg && <span style={{ fontSize: '.8rem', color: msg.includes('✓') ? '#16a34a' : '#dc2626' }}>{msg}</span>}
+            <div className="flex items-center gap-2.5 mt-3">
+              <Button size="sm" onClick={save} isProcessing={saving} disabled={saving}>
+                {saving ? 'Saving…' : 'Save Changes'}
+              </Button>
+              {msg && <span className={`text-sm font-medium ${msg.includes('✓') ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{msg}</span>}
             </div>
           )}
         </div>
@@ -730,22 +784,16 @@ function GroupsManager({ groups, reload }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Permission Groups</span></div>
+      <Section title="Permission Groups">
+        {groups.map(g => <GroupCard key={g.id} g={g} onSave={reload} onDelete={deleteGroup} />)}
+        <div className="flex gap-2 mt-3 items-center">
+          <TextInput value={newLabel} onChange={e => setNewLabel(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && createGroup()}
+            placeholder="Group Name (e.g. Night Staff)" sizing="sm" className="flex-1 max-w-xs" />
+          <Button size="sm" onClick={createGroup} disabled={creating}>+ Create</Button>
+          {createErr && <span className="text-sm text-red-600 dark:text-red-400">{createErr}</span>}
         </div>
-        <div className="section-body">
-          {groups.map(g => <GroupCard key={g.id} g={g} onSave={reload} onDelete={deleteGroup} />)}
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-            <input type="text" value={newLabel} onChange={e => setNewLabel(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && createGroup()}
-              placeholder="Group Name (e.g. Night Staff)"
-              style={{ flex: 1, fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none', maxWidth: 300 }} />
-            <button className="btn-add btn-add-b" onClick={createGroup} disabled={creating}>+ Create</button>
-            {createErr && <span style={{ fontSize: '.78rem', color: '#dc2626' }}>{createErr}</span>}
-          </div>
-        </div>
-      </div>
+      </Section>
     </div>
   )
 }
@@ -778,7 +826,7 @@ function FacilitySetupTab({ panel }) {
     return r.ok
   }
 
-  if (!settings) return <div className="empty-state" style={{ paddingTop: 48 }}>Loading…</div>
+  if (!settings) return <p className="text-sm text-gray-400 py-12 text-center dark:text-gray-500">Loading…</p>
 
   return (
     <div>
@@ -810,7 +858,7 @@ function EHRConfigSettings() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  if (!cfg) return <div className="empty-state" style={{ paddingTop: 48 }}>Loading…</div>
+  if (!cfg) return <p className="text-sm text-gray-400 py-12 text-center dark:text-gray-500">Loading…</p>
 
   function setTrack(idx, val) {
     const next = [...(cfg.program_tracks||[])]; next[idx] = val
@@ -869,72 +917,59 @@ function EHRConfigSettings() {
 
   return (
     <div>
-      {err && <div className="auth-error" style={{ marginBottom: 12 }}>{err}</div>}
+      {err && <Alert color="failure" className="mb-3">{err}</Alert>}
 
       {/* Program tracks */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Program Tracks</span></div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize:'.78rem', color:'#64748b' }}>Tracks shown in the resident profile dropdown.</p>
+      <Section title="Program Tracks">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Tracks shown in the resident profile dropdown.</p>
+        <div className="space-y-2 mb-3">
           {(cfg.program_tracks||[]).map((t, idx) => (
-            <div key={idx} style={{ display:'flex', gap:6, marginBottom:6 }}>
-              <input value={t} onChange={e=>setTrack(idx, e.target.value)} style={{ flex:1 }}/>
-              <button className="btn btn-sm btn-danger" onClick={()=>removeTrack(idx)}>×</button>
+            <div key={idx} className="flex gap-2">
+              <TextInput sizing="sm" value={t} onChange={e=>setTrack(idx, e.target.value)} className="flex-1" />
+              <Button size="xs" color="failure" onClick={()=>removeTrack(idx)}>×</Button>
             </div>
           ))}
-          <button className="btn btn-sm" onClick={addTrack}>+ Add track</button>
         </div>
-      </div>
+        <Button size="xs" color="light" onClick={addTrack}>+ Add track</Button>
+      </Section>
 
       {/* Program phases */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Program Phases &amp; Objectives</span></div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize:'.78rem', color:'#64748b' }}>Used by the Milestones tab to seed objectives per phase. One objective per line.</p>
+      <Section title="Program Phases &amp; Objectives">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Used by the Milestones tab to seed objectives per phase. One objective per line.</p>
+        <div className="space-y-3 mb-3">
           {(cfg.program_phases||[]).map((p, idx) => (
-            <div key={idx} style={{ border:'1px solid var(--line)', borderRadius:6, padding:10, marginBottom:10 }}>
-              <div style={{ display:'flex', gap:8, marginBottom:6 }}>
-                <input placeholder="key (e.g. phase1)" value={p.key||''}   onChange={e=>setPhaseField(idx, 'key', e.target.value)} style={{ flex:1 }}/>
-                <input placeholder="Label"             value={p.label||''} onChange={e=>setPhaseField(idx, 'label', e.target.value)} style={{ flex:2 }}/>
-                <button className="btn btn-sm btn-danger" onClick={()=>removePhase(idx)}>×</button>
+            <div key={idx} className="border border-gray-200 rounded-lg p-3 dark:border-gray-700">
+              <div className="flex gap-2 mb-2">
+                <TextInput sizing="sm" placeholder="key (e.g. phase1)" value={p.key||''} onChange={e=>setPhaseField(idx,'key',e.target.value)} className="flex-1" />
+                <TextInput sizing="sm" placeholder="Label" value={p.label||''} onChange={e=>setPhaseField(idx,'label',e.target.value)} className="flex-[2]" />
+                <Button size="xs" color="failure" onClick={()=>removePhase(idx)}>×</Button>
               </div>
-              <textarea rows={3} placeholder="One objective per line"
-                value={(p.objectives||[]).join('\n')}
-                onChange={e=>setPhaseObjectives(idx, e.target.value)}
-                style={{ width:'100%' }}/>
+              <Textarea rows={3} placeholder="One objective per line"
+                value={(p.objectives||[]).join('\n')} onChange={e=>setPhaseObjectives(idx, e.target.value)} className="text-xs" />
             </div>
           ))}
-          <button className="btn btn-sm" onClick={addPhase}>+ Add phase</button>
         </div>
-      </div>
+        <Button size="xs" color="light" onClick={addPhase}>+ Add phase</Button>
+      </Section>
 
       {/* Incident notification policy */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Incident Notification Policy</span></div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize:'.78rem', color:'#64748b' }}>
-            Mandatory notification parties per incident severity. The server enforces these minimums when an incident is logged.
-          </p>
-          <table className="table" style={{ marginTop:6 }}>
-            <thead><tr>
-              <th>Severity</th>
-              {NOTIFIERS.map(n => <th key={n} style={{ fontSize:'.7em', textTransform:'capitalize' }}>{n.replace(/_/g,' ')}</th>)}
-            </tr></thead>
-            <tbody>
+      <Section title="Incident Notification Policy">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Mandatory notification parties per incident severity. The server enforces these minimums when an incident is logged.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-gray-200 dark:border-gray-700">
+                <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">Severity</th>
+                {NOTIFIERS.map(n => <th key={n} className="px-2 py-2 text-center text-[10px] font-semibold text-gray-500 dark:text-gray-400 capitalize">{n.replace(/_/g,' ')}</th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {SEVS.map(sev => (
-                <tr key={sev}>
-                  <td style={{ fontWeight:700, textTransform:'capitalize' }}>{sev}</td>
+                <tr key={sev} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                  <td className="px-3 py-2 font-semibold capitalize text-gray-700 dark:text-gray-200">{sev}</td>
                   {NOTIFIERS.map(n => (
-                    <td key={n} style={{ textAlign:'center' }}>
-                      <input type="checkbox"
-                        checked={(cfg.incident_notifications?.[sev]||[]).includes(n)}
-                        onChange={()=>toggleNotif(sev, n)} />
+                    <td key={n} className="px-2 py-2 text-center">
+                      <Checkbox checked={(cfg.incident_notifications?.[sev]||[]).includes(n)} onChange={()=>toggleNotif(sev,n)} />
                     </td>
                   ))}
                 </tr>
@@ -942,40 +977,28 @@ function EHRConfigSettings() {
             </tbody>
           </table>
         </div>
-      </div>
+      </Section>
 
       {/* HIPAA idle session timeout */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>HIPAA Idle Session Timeout</span></div>
+      <Section title="HIPAA Idle Session Timeout">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+          Minutes of inactivity before a session is automatically terminated (HIPAA technical safeguard, 45 CFR §164.312(a)(2)(iii)). Range: 5–240 minutes.
+        </p>
+        <div className="max-w-[200px]">
+          <Label htmlFor="ehr-idle" className="mb-1 block">Idle timeout (minutes)</Label>
+          <TextInput id="ehr-idle" type="number" min={5} max={240}
+            value={cfg.session_idle_mins} onChange={e => setCfg({ ...cfg, session_idle_mins: e.target.value })} />
         </div>
-        <div className="section-body">
-          <p style={{ fontSize:'.78rem', color:'#64748b' }}>
-            Minutes of inactivity before a session is automatically terminated (HIPAA technical safeguard, 45 CFR §164.312(a)(2)(iii)).
-            Range: 5–240 minutes.
-          </p>
-          <div className="field" style={{ maxWidth: 200 }}>
-            <label>Idle timeout (minutes)</label>
-            <input type="number" min={5} max={240}
-              value={cfg.session_idle_mins}
-              onChange={e => setCfg({ ...cfg, session_idle_mins: e.target.value })}/>
-          </div>
-        </div>
-      </div>
+      </Section>
 
-      <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'flex-end', marginTop:12 }}>
-        {saved && <SaveMsg ok />}
-        <button className="btn btn-primary" disabled={saving} onClick={save}>{saving?'Saving…':'Save EHR Config'}</button>
+      <div className="flex gap-2 items-center justify-end mt-2">
+        <SaveMsg ok={saved} />
+        <Button isProcessing={saving} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save EHR Config'}</Button>
       </div>
     </div>
   )
 }
 
-function SaveMsg({ ok }) {
-  return ok
-    ? <span style={{ fontSize: '.8rem', color: '#16a34a', fontWeight: 600 }}>✓ Saved</span>
-    : null
-}
 
 // ── Facility Name ─────────────────────────────────────────────────
 
@@ -990,22 +1013,13 @@ function FacilityName({ settings, onSave, saving }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Facility Name</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Name'}</button>
-          </div>
+      <Section title="Facility Name" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Name'}</Button></>}>
+        <div className="mb-3">
+          <Label htmlFor="fac-name" className="mb-1 block">Facility Name</Label>
+          <TextInput id="fac-name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. James Baldwin Place" />
         </div>
-        <div className="section-body">
-          <div className="field">
-            <label>Facility Name</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. James Baldwin Place" />
-          </div>
-          <p style={{ fontSize: '.78rem', color: '#64748b' }}>Shown in the app header, mobile app, and DOCX reports.</p>
-        </div>
-      </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">Shown in the app header, mobile app, and DOCX reports.</p>
+      </Section>
     </div>
   )
 }
@@ -1124,157 +1138,159 @@ function RoomsManager() {
     }
   }
 
-  function rowBg(r) {
-    if (r.is_special) return '#f5f3ff'
-    if (!r.is_active) return '#fff1f2'
-    if (r.name === 'VACANT') return '#f8fafc'
-    return 'transparent'
+  function rowCls(r) {
+    if (r.is_special) return 'bg-violet-50 dark:bg-violet-900/10'
+    if (!r.is_active) return 'bg-red-50 dark:bg-red-900/10'
+    if (r.name === 'VACANT') return 'bg-gray-50 dark:bg-gray-700/20'
+    return ''
   }
 
   return (
     <div>
       {/* Stats */}
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        {[['Total', total, '#475569'], ['Active', active, '#16a34a'], ['Vacant', vacant, '#94a3b8'], ['Special', special, '#7c3aed'], ['Discharged', discharged, '#dc2626']].map(([label, n, color]) => (
-          <div key={label} style={{ border: '1.5px solid var(--line)', borderRadius: 8, padding: '8px 16px', background: '#fff', minWidth: 80, textAlign: 'center' }}>
-            <div style={{ fontSize: '1.2rem', fontWeight: 700, color }}>{n}</div>
-            <div style={{ fontSize: '.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+      <div className="flex gap-2 flex-wrap mb-4">
+        {[['Total', total, 'text-gray-600 dark:text-gray-300'], ['Active', active, 'text-green-600 dark:text-green-400'], ['Vacant', vacant, 'text-gray-400'], ['Special', special, 'text-violet-600 dark:text-violet-400'], ['Discharged', discharged, 'text-red-600 dark:text-red-400']].map(([label, n, cls]) => (
+          <div key={label} className="border border-gray-200 rounded-xl px-4 py-2 bg-white text-center min-w-[72px] dark:bg-gray-800 dark:border-gray-700">
+            <div className={`text-xl font-bold ${cls}`}>{n}</div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</div>
           </div>
         ))}
       </div>
 
       {/* Roster */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Room Roster</span></div>
-          <span style={{ fontSize: '.76rem', color: '#94a3b8' }}>Drag 🔀 to reorder</span>
-        </div>
-        <div className="section-body" style={{ padding: 0 }}>
-          {loading ? <div className="empty-state">Loading…</div> : (
-            <div className="roster-wrap">
-              <table>
-                <thead><tr><th style={{ width: 28 }}></th><th>Room #</th><th>Name / Label</th><th>Type</th><th>Status</th><th className="tc">Actions</th></tr></thead>
-                <tbody>
-                  {rooms.map((r, idx) => (
-                    <tr key={r.id} draggable style={{ background: rowBg(r), cursor: 'default' }}
-                      onDragStart={e => onDragStart(e, idx)}
-                      onDragOver={e => onDragOver(e, idx)}
-                      onDrop={onDrop}>
-                      <td style={{ textAlign: 'center', cursor: 'grab', color: '#94a3b8', fontSize: '.9rem' }}>⠿</td>
-                      <td className="rm">
-                        <input type="text" defaultValue={r.room} onBlur={e => e.target.value !== r.room && patchRoom(r.id, { room: e.target.value, name: r.name, is_special: r.is_special ? 1 : 0, special_label: r.special_label || '' })}
-                          style={{ width: 60, fontFamily: 'var(--mono)', fontSize: '.82rem', padding: '2px 5px', border: '1px solid var(--line)', borderRadius: 4 }} />
-                      </td>
-                      <td>
-                        <input type="text" defaultValue={r.name} onBlur={e => e.target.value !== r.name && patchRoom(r.id, { room: r.room, name: e.target.value, is_special: r.is_special ? 1 : 0, special_label: r.special_label || '' })}
-                          style={{ width: 160, fontSize: '.84rem', padding: '2px 5px', border: '1px solid var(--line)', borderRadius: 4 }} />
-                      </td>
-                      <td>
-                        {r.is_special
-                          ? <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#ede9fe', color: '#6d28d9' }}>Special</span>
-                          : <span style={{ fontSize: '.72rem', fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: '#f1f5f9', color: '#475569' }}>Resident</span>
-                        }
-                      </td>
-                      <td>
-                        {r.is_special ? <span style={{ fontSize: '.76rem', color: '#7c3aed' }}>{r.special_label || '—'}</span>
-                          : !r.is_active ? <span style={{ fontSize: '.72rem', fontWeight: 700, background: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: 8 }}>Discharged</span>
-                          : r.name === 'VACANT' ? <span style={{ fontSize: '.76rem', color: '#94a3b8' }}>Vacant</span>
-                          : <span style={{ fontSize: '.76rem', fontWeight: 600, color: '#16a34a' }}>Active</span>
-                        }
-                      </td>
-                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+      <Section title="Room Roster" noPad right={<span className="text-xs text-gray-400">Drag 🔀 to reorder</span>}>
+        {loading ? <p className="text-sm text-gray-400 py-8 text-center dark:text-gray-500">Loading…</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs uppercase bg-gray-50 border-b border-gray-200 dark:bg-gray-700 dark:border-gray-600">
+                <tr>
+                  <th className="px-2 py-3 w-7"></th>
+                  <th className="px-3 py-3 text-gray-500 dark:text-gray-400 font-medium">Room #</th>
+                  <th className="px-3 py-3 text-gray-500 dark:text-gray-400 font-medium">Name / Label</th>
+                  <th className="px-3 py-3 text-gray-500 dark:text-gray-400 font-medium">Type</th>
+                  <th className="px-3 py-3 text-gray-500 dark:text-gray-400 font-medium">Status</th>
+                  <th className="px-3 py-3 text-gray-500 dark:text-gray-400 font-medium text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {rooms.map((r, idx) => (
+                  <tr key={r.id} draggable className={`${rowCls(r)} hover:brightness-95 transition-colors`}
+                    onDragStart={e => onDragStart(e, idx)} onDragOver={e => onDragOver(e, idx)} onDrop={onDrop}>
+                    <td className="px-2 py-2 text-center cursor-grab text-gray-400">⠿</td>
+                    <td className="px-3 py-2">
+                      <input type="text" defaultValue={r.room} onBlur={e => e.target.value !== r.room && patchRoom(r.id, { room: e.target.value, name: r.name, is_special: r.is_special ? 1 : 0, special_label: r.special_label || '' })}
+                        className="w-16 font-mono text-xs px-1.5 py-0.5 border border-gray-200 rounded dark:border-gray-600 dark:bg-transparent dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input type="text" defaultValue={r.name} onBlur={e => e.target.value !== r.name && patchRoom(r.id, { room: r.room, name: e.target.value, is_special: r.is_special ? 1 : 0, special_label: r.special_label || '' })}
+                        className="w-44 text-sm px-1.5 py-0.5 border border-gray-200 rounded dark:border-gray-600 dark:bg-transparent dark:text-white focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.is_special
+                        ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">Special</span>
+                        : <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">Resident</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.is_special ? <span className="text-xs text-violet-600 dark:text-violet-400">{r.special_label || '—'}</span>
+                        : !r.is_active ? <span className="text-[11px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full dark:bg-red-900/30 dark:text-red-400">Discharged</span>
+                        : r.name === 'VACANT' ? <span className="text-xs text-gray-400">Vacant</span>
+                        : <span className="text-xs font-semibold text-green-600 dark:text-green-400">Active</span>
+                      }
+                    </td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5">
                         {!r.is_special && r.name !== 'VACANT' && !!r.is_active && (
-                          <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', marginRight: 4 }}
-                            onClick={() => patchRoom(r.id, { room: r.room, name: r.name, is_special: 1, special_label: r.name })}>→ Special</button>
+                          <Button size="xs" color="light" onClick={() => patchRoom(r.id, { room: r.room, name: r.name, is_special: 1, special_label: r.name })}>→ Special</Button>
                         )}
                         {!!r.is_special && (
-                          <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', marginRight: 4 }}
-                            onClick={() => patchRoom(r.id, { room: r.room, name: 'VACANT', is_special: 0, special_label: '' })}>→ Resident</button>
+                          <Button size="xs" color="light" onClick={() => patchRoom(r.id, { room: r.room, name: 'VACANT', is_special: 0, special_label: '' })}>→ Resident</Button>
                         )}
                         {(!!r.is_special || r.name === 'VACANT' || !r.is_active) && (
-                          <button className="btn-danger-sm" onClick={() => deleteRoom(r)}>Remove</button>
+                          <Button size="xs" color="failure" onClick={() => deleteRoom(r)}>Remove</Button>
                         )}
-                      </td>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
+      {/* Add Room */}
+      <Section title="Add Room">
+        {addErr && <Alert color="failure" className="mb-3">{addErr}</Alert>}
+        <form onSubmit={addRoom} className="flex gap-3 flex-wrap items-end">
+          <div>
+            <Label htmlFor="ar-room" className="mb-1 block">Room Number</Label>
+            <TextInput id="ar-room" value={addForm.room} onChange={e => setAddForm(f => ({ ...f, room: e.target.value }))} placeholder="e.g. 207" className="w-28" />
+          </div>
+          <div>
+            <Label htmlFor="ar-type" className="mb-1 block">Type</Label>
+            <Select id="ar-type" value={addForm.type} onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}>
+              <option value="resident">Resident Room (starts Vacant)</option>
+              <option value="special">Special Space (Office, Storage…)</option>
+            </Select>
+          </div>
+          {addForm.type === 'special' && (
+            <div>
+              <Label htmlFor="ar-label" className="mb-1 block">Space Label</Label>
+              <TextInput id="ar-label" value={addForm.label} onChange={e => setAddForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. Supply Room" />
+            </div>
+          )}
+          <Button type="submit">Add Room</Button>
+        </form>
+      </Section>
+
+      {/* Bulk Import */}
+      <Section title="Bulk Import">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+          One room per line: <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-px rounded text-xs">room, Name, type</code> — type is <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-px rounded text-xs">resident</code> or <code className="bg-gray-100 dark:bg-gray-700 px-1.5 py-px rounded text-xs">special</code>
+        </p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">Example: <code>101, Frank E., resident</code> &nbsp;or&nbsp; <code>104, Office, special</code></p>
+        <Textarea rows={10} value={bulkText} onChange={e => onBulkInput(e.target.value)}
+          placeholder={'101, Frank E., resident\n102, Anthony D., resident\n104, Office, special\n# Lines starting with # are ignored'}
+          className="font-mono text-xs mb-3" />
+
+        {bulkParsed.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-1.5">
+              <strong>{bulkParsed.length} rooms parsed:</strong> {bulkParsed.filter(r => !r.is_special).length} resident, {bulkParsed.filter(r => r.is_special).length} special
+            </p>
+            <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg dark:border-gray-700">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 dark:bg-gray-700">
+                    <th className="px-2 py-1 text-left font-medium text-gray-500 dark:text-gray-400">Room</th>
+                    <th className="px-2 py-1 text-left font-medium text-gray-500 dark:text-gray-400">Name</th>
+                    <th className="px-2 py-1 text-left font-medium text-gray-500 dark:text-gray-400">Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bulkParsed.map((r, i) => (
+                    <tr key={i} className="border-t border-gray-100 dark:border-gray-700">
+                      <td className="px-2 py-1 font-mono">{r.room}</td>
+                      <td className="px-2 py-1">{r.name}</td>
+                      <td className={`px-2 py-1 ${r.is_special ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500'}`}>{r.is_special ? 'special' : 'resident'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Add Room */}
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Add Room</span></div></div>
-        <div className="section-body">
-          {addErr && <div className="auth-error" style={{ marginBottom: 10 }}>{addErr}</div>}
-          <form onSubmit={addRoom} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="field" style={{ margin: 0 }}><label>Room Number</label>
-              <input type="text" value={addForm.room} onChange={e => setAddForm(f => ({ ...f, room: e.target.value }))} placeholder="e.g. 207" style={{ width: 100 }} />
-            </div>
-            <div className="field" style={{ margin: 0 }}><label>Type</label>
-              <select value={addForm.type} onChange={e => setAddForm(f => ({ ...f, type: e.target.value }))}>
-                <option value="resident">Resident Room (starts Vacant)</option>
-                <option value="special">Special Space (Office, Storage…)</option>
-              </select>
-            </div>
-            {addForm.type === 'special' && (
-              <div className="field" style={{ margin: 0 }}><label>Space Label</label>
-                <input type="text" value={addForm.label} onChange={e => setAddForm(f => ({ ...f, label: e.target.value }))} placeholder="e.g. Supply Room" />
-              </div>
-            )}
-            <button type="submit" className="btn btn-primary">Add Room</button>
-          </form>
-        </div>
-      </div>
-
-      {/* Bulk Import */}
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Bulk Import</span></div></div>
-        <div className="section-body">
-          <p style={{ fontSize: '.82rem', color: '#475569', marginBottom: 8 }}>
-            One room per line: <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>room, Name, type</code> — type is <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>resident</code> or <code style={{ background: '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>special</code>
-          </p>
-          <p style={{ fontSize: '.78rem', color: '#94a3b8', marginBottom: 10 }}>
-            Example: <code>101, Frank E., resident</code> &nbsp; or &nbsp; <code>104, Office, special</code>
-          </p>
-          <textarea rows={10} value={bulkText} onChange={e => onBulkInput(e.target.value)}
-            placeholder={'101, Frank E., resident\n102, Anthony D., resident\n104, Office, special\n# Lines starting with # are ignored'}
-            style={{ width: '100%', fontFamily: 'var(--mono)', fontSize: '.82rem', padding: '8px 10px', border: '1.5px solid var(--line)', borderRadius: 6, resize: 'vertical', outline: 'none' }} />
-
-          {bulkParsed.length > 0 && (
-            <div style={{ margin: '10px 0', fontSize: '.78rem', color: '#475569' }}>
-              <strong>{bulkParsed.length} rooms parsed:</strong> {bulkParsed.filter(r => !r.is_special).length} resident, {bulkParsed.filter(r => r.is_special).length} special
-              <div style={{ maxHeight: 160, overflowY: 'auto', marginTop: 6, border: '1px solid var(--line)', borderRadius: 6 }}>
-                <table style={{ width: '100%', fontSize: '.76rem', borderCollapse: 'collapse' }}>
-                  <thead><tr style={{ background: '#f8fafc' }}><th style={{ padding: '4px 8px', textAlign: 'left' }}>Room</th><th style={{ padding: '4px 8px', textAlign: 'left' }}>Name</th><th style={{ padding: '4px 8px', textAlign: 'left' }}>Type</th></tr></thead>
-                  <tbody>
-                    {bulkParsed.map((r, i) => (
-                      <tr key={i} style={{ borderTop: '1px solid var(--line)' }}>
-                        <td style={{ padding: '3px 8px', fontFamily: 'var(--mono)' }}>{r.room}</td>
-                        <td style={{ padding: '3px 8px' }}>{r.name}</td>
-                        <td style={{ padding: '3px 8px', color: r.is_special ? '#7c3aed' : '#475569' }}>{r.is_special ? 'special' : 'resident'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {bulkMsg && (
-            <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: '.82rem', marginBottom: 10, background: bulkMsg.startsWith('✓') ? '#dcfce7' : '#fee2e2', color: bulkMsg.startsWith('✓') ? '#15803d' : '#991b1b', border: `1px solid ${bulkMsg.startsWith('✓') ? '#86efac' : '#fca5a5'}` }}>
-              {bulkMsg}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-primary" onClick={() => importBulk(false)} disabled={!bulkParsed.length}>Append to Roster</button>
-            <button className="btn btn-sm btn-red" onClick={() => importBulk(true)} disabled={!bulkParsed.length}>⚠ Replace Entire Roster</button>
           </div>
+        )}
+
+        {bulkMsg && (
+          <Alert color={bulkMsg.startsWith('✓') ? 'success' : 'failure'} className="mb-3">{bulkMsg}</Alert>
+        )}
+
+        <div className="flex gap-2">
+          <Button onClick={() => importBulk(false)} disabled={!bulkParsed.length}>Append to Roster</Button>
+          <Button color="failure" size="sm" onClick={() => importBulk(true)} disabled={!bulkParsed.length}>⚠ Replace Entire Roster</Button>
         </div>
-      </div>
+      </Section>
     </div>
   )
 }
@@ -1294,46 +1310,41 @@ function RemindersSettings({ settings, onSave, saving }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Reminder Scheduled Times</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Reminder Settings'}</button>
-          </div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize: '.78rem', color: '#64748b', marginBottom: 16 }}>Reminder fires at each time regardless of whether a check has been done.</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '.84rem', marginBottom: 8 }}>Wellness Check Times</div>
+      <Section title="Reminder Scheduled Times" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Reminder Settings'}</Button></>}>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">Reminder fires at each time regardless of whether a check has been done.</p>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Wellness Check Times</p>
+            <div className="space-y-1.5 mb-2">
               {ws.map((t, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: '.82rem', flex: 1 }}>{t}</span>
-                  <button onClick={() => setWs(ws.filter((_, j) => j !== i))} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: 4, padding: '2px 7px', cursor: 'pointer', fontSize: '.78rem' }}>×</button>
+                <div key={i} className="flex items-center gap-2">
+                  <span className="font-mono text-xs flex-1 text-gray-700 dark:text-gray-300">{t}</span>
+                  <button onClick={() => setWs(ws.filter((_, j) => j !== i))} className="text-xs bg-red-50 border-0 text-red-600 hover:bg-red-100 rounded px-1.5 py-0.5 cursor-pointer dark:bg-red-900/30 dark:text-red-400">×</button>
                 </div>
               ))}
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <input type="time" value={wTime} onChange={e => setWTime(e.target.value)} style={{ fontFamily: 'var(--mono)', fontSize: '.84rem', padding: '4px 8px', border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none' }} />
-                <button className="btn-add btn-add-b" onClick={() => { if (wTime && !ws.includes(wTime)) { setWs([...ws, wTime].sort()); setWTime('') } }}>+ Add</button>
-              </div>
             </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '.84rem', marginBottom: 8 }}>Walkthrough Times</div>
+            <div className="flex gap-2">
+              <TextInput type="time" sizing="sm" value={wTime} onChange={e => setWTime(e.target.value)} className="font-mono" />
+              <Button size="xs" onClick={() => { if (wTime && !ws.includes(wTime)) { setWs([...ws, wTime].sort()); setWTime('') } }}>+ Add</Button>
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Walkthrough Times</p>
+            <div className="space-y-1.5 mb-2">
               {wk.map((t, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: '.82rem', flex: 1 }}>{t}</span>
-                  <button onClick={() => setWk(wk.filter((_, j) => j !== i))} style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: 4, padding: '2px 7px', cursor: 'pointer', fontSize: '.78rem' }}>×</button>
+                <div key={i} className="flex items-center gap-2">
+                  <span className="font-mono text-xs flex-1 text-gray-700 dark:text-gray-300">{t}</span>
+                  <button onClick={() => setWk(wk.filter((_, j) => j !== i))} className="text-xs bg-red-50 border-0 text-red-600 hover:bg-red-100 rounded px-1.5 py-0.5 cursor-pointer dark:bg-red-900/30 dark:text-red-400">×</button>
                 </div>
               ))}
-              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                <input type="time" value={wkTime} onChange={e => setWkTime(e.target.value)} style={{ fontFamily: 'var(--mono)', fontSize: '.84rem', padding: '4px 8px', border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none' }} />
-                <button className="btn-add btn-add-b" onClick={() => { if (wkTime && !wk.includes(wkTime)) { setWk([...wk, wkTime].sort()); setWkTime('') } }}>+ Add</button>
-              </div>
+            </div>
+            <div className="flex gap-2">
+              <TextInput type="time" sizing="sm" value={wkTime} onChange={e => setWkTime(e.target.value)} className="font-mono" />
+              <Button size="xs" onClick={() => { if (wkTime && !wk.includes(wkTime)) { setWk([...wk, wkTime].sort()); setWkTime('') } }}>+ Add</Button>
             </div>
           </div>
         </div>
-      </div>
+      </Section>
     </div>
   )
 }
@@ -1353,27 +1364,18 @@ function ShiftTimes({ settings, onSave, saving }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Shift Times</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Shift Times'}</button>
-          </div>
+      <Section title="Shift Times" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Shift Times'}</Button></>}>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div><Label htmlFor="sh-day" className="mb-1 block">Day Start</Label><TextInput id="sh-day" type="time" value={day} onChange={e => setDay(e.target.value)} /></div>
+          <div><Label htmlFor="sh-swing" className="mb-1 block">Swing Start</Label><TextInput id="sh-swing" type="time" value={swing} onChange={e => setSwing(e.target.value)} /></div>
+          <div><Label htmlFor="sh-grave" className="mb-1 block">Grave Start</Label><TextInput id="sh-grave" type="time" value={grave} onChange={e => setGrave(e.target.value)} /></div>
         </div>
-        <div className="section-body">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 16 }}>
-            <div className="field"><label>Day Start</label><input type="time" value={day} onChange={e => setDay(e.target.value)} /></div>
-            <div className="field"><label>Swing Start</label><input type="time" value={swing} onChange={e => setSwing(e.target.value)} /></div>
-            <div className="field"><label>Grave Start</label><input type="time" value={grave} onChange={e => setGrave(e.target.value)} /></div>
-          </div>
-          <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: 6, padding: '10px 14px', fontSize: '.82rem' }}>
-            <div style={{ marginBottom: 4 }}><strong>Day:</strong> {day} – end computed 30 min before Swing</div>
-            <div style={{ marginBottom: 4 }}><strong>Swing:</strong> {swing} – end computed 30 min before Grave</div>
-            <div><strong>Grave:</strong> {grave} – end computed 30 min before Day</div>
-          </div>
+        <div className="text-sm bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2.5 space-y-1 dark:bg-gray-700/50 dark:border-gray-600 dark:text-gray-300">
+          <div><strong>Day:</strong> {day} – end computed 30 min before Swing</div>
+          <div><strong>Swing:</strong> {swing} – end computed 30 min before Grave</div>
+          <div><strong>Grave:</strong> {grave} – end computed 30 min before Day</div>
         </div>
-      </div>
+      </Section>
     </div>
   )
 }
@@ -1415,36 +1417,31 @@ function DisplaySettings({ settings, onSave, saving }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Feature Visibility</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Feature Settings'}</button>
-          </div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 12 }}>Uncheck any feature your facility does not use — it will be hidden for all staff. Core tabs (Clients, Report, Archive) and Clinical section features are managed separately via permissions.</p>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontWeight: 700, fontSize: '.84rem', marginBottom: 8 }}>Navigation Tabs</div>
+      <Section title="Feature Visibility" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Feature Settings'}</Button></>}>
+        <p className="text-xs text-gray-400 mb-3 dark:text-gray-500">Uncheck any feature your facility does not use — it will be hidden for all staff. Core tabs (Clients, Report, Archive) and Clinical section features are managed separately via permissions.</p>
+        <div className="mb-4">
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Navigation Tabs</p>
+          <div className="space-y-2">
             {TAB_OPTS.map(t => (
-              <label key={t.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', fontSize: '.84rem' }}>
-                <input type="checkbox" checked={vis.tabs?.[t.key] !== false} onChange={e => setTab(t.key, e.target.checked)} />
-                {t.label}
-              </label>
-            ))}
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '.84rem', marginBottom: 8 }}>Header Toolbar Buttons</div>
-            {BTN_OPTS.map(b => (
-              <label key={b.key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, cursor: 'pointer', fontSize: '.84rem' }}>
-                <input type="checkbox" checked={vis.buttons?.[b.key] !== false} onChange={e => setBtn(b.key, e.target.checked)} />
-                {b.label}
-              </label>
+              <div key={t.key} className="flex items-center gap-2">
+                <Checkbox id={`tab-${t.key}`} checked={vis.tabs?.[t.key] !== false} onChange={e => setTab(t.key, e.target.checked)} />
+                <Label htmlFor={`tab-${t.key}`} className="cursor-pointer">{t.label}</Label>
+              </div>
             ))}
           </div>
         </div>
-      </div>
+        <div>
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Header Toolbar Buttons</p>
+          <div className="space-y-2">
+            {BTN_OPTS.map(b => (
+              <div key={b.key} className="flex items-center gap-2">
+                <Checkbox id={`btn-${b.key}`} checked={vis.buttons?.[b.key] !== false} onChange={e => setBtn(b.key, e.target.checked)} />
+                <Label htmlFor={`btn-${b.key}`} className="cursor-pointer">{b.label}</Label>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
     </div>
   )
 }
@@ -1478,34 +1475,26 @@ function WalkAreas({ settings, onSave, saving }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Walkthrough Areas</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Locations'}</button>
-          </div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 10 }}>Drag ⠿ to reorder</p>
+      <Section title="Walkthrough Areas" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Locations'}</Button></>}>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Drag ⠿ to reorder</p>
+        <div className="mb-3">
           {areas.map((a, i) => (
-            <div key={i} draggable style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--line)', cursor: 'default' }}
-              onDragStart={e => onDragStart(e, i)} onDragOver={e => onDragOver(e, i)} onDrop={onDrop}>
-              <span style={{ cursor: 'grab', color: '#94a3b8' }}>⠿</span>
-              <span style={{ flex: 1, fontSize: '.84rem' }}>{a}</span>
+            <div key={i} draggable
+              onDragStart={e => onDragStart(e, i)} onDragOver={e => onDragOver(e, i)} onDrop={onDrop}
+              className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0 dark:border-gray-700">
+              <span className="cursor-grab text-gray-400">⠿</span>
+              <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{a}</span>
               <button onClick={() => setAreas(areas.filter((_, j) => j !== i))}
-                style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: '.78rem' }}>×</button>
+                className="text-xs bg-red-50 border-0 text-red-600 hover:bg-red-100 rounded px-2 py-0.5 cursor-pointer dark:bg-red-900/30 dark:text-red-400">×</button>
             </div>
           ))}
-          <div style={{ display: 'flex', gap: 7, marginTop: 12 }}>
-            <input type="text" value={newArea} onChange={e => setNewArea(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addArea()}
-              placeholder="New location (e.g. Rooftop Deck)"
-              style={{ flex: 1, fontFamily: 'var(--sans)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none' }} />
-            <button className="btn-add btn-add-b" onClick={addArea}>+ Add</button>
-          </div>
         </div>
-      </div>
+        <div className="flex gap-2">
+          <TextInput value={newArea} onChange={e => setNewArea(e.target.value)} onKeyDown={e => e.key === 'Enter' && addArea()}
+            placeholder="New location (e.g. Rooftop Deck)" sizing="sm" className="flex-1" />
+          <Button size="sm" onClick={addArea}>+ Add</Button>
+        </div>
+      </Section>
     </div>
   )
 }
@@ -1539,34 +1528,26 @@ function UAPanelSettings({ settings, onSave, saving }) {
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>UA Panel</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            {saved && <SaveMsg ok />}
-            <button className="btn btn-sm btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save Panel'}</button>
-          </div>
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize: '.76rem', color: '#94a3b8', marginBottom: 10 }}>Substances shown in the UA modal. Drag ⠿ to reorder.</p>
+      <Section title="UA Panel" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Panel'}</Button></>}>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Substances shown in the UA modal. Drag ⠿ to reorder.</p>
+        <div className="mb-3">
           {panel.map((item, i) => (
-            <div key={i} draggable style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--line)', cursor: 'default' }}
-              onDragStart={e => onDragStart(e, i)} onDragOver={e => onDragOver(e, i)} onDrop={onDrop}>
-              <span style={{ cursor: 'grab', color: '#94a3b8' }}>⠿</span>
-              <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, fontSize: '.84rem', flex: 1 }}>{item}</span>
+            <div key={i} draggable
+              onDragStart={e => onDragStart(e, i)} onDragOver={e => onDragOver(e, i)} onDrop={onDrop}
+              className="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0 dark:border-gray-700">
+              <span className="cursor-grab text-gray-400">⠿</span>
+              <span className="font-mono font-bold text-sm flex-1 text-gray-700 dark:text-gray-300">{item}</span>
               <button onClick={() => setPanel(panel.filter((_, j) => j !== i))}
-                style={{ background: '#fee2e2', border: 'none', color: '#dc2626', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: '.78rem' }}>×</button>
+                className="text-xs bg-red-50 border-0 text-red-600 hover:bg-red-100 rounded px-2 py-0.5 cursor-pointer dark:bg-red-900/30 dark:text-red-400">×</button>
             </div>
           ))}
-          <div style={{ display: 'flex', gap: 7, marginTop: 12 }}>
-            <input type="text" value={code} onChange={e => setCode(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && addItem()}
-              placeholder="Code (e.g. ETG)"
-              style={{ width: 120, fontFamily: 'var(--mono)', fontSize: '.88rem', padding: '7px 10px', border: '1.5px solid var(--line)', borderRadius: 6, outline: 'none' }} />
-            <button className="btn-add btn-add-b" onClick={addItem}>+ Add</button>
-          </div>
         </div>
-      </div>
+        <div className="flex gap-2">
+          <TextInput value={code} onChange={e => setCode(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && addItem()}
+            placeholder="Code (e.g. ETG)" sizing="sm" className="w-28 font-mono" />
+          <Button size="sm" onClick={addItem}>+ Add</Button>
+        </div>
+      </Section>
     </div>
   )
 }
@@ -1591,22 +1572,22 @@ function FacilityReset() {
 
   return (
     <div>
-      <div className="section" style={{ border: '2px solid #dc2626' }}>
-        <div className="section-head" style={{ background: '#dc2626' }}>
-          <div className="sh-left" style={{ color: '#fff' }}><span className="sh-dot" style={{ background: '#fff' }} /><span style={{ color: '#fff' }}>Reset Roster</span></div>
+      <div className="mb-5 border-2 border-red-600 rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 bg-red-600">
+          <span className="w-2 h-2 rounded-full bg-white/80 shrink-0" />
+          <span className="text-sm font-semibold text-white">Reset Roster</span>
         </div>
-        <div className="section-body">
-          <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 12 }}>
+        <div className="p-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
             This permanently wipes all residents and rooms. Shift reports are preserved. Use Bulk Import to reconfigure after reset.
           </p>
-          {msg && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: '.82rem', marginBottom: 10, background: msg.startsWith('✓') ? '#dcfce7' : '#fee2e2', color: msg.startsWith('✓') ? '#15803d' : '#991b1b' }}>{msg}</div>}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-            <input type="text" value={confirm} onChange={e => setConfirm(e.target.value)}
-              placeholder="Type RESET to confirm" maxLength={10}
-              style={{ width: 180, padding: '7px 10px', border: '2px solid var(--line)', borderRadius: 6, fontFamily: 'var(--mono)', fontSize: '.88rem', outline: 'none' }} />
-            <button className="btn btn-sm btn-red" onClick={doReset} disabled={busy || confirm !== 'RESET'}>
-              ⚠ Wipe Roster & Reset
-            </button>
+          {msg && <Alert color={msg.startsWith('✓') ? 'success' : 'failure'} className="mb-3">{msg}</Alert>}
+          <div className="flex gap-3 items-center">
+            <TextInput value={confirm} onChange={e => setConfirm(e.target.value)}
+              placeholder="Type RESET to confirm" maxLength={10} className="w-48 font-mono" />
+            <Button color="failure" size="sm" onClick={doReset} disabled={busy || confirm !== 'RESET'}>
+              ⚠ Wipe Roster &amp; Reset
+            </Button>
           </div>
         </div>
       </div>
@@ -1631,13 +1612,6 @@ const AUDIT_CATS = [
   { value: 'user,group', label: 'Admin' },
   { value: 'server', label: 'Server' },
 ]
-
-const ACT_COLORS = {
-  'auth': '#2563eb', 'report': '#059669', 'log': '#059669', 'status': '#7c3aed',
-  'client': '#c2410c', 'passes': '#b45309', 'mail': '#0891b2', 'staff': '#475569',
-  'ua': '#dc2626', 'facility': '#9333ea', 'user': '#16a34a', 'group': '#16a34a',
-  'server': '#dc2626',
-}
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -1701,107 +1675,91 @@ function AuditLogTab() {
     catch { return s }
   }
 
-  function actionColor(action) {
-    const prefix = (action || '').split('.')[0]
-    return ACT_COLORS[prefix] || '#64748b'
-  }
-
   const totalPages = Math.ceil(total / LIMIT)
 
   return (
     <div>
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Audit Log</span></div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.78rem', color: '#94a3b8' }}>{total} entries</span>
-            <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }} onClick={exportCSV}>⬇ Export CSV</button>
-          </div>
-        </div>
+      <Section title="Audit Log" noPad
+        right={<><span className="font-mono text-xs text-gray-400">{total} entries</span><Button size="xs" color="light" onClick={exportCSV}>⬇ Export CSV</Button></>}>
 
         {/* Category chips */}
-        <div style={{ display: 'flex', gap: 5, padding: '10px 14px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap' }}>
+        <div className="flex gap-1.5 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex-wrap">
           {AUDIT_CATS.map(c => (
             <button key={c.value} onClick={() => { setCat(c.value); setPage(0) }}
-              style={{
-                padding: '4px 12px', borderRadius: 20, fontSize: '.74rem', fontWeight: 700,
-                border: '1.5px solid', cursor: 'pointer', transition: 'all .15s',
-                borderColor: cat === c.value ? 'var(--crimson)' : 'var(--line)',
-                background: cat === c.value ? 'var(--crimson)' : 'transparent',
-                color: cat === c.value ? '#fff' : 'var(--steel)',
-              }}>{c.label}</button>
+              className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${
+                cat === c.value
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-transparent text-gray-600 border-gray-300 hover:bg-gray-100 dark:text-gray-400 dark:border-gray-600 dark:hover:bg-gray-700'
+              }`}>{c.label}</button>
           ))}
         </div>
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--line)', flexWrap: 'wrap', alignItems: 'center' }}>
-          <select value={actorId} onChange={e => { setActorId(e.target.value); setPage(0) }}
-            style={{ fontSize: '.8rem', padding: '5px 10px', border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none', background: '#fff' }}>
+        <div className="flex gap-2 px-4 py-2.5 border-b border-gray-200 dark:border-gray-700 flex-wrap items-center">
+          <Select sizing="sm" value={actorId} onChange={e => { setActorId(e.target.value); setPage(0) }}>
             <option value="">All Users</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.displayName || u.display_name} ({u.username})</option>)}
-          </select>
-          <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(0) }}
-            style={{ fontSize: '.8rem', padding: '5px 8px', border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none' }} />
-          <span style={{ fontSize: '.8rem', color: '#94a3b8' }}>to</span>
-          <input type="date" value={to} onChange={e => { setTo(e.target.value); setPage(0) }}
-            style={{ fontSize: '.8rem', padding: '5px 8px', border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none' }} />
-          <input type="text" placeholder="🔍 Search user, action, target…" value={search}
-            onChange={e => { setSearch(e.target.value); setPage(0) }}
-            style={{ fontSize: '.8rem', padding: '5px 10px', border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none', flex: 1, minWidth: 180 }} />
-          <button className="btn btn-sm" style={{ background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)' }}
-            onClick={() => { setCat(''); setActorId(''); setFrom(''); setTo(''); setSearch(''); setPage(0) }}>Clear</button>
+          </Select>
+          <TextInput sizing="sm" type="date" value={from} onChange={e => { setFrom(e.target.value); setPage(0) }} />
+          <span className="text-xs text-gray-400">to</span>
+          <TextInput sizing="sm" type="date" value={to} onChange={e => { setTo(e.target.value); setPage(0) }} />
+          <TextInput sizing="sm" placeholder="🔍 Search user, action, target…" value={search}
+            onChange={e => { setSearch(e.target.value); setPage(0) }} className="flex-1 min-w-44" />
+          <Button size="xs" color="light" onClick={() => { setCat(''); setActorId(''); setFrom(''); setTo(''); setSearch(''); setPage(0) }}>Clear</Button>
         </div>
 
-        <div className="section-body" style={{ padding: 0 }}>
-          {loading ? <div className="empty-state">Loading…</div> : rows.length === 0 ? (
-            <div className="empty-state">No audit entries found.</div>
-          ) : (
-            <div className="roster-wrap">
-              <table>
-                <thead>
-                  <tr><th style={{ width: 140 }}>Time</th><th style={{ width: 120 }}>User</th><th style={{ width: 110 }}>IP</th><th style={{ width: 160 }}>Action</th><th style={{ width: 180 }}>Target</th><th>Detail</th></tr>
-                </thead>
-                <tbody>
+        {loading ? <p className="text-sm text-gray-400 py-8 text-center dark:text-gray-500">Loading…</p>
+          : rows.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center dark:text-gray-500">No audit entries found.</p>
+          : (
+            <div className="overflow-x-auto">
+              <Table hoverable>
+                <TableHead>
+                  <TableHeadCell className="w-36">Time</TableHeadCell>
+                  <TableHeadCell className="w-28">User</TableHeadCell>
+                  <TableHeadCell className="w-28">IP</TableHeadCell>
+                  <TableHeadCell className="w-40">Action</TableHeadCell>
+                  <TableHeadCell className="w-44">Target</TableHeadCell>
+                  <TableHeadCell>Detail</TableHeadCell>
+                </TableHead>
+                <TableBody>
                   {rows.map(row => (
                     <>
-                      <tr key={row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}
-                        style={{ cursor: 'pointer' }}>
-                        <td className="date-cell" style={{ whiteSpace: 'nowrap' }}>{fmtDT(row.ts)}</td>
-                        <td style={{ fontSize: '.82rem', fontWeight: 600 }}>{row.actor_name || '—'}</td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: '.75rem', color: '#94a3b8' }}>{row.ip || '—'}</td>
-                        <td>
-                          <span style={{ fontFamily: 'var(--mono)', fontSize: '.72rem', padding: '2px 7px', borderRadius: 6, fontWeight: 700, background: actionColor(row.action) + '22', color: actionColor(row.action) }}>
-                            {row.action}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '.82rem', color: '#475569' }}>{row.target_label || row.target_type || '—'}</td>
-                        <td style={{ fontSize: '.78rem', color: '#64748b', maxWidth: 220 }}>
-                          {row.detail ? <span style={{ color: '#2563eb', textDecoration: 'underline dotted' }}>View detail…</span> : ''}
-                        </td>
-                      </tr>
+                      <TableRow key={row.id} className="cursor-pointer" onClick={() => setExpanded(expanded === row.id ? null : row.id)}>
+                        <TableCell className="text-xs text-gray-500 whitespace-nowrap dark:text-gray-400">{fmtDT(row.ts)}</TableCell>
+                        <TableCell className="text-sm font-semibold text-gray-800 dark:text-white">{row.actor_name || '—'}</TableCell>
+                        <TableCell className="font-mono text-xs text-gray-400">{row.ip || '—'}</TableCell>
+                        <TableCell>
+                          <span className={`font-mono text-[11px] px-1.5 py-0.5 rounded font-bold ${actionBadgeCls(row.action)}`}>{row.action}</span>
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600 dark:text-gray-400">{row.target_label || row.target_type || '—'}</TableCell>
+                        <TableCell className="text-xs text-gray-500 max-w-[200px]">
+                          {row.detail ? <span className="text-blue-600 underline decoration-dotted dark:text-blue-400">View detail…</span> : ''}
+                        </TableCell>
+                      </TableRow>
                       {expanded === row.id && row.detail && (
-                        <tr key={`${row.id}-exp`}>
-                          <td colSpan={6} style={{ background: '#f8fafc', padding: '8px 14px' }}>
-                            <pre style={{ margin: 0, fontFamily: 'var(--mono)', fontSize: '.76rem', color: '#334155', whiteSpace: 'pre-wrap' }}>{fmtDetail(row.detail)}</pre>
-                          </td>
-                        </tr>
+                        <TableRow key={`${row.id}-exp`}>
+                          <TableCell colSpan={6} className="bg-gray-50 dark:bg-gray-700/50 py-2 px-4">
+                            <pre className="font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap m-0">{fmtDetail(row.detail)}</pre>
+                          </TableCell>
+                        </TableRow>
                       )}
                     </>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
-          )}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', fontSize: '.82rem', borderTop: '1px solid var(--line)' }}>
-              <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
-              <span style={{ color: '#475569' }}>{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total} entries</span>
-              <button className="btn btn-sm" style={{ background: 'var(--bg)', color: 'var(--steel)', border: '1px solid var(--line)' }} disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</button>
-            </div>
-          )}
-          {rows.length > 0 && <div style={{ padding: '6px 14px', fontSize: '.72rem', color: '#94a3b8', borderTop: '1px solid var(--line)' }}>Click a detail cell to expand it</div>}
-        </div>
-      </div>
+          )
+        }
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-3 px-4 py-2.5 text-sm border-t border-gray-200 dark:border-gray-700">
+            <Button size="xs" color="light" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</Button>
+            <span className="text-gray-500 dark:text-gray-400">{page * LIMIT + 1}–{Math.min((page + 1) * LIMIT, total)} of {total} entries</span>
+            <Button size="xs" color="light" disabled={page + 1 >= totalPages} onClick={() => setPage(p => p + 1)}>Next →</Button>
+          </div>
+        )}
+        {rows.length > 0 && <p className="text-[11px] text-gray-400 px-4 py-1.5 border-t border-gray-100 dark:border-gray-700">Click a row to expand detail</p>}
+      </Section>
     </div>
   )
 }
@@ -1982,188 +1940,172 @@ function SystemTab() {
   return (
     <div>
       {/* Central / HQ Connection */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Central / HQ Connection</span></div>
-          {central?.connected && !cBusy && <button className="btn btn-sm" onClick={centralCheckin}>Check in now</button>}
-        </div>
-        <div className="section-body">
-          <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 14 }}>
-            Link this facility to your central OpsPoint (HQ) server for off-site backup and org-wide reporting. The facility keeps running normally if HQ is unreachable.
-          </p>
-          {cErr && <div className="auth-error" style={{ marginBottom: 12 }}>{cErr}</div>}
-          {cMsg && <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: '.82rem', marginBottom: 12, background: '#dcfce7', color: '#15803d' }}>{cMsg}</div>}
+      <Section title="Central / HQ Connection"
+        right={central?.connected && !cBusy ? <Button size="xs" color="light" onClick={centralCheckin}>Check in now</Button> : null}>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Link this facility to your central OpsPoint (HQ) server for off-site backup and org-wide reporting. The facility keeps running normally if HQ is unreachable.
+        </p>
+        {cErr && <Alert color="failure" className="mb-3">{cErr}</Alert>}
+        {cMsg && <Alert color="success" className="mb-3">{cMsg}</Alert>}
 
-          {central?.connected ? (
-            <div style={{ padding: '12px 14px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <span style={{ fontWeight: 800, color: '#065f46' }}>Connected to HQ</span>
-                <Chip2 bg={central.last_status === 'connected' ? '#dcfce7' : '#fee2e2'} fg={central.last_status === 'connected' ? '#15803d' : '#991b1b'}>{central.last_status || 'unknown'}</Chip2>
-              </div>
-              <div style={{ fontSize: '.82rem', color: '#334155', lineHeight: 1.9 }}>
-                <div><strong>HQ URL:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.url}</span></div>
-                <div><strong>Facility ID:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.facility_id}</span></div>
-                <div><strong>Key:</strong> <span style={{ fontFamily: 'var(--mono)' }}>{central.key_prefix}…</span></div>
-                <div><strong>Last check-in:</strong> {central.last_checkin || 'never'}</div>
-                <div><strong>Backup:</strong> {central.pending > 0 ? (central.pending + ' change(s) pending') : 'up to date'}{central.last_sync ? ' · last synced ' + central.last_sync : ''}</div>
-                {central.target_version
-                  ? <div><strong>HQ target version:</strong> v{central.target_version}{central.update_available
-                      ? <span style={{ color: '#b45309' }}> — you're on v{central.current_version}; use Software Updates above</span>
-                      : <span style={{ color: '#15803d' }}> ✓ up to date</span>}</div>
-                  : null}
-                {central.sync_error && <div style={{ color: '#b91c1c' }}>Sync error: {central.sync_error}</div>}
-                {central.insecure && <div style={{ color: '#b45309' }}>⚠ TLS verification disabled for HQ</div>}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button className="btn btn-sm" onClick={centralCheckin} disabled={cBusy}>Check in now</button>
-                <button className="btn btn-sm btn-primary" onClick={centralSyncNow} disabled={cBusy}>Sync now</button>
-                <button className="btn btn-sm btn-red" onClick={centralDisconnect} disabled={cBusy}>Disconnect</button>
-              </div>
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #a7f3d0' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.86rem', fontWeight: 600, color: '#334155' }}>
-                  <input type="checkbox" checked={!!central.manages_users} disabled={cBusy} onChange={e => centralToggleUsers(e.target.checked)} style={{ width: 'auto' }} />
-                  Let HQ manage user accounts for this facility
-                </label>
-                <div className="dim" style={{ margin: '6px 0 0 24px' }}>
-                  {central.manages_users
-                    ? <>HQ-provisioned accounts: <strong>{central.users_count || 0}</strong>{central.users_last_pull ? ' · last pulled ' + central.users_last_pull : ''}
-                        <div style={{ marginTop: 8 }}><button className="btn btn-sm" onClick={centralPullUsers} disabled={cBusy}>Pull users now</button></div></>
-                    : 'Off — this facility manages its own accounts. Your local admin always stays in control.'}
-                </div>
-              </div>
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #a7f3d0' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.86rem', fontWeight: 600, color: '#334155' }}>
-                  <input type="checkbox" checked={!!central.auto_update} disabled={cBusy} onChange={e => centralSetAuto(e.target.checked, cWindow)} style={{ width: 'auto' }} />
-                  Auto-apply HQ rollout updates
-                </label>
-                <div className="dim" style={{ margin: '6px 0 0 24px' }}>
-                  {central.auto_update
-                    ? <>This facility installs HQ-staged updates automatically (verified + signed), then auto-rolls-back a failed boot.
-                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span>Maintenance window:</span>
-                          <input value={cWindow} onChange={e => setCWindow(e.target.value)} placeholder="HH:MM-HH:MM (empty = anytime)" style={{ width: 200 }} />
-                          <button className="btn btn-sm" onClick={() => centralSetAuto(true, cWindow)} disabled={cBusy}>Save window</button>
-                        </div>
-                        <div style={{ marginTop: 4 }}>{central.update_window ? ('Applies only between ' + central.update_window) : 'Applies anytime HQ releases to this facility.'}</div></>
-                    : 'Off — updates wait for an admin to click Install above. Turn on for hands-off HQ rollouts.'}
-                </div>
-              </div>
+        {central?.connected ? (
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="font-bold text-emerald-900 dark:text-emerald-300">Connected to HQ</span>
+              <Badge color={central.last_status === 'connected' ? 'success' : 'failure'}>{central.last_status || 'unknown'}</Badge>
             </div>
-          ) : (
-            <div style={{ maxWidth: 460 }}>
-              <div className="field"><label>HQ server URL</label>
-                <input placeholder="https://hq.example.org:4000" value={cForm.url} onChange={e => setCForm(f => ({ ...f, url: e.target.value }))} /></div>
-              <div className="field"><label>Facility ID</label>
-                <input placeholder="from the HQ console" value={cForm.facility_id} onChange={e => setCForm(f => ({ ...f, facility_id: e.target.value }))} /></div>
-              <div className="field"><label>Enrollment key</label>
-                <input type="password" placeholder="one-time key from HQ" value={cForm.api_key} onChange={e => setCForm(f => ({ ...f, api_key: e.target.value }))} /></div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '.82rem', color: '#475569', margin: '4px 0 12px' }}>
-                <input type="checkbox" checked={cForm.insecure} onChange={e => setCForm(f => ({ ...f, insecure: e.target.checked }))} style={{ width: 'auto' }} />
-                Allow self-signed TLS cert on HQ (trusted networks only)
+            <div className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+              <div><strong>HQ URL:</strong> <code className="font-mono">{central.url}</code></div>
+              <div><strong>Facility ID:</strong> <code className="font-mono">{central.facility_id}</code></div>
+              <div><strong>Key:</strong> <code className="font-mono">{central.key_prefix}…</code></div>
+              <div><strong>Last check-in:</strong> {central.last_checkin || 'never'}</div>
+              <div><strong>Backup:</strong> {central.pending > 0 ? `${central.pending} change(s) pending` : 'up to date'}{central.last_sync ? ` · last synced ${central.last_sync}` : ''}</div>
+              {central.target_version && (
+                <div><strong>HQ target version:</strong> v{central.target_version}
+                  {central.update_available
+                    ? <span className="text-amber-600 dark:text-amber-400"> — you're on v{central.current_version}; use Software Updates above</span>
+                    : <span className="text-emerald-600 dark:text-emerald-400"> ✓ up to date</span>}
+                </div>
+              )}
+              {central.sync_error && <div className="text-red-700 dark:text-red-400">Sync error: {central.sync_error}</div>}
+              {central.insecure && <div className="text-amber-600 dark:text-amber-400">⚠ TLS verification disabled for HQ</div>}
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button size="xs" color="light" onClick={centralCheckin} disabled={cBusy}>Check in now</Button>
+              <Button size="xs" onClick={centralSyncNow} disabled={cBusy}>Sync now</Button>
+              <Button size="xs" color="failure" onClick={centralDisconnect} disabled={cBusy}>Disconnect</Button>
+            </div>
+            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 cursor-pointer">
+                <Checkbox checked={!!central.manages_users} disabled={cBusy} onChange={e => centralToggleUsers(e.target.checked)} />
+                Let HQ manage user accounts for this facility
               </label>
-              <button className="btn btn-sm btn-primary" onClick={centralConnect} disabled={cBusy}>{cBusy ? 'Connecting…' : 'Connect to HQ'}</button>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 ml-6">
+                {central.manages_users
+                  ? <>HQ-provisioned accounts: <strong>{central.users_count || 0}</strong>{central.users_last_pull ? ` · last pulled ${central.users_last_pull}` : ''}
+                      <div className="mt-2"><Button size="xs" color="light" onClick={centralPullUsers} disabled={cBusy}>Pull users now</Button></div></>
+                  : 'Off — this facility manages its own accounts. Your local admin always stays in control.'}
+              </div>
             </div>
-          )}
-        </div>
-      </div>
+            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
+              <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 cursor-pointer">
+                <Checkbox checked={!!central.auto_update} disabled={cBusy} onChange={e => centralSetAuto(e.target.checked, cWindow)} />
+                Auto-apply HQ rollout updates
+              </label>
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-1.5 ml-6">
+                {central.auto_update
+                  ? <>This facility installs HQ-staged updates automatically (verified + signed), then auto-rolls-back a failed boot.
+                      <div className="flex items-center gap-2 flex-wrap mt-2">
+                        <span>Maintenance window:</span>
+                        <TextInput sizing="xs" value={cWindow} onChange={e => setCWindow(e.target.value)} placeholder="HH:MM-HH:MM (empty = anytime)" className="w-52" />
+                        <Button size="xs" color="light" onClick={() => centralSetAuto(true, cWindow)} disabled={cBusy}>Save window</Button>
+                      </div>
+                      <div className="mt-1">{central.update_window ? `Applies only between ${central.update_window}` : 'Applies anytime HQ releases to this facility.'}</div>
+                    </>
+                  : 'Off — updates wait for an admin to click Install above. Turn on for hands-off HQ rollouts.'}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-md space-y-3">
+            <div><Label htmlFor="hq-url" className="mb-1 block">HQ server URL</Label>
+              <TextInput id="hq-url" placeholder="https://hq.example.org:4000" value={cForm.url} onChange={e => setCForm(f => ({ ...f, url: e.target.value }))} /></div>
+            <div><Label htmlFor="hq-fid" className="mb-1 block">Facility ID</Label>
+              <TextInput id="hq-fid" placeholder="from the HQ console" value={cForm.facility_id} onChange={e => setCForm(f => ({ ...f, facility_id: e.target.value }))} /></div>
+            <div><Label htmlFor="hq-key" className="mb-1 block">Enrollment key</Label>
+              <TextInput id="hq-key" type="password" placeholder="one-time key from HQ" value={cForm.api_key} onChange={e => setCForm(f => ({ ...f, api_key: e.target.value }))} /></div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="hq-insecure" checked={cForm.insecure} onChange={e => setCForm(f => ({ ...f, insecure: e.target.checked }))} />
+              <Label htmlFor="hq-insecure" className="cursor-pointer text-sm">Allow self-signed TLS cert on HQ (trusted networks only)</Label>
+            </div>
+            <Button size="sm" onClick={centralConnect} isProcessing={cBusy} disabled={cBusy}>{cBusy ? 'Connecting…' : 'Connect to HQ'}</Button>
+          </div>
+        )}
+      </Section>
 
       {/* Software Updates */}
-      <div className="section">
-        <div className="section-head">
-          <div className="sh-left"><span className="sh-dot" /><span>Software Updates</span></div>
-          {!busy && <button className="btn btn-sm" onClick={check} disabled={checking}>{checking ? 'Checking…' : 'Check for Updates'}</button>}
+      <Section title="Software Updates"
+        right={!busy ? <Button size="xs" color="light" onClick={check} isProcessing={checking} disabled={checking}>{checking ? 'Checking…' : 'Check for Updates'}</Button> : null}>
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <span className="text-sm text-gray-500 dark:text-gray-400">Current version</span>
+          <span className="font-mono font-bold text-gray-800 dark:text-white">v{cur}</span>
+          {upd?.lastChecked && <span className="text-xs text-gray-400">· checked {new Date(upd.lastChecked).toLocaleString()}</span>}
         </div>
-        <div className="section-body">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '.82rem', color: '#64748b' }}>Current version</span>
-            <span style={{ fontFamily: 'var(--mono)', fontWeight: 700 }}>v{cur}</span>
-            {upd?.lastChecked && <span style={{ fontSize: '.72rem', color: '#94a3b8' }}>· checked {new Date(upd.lastChecked).toLocaleString()}</span>}
-          </div>
 
-          {checkErr && <div className="auth-error" style={{ marginBottom: 12 }}>{checkErr}</div>}
+        {checkErr && <Alert color="failure" className="mb-3">{checkErr}</Alert>}
 
-          {progress && progress.phase !== 'idle' ? (
-            <div style={{ marginBottom: 4 }}>
-              {progress.phase === 'error' ? (
-                <div style={{ padding: '10px 13px', borderRadius: 8, background: '#fee2e2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '.83rem' }}>
-                  <strong>Update failed.</strong> {progress.error}
-                  <div style={{ marginTop: 8 }}><button className="btn btn-sm" onClick={() => setProgress(null)}>Dismiss</button></div>
+        {progress && progress.phase !== 'idle' ? (
+          <div className="mb-3">
+            {progress.phase === 'error' ? (
+              <Alert color="failure">
+                <p className="font-semibold">Update failed.</p>
+                <p className="text-sm mt-1">{progress.error}</p>
+                <Button size="xs" color="light" className="mt-2" onClick={() => setProgress(null)}>Dismiss</Button>
+              </Alert>
+            ) : (
+              <div className="p-3.5 rounded-xl bg-sky-50 border border-sky-200 dark:bg-sky-900/10 dark:border-sky-800">
+                <div className="flex justify-between text-sm text-sky-700 dark:text-sky-300 mb-2">
+                  <span>{progress.message || progress.phase}</span>
+                  <span>{progress.pct || 0}%</span>
                 </div>
-              ) : (
-                <div style={{ padding: '12px 14px', borderRadius: 8, background: '#f0f9ff', border: '1px solid #bae6fd' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '.82rem', color: '#075985', marginBottom: 7 }}>
-                    <span>{progress.message || progress.phase}</span><span>{progress.pct || 0}%</span>
-                  </div>
-                  <div style={{ height: 7, background: '#e0f2fe', borderRadius: 99, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: (progress.pct || 0) + '%', background: '#0ea5e9', transition: 'width .4s' }} />
-                  </div>
-                  {busy && <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 7 }}>Do not close this window. The server will restart automatically.</div>}
+                <div className="h-1.5 bg-sky-100 rounded-full overflow-hidden dark:bg-sky-900/30">
+                  <div style={{ width: `${progress.pct || 0}%` }} className="h-full bg-sky-500 transition-[width] duration-300" />
                 </div>
-              )}
-            </div>
-          ) : available ? (
-            <div style={{ padding: '12px 14px', borderRadius: 8, background: '#ecfdf5', border: '1px solid #a7f3d0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontWeight: 800, color: '#065f46' }}>Update available — v{upd.latest}</span>
-                {upd.mandatory && <Chip2 bg="#fee2e2" fg="#991b1b">Required</Chip2>}
+                {busy && <p className="text-xs text-gray-400 mt-2">Do not close this window. The server will restart automatically.</p>}
               </div>
-              {Array.isArray(upd.changelog) && upd.changelog.length > 0 && (
-                <ul style={{ margin: '6px 0 10px', paddingLeft: 18, fontSize: '.82rem', color: '#334155' }}>
-                  {upd.changelog.slice(0, 8).map((c, i) => <li key={i} style={{ marginBottom: 2 }}>{c}</li>)}
-                </ul>
-              )}
-              {!confirming
-                ? <button className="btn btn-sm btn-primary" onClick={() => setConfirming(true)}>Download &amp; Install</button>
-                : (
-                  <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 8, padding: 12 }}>
-                    <div style={{ fontSize: '.83rem', color: '#334155', marginBottom: 10 }}>
-                      This downloads and verifies v{upd.latest}, backs up the database, then <strong>restarts the server</strong> — everyone is disconnected for ~30&nbsp;seconds. Make sure no one is mid-report. Continue?
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button className="btn btn-sm btn-primary" onClick={install}>Yes, install v{upd.latest}</button>
-                      <button className="btn btn-sm" onClick={() => setConfirming(false)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
+            )}
+          </div>
+        ) : available ? (
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-bold text-emerald-900 dark:text-emerald-300">Update available — v{upd.latest}</span>
+              {upd.mandatory && <Badge color="failure">Required</Badge>}
             </div>
-          ) : (
-            upd && <div style={{ fontSize: '.84rem', color: '#15803d' }}>✓ You’re on the latest version.</div>
-          )}
-        </div>
-      </div>
+            {Array.isArray(upd.changelog) && upd.changelog.length > 0 && (
+              <ul className="list-disc pl-4 text-sm text-gray-700 dark:text-gray-300 mb-3 space-y-0.5">
+                {upd.changelog.slice(0, 8).map((c, i) => <li key={i}>{c}</li>)}
+              </ul>
+            )}
+            {!confirming
+              ? <Button size="sm" onClick={() => setConfirming(true)}>Download &amp; Install</Button>
+              : (
+                <div className="bg-white border border-gray-200 rounded-xl p-3 dark:bg-gray-800 dark:border-gray-700">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">
+                    This downloads and verifies v{upd.latest}, backs up the database, then <strong>restarts the server</strong> — everyone is disconnected for ~30&nbsp;seconds. Make sure no one is mid-report. Continue?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={install}>Yes, install v{upd.latest}</Button>
+                    <Button size="sm" color="light" onClick={() => setConfirming(false)}>Cancel</Button>
+                  </div>
+                </div>
+              )
+            }
+          </div>
+        ) : (
+          upd && <p className="text-sm text-green-600 dark:text-green-400">✓ You're on the latest version.</p>
+        )}
+      </Section>
 
       {/* Server Control */}
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Server Control</span></div></div>
-        <div className="section-body">
-          <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 14 }}>
-            Restart the OpsPoint server process. The server will shut down, respawn automatically, and all connected clients will reconnect within a few seconds.
-          </p>
-          {msg && (
-            <div style={{ padding: '8px 12px', borderRadius: 6, fontSize: '.82rem', marginBottom: 12, background: msg.startsWith('✓') ? '#dcfce7' : '#fef9c3', color: msg.startsWith('✓') ? '#15803d' : '#854d0e' }}>
-              {msg}
-            </div>
-          )}
-          <button className="btn btn-sm btn-red" onClick={restart} disabled={restarting || busy}>⚠ Restart Server</button>
-        </div>
-      </div>
+      <Section title="Server Control">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Restart the OpsPoint server process. The server will shut down, respawn automatically, and all connected clients will reconnect within a few seconds.
+        </p>
+        {msg && <Alert color={msg.startsWith('✓') ? 'success' : 'warning'} className="mb-3">{msg}</Alert>}
+        <Button color="failure" size="sm" onClick={restart} disabled={restarting || busy}>⚠ Restart Server</Button>
+      </Section>
 
       {/* Version Info */}
-      <div className="section">
-        <div className="section-head"><div className="sh-left"><span className="sh-dot" /><span>Version Info</span></div></div>
-        <div className="section-body">
-          <table style={{ fontSize: '.84rem', borderCollapse: 'collapse' }}>
-            <tbody>
-              {[['App', 'OpsPoint'], ['Version', 'v' + cur], ['Server', window.location.host], ['Protocol', window.location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP']].map(([k, v]) => (
-                <tr key={k}>
-                  <td style={{ padding: '4px 16px 4px 0', fontWeight: 700, color: '#475569' }}>{k}</td>
-                  <td style={{ fontFamily: 'var(--mono)', fontSize: '.82rem' }}>{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <Section title="Version Info">
+        <div className="space-y-2 text-sm">
+          {[['App', 'OpsPoint'], ['Version', 'v' + cur], ['Server', window.location.host], ['Protocol', window.location.protocol === 'https:' ? 'HTTPS (TLS)' : 'HTTP']].map(([k, v]) => (
+            <div key={k} className="flex gap-4">
+              <span className="font-semibold text-gray-600 w-20 shrink-0 dark:text-gray-400">{k}</span>
+              <span className="font-mono text-xs text-gray-800 dark:text-gray-200">{v}</span>
+            </div>
+          ))}
         </div>
-      </div>
+      </Section>
     </div>
   )
 }
@@ -2174,8 +2116,4 @@ function cmpVer(a, b) {
   const pb = String(b || '0').split('.').map(n => parseInt(n, 10) || 0)
   for (let i = 0; i < 3; i++) { if ((pa[i] || 0) > (pb[i] || 0)) return 1; if ((pa[i] || 0) < (pb[i] || 0)) return -1 }
   return 0
-}
-
-function Chip2({ bg, fg, children }) {
-  return <span style={{ background: bg, color: fg, fontSize: '.68rem', fontWeight: 800, padding: '1px 7px', borderRadius: 999 }}>{children}</span>
 }

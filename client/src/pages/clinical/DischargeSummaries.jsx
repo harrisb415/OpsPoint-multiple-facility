@@ -7,18 +7,17 @@ import {
 import { Header, card, btnSm, btnSmGreen, btnSmRed } from './ClinicalNotes.jsx'
 import { useConfirm } from '../../components/ui.jsx'
 
-// Nav path is /clinical/discharge, but the REST segment is discharge-summaries.
 const dapi = clinicalApi('discharge-summaries')
 
 const TYPES = [
   ['planned', 'Planned'], ['unplanned', 'Unplanned'], ['ama', 'AMA'], ['transfer', 'Transfer'], ['deceased', 'Deceased'],
 ]
-const TYPE_COLORS = {
-  planned:   ['#dcfce7', '#15803d'],
-  unplanned: ['#ffedd5', '#9a3412'],
-  ama:       ['#fee2e2', '#991b1b'],
-  transfer:  ['#dbeafe', '#1d4ed8'],
-  deceased:  ['#f1f5f9', '#475569'],
+const TYPE_CLS = {
+  planned:   'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  unplanned: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  ama:       'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  transfer:  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  deceased:  'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300',
 }
 const SECTIONS = [
   ['presenting_problem',    'Presenting Problem'],
@@ -56,31 +55,30 @@ export default function DischargeSummaries() {
       {rows.length === 0
         ? <EmptyState>No discharge summaries{filter !== 'all' ? ' for this resident' : ''} yet.</EmptyState>
         : (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div className="grid gap-2.5">
             {rows.map(d => {
-              const [tbg, tfg] = TYPE_COLORS[d.discharge_type] || TYPE_COLORS.planned
               const typeLabel = labelOf(TYPES, d.discharge_type)
               const isFinal = d.status === 'final'
               return (
-                <div key={d.id} style={card}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: '.92rem', marginBottom: 3 }}>{clientLabel(clients, d.client_id)}</div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <Chip bg={tbg} fg={tfg}>{typeLabel}</Chip>
+                <div key={d.id} className={card}>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-[.92rem] mb-0.5 text-gray-900 dark:text-white">{clientLabel(clients, d.client_id)}</div>
+                      <div className="flex gap-1.5 items-center flex-wrap">
+                        <Chip className={TYPE_CLS[d.discharge_type] || TYPE_CLS.planned}>{typeLabel}</Chip>
                         <StatusBadge status={d.status} />
-                        <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>Discharged {fmtDate(d.discharge_date)}</span>
-                        {d.discharge_to && <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>→ {d.discharge_to}</span>}
+                        <span className="text-xs text-gray-400 dark:text-gray-500">Discharged {fmtDate(d.discharge_date)}</span>
+                        {d.discharge_to && <span className="text-xs text-gray-400 dark:text-gray-500">→ {d.discharge_to}</span>}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-                      <button style={btnSm} onClick={() => setViewing(d)}>View</button>
+                    <div className="flex gap-1.5 flex-shrink-0 items-center">
+                      <button className={btnSm} onClick={() => setViewing(d)}>View</button>
                       {isFinal
                         ? <SignedLine row={d} />
                         : <>
-                            <button style={btnSm} onClick={() => setEditing(d)}>Edit</button>
-                            <button style={btnSmGreen} onClick={() => finalise(d.id)}>Finalise</button>
-                            <button style={btnSmRed} onClick={() => remove(d.id)}>Delete</button>
+                            <button className={btnSm} onClick={() => setEditing(d)}>Edit</button>
+                            <button className={btnSmGreen} onClick={() => finalise(d.id)}>Finalise</button>
+                            <button className={btnSmRed} onClick={() => remove(d.id)}>Delete</button>
                           </>}
                     </div>
                   </div>
@@ -132,35 +130,35 @@ function DischargeModal({ clients, record, onClose, onSaved, busy, setBusy }) {
   return (
     <Modal title={isEdit ? 'Edit Discharge Summary' : 'New Discharge Summary'} onClose={onClose} maxWidth={700}
       footer={<>
-        <button className="btn-cancel" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Draft'}</button>
+        <button className={btnSm} onClick={onClose}>Cancel</button>
+        <button className={btnSmGreen} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Draft'}</button>
       </>}>
-      {err && <div className="auth-error" style={{ marginBottom: 12 }}>{err}</div>}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ ...field, flex: 2, minWidth: 200 }}>
-          <label style={lbl}>Resident</label>
-          <select style={inp} value={f.client_id} disabled={isEdit} onChange={e => set('client_id', e.target.value)}>
+      {err && <div className="mb-3 p-2.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded dark:bg-red-900/20 dark:text-red-400 dark:border-red-800">{err}</div>}
+      <div className="flex gap-3 flex-wrap">
+        <div className={`${field} flex-[2] min-w-[200px]`}>
+          <label className={lbl}>Resident</label>
+          <select className={inp} value={f.client_id} disabled={isEdit} onChange={e => set('client_id', e.target.value)}>
             <option value="">Select resident…</option>
             {activeClients(clients).map(c => <option key={c.id} value={c.id}>{clientLabel(clients, c.id)}</option>)}
           </select>
         </div>
-        <div style={{ ...field, flex: 1, minWidth: 140 }}>
-          <label style={lbl}>Discharge type</label>
-          <select style={inp} value={f.discharge_type} onChange={e => set('discharge_type', e.target.value)}>
+        <div className={`${field} flex-1 min-w-[140px]`}>
+          <label className={lbl}>Discharge type</label>
+          <select className={inp} value={f.discharge_type} onChange={e => set('discharge_type', e.target.value)}>
             {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ ...field, flex: 1, minWidth: 130 }}><label style={lbl}>Admission date</label><input style={inp} type="date" value={f.admission_date} onChange={e => set('admission_date', e.target.value)} /></div>
-        <div style={{ ...field, flex: 1, minWidth: 130 }}><label style={lbl}>Discharge date</label><input style={inp} type="date" value={f.discharge_date} onChange={e => set('discharge_date', e.target.value)} /></div>
-        <div style={{ ...field, flex: 1, minWidth: 130 }}><label style={lbl}>Follow-up date</label><input style={inp} type="date" value={f.follow_up_date} onChange={e => set('follow_up_date', e.target.value)} /></div>
+      <div className="flex gap-3 flex-wrap">
+        <div className={`${field} flex-1 min-w-[130px]`}><label className={lbl}>Admission date</label><input className={inp} type="date" value={f.admission_date} onChange={e => set('admission_date', e.target.value)} /></div>
+        <div className={`${field} flex-1 min-w-[130px]`}><label className={lbl}>Discharge date</label><input className={inp} type="date" value={f.discharge_date} onChange={e => set('discharge_date', e.target.value)} /></div>
+        <div className={`${field} flex-1 min-w-[130px]`}><label className={lbl}>Follow-up date</label><input className={inp} type="date" value={f.follow_up_date} onChange={e => set('follow_up_date', e.target.value)} /></div>
       </div>
-      <div style={field}><label style={lbl}>Discharged to</label><input style={inp} value={f.discharge_to} onChange={e => set('discharge_to', e.target.value)} placeholder="e.g. Sober living, IOP, family" /></div>
+      <div className={field}><label className={lbl}>Discharged to</label><input className={inp} value={f.discharge_to} onChange={e => set('discharge_to', e.target.value)} placeholder="e.g. Sober living, IOP, family" /></div>
       {SECTIONS.map(([k, label]) => (
-        <div key={k} style={field}>
-          <label style={lbl}>{label}</label>
-          <textarea style={{ ...inp, minHeight: 70, resize: 'vertical' }} value={f[k]} onChange={e => set(k, e.target.value)} />
+        <div key={k} className={field}>
+          <label className={lbl}>{label}</label>
+          <textarea className={`${inp} min-h-[70px] resize-y`} value={f[k]} onChange={e => set(k, e.target.value)} />
         </div>
       ))}
     </Modal>
@@ -169,25 +167,24 @@ function DischargeModal({ clients, record, onClose, onSaved, busy, setBusy }) {
 
 function ViewModal({ record, clients, onClose }) {
   const typeLabel = labelOf(TYPES, record.discharge_type)
-  const [tbg, tfg] = TYPE_COLORS[record.discharge_type] || TYPE_COLORS.planned
   return (
     <Modal title="Discharge Summary" onClose={onClose} maxWidth={640}
-      footer={<button className="btn btn-primary" onClick={onClose}>Close</button>}>
-      <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <strong>{clientLabel(clients, record.client_id)}</strong>
-        <Chip bg={tbg} fg={tfg}>{typeLabel}</Chip>
+      footer={<button className={btnSm} onClick={onClose}>Close</button>}>
+      <div className="mb-2.5 flex gap-2 items-center flex-wrap">
+        <strong className="text-gray-900 dark:text-white">{clientLabel(clients, record.client_id)}</strong>
+        <Chip className={TYPE_CLS[record.discharge_type] || TYPE_CLS.planned}>{typeLabel}</Chip>
         <StatusBadge status={record.status} />
       </div>
-      <div style={{ fontSize: '.82rem', color: '#475569', marginBottom: 12, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      <div className="text-[.82rem] text-gray-500 dark:text-gray-400 mb-3 flex gap-4 flex-wrap">
         <span><strong>Admitted:</strong> {fmtDate(record.admission_date)}</span>
         <span><strong>Discharged:</strong> {fmtDate(record.discharge_date)}</span>
         {record.discharge_to && <span><strong>To:</strong> {record.discharge_to}</span>}
         {record.follow_up_date && <span><strong>Follow-up:</strong> {fmtDate(record.follow_up_date)}</span>}
       </div>
       {SECTIONS.map(([k, label]) => (
-        <div key={k} style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: '.74rem', fontWeight: 800, color: 'var(--sidebar-bg, #0a4655)', borderBottom: '2px solid var(--line, #e2e8f0)', paddingBottom: 3, marginBottom: 5 }}>{label}</div>
-          <div style={{ fontSize: '.84rem', color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{record[k] || <em style={{ color: '#cbd5e1' }}>—</em>}</div>
+        <div key={k} className="mb-3">
+          <div className="text-[.74rem] font-extrabold text-[#0a4655] dark:text-teal-300 border-b-2 border-gray-200 dark:border-gray-600 pb-0.5 mb-1.5">{label}</div>
+          <div className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">{record[k] || <em className="text-gray-300 dark:text-gray-600">—</em>}</div>
         </div>
       ))}
     </Modal>

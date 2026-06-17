@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ListChecks, CheckCircle, Users, Printer, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { Breadcrumb, BreadcrumbItem, Button, TextInput } from 'flowbite-react'
+import { Breadcrumb, BreadcrumbItem, Button, Select, TextInput } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 
@@ -280,7 +280,7 @@ export default function ChoresTab() {
       </div>
 
       {/* Weekly Chore Log */}
-      <div className={`${CARD}`} style={{ padding: 0, overflow: 'hidden' }}>
+      <div className={`${CARD} !p-0 overflow-hidden`}>
         <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Weekly Chore Log</h3>
@@ -298,32 +298,28 @@ export default function ChoresTab() {
           {fmtWeekRange(weekDays)}
         </div>
 
-        <div style={{ padding: 0 }}>
+        <div>
           {clients.length === 0 ? (
             <div className="p-8 text-sm text-center text-gray-400">No active residents.</div>
           ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ minWidth: 700 }}>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse min-w-[700px]">
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }}>Rm</th>
-                    <th>Name</th>
-                    <th style={{ minWidth: 130 }}>Assigned Chore</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium tracking-wide text-gray-500 uppercase border-b border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400 whitespace-nowrap w-10">Rm</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium tracking-wide text-gray-500 uppercase border-b border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400 whitespace-nowrap">Name</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium tracking-wide text-gray-500 uppercase border-b border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400 whitespace-nowrap min-w-[130px]">Assigned Chore</th>
                     {weekDays.map(d => {
                       const { day, date } = fmtDayHeader(d)
                       const isToday = d === today
                       return (
-                        <th key={d} className="tc" style={{
-                          minWidth: 64, background: isToday ? '#EFF6FF' : undefined,
-                          color: isToday ? '#1D4ED8' : undefined,
-                          fontWeight: isToday ? 700 : 600,
-                        }}>
+                        <th key={d} className={`px-2 py-3 text-center text-xs font-medium uppercase border-b border-gray-200 dark:border-gray-600 whitespace-nowrap min-w-[64px] ${isToday ? 'font-bold bg-[var(--chore-today-bg)] text-[var(--chore-today-text)]' : 'text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700'}`}>
                           <div>{day}</div>
-                          <div style={{ fontWeight: 400, fontSize: '.7rem', opacity: .8 }}>{date}</div>
+                          <div className="font-normal text-[.7rem] opacity-80">{date}</div>
                         </th>
                       )
                     })}
-                    <th className="tc" style={{ width: 52 }}>Done</th>
+                    <th className="px-2 py-3 text-center text-xs font-medium tracking-wide text-gray-500 uppercase border-b border-gray-200 bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-400 w-[52px]">Done</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -403,47 +399,35 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
   }).length
 
   return (
-    <tr>
-      <td className="rm">{c.room}</td>
-      <td className="name-cell">{c.name}</td>
-      <td style={{ verticalAlign: 'top', paddingTop: 7 }}>
+    <tr className="even:bg-gray-50 dark:even:bg-gray-700/20 hover:bg-[var(--teal-50)] dark:hover:bg-gray-700/40 transition-colors">
+      <td className="px-3 py-2 font-mono text-xs text-center text-gray-500 dark:text-gray-400 border-b border-gray-100 dark:border-gray-700">{c.room}</td>
+      <td className="px-3 py-2 font-semibold text-sm text-gray-900 dark:text-white border-b border-gray-100 dark:border-gray-700">{c.name}</td>
+      <td className="px-3 py-2 align-top border-b border-gray-100 dark:border-gray-700">
         {canAssign ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <select value={localChore} onChange={e => handleChoreChange(e.target.value)}
-              style={{ fontFamily: 'var(--sans)', fontSize: '.84rem', padding: '4px 8px',
-                border: '1.5px solid var(--line)', borderRadius: 5, outline: 'none',
-                background: '#fff', maxWidth: 170 }}>
+          <div className="flex flex-col gap-1.5">
+            <Select sizing="sm" value={localChore} onChange={e => handleChoreChange(e.target.value)} className="max-w-[170px]">
               <option value="">— Unassigned —</option>
               {masterChores.map((ch, i) => <option key={i} value={ch}>{ch}</option>)}
-            </select>
+            </Select>
             {localChore && (
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <div className="flex gap-1 flex-wrap">
                 {DAY_CHIPS.map((label, idx) => {
                   const active = localDays.includes(idx)
                   const shift  = localDayShifts[idx] || 'AM'
                   return (
-                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <div key={idx} className="flex flex-col items-center gap-0.5">
                       <button type="button" onClick={() => toggleDay(idx)} title={DAY_SHORT[idx]}
-                        style={{
-                          width: 22, height: 22, borderRadius: '50%', padding: 0,
-                          background: active ? 'var(--accent)' : '#e2e8f0',
-                          color: active ? '#fff' : '#64748b',
-                          border: active ? '1.5px solid var(--accent)' : '1.5px solid #d1d5db',
-                          cursor: 'pointer', fontSize: '.6rem', fontWeight: 800,
-                          lineHeight: '22px', textAlign: 'center',
-                        }}>{label}</button>
+                        className={`w-[22px] h-[22px] rounded-full p-0 text-[.6rem] font-extrabold leading-none cursor-pointer border-[1.5px] ${active ? 'bg-[var(--accent)] text-white border-[var(--accent)]' : 'bg-[var(--chore-chip-bg)] text-[var(--text-muted)] border-[var(--line)]'}`}>
+                        {label}
+                      </button>
                       {active && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        <div className="flex flex-col gap-px">
                           {['AM','PM'].map(t => (
                             <button key={t} type="button"
                               onClick={e => { e.stopPropagation(); setDayShift(idx, t) }}
-                              style={{
-                                padding: '0 2px', borderRadius: 3, fontSize: '.55rem', fontWeight: 700,
-                                background: shift === t ? '#0a4655' : '#f1f5f9',
-                                color: shift === t ? '#fff' : '#94a3b8',
-                                border: `1px solid ${shift === t ? '#0a4655' : '#d1d5db'}`,
-                                cursor: 'pointer', lineHeight: '12px',
-                              }}>{t}</button>
+                              className={`px-0.5 rounded text-[.55rem] font-bold leading-3 cursor-pointer border ${shift === t ? 'bg-[var(--accent)] text-white border-[var(--accent)]' : 'bg-[var(--chore-chip-bg)] text-[var(--text-muted)] border-[var(--line)]'}`}>
+                              {t}
+                            </button>
                           ))}
                         </div>
                       )}
@@ -454,12 +438,12 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
             )}
           </div>
         ) : (
-          <div style={{ fontSize: '.84rem' }}>
-            <span style={{ color: localChore ? 'var(--text-primary)' : '#94a3b8', fontWeight: localChore ? 600 : 400 }}>
+          <div className="text-sm">
+            <span className={localChore ? 'font-semibold text-gray-900 dark:text-white' : 'font-normal text-gray-400 dark:text-gray-500'}>
               {localChore || '—'}
             </span>
             {localChore && (
-              <div style={{ fontSize: '.7rem', color: '#64748b', marginTop: 2 }}>
+              <div className="text-[.7rem] text-gray-400 dark:text-gray-500 mt-0.5">
                 {localDays.length > 0
                   ? localDays.map(idx => `${DAY_SHORT[idx]}:${localDayShifts[idx]||'AM'}`).join(' ')
                   : 'All days · AM'}
@@ -485,9 +469,8 @@ function ChoreRow({ client: c, masterChores, weekDays, logMap, today, canAssign,
           />
         )
       })}
-      <td className="tc">
-        <span style={{ fontSize: '.82rem', fontWeight: 700,
-          color: initialed === assignedCount ? '#15803D' : initialed > 0 ? '#92400E' : '#94a3b8' }}>
+      <td className="px-2 py-2 text-center border-b border-gray-100 dark:border-gray-700">
+        <span className={`text-[.82rem] font-bold ${initialed === assignedCount ? 'text-[var(--chore-done-text)]' : initialed > 0 ? 'text-[var(--chore-warn-text)]' : 'text-[var(--text-muted)]'}`}>
           {initialed}/{assignedCount}
         </span>
       </td>
@@ -505,16 +488,16 @@ function DayCell({ initials: savedInitials, shift, isToday, canEdit, scheduled, 
 
   if (!scheduled) {
     return (
-      <td style={{ textAlign: 'center', background: '#f8fafc', padding: '3px 2px' }}>
-        <span style={{ color: '#d1d5db', fontFamily: 'var(--mono)', fontSize: '.72rem' }}>—</span>
+      <td className="text-center bg-[var(--chore-skip-bg)] px-[2px] py-[3px] border-b border-gray-100 dark:border-gray-700">
+        <span className="text-[var(--text-muted)] font-mono text-[.72rem]">—</span>
       </td>
     )
   }
 
   return (
-    <td style={{ textAlign: 'center', background: isToday ? '#EFF6FF' : undefined, padding: '3px 2px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-        <span style={{ fontSize: '.52rem', fontWeight: 700, color: done ? '#15803D' : '#94a3b8' }}>
+    <td className={`text-center px-[2px] py-[3px] border-b border-gray-100 dark:border-gray-700 ${isToday ? 'bg-[var(--chore-today-bg)]' : ''}`}>
+      <div className="flex flex-col items-center gap-px">
+        <span className={`text-[.52rem] font-bold ${done ? 'text-[var(--chore-done-text)]' : 'text-[var(--text-muted)]'}`}>
           {shift}
         </span>
         {canEdit ? (
@@ -525,20 +508,10 @@ function DayCell({ initials: savedInitials, shift, isToday, canEdit, scheduled, 
             onChange={e => setVal(e.target.value)}
             onBlur={e => { if (e.target.value !== savedInitials) onBlur(e.target.value) }}
             placeholder="—"
-            style={{
-              width: 34, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
-              padding: '2px 2px', border: `1.5px solid ${done ? '#86EFAC' : 'var(--line)'}`,
-              borderRadius: 4, background: done ? '#DCFCE7' : '#fff',
-              outline: 'none', letterSpacing: '.06em', color: done ? '#15803D' : 'inherit',
-            }}
+            className={`w-[34px] text-center font-mono text-[.72rem] font-bold px-[2px] py-[2px] rounded border-[1.5px] outline-none tracking-[.06em] ${done ? 'border-[var(--chore-done-border)] bg-[var(--chore-done-bg)] text-[var(--chore-done-text)]' : 'border-[var(--line)] bg-[var(--inp-bg)] text-[var(--text-primary)]'}`}
           />
         ) : (
-          <span style={{
-            display: 'inline-block', width: 34, textAlign: 'center', padding: '2px 2px',
-            fontFamily: 'var(--mono)', fontSize: '.72rem', fontWeight: 700,
-            background: done ? '#DCFCE7' : 'transparent',
-            color: done ? '#15803D' : '#94a3b8', borderRadius: 4,
-          }}>
+          <span className={`inline-block w-[34px] text-center px-[2px] py-[2px] font-mono text-[.72rem] font-bold rounded ${done ? 'bg-[var(--chore-done-bg)] text-[var(--chore-done-text)]' : 'bg-transparent text-[var(--text-muted)]'}`}>
             {val || '—'}
           </span>
         )}

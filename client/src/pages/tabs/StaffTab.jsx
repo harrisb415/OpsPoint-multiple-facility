@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { UserPlus, MoreHorizontal, Users, UserCog, ClipboardList } from 'lucide-react'
 import {
-  Badge, Breadcrumb, BreadcrumbItem, Button, Card,
+  Breadcrumb, BreadcrumbItem, Button, Card,
   Dropdown, DropdownItem, Label, Modal, ModalHeader, ModalBody, ModalFooter,
   Select,
   TextInput, Textarea, Alert,
@@ -11,7 +11,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { ColoredAvatar, FilterChip, useConfirm } from '../../components/ui.jsx'
+import { ColoredAvatar, FilterChip, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 function formatPhone(raw) {
   if (!raw) return ''
@@ -114,6 +114,7 @@ export default function StaffTab() {
             </div>
             <div className="flex items-center justify-center rounded-lg w-11 h-11 bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300"><Users className="w-5 h-5" /></div>
           </div>
+          <DeltaRow delta={null} label="no prior data" />
         </Card>
         <Card>
           <div className="flex items-start justify-between">
@@ -124,6 +125,7 @@ export default function StaffTab() {
             </div>
             <div className="flex items-center justify-center rounded-lg w-11 h-11 bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300"><UserCog className="w-5 h-5" /></div>
           </div>
+          <DeltaRow delta={null} label="no prior data" />
         </Card>
         <Card>
           <div className="flex items-start justify-between">
@@ -134,6 +136,7 @@ export default function StaffTab() {
             </div>
             <div className="flex items-center justify-center rounded-lg w-11 h-11 bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300"><ClipboardList className="w-5 h-5" /></div>
           </div>
+          <DeltaRow delta={null} label="no prior data" />
         </Card>
       </div>
 

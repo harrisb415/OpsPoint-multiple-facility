@@ -229,7 +229,7 @@ export default function IncidentsTab() {
                     </div>
                   </TableCell>
                   <TableCell><StatusBadge color={SEV_BADGE[i.severity] || 'gray'}>{SEVERITY_LABEL[i.severity] || i.severity}</StatusBadge></TableCell>
-                  <TableCell className="text-gray-500 dark:text-gray-400" style={{ maxWidth: 340 }}>
+                  <TableCell className="text-gray-500 dark:text-gray-400 max-w-[340px]">
                     <div className="overflow-hidden whitespace-nowrap text-ellipsis">{i.narrative}</div>
                     {i.notifications_required?.length > 0 && (
                       <div className="mt-1 text-xs text-gray-400">Notify: {i.notifications_required.join(', ')}</div>

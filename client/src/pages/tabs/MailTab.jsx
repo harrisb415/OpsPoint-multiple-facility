@@ -299,32 +299,28 @@ export default function MailTab() {
           <ModalHeader>Log Incoming Mail</ModalHeader>
           <ModalBody>
               {error && <Alert color="failure" className="mb-3">{error}</Alert>}
-              <p style={{ fontSize: '.84rem', color: '#475569', marginBottom: 12 }}>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
                 Select one or more residents who received mail. Optionally add notes per resident.
               </p>
-              <div style={{ maxHeight: 320, overflowY: 'auto', border: '1.5px solid var(--line)', borderRadius: 6 }}>
+              <div className="max-h-80 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md">
                 {activeClients.map(c => {
                   const sid = String(c.id)
                   const selected = selectedIds.includes(sid)
                   return (
-                    <div key={c.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '7px 12px', borderBottom: '1px solid var(--line)',
-                      background: selected ? '#eff6ff' : 'transparent',
-                    }}>
+                    <div key={c.id} className={`flex items-center gap-2.5 px-3 py-1.5 border-b border-gray-100 dark:border-gray-700 ${selected ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-transparent'}`}>
                       <input type="checkbox" checked={selected} onChange={() => toggleClient(c.id)}
-                        style={{ width: 15, height: 15, flexShrink: 0 }} />
-                      <span style={{ fontSize: '.84rem', fontWeight: 600, minWidth: 32 }}>Rm {c.room}</span>
-                      <span style={{ fontSize: '.84rem', flex: 1 }}>{c.name}</span>
+                        className="w-3.5 h-3.5 flex-shrink-0 accent-blue-600 cursor-pointer" />
+                      <span className="text-sm font-semibold w-8 flex-shrink-0">Rm {c.room}</span>
+                      <span className="text-sm flex-1">{c.name}</span>
                       {selected && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <div className="flex items-center gap-2.5 flex-wrap">
                           {['letter', 'package'].map(t => {
                             const checked = !!(mailTypes[sid] || {})[t]
                             return (
-                              <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize', userSelect: 'none' }}>
+                              <label key={t} className="flex items-center gap-1 text-xs font-semibold cursor-pointer capitalize select-none">
                                 <input type="checkbox" checked={checked}
                                   onChange={() => setMailTypes(m => ({ ...m, [sid]: { ...(m[sid] || {}), [t]: !checked } }))}
-                                  style={{ width: 13, height: 13 }} />
+                                  className="w-3 h-3 accent-blue-600 cursor-pointer" />
                                 {t}
                               </label>
                             )
@@ -332,7 +328,7 @@ export default function MailTab() {
                           <input type="text" placeholder="Notes (optional)"
                             value={notes[sid] || ''}
                             onChange={e => setNotes(n => ({ ...n, [sid]: e.target.value }))}
-                            style={{ fontSize: '.78rem', padding: '3px 8px', border: '1px solid var(--line)', borderRadius: 4, width: 140 }} />
+                            className="text-xs px-2 py-1 border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-700 dark:text-white w-[140px]" />
                         </div>
                       )}
                     </div>
@@ -340,7 +336,7 @@ export default function MailTab() {
                 })}
               </div>
               {selectedIds.length > 0 && (
-                <p style={{ fontSize: '.78rem', color: '#64748b', marginTop: 8 }}>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
                   {selectedIds.length} resident{selectedIds.length !== 1 ? 's' : ''} selected
                 </p>
               )}

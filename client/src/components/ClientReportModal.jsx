@@ -474,15 +474,15 @@ export default function ClientReportModal({ data, onClose }) {
           </Field>
 
           {/* Client selection */}
-          <div className="field">
-            <label>Include Clients</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+          <div className="mb-3.5">
+            <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Include Clients</label>
+            <div className="flex flex-col gap-1.5 mt-1">
               {[
                 { val: 'active', lbl: `Active residents only (${activeResidents.length})` },
                 { val: 'all',    lbl: `All residents including discharged (${residents.length})` },
                 { val: 'select', lbl: 'Select specific residents…' },
               ].map(opt => (
-                <label key={opt.val} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '.83rem', cursor: 'pointer' }}>
+                <label key={opt.val} className="flex items-center gap-2 text-[.83rem] cursor-pointer">
                   <input type="radio" name="rpt-filter" value={opt.val}
                     checked={clientFilter === opt.val}
                     onChange={() => { setClientFilter(opt.val); setSelectedIds([]) }} />
@@ -493,27 +493,17 @@ export default function ClientReportModal({ data, onClose }) {
 
             {/* Resident checklist when "select" chosen */}
             {clientFilter === 'select' && (
-              <div style={{
-                marginTop: 8, border: '1px solid var(--border-light)', borderRadius: 6,
-                maxHeight: 160, overflowY: 'auto', background: '#fff',
-              }}>
+              <div className="mt-2 border border-gray-200 dark:border-gray-700 rounded-md max-h-40 overflow-y-auto bg-white dark:bg-gray-800">
                 {residents.map(c => (
-                  <label key={c.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
-                    fontSize: '.81rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9',
-                    background: selectedIds.includes(c.id) ? '#f0f9ff' : 'transparent',
-                  }}>
+                  <label key={c.id} className={`flex items-center gap-2 px-2.5 py-[5px] text-[.81rem] cursor-pointer border-b border-gray-100 dark:border-gray-700 ${selectedIds.includes(c.id) ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-transparent'}`}>
                     <input type="checkbox" checked={selectedIds.includes(c.id)}
                       onChange={() => toggleId(c.id)} />
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: '.74rem', color: '#64748b', minWidth: 28 }}>
+                    <span className="font-mono text-[.74rem] text-gray-500 min-w-[28px]">
                       {c.room}
                     </span>
                     {c.name}
                     {!c.is_active && (
-                      <span style={{
-                        fontSize: '.62rem', fontWeight: 700, background: '#fee2e2',
-                        color: '#991b1b', padding: '1px 5px', borderRadius: 8, marginLeft: 4,
-                      }}>Discharged</span>
+                      <span className="text-[.62rem] font-bold bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 px-[5px] py-[1px] rounded-full ml-1">Discharged</span>
                     )}
                   </label>
                 ))}
@@ -522,22 +512,16 @@ export default function ClientReportModal({ data, onClose }) {
           </div>
 
           {/* Section toggles */}
-          <div className="field">
-            <label>Sections to Include</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 10px', marginTop: 6 }}>
+          <div className="mb-3.5">
+            <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Sections to Include</label>
+            <div className="grid grid-cols-2 gap-x-2.5 gap-y-1.5 mt-1.5">
               {SECTION_OPTS.map(s => (
-                <label key={s.key} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: '.81rem', cursor: 'pointer',
-                  padding: '6px 8px', borderRadius: 5, border: '1px solid',
-                  borderColor: sections[s.key] ? '#c9780c' : 'var(--border-light)',
-                  background:  sections[s.key] ? '#fff8ed' : 'transparent',
-                  transition: 'border-color .1s, background .1s',
-                }}>
+                <label key={s.key} className={`flex items-start gap-2 text-[.81rem] cursor-pointer px-2 py-1.5 rounded border transition-colors duration-100 ${sections[s.key] ? 'border-[#c9780c] bg-[#fff8ed] dark:bg-amber-900/20 dark:border-amber-600' : 'border-gray-200 dark:border-gray-600 bg-transparent'}`}>
                   <input type="checkbox" checked={sections[s.key]}
-                    onChange={() => toggleSection(s.key)} style={{ marginTop: 2, flexShrink: 0 }} />
+                    onChange={() => toggleSection(s.key)} className="mt-0.5 shrink-0" />
                   <div>
-                    <div style={{ fontWeight: 600 }}>{s.label}</div>
-                    <div style={{ fontSize: '.7rem', color: '#94a3b8', marginTop: 1 }}>{s.desc}</div>
+                    <div className="font-semibold">{s.label}</div>
+                    <div className="text-[.7rem] text-gray-400 dark:text-gray-500 mt-[1px]">{s.desc}</div>
                   </div>
                 </label>
               ))}
@@ -546,15 +530,15 @@ export default function ClientReportModal({ data, onClose }) {
 
           {/* Max records per timed section */}
           {showLimit && (
-            <div className="field">
-              <label>
+            <div className="mb-3.5">
+              <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
                 Max records per section
-                <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 4 }}>(UA, Meds, Incident Reports, Passes)</span>
+                <span className="font-normal text-gray-400 ml-1">(UA, Meds, Incident Reports, Passes)</span>
               </label>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+              <div className="flex items-center gap-2 mt-1">
                 <TextInput type="number" min={1} max={50} value={limit} className="w-20"
                   onChange={e => setLimit(Math.max(1, Math.min(50, parseInt(e.target.value) || 5)))} />
-                <span style={{ fontSize: '.78rem', color: '#64748b' }}>most recent per resident</span>
+                <span className="text-[.78rem] text-gray-500 dark:text-gray-400">most recent per resident</span>
               </div>
             </div>
           )}

@@ -148,7 +148,7 @@ export default function GroupsTab() {
       </div>
 
       {/* Session Log */}
-      <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>
+      <div className={`${CARD} !p-0 overflow-hidden`}>
         <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Group Attendance</h3>
           <div className="flex items-center gap-2">
@@ -287,44 +287,41 @@ function SessionCard({ session: s, canLog, onEdit, onDelete }) {
   const isFinal = s.status === 'final'
 
   return (
-    <div style={{ borderBottom: '1px solid var(--line)', padding: '12px 16px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: '.95rem', color: 'var(--text-primary)' }}>{s.group_name || '(untitled group)'}</span>
-            {s.topic && <span style={{ fontSize: '.7rem', fontWeight: 700, background: '#dbeafe', color: '#1e40af', padding: '2px 7px', borderRadius: 10 }}>{s.topic}</span>}
+    <div className="border-b border-gray-200 dark:border-gray-700 px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-[.95rem] text-gray-900 dark:text-white">{s.group_name || '(untitled group)'}</span>
+            {s.topic && <span className="text-[.7rem] font-bold bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 px-2 py-0.5 rounded-full">{s.topic}</span>}
             {total > 0 && (
-              <span style={{ fontSize: '.7rem', fontWeight: 800, padding: '2px 7px', borderRadius: 10,
-                background: pct === 100 ? '#dcfce7' : pct >= 70 ? '#fef9c3' : '#fee2e2',
-                color: pct === 100 ? '#15803d' : pct >= 70 ? '#854d0e' : '#991b1b' }}>{present}/{total} present</span>
+              <span className={`text-[.7rem] font-extrabold px-2 py-0.5 rounded-full ${pct === 100 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : pct >= 70 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'}`}>
+                {present}/{total} present
+              </span>
             )}
             {isFinal
-              ? <span style={{ fontSize: '.68rem', fontWeight: 700, background: '#dcfce7', color: '#15803d', padding: '2px 7px', borderRadius: 10 }}>🔒 Note signed</span>
+              ? <span className="text-[.68rem] font-bold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 px-2 py-0.5 rounded-full">Note signed</span>
               : s.content
-                ? <span style={{ fontSize: '.68rem', fontWeight: 700, background: '#e0f2fe', color: '#0369a1', padding: '2px 7px', borderRadius: 10 }}>Note drafted</span>
-                : <span style={{ fontSize: '.68rem', fontWeight: 700, background: '#fef9c3', color: '#854d0e', padding: '2px 7px', borderRadius: 10 }}>Clinical note pending</span>}
+                ? <span className="text-[.68rem] font-bold bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded-full">Note drafted</span>
+                : <span className="text-[.68rem] font-bold bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300 px-2 py-0.5 rounded-full">Clinical note pending</span>}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-          {total > 0 && <button className="btn btn-sm" onClick={() => setExpanded(e => !e)} style={pillBtn}>{expanded ? '▲ Hide' : '▼ Roster'}</button>}
-          {canLog && !isFinal && <button className="btn btn-sm" onClick={onEdit} style={pillBtn}>Edit</button>}
-          {canLog && !isFinal && <button className="btn btn-sm" onClick={onDelete} style={{ background: 'none', border: '1px solid #fca5a5', color: '#dc2626', fontSize: '.72rem' }}>Delete</button>}
+        <div className="flex gap-1.5 flex-shrink-0">
+          {total > 0 && <Button size="xs" color="light" onClick={() => setExpanded(e => !e)}>{expanded ? '▲ Hide' : '▼ Roster'}</Button>}
+          {canLog && !isFinal && <Button size="xs" color="light" onClick={onEdit}>Edit</Button>}
+          {canLog && !isFinal && <Button size="xs" color="failure" onClick={onDelete}>Delete</Button>}
         </div>
       </div>
 
       {expanded && att.length > 0 && (
-        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div className="mt-3 flex flex-wrap gap-1.5">
           {att.map(a => {
             const isPresent = a.participation === 'present'
             const isExcused = a.participation === 'excused'
             return (
-              <span key={a.client_id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, fontSize: '.78rem', fontWeight: 600,
-                background: isPresent ? '#dcfce7' : isExcused ? '#fef3c7' : '#f1f5f9',
-                color: isPresent ? '#15803d' : isExcused ? '#92400e' : '#94a3b8',
-                border: `1px solid ${isPresent ? '#86efac' : isExcused ? '#fde68a' : '#e2e8f0'}` }}>
-                <span style={{ fontFamily: 'var(--mono)', fontSize: '.68rem', opacity: .7 }}>{a.room}</span>
+              <span key={a.client_id} className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[.78rem] font-semibold border ${isPresent ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800' : isExcused ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-800' : 'bg-gray-100 text-gray-400 border-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:border-gray-600'}`}>
+                <span className="font-mono text-[.68rem] opacity-70">{a.room}</span>
                 {a.client_name}
-                {!isPresent && <span style={{ fontSize: '.65rem', opacity: .7 }}>{a.participation}</span>}
+                {!isPresent && <span className="text-[.65rem] opacity-70">{a.participation}</span>}
               </span>
             )
           })}
@@ -333,5 +330,3 @@ function SessionCard({ session: s, canLog, onEdit, onDelete }) {
     </div>
   )
 }
-
-const pillBtn = { background: 'var(--bg)', border: '1px solid var(--line)', color: 'var(--steel)', fontSize: '.72rem' }

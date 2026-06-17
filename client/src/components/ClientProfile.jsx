@@ -26,23 +26,62 @@
  */
 
 import { useState, useMemo, useEffect } from 'react'
+import { Badge, Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { openPrintWindow, classifyLogEntry } from '../utils/printLog.js'
 
-const LOG_TYPE_STYLE = {
-  Wellness:      { bg: '#ccfbf1', color: '#0f766e' },
-  Walkthrough:   { bg: '#ccfbf1', color: '#0f766e' },
-  UA:            { bg: '#fef3c7', color: '#92400e' },
-  Lunch:         { bg: '#f0fdf9', color: '#6b7280' },
-  'Room Search': { bg: '#ede9fe', color: '#6d28d9' },
-  Mail:          { bg: '#dbeafe', color: '#1d4ed8' },
-  Infraction:    { bg: '#fee2e2', color: '#991b1b' },
-  Intake:        { bg: '#dcfce7', color: '#15803d' },
-  Discharge:     { bg: '#f0fdf9', color: '#6b7280' },
-  Group:         { bg: '#ede9fe', color: '#6d28d9' },
-  Note:          { bg: '#f1f5f9', color: '#475569' },
+const LOG_TYPE_CLS = {
+  Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  Walkthrough:   'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+  UA:            'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  Lunch:         'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+  'Room Search': 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  Mail:          'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  Infraction:    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  Intake:        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  Discharge:     'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+  Group:         'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  Note:          'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400',
 }
+const LOG_TYPE_CLS_DEFAULT = 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+
+const PASS_STATUS_CLS = {
+  Out:      'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  Extended: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  Returned: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+}
+const PASS_STATUS_CLS_DEFAULT = 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+
+const MAIL_STATUS = {
+  pending:   { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400', label: 'Pending' },
+  approved:  { cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', label: 'Approved' },
+  delivered: { cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',    label: 'Delivered' },
+}
+const MAIL_STATUS_DEFAULT = { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400', label: '' }
+
+const RES_CLS = {
+  NEG: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  POS: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  NT:  'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
+}
+const RES_CLS_DEFAULT = 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+
+const SEV_CLS = {
+  low:      'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  medium:   'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  high:     'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  critical: 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-400',
+}
+const SEV_CLS_DEFAULT = 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+
+const VIOL_STATUS = {
+  pending:   { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400', label: 'Pending' },
+  assigned:  { cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',     label: 'Assigned' },
+  completed: { cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', label: 'Completed' },
+  waived:    { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',        label: 'Waived' },
+}
+const VIOL_STATUS_DEFAULT = { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400', label: '' }
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
@@ -100,19 +139,21 @@ function computeRisk(clientId, data) {
   return 'green'
 }
 
+const RISK_CLS = {
+  red:   'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  amber: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+}
+const RISK_LABEL = {
+  red:   '⚠ Open Incident',
+  amber: '⚡ Needs Attention',
+  green: '✓ On Track',
+}
+
 function RiskChip({ level }) {
-  const styles = {
-    red:   { background: '#fee2e2', color: '#991b1b', text: '⚠ Open Incident' },
-    amber: { background: '#fef3c7', color: '#92400e', text: '⚡ Needs Attention' },
-    green: { background: '#dcfce7', color: '#15803d', text: '✓ On Track' },
-  }
-  const s = styles[level] || styles.green
   return (
-    <span style={{
-      fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 10,
-      background: s.background, color: s.color, whiteSpace: 'nowrap', flexShrink: 0,
-    }}>
-      {s.text}
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 ${RISK_CLS[level] || RISK_CLS.green}`}>
+      {RISK_LABEL[level] || RISK_LABEL.green}
     </span>
   )
 }
@@ -130,34 +171,32 @@ function OverviewTab({ client, data }) {
   const ecs  = parseECs(client.emergency_contacts)
 
   const Field = ({ label, children, span }) => (
-    <div style={{ gridColumn: span ? '1/-1' : undefined }}>
-      <div style={{ fontSize: '.63rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 2 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: '.83rem', color: '#0f172a' }}>{children}</div>
+    <div className={span ? 'col-span-2' : ''}>
+      <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-0.5 dark:text-gray-500">{label}</div>
+      <div className="text-sm text-gray-900 dark:text-gray-100">{children}</div>
     </div>
   )
 
   return (
-    <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div className="p-4 flex flex-col gap-3.5">
       {/* Identity card */}
-      <div style={{ background: '#f8fafc', borderRadius: 8, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+      <div className="bg-slate-50 rounded-lg p-3.5 border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
           <Field label="Room">
-            <span style={{ fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--sidebar-bg)' }}>Rm. {client.room}</span>
+            <span className="font-bold font-mono text-[#0a4655] dark:text-primary-400">Rm. {client.room}</span>
           </Field>
           <Field label="Days in Program">
-            <span style={{ fontWeight: 700, color: 'var(--sidebar-bg)' }}>{days != null ? days : '—'}</span>
+            <span className="font-bold text-[#0a4655] dark:text-primary-400">{days != null ? days : '—'}</span>
           </Field>
           <Field label="Case Manager">
-            <span style={{ fontWeight: 600 }}>{client.case_manager || '—'}</span>
+            <span className="font-semibold">{client.case_manager || '—'}</span>
           </Field>
           <Field label="Phone">
-            <span style={{ fontFamily: 'var(--mono)', fontSize: '.8rem' }}>{formatPhone(client.phone) || '—'}</span>
+            <span className="font-mono text-xs">{formatPhone(client.phone) || '—'}</span>
           </Field>
           <Field label="Intake Date">{fmtDate(client.intake_date)}</Field>
           <Field label="Current Status">
-            <span style={{ fontWeight: 600 }}>{STATUS_LABEL[status] || status}</span>
+            <span className="font-semibold">{STATUS_LABEL[status] || status}</span>
           </Field>
           {client.program_track && (
             <Field label="Program Track" span>{client.program_track}</Field>
@@ -171,33 +210,27 @@ function OverviewTab({ client, data }) {
       {/* Emergency contacts */}
       {ecs.length > 0 && (
         <div>
-          <div style={{ fontSize: '.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-            Emergency Contacts
-          </div>
+          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5 dark:text-gray-400">Emergency Contacts</div>
           {ecs.map((ec, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', borderBottom: i < ecs.length - 1 ? '1px solid #f1f5f9' : undefined }}>
-              <span style={{ fontSize: '.9rem', flexShrink: 0 }}>👤</span>
+            <div key={i} className={`flex items-center gap-2.5 py-1.5 ${i < ecs.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+              <span className="text-base shrink-0">👤</span>
               <div>
-                <div style={{ fontWeight: 600, fontSize: '.82rem', color: '#0f172a' }}>
+                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">
                   {ec.name}
-                  {ec.relationship ? <span style={{ fontWeight: 400, color: '#64748b' }}> ({ec.relationship})</span> : null}
+                  {ec.relationship ? <span className="font-normal text-gray-500"> ({ec.relationship})</span> : null}
                 </div>
-                {ec.phone && (
-                  <div style={{ fontSize: '.75rem', fontFamily: 'var(--mono)', color: '#475569' }}>{formatPhone(ec.phone)}</div>
-                )}
+                {ec.phone && <div className="text-xs font-mono text-gray-600 dark:text-gray-400">{formatPhone(ec.phone)}</div>}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Intake notes (clinical — already stripped for non-clinical users server-side) */}
+      {/* Intake notes */}
       {client.intake_notes && (
         <div>
-          <div style={{ fontSize: '.7rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-            Intake Notes
-          </div>
-          <div style={{ background: '#fef9c3', borderRadius: 6, padding: '8px 10px', fontSize: '.82rem', color: '#78350f', border: '1px solid #fde68a', lineHeight: 1.5 }}>
+          <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1 dark:text-gray-400">Intake Notes</div>
+          <div className="bg-yellow-50 border border-yellow-200 rounded-md px-2.5 py-2 text-sm text-yellow-900 leading-relaxed dark:bg-yellow-900/10 dark:border-yellow-800 dark:text-yellow-200">
             {client.intake_notes}
           </div>
         </div>
@@ -233,41 +266,28 @@ function TimelineTab({ client, data }) {
   }, [data?.reports, name, rm])
 
   if (entries.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No activity log entries found for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No activity log entries found for this resident.</p>
   )
 
   return (
     <div>
       {entries.map((e, i) => {
         const type  = classifyLogEntry(e.text)
-        const ts    = LOG_TYPE_STYLE[type] || LOG_TYPE_STYLE.Note
+        const cls   = LOG_TYPE_CLS[type] || LOG_TYPE_CLS_DEFAULT
         const isPos = e.text && /POS:/.test(e.text)
         return (
-          <div key={e.id || i} style={{
-            display: 'flex', gap: 12, padding: '10px 16px',
-            borderBottom: '1px solid #f1f5f9',
-            background: isPos ? '#fff5f5' : undefined,
-            borderLeft: isPos ? '3px solid #DC2626' : undefined,
-          }}>
-            <div style={{ flexShrink: 0, width: 56, textAlign: 'right' }}>
-              <div style={{ fontFamily: 'var(--mono)', fontSize: '.7rem', color: 'var(--sidebar-bg)', fontWeight: 700 }}>{e.time}</div>
-              <div style={{ fontSize: '.6rem', color: '#94a3b8', marginTop: 1 }}>{fmtDate(e.report_date)}</div>
+          <div key={e.id || i} className={`flex gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 ${isPos ? 'bg-red-50 border-l-2 border-l-red-500 dark:bg-red-900/10' : ''}`}>
+            <div className="shrink-0 w-14 text-right">
+              <div className="font-mono text-[11px] font-bold text-[#0a4655] dark:text-primary-400">{e.time}</div>
+              <div className="text-[10px] text-gray-400 mt-0.5">{fmtDate(e.report_date)}</div>
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{
-                display: 'inline-block', marginBottom: 4,
-                fontSize: '.62rem', fontWeight: 700, padding: '1px 7px', borderRadius: 8,
-                background: ts.bg, color: ts.color,
-              }}>
-                {type}
-              </span>
-              <div style={{ fontSize: '.81rem', color: '#0f172a', lineHeight: 1.45 }}>
+            <div className="flex-1 min-w-0">
+              <span className={`inline-block mb-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${cls}`}>{type}</span>
+              <div className="text-[13px] text-gray-900 leading-snug dark:text-gray-100">
                 {isPos
                   ? e.text.split(/(POS:[^|<]+)/).map((part, pi) =>
                       /^POS:/.test(part)
-                        ? <strong key={pi} style={{ color: '#DC2626' }}>{part}</strong>
+                        ? <strong key={pi} className="text-red-600 dark:text-red-400">{part}</strong>
                         : part
                     )
                   : e.text
@@ -287,39 +307,28 @@ function PassesTab({ client, data }) {
     .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
 
   if (passes.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No pass records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No pass records for this resident.</p>
   )
-
-  const STATUS_STYLE = {
-    Out:      { background: '#fef9c3', color: '#92400e' },
-    Extended: { background: '#fee2e2', color: '#991b1b' },
-    Returned: { background: '#dcfce7', color: '#15803d' },
-  }
 
   return (
     <div>
-      {passes.map(p => {
-        const s = STATUS_STYLE[p.status] || { background: '#f1f5f9', color: '#475569' }
-        return (
-          <div key={p.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
-                  Departed {fmtDate(p.departure)}
-                  {p.return_date ? ` — Returns ${fmtDate(p.return_date)}` : ' (open)'}
-                </div>
-                {p.notes && <div style={{ fontSize: '.76rem', color: '#475569', marginTop: 3 }}>{p.notes}</div>}
-                {p.ua_notes && <div style={{ fontSize: '.76rem', color: '#6b21a8', marginTop: 2 }}>UA: {p.ua_notes}</div>}
+      {passes.map(p => (
+        <div key={p.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
+          <div className="flex justify-between items-start gap-2">
+            <div>
+              <div className="font-bold text-sm text-gray-900 dark:text-gray-100">
+                Departed {fmtDate(p.departure)}
+                {p.return_date ? ` — Returns ${fmtDate(p.return_date)}` : ' (open)'}
               </div>
-              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8, ...s }}>
-                {p.status}
-              </span>
+              {p.notes && <div className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{p.notes}</div>}
+              {p.ua_notes && <div className="text-xs text-violet-700 mt-0.5 dark:text-violet-400">UA: {p.ua_notes}</div>}
             </div>
+            <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${PASS_STATUS_CLS[p.status] || PASS_STATUS_CLS_DEFAULT}`}>
+              {p.status}
+            </span>
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }
@@ -330,35 +339,23 @@ function MailSubTab({ client, data }) {
     .sort((a, b) => (b.logged_at || '').localeCompare(a.logged_at || ''))
 
   if (records.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No mail records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No mail records for this resident.</p>
   )
-
-  const STATUS_STYLE = {
-    pending:   { background: '#fef9c3', color: '#92400e',  label: 'Pending' },
-    approved:  { background: '#dcfce7', color: '#15803d',  label: 'Approved' },
-    delivered: { background: '#dbeafe', color: '#1e40af',  label: 'Delivered' },
-  }
 
   return (
     <div>
       {records.map(m => {
-        const s = STATUS_STYLE[m.status] || { background: '#f1f5f9', color: '#475569', label: m.status }
+        const s = MAIL_STATUS[m.status] || { ...MAIL_STATUS_DEFAULT, label: m.status }
         return (
-          <div key={m.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div key={m.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start gap-2">
             <div>
-              <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
+              <div className="font-bold text-sm text-gray-900 dark:text-gray-100">
                 {m.mail_type || 'Mail'}
-                {m.notes ? <span style={{ fontWeight: 400, color: '#64748b' }}> — {m.notes}</span> : null}
+                {m.notes ? <span className="font-normal text-gray-500"> — {m.notes}</span> : null}
               </div>
-              <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
-                Logged {fmtDate(m.logged_at)} · by {m.logged_by}
-              </div>
+              <div className="text-[11px] text-gray-400 mt-0.5">Logged {fmtDate(m.logged_at)} · by {m.logged_by}</div>
             </div>
-            <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8, ...s }}>
-              {s.label}
-            </span>
+            <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
           </div>
         )
       })}
@@ -377,12 +374,6 @@ function UATab({ client, data, hasPerm }) {
   const pending = (data?.ua_requests || [])
     .filter(r => r.client_id === client.id && !r.acknowledged)
 
-  const RES_STYLE = {
-    NEG: { background: '#dcfce7', color: '#15803d' },
-    POS: { background: '#fee2e2', color: '#991b1b' },
-    NT:  { background: '#f1f5f9', color: '#475569' },
-  }
-
   async function requestUA() {
     setReqState('busy'); setReqErr('')
     try {
@@ -398,54 +389,40 @@ function UATab({ client, data, hasPerm }) {
 
   return (
     <div>
-      {/* UA request controls */}
       {hasPerm('ua.request') && (
-        <div style={{ padding: '10px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+        <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
           {pending.length > 0 && (
-            <div style={{ fontSize: '.76rem', color: '#92400e', background: '#fef3c7', padding: '5px 10px', borderRadius: 6, marginBottom: 8 }}>
+            <div className="text-xs text-amber-800 bg-amber-100 rounded px-2.5 py-1.5 mb-2 dark:bg-amber-900/20 dark:text-amber-300">
               ⚠ UA already pending for this resident ({pending.length} request{pending.length > 1 ? 's' : ''})
             </div>
           )}
-          {reqErr && <div style={{ color: '#dc2626', fontSize: '.76rem', marginBottom: 6 }}>{reqErr}</div>}
-          {reqState === 'done' ? (
-            <div style={{ fontSize: '.82rem', color: '#15803d', fontWeight: 600 }}>✓ UA request submitted</div>
-          ) : (
-            <button className="btn btn-sm btn-primary" onClick={requestUA}
-              disabled={reqState === 'busy' || pending.length > 0}>
-              {reqState === 'busy' ? 'Requesting…' : '🧪 Request UA'}
-            </button>
-          )}
+          {reqErr && <p className="text-xs text-red-600 mb-1.5 dark:text-red-400">{reqErr}</p>}
+          {reqState === 'done'
+            ? <p className="text-sm font-semibold text-green-600 dark:text-green-400">✓ UA request submitted</p>
+            : <Button size="xs" onClick={requestUA} isProcessing={reqState === 'busy'}
+                disabled={reqState === 'busy' || pending.length > 0}>
+                {reqState === 'busy' ? 'Requesting…' : '🧪 Request UA'}
+              </Button>
+          }
         </div>
       )}
 
-      {records.length === 0 ? (
-        <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-          No UA records for this resident.
-        </div>
-      ) : records.map(r => {
-        const s = RES_STYLE[r.result] || RES_STYLE.NT
-        return (
-          <div key={r.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+      {records.length === 0
+        ? <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No UA records for this resident.</p>
+        : records.map(r => (
+          <div key={r.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start gap-2">
             <div>
-              <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
-                {r.test_type || 'Urinalysis'}
-              </div>
-              <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
-                {fmtDate(r.tested_at)} · by {r.witnessed_by_name || '—'}
-              </div>
-              {r.collection_method && (
-                <div style={{ fontSize: '.71rem', color: '#64748b' }}>{r.collection_method}</div>
-              )}
-              {r.notes && (
-                <div style={{ fontSize: '.75rem', color: '#475569', marginTop: 3 }}>{r.notes}</div>
-              )}
+              <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{r.test_type || 'Urinalysis'}</div>
+              <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(r.tested_at)} · by {r.witnessed_by_name || '—'}</div>
+              {r.collection_method && <div className="text-[11px] text-gray-500 dark:text-gray-400">{r.collection_method}</div>}
+              {r.notes && <div className="text-xs text-gray-600 mt-0.5 dark:text-gray-400">{r.notes}</div>}
             </div>
-            <span style={{ flexShrink: 0, fontSize: '.72rem', fontWeight: 800, padding: '2px 10px', borderRadius: 8, ...s }}>
+            <span className={`shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${RES_CLS[r.result] || RES_CLS_DEFAULT}`}>
               {r.result}
             </span>
           </div>
-        )
-      })}
+        ))
+      }
     </div>
   )
 }
@@ -457,35 +434,31 @@ function MedsTab({ client, data }) {
     .slice(0, 40)
 
   if (records.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No medication records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No medication records for this resident.</p>
   )
 
   return (
     <div>
       {records.map((m, i) => (
-        <div key={m.id || i} style={{ padding: '8px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div key={m.id || i} className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start gap-2">
           <div>
-            <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
+            <div className="font-bold text-sm text-gray-900 dark:text-gray-100">
               {m.medication_name || 'Medication'}
-              {m.dosage ? <span style={{ fontWeight: 400, color: '#64748b' }}> · {m.dosage}</span> : null}
+              {m.dosage ? <span className="font-normal text-gray-500"> · {m.dosage}</span> : null}
             </div>
-            <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+            <div className="text-[11px] text-gray-400 mt-0.5">
               {fmtDate(m.administered_at || m.logged_at)} · witnessed by {m.witnessed_by_name || '—'}
             </div>
           </div>
           {m.refused && (
-            <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8, background: '#fee2e2', color: '#991b1b' }}>
+            <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
               Refused
             </span>
           )}
         </div>
       ))}
       {(data?.med_log || []).filter(m => m.client_id === client.id).length > 40 && (
-        <div style={{ padding: '8px 16px', fontSize: '.74rem', color: '#94a3b8', textAlign: 'center' }}>
-          Showing 40 most recent records
-        </div>
+        <p className="px-4 py-2 text-xs text-gray-400 text-center">Showing 40 most recent records</p>
       )}
     </div>
   )
@@ -498,9 +471,7 @@ function MilestonesTab({ client, data }) {
     .sort((a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999'))
 
   if (milestones.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No milestones for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No milestones for this resident.</p>
   )
 
   return (
@@ -509,18 +480,14 @@ function MilestonesTab({ client, data }) {
         const done    = !!m.completed_at
         const overdue = !done && m.due_date && m.due_date < today
         return (
-          <div key={m.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            <span style={{ fontSize: '1.1rem', flexShrink: 0, marginTop: 1 }}>
-              {done ? '✅' : overdue ? '🔴' : '⏳'}
-            </span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: '.83rem', color: done ? '#15803d' : overdue ? '#991b1b' : '#0f172a' }}>
+          <div key={m.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex gap-2.5 items-start">
+            <span className="text-base shrink-0 mt-0.5">{done ? '✅' : overdue ? '🔴' : '⏳'}</span>
+            <div className="flex-1">
+              <div className={`font-bold text-sm ${done ? 'text-green-700 dark:text-green-400' : overdue ? 'text-red-700 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>
                 {m.title}
               </div>
-              {m.description && (
-                <div style={{ fontSize: '.75rem', color: '#475569', marginTop: 2, lineHeight: 1.4 }}>{m.description}</div>
-              )}
-              <div style={{ fontSize: '.7rem', color: '#94a3b8', marginTop: 3 }}>
+              {m.description && <div className="text-xs text-gray-500 mt-0.5 leading-snug dark:text-gray-400">{m.description}</div>}
+              <div className="text-[11px] text-gray-400 mt-0.5">
                 {m.due_date ? `Due ${fmtDate(m.due_date)}` : 'No due date'}
                 {done && m.completed_at ? ` · Completed ${fmtDate(m.completed_at)}` : ''}
                 {done && m.signed_off_by ? ` by ${m.signed_off_by}` : ''}
@@ -539,54 +506,32 @@ function IncidentsTab({ client, data }) {
     .sort((a, b) => (b.logged_at || '').localeCompare(a.logged_at || ''))
 
   if (incidents.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No incident reports for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No incident reports for this resident.</p>
   )
-
-  const SEV_STYLE = {
-    low:      { background: '#dbeafe', color: '#1e40af' },
-    medium:   { background: '#fef3c7', color: '#92400e' },
-    high:     { background: '#fee2e2', color: '#9a3412' },
-    critical: { background: '#fce7f3', color: '#7c2d12' },
-  }
 
   return (
     <div>
-      {incidents.map(inc => {
-        const sevStyle = SEV_STYLE[inc.severity] || { background: '#f1f5f9', color: '#475569' }
-        return (
-          <div key={inc.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
-                {inc.incident_type || 'Incident'}
-              </div>
-              <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                {inc.severity && (
-                  <span style={{ fontSize: '.63rem', fontWeight: 700, padding: '2px 7px', borderRadius: 8, textTransform: 'capitalize', ...sevStyle }}>
-                    {inc.severity}
-                  </span>
-                )}
-                {inc.status && (
-                  <span style={{ fontSize: '.63rem', fontWeight: 700, padding: '2px 7px', borderRadius: 8,
-                    background: inc.status === 'closed' ? '#dcfce7' : '#fee2e2',
-                    color:      inc.status === 'closed' ? '#15803d' : '#991b1b' }}>
-                    {inc.status}
-                  </span>
-                )}
-              </div>
+      {incidents.map(inc => (
+        <div key={inc.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
+          <div className="flex justify-between items-start gap-2">
+            <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{inc.incident_type || 'Incident'}</div>
+            <div className="flex gap-1 shrink-0">
+              {inc.severity && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full capitalize ${SEV_CLS[inc.severity] || SEV_CLS_DEFAULT}`}>
+                  {inc.severity}
+                </span>
+              )}
+              {inc.status && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${inc.status === 'closed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                  {inc.status}
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
-              {fmtDate(inc.logged_at)} · by {inc.logged_by}
-            </div>
-            {inc.narrative && (
-              <div style={{ fontSize: '.77rem', color: '#475569', marginTop: 5, lineHeight: 1.45 }}>
-                {inc.narrative}
-              </div>
-            )}
           </div>
-        )
-      })}
+          <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(inc.logged_at)} · by {inc.logged_by}</div>
+          {inc.narrative && <div className="text-xs text-gray-600 mt-1.5 leading-snug dark:text-gray-400">{inc.narrative}</div>}
+        </div>
+      ))}
     </div>
   )
 }
@@ -609,9 +554,7 @@ function DischargeTab({ client, data }) {
     .sort((a, b) => (b.discharge_date || '').localeCompare(a.discharge_date || ''))
 
   if (records.length === 0) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No discharge records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No discharge records for this resident.</p>
   )
 
   function printDischarge() {
@@ -650,69 +593,57 @@ function DischargeTab({ client, data }) {
 
   return (
     <div>
-      {/* Print toolbar */}
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn btn-sm" onClick={printDischarge}>🖨 Print</button>
+      <div className="px-4 py-2 border-b border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 flex justify-end">
+        <Button size="xs" color="light" onClick={printDischarge}>🖨 Print</Button>
       </div>
 
       {records.map((r, i) => {
         const referrals = parseReferrals(r.referrals_made)
         return (
-          <div key={r.id || i} style={{ padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            {/* Header row */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+          <div key={r.id || i} className="px-4 py-3.5 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex justify-between items-start gap-2 mb-2.5">
               <div>
-                <div style={{ fontWeight: 800, fontSize: '.9rem', color: '#0f172a' }}>
+                <div className="font-extrabold text-sm text-gray-900 dark:text-gray-100">
                   {REASON_LABEL[r.reason] || r.reason || 'Discharge'}
                 </div>
-                <div style={{ fontSize: '.72rem', color: '#94a3b8', marginTop: 2 }}>
+                <div className="text-[11px] text-gray-400 mt-0.5">
                   Discharged {fmtDate(r.discharge_date)}
                   {r.days_in_program != null ? ` · ${r.days_in_program} days in program` : ''}
                   {r.created_by_name ? ` · by ${r.created_by_name}` : ''}
                 </div>
               </div>
-              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
-                background: '#fee2e2', color: '#991b1b' }}>
+              <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
                 Discharged
               </span>
             </div>
 
-            {/* Narrative */}
             {r.narrative && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: '.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
-                  Narrative
-                </div>
-                <div style={{ fontSize: '.82rem', color: '#334155', lineHeight: 1.5, background: '#f8fafc', borderRadius: 6, padding: '8px 10px', border: '1px solid #e2e8f0' }}>
+              <div className="mb-2">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1 dark:text-gray-500">Narrative</div>
+                <div className="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-md px-2.5 py-2 border border-gray-200 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300">
                   {r.narrative}
                 </div>
               </div>
             )}
 
-            {/* Aftercare plan */}
             {r.aftercare_plan && (
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: '.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>
-                  Aftercare Plan
-                </div>
-                <div style={{ fontSize: '.82rem', color: '#334155', lineHeight: 1.5, background: '#f0fdf4', borderRadius: 6, padding: '8px 10px', border: '1px solid #bbf7d0' }}>
+              <div className="mb-2">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1 dark:text-gray-500">Aftercare Plan</div>
+                <div className="text-sm text-gray-700 leading-relaxed bg-green-50 rounded-md px-2.5 py-2 border border-green-200 dark:bg-green-900/10 dark:border-green-800 dark:text-green-200">
                   {r.aftercare_plan}
                 </div>
               </div>
             )}
 
-            {/* Referrals */}
             {referrals.length > 0 && (
               <div>
-                <div style={{ fontSize: '.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
-                  Referrals Made
-                </div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5 dark:text-gray-500">Referrals Made</div>
                 {referrals.map((ref, j) => (
-                  <div key={j} style={{ fontSize: '.78rem', color: '#334155', padding: '5px 0', borderBottom: j < referrals.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                    <span style={{ fontWeight: 600 }}>{ref.agency || '—'}</span>
-                    {ref.contact ? <span style={{ color: '#64748b' }}> · {ref.contact}</span> : null}
-                    {ref.type   ? <span style={{ color: '#64748b' }}> · {ref.type}</span> : null}
-                    {ref.date   ? <span style={{ color: '#94a3b8' }}> · {fmtDate(ref.date)}</span> : null}
+                  <div key={j} className={`text-xs text-gray-700 dark:text-gray-300 py-1.5 ${j < referrals.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+                    <span className="font-semibold">{ref.agency || '—'}</span>
+                    {ref.contact ? <span className="text-gray-500"> · {ref.contact}</span> : null}
+                    {ref.type   ? <span className="text-gray-500"> · {ref.type}</span> : null}
+                    {ref.date   ? <span className="text-gray-400"> · {fmtDate(ref.date)}</span> : null}
                   </div>
                 ))}
               </div>
@@ -736,13 +667,9 @@ function ConsentsTab({ client }) {
       .catch(() => { setRecords([]); setLoading(false) })
   }, [client.id])
 
-  if (loading) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontSize: '.84rem' }}>Loading…</div>
-  )
+  if (loading) return <p className="py-7 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</p>
   if (!records?.length) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No consent records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No consent records for this resident.</p>
   )
 
   return (
@@ -750,29 +677,19 @@ function ConsentsTab({ client }) {
       {records.map(c => {
         const active = !c.revoked
         return (
-          <div key={c.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
-                {c.recipient_name || '—'}
-              </div>
-              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
-                background: active ? '#dcfce7' : '#fee2e2',
-                color:      active ? '#15803d' : '#991b1b' }}>
+          <div key={c.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex justify-between items-start gap-2">
+              <div className="font-bold text-sm text-gray-900 dark:text-gray-100">{c.recipient_name || '—'}</div>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                 {active ? 'Active' : 'Revoked'}
               </span>
             </div>
-            <div style={{ fontSize: '.74rem', color: '#475569', marginTop: 2 }}>
-              {c.purpose}
-            </div>
-            <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+            <div className="text-xs text-gray-600 mt-0.5 dark:text-gray-400">{c.purpose}</div>
+            <div className="text-[11px] text-gray-400 mt-0.5">
               Effective {fmtDate(c.effective_date)} · by {c.created_by_name}
               {c.expiration_date ? ` · expires ${fmtDate(c.expiration_date)}` : ''}
             </div>
-            {c.information_type && (
-              <div style={{ fontSize: '.74rem', color: '#475569', marginTop: 3 }}>
-                {c.information_type}
-              </div>
-            )}
+            {c.information_type && <div className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{c.information_type}</div>}
           </div>
         )
       })}
@@ -817,22 +734,20 @@ function QuickMailForm({ client, onDone, onCancel }) {
   }
 
   if (done) return (
-    <div style={{ padding: '10px 16px', background: '#f0fdf4', borderBottom: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <span style={{ fontSize: '.83rem', color: '#15803d', fontWeight: 600 }}>✓ Mail logged for {client.name}</span>
-      <button className="btn btn-sm" style={{ background: 'none', border: '1px solid #d1d5db', color: '#64748b', marginLeft: 'auto' }} onClick={onCancel}>Close</button>
+    <div className="px-4 py-2.5 bg-green-50 border-b border-green-200 dark:bg-green-900/10 dark:border-green-800 flex items-center gap-2.5">
+      <span className="text-sm font-semibold text-green-700 dark:text-green-400">✓ Mail logged for {client.name}</span>
+      <Button size="xs" color="light" className="ml-auto" onClick={onCancel}>Close</Button>
     </div>
   )
 
   return (
-    <div style={{ padding: '12px 16px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-      <div style={{ fontSize: '.78rem', fontWeight: 700, color: '#475569', marginBottom: 8 }}>
-        Log mail for {client.name}
-      </div>
-      {err && <div style={{ color: '#dc2626', fontSize: '.76rem', marginBottom: 6 }}>{err}</div>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700">
+      <div className="text-xs font-bold text-gray-600 mb-2 dark:text-gray-300">Log mail for {client.name}</div>
+      {err && <p className="text-xs text-red-600 mb-1.5 dark:text-red-400">{err}</p>}
+      <div className="flex flex-wrap gap-3 mb-2">
         {['Letter', 'Package', 'Card', 'Legal'].map(t => (
-          <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: '.78rem', cursor: 'pointer', userSelect: 'none' }}>
-            <input type="checkbox" checked={types.includes(t)} onChange={() => toggleType(t)} />
+          <label key={t} className="flex items-center gap-1.5 text-xs cursor-pointer select-none text-gray-700 dark:text-gray-300">
+            <input type="checkbox" checked={types.includes(t)} onChange={() => toggleType(t)} className="rounded border-gray-300 text-primary-600 dark:border-gray-600 dark:bg-gray-700" />
             {t}
           </label>
         ))}
@@ -840,15 +755,13 @@ function QuickMailForm({ client, onDone, onCancel }) {
       <input
         type="text" placeholder="Notes (optional)" value={notes}
         onChange={e => setNotes(e.target.value)}
-        style={{ width: '100%', fontSize: '.8rem', padding: '5px 8px', border: '1px solid #d1d5db', borderRadius: 5, outline: 'none', marginBottom: 8 }}
+        className="w-full text-sm px-2 py-1.5 border border-gray-300 rounded-md outline-none mb-2 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:ring-1 focus:ring-primary-500"
       />
-      <div style={{ display: 'flex', gap: 6 }}>
-        <button className="btn btn-sm btn-primary" onClick={submit} disabled={saving}>
+      <div className="flex gap-1.5">
+        <Button size="xs" onClick={submit} isProcessing={saving} disabled={saving}>
           {saving ? 'Saving…' : 'Log Mail'}
-        </button>
-        <button className="btn btn-sm" style={{ background: 'none', border: '1px solid #e2e8f0', color: '#64748b' }} onClick={onCancel}>
-          Cancel
-        </button>
+        </Button>
+        <Button size="xs" color="light" onClick={onCancel}>Cancel</Button>
       </div>
     </div>
   )
@@ -874,52 +787,33 @@ function ViolationsProfileTab({ client }) {
       .catch(() => { setRecords([]); setLoading(false) })
   }, [client.id])
 
-  const STATUS_STYLE = {
-    pending:   { background: '#fef3c7', color: '#92400e',  label: 'Pending'   },
-    assigned:  { background: '#dbeafe', color: '#1e40af',  label: 'Assigned'  },
-    completed: { background: '#dcfce7', color: '#15803d',  label: 'Completed' },
-    waived:    { background: '#f1f5f9', color: '#475569',  label: 'Waived'    },
-  }
-
-  if (loading) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontSize: '.84rem' }}>Loading…</div>
-  )
+  if (loading) return <p className="py-7 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</p>
   if (!records?.length) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No infraction records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No infraction records for this resident.</p>
   )
 
   return (
     <div>
       {records.map((v, i) => {
-        const s = STATUS_STYLE[v.status] || { background: '#f1f5f9', color: '#475569', label: v.status }
+        const s = VIOL_STATUS[v.status] || { ...VIOL_STATUS_DEFAULT, label: v.status }
         return (
-          <div key={v.id || i} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: '.83rem', color: '#0f172a', lineHeight: 1.4 }}>
-                  {v.description || 'Infraction'}
-                </div>
-                <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+          <div key={v.id || i} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex justify-between items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-sm text-gray-900 leading-snug dark:text-gray-100">{v.description || 'Infraction'}</div>
+                <div className="text-[11px] text-gray-400 mt-0.5">
                   {fmtDate(v.violation_date)}{v.logged_by ? ` · logged by ${v.logged_by}` : ''}
                 </div>
-                {v.notes && (
-                  <div style={{ fontSize: '.76rem', color: '#475569', marginTop: 3 }}>{v.notes}</div>
-                )}
+                {v.notes && <div className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{v.notes}</div>}
                 {(v.status === 'assigned' || v.status === 'completed') && v.consequence && (
-                  <div style={{ fontSize: '.76rem', color: '#1e40af', marginTop: 3 }}>
+                  <div className="text-xs text-blue-700 mt-0.5 dark:text-blue-400">
                     Consequence: {v.consequence}
-                    {v.consequence_by ? <span style={{ color: '#94a3b8' }}> · by {v.consequence_by}</span> : null}
+                    {v.consequence_by ? <span className="text-gray-400"> · by {v.consequence_by}</span> : null}
                   </div>
                 )}
-                {v.status === 'waived' && (
-                  <div style={{ fontSize: '.76rem', color: '#64748b', marginTop: 3 }}>Waived — no consequence</div>
-                )}
+                {v.status === 'waived' && <div className="text-xs text-gray-500 mt-0.5">Waived — no consequence</div>}
               </div>
-              <span style={{ flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8, ...s }}>
-                {s.label}
-              </span>
+              <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${s.cls}`}>{s.label}</span>
             </div>
           </div>
         )
@@ -952,13 +846,9 @@ function GroupsProfileTab({ client }) {
       .catch(() => { setSessions([]); setLoading(false) })
   }, [client.id])
 
-  if (loading) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontSize: '.84rem' }}>Loading…</div>
-  )
+  if (loading) return <p className="py-7 text-center text-sm text-gray-400 dark:text-gray-500">Loading…</p>
   if (!sessions?.length) return (
-    <div style={{ padding: 28, textAlign: 'center', color: '#94a3b8', fontStyle: 'italic', fontSize: '.84rem' }}>
-      No group session records for this resident.
-    </div>
+    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No group session records for this resident.</p>
   )
 
   return (
@@ -967,32 +857,24 @@ function GroupsProfileTab({ client }) {
         const present = (s.attendance || []).filter(a => a.present).length
         const total   = (s.attendance || []).length
         return (
-          <div key={s.id} style={{ padding: '10px 16px', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div key={s.id} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
+            <div className="flex justify-between items-start gap-2">
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '.83rem', color: '#0f172a' }}>
+                <div className="flex items-center gap-1.5 font-bold text-sm text-gray-900 dark:text-gray-100">
                   {s.group_name}
                   {s.time_of_day && (
-                    <span style={{ fontSize: '.63rem', fontWeight: 800, background: '#dbeafe', color: '#1e40af', padding: '1px 6px', borderRadius: 8 }}>
+                    <span className="text-[10px] font-extrabold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-400">
                       {s.time_of_day}
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: '.71rem', color: '#94a3b8', marginTop: 2 }}>
+                <div className="text-[11px] text-gray-400 mt-0.5">
                   {fmtDate(s.session_date)}{s.facilitator ? ` · ${s.facilitator}` : ''}
                 </div>
-                {total > 0 && (
-                  <div style={{ fontSize: '.71rem', color: '#64748b', marginTop: 1 }}>
-                    Group: {present}/{total} attended
-                  </div>
-                )}
+                {total > 0 && <div className="text-[11px] text-gray-500 mt-0.5">Group: {present}/{total} attended</div>}
               </div>
               {s.myAtt && (
-                <span style={{
-                  flexShrink: 0, fontSize: '.66rem', fontWeight: 700, padding: '2px 8px', borderRadius: 8,
-                  background: s.myAtt.present ? '#dcfce7' : '#f1f5f9',
-                  color:      s.myAtt.present ? '#15803d' : '#94a3b8',
-                }}>
+                <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${s.myAtt.present ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700'}`}>
                   {s.myAtt.present ? 'Present' : 'Absent'}
                 </span>
               )}
@@ -1011,11 +893,7 @@ function NavBtn({ onClick, disabled, children }) {
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      style={{
-        background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.22)',
-        color: '#fff', padding: '3px 10px', borderRadius: 5, fontSize: '.71rem',
-        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1,
-      }}
+      className={`px-2.5 py-0.5 rounded text-[11px] text-white border border-white/20 bg-white/10 transition-opacity ${disabled ? 'opacity-40 cursor-default' : 'hover:bg-white/20 cursor-pointer'}`}
     >
       {children}
     </button>
@@ -1085,65 +963,37 @@ export default function ClientProfile({ onNavigateTab }) {
   return (
     <>
       {/* Backdrop */}
-      <div
-        onClick={closeProfile}
-        style={{
-          position: 'fixed', inset: 0,
-          background: 'rgba(15,23,42,.38)',
-          zIndex: 1200,
-        }}
-      />
+      <div onClick={closeProfile} className="fixed inset-0 bg-slate-900/40 z-[1200]" />
 
       {/* Drawer panel */}
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 490,
-        background: '#fff', zIndex: 1201,
-        display: 'flex', flexDirection: 'column',
-        boxShadow: '-6px 0 32px rgba(0,0,0,.2)',
-        overflow: 'hidden',
-      }}>
+      <div className="fixed top-0 right-0 bottom-0 w-[490px] bg-white dark:bg-gray-900 z-[1201] flex flex-col shadow-[-6px_0_32px_rgba(0,0,0,0.2)] overflow-hidden">
 
         {/* ── Header ── */}
-        <div style={{ background: 'var(--sidebar-bg)', color: '#fff', padding: '12px 16px 10px', flexShrink: 0 }}>
-
+        <div className="bg-[#0a4655] text-white px-4 pt-3 pb-2.5 shrink-0">
           {/* Caseload nav row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <div className="flex justify-between items-center mb-2.5">
+            <div className="flex gap-1.5 items-center">
               <NavBtn onClick={() => openProfile(prevClient.id)} disabled={!prevClient}>← Prev</NavBtn>
               {rosterIdx >= 0 && (
-                <span style={{ fontSize: '.66rem', color: '#a8c0e8' }}>
-                  {rosterIdx + 1} / {roster.length}
-                </span>
+                <span className="text-[10px] text-blue-200">{rosterIdx + 1} / {roster.length}</span>
               )}
               <NavBtn onClick={() => openProfile(nextClient.id)} disabled={!nextClient}>Next →</NavBtn>
             </div>
-            <button
-              onClick={closeProfile}
-              style={{
-                background: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.22)',
-                color: '#fff', width: 28, height: 28, borderRadius: 5,
-                fontSize: '.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
+            <button onClick={closeProfile}
+              className="w-7 h-7 rounded flex items-center justify-center text-sm text-white bg-white/10 border border-white/20 hover:bg-white/20 cursor-pointer">
               ✕
             </button>
           </div>
 
           {/* Identity row */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {client.photo ? (
-              <img src={client.photo} alt=""
-                style={{ width: 46, height: 46, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255,255,255,.3)', flexShrink: 0 }} />
-            ) : (
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'rgba(255,255,255,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem', flexShrink: 0 }}>
-                👤
-              </div>
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {client.name}
-              </div>
-              <div style={{ fontSize: '.73rem', color: '#a8c0e8', marginTop: 1 }}>
+          <div className="flex items-center gap-3">
+            {client.photo
+              ? <img src={client.photo} alt="" className="w-11 h-11 rounded-full object-cover border-2 border-white/30 shrink-0" />
+              : <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center text-xl shrink-0">👤</div>
+            }
+            <div className="flex-1 min-w-0">
+              <div className="font-extrabold text-base text-white truncate">{client.name}</div>
+              <div className="text-[11px] text-blue-200 mt-0.5">
                 Rm. {client.room}
                 {days != null ? ` · Day ${days}` : ''}
                 {!client.is_active && ' · Discharged'}
@@ -1151,35 +1001,24 @@ export default function ClientProfile({ onNavigateTab }) {
             </div>
             <RiskChip level={riskLevel} />
           </div>
-
         </div>
 
         {/* ── Tab bar ── */}
-        <div style={{
-          display: 'flex', flexShrink: 0, background: '#f8fafc',
-          borderBottom: '2px solid #e2e8f0', overflowX: 'auto',
-        }}>
+        <div className="flex shrink-0 bg-gray-50 border-b-2 border-gray-200 overflow-x-auto dark:bg-gray-800 dark:border-gray-700">
           {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              style={{
-                padding: '8px 12px', border: 'none',
-                borderBottom: activeTab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
-                background: 'none',
-                fontSize: '.74rem', fontWeight: activeTab === t.id ? 700 : 500,
-                color: activeTab === t.id ? 'var(--accent)' : '#64748b',
-                cursor: 'pointer', whiteSpace: 'nowrap', marginBottom: -2,
-              }}
-            >
+            <button key={t.id} onClick={() => setActiveTab(t.id)}
+              className={`px-3 py-2 border-none whitespace-nowrap text-xs -mb-0.5 border-b-2 cursor-pointer bg-transparent transition-colors
+                ${activeTab === t.id
+                  ? 'border-b-[#c9780c] text-[#c9780c] font-bold'
+                  : 'border-b-transparent text-gray-500 font-medium hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                }`}>
               {t.label}
             </button>
           ))}
         </div>
 
         {/* ── Tab body (scrollable) ── */}
-        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-
+        <div className="flex-1 overflow-y-auto min-h-0">
           {activeTab === 'overview'    && <OverviewTab       client={client} data={data} />}
           {activeTab === 'timeline'    && <TimelineTab       client={client} data={data} />}
           {activeTab === 'passes'      && <PassesTab         client={client} data={data} />}
@@ -1194,14 +1033,6 @@ export default function ClientProfile({ onNavigateTab }) {
           {activeTab === 'discharge'   && <DischargeTab      client={client} data={data} />}
         </div>
       </div>
-
-      {/* Slide-in animation */}
-      <style>{`
-        @keyframes op-slide-in-right {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
-        }
-      `}</style>
     </>
   )
 }

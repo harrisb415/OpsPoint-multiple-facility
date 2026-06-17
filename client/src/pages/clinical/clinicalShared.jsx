@@ -93,12 +93,9 @@ export function StatusBadge({ status }) {
 }
 
 // ── Generic chip badge ─────────────────────────────────────────────────────
-export function Chip({ children, bg = '#f1f5f9', fg = '#475569' }) {
+export function Chip({ children, className = 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-300' }) {
   return (
-    <span style={{
-      background: bg, color: fg, fontSize: '.68rem', fontWeight: 700,
-      padding: '2px 9px', borderRadius: 20, textTransform: 'capitalize', whiteSpace: 'nowrap',
-    }}>{children}</span>
+    <span className={`text-[.68rem] font-bold px-2.5 py-0.5 rounded-full capitalize whitespace-nowrap ${className}`}>{children}</span>
   )
 }
 
@@ -121,19 +118,10 @@ export function Modal({ title, onClose, children, footer, maxWidth = 580 }) {
   )
 }
 
-// ── Shared inline styles for form controls ─────────────────────────────────
-// Colors use --inp-* CSS variables that flip under .dark (defined in index.css),
-// so these inline-styled controls stay dark-correct inside flowbite Modals.
-export const inp = {
-  width: '100%', padding: '7px 10px', fontSize: '.85rem',
-  border: '1px solid var(--inp-border)', borderRadius: 6,
-  fontFamily: 'var(--sans)', background: 'var(--inp-bg)', color: 'var(--inp-text)',
-}
-export const lbl = {
-  display: 'block', fontSize: '.72rem', fontWeight: 700, letterSpacing: '.04em',
-  textTransform: 'uppercase', color: 'var(--inp-label)', marginBottom: 4,
-}
-export const field = { marginBottom: 14 }
+// ── Shared Tailwind class strings for form controls ────────────────────────
+export const inp = 'w-full px-2.5 py-[7px] text-sm border border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-primary-500 focus:border-primary-500 outline-none'
+export const lbl = 'block text-[.72rem] font-bold tracking-[.04em] uppercase text-gray-500 dark:text-gray-400 mb-1'
+export const field = 'mb-3.5'
 
 // ── Empty-state row ─────────────────────────────────────────────────────────
 export function EmptyState({ children }) {
@@ -148,8 +136,8 @@ export function EmptyState({ children }) {
 export function SignedLine({ row }) {
   if (!row?.signed_at) return null
   return (
-    <span style={{ fontSize: '.72rem', color: '#15803d', fontWeight: 600 }}>
-      🔒 Signed {fmtDate(row.signed_at)}
+    <span className="text-[.72rem] font-semibold text-green-700 dark:text-green-400">
+      Signed {fmtDate(row.signed_at)}
     </span>
   )
 }

@@ -68,11 +68,11 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="container">
-        <div className="card" style={{ padding: 24 }}>
-          <div className="skeleton-block" style={{ height: 24, marginBottom: 10 }} />
-          <div className="skeleton-block" style={{ height: 24, width: '60%', marginBottom: 10 }} />
-          <div className="skeleton-block" style={{ height: 24, width: '80%' }} />
+      <div className="flex-1 p-6 overflow-y-auto">
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 shadow-sm">
+          <div className="h-6 mb-2.5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-6 mb-2.5 w-3/5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-6 w-4/5 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
         </div>
       </div>
     )
@@ -85,7 +85,7 @@ export default function Dashboard() {
   const active = visibleTabs.find(t => t.id === currentTab) || visibleTabs[0]
 
   return (
-    <div className="container" role="main">
+    <div className="flex-1 p-6 overflow-y-auto" role="main">
       {active?.id === 'report'     && <ReportTab onNavigate={setActiveTab} />}
       {active?.id === 'archive'    && <ArchiveTab />}
       {active?.id === 'clients'    && <ClientsTab />}

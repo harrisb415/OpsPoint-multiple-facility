@@ -10,7 +10,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
 const PASS_BADGE = { Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
@@ -159,6 +159,7 @@ export default function PassesTab() {
               </div>
               <div className={`flex items-center justify-center rounded-lg w-11 h-11 ${k.tint}`}><k.Icon className="w-5 h-5" /></div>
             </div>
+            <DeltaRow delta={null} label="no prior data" />
           </Card>
         ))}
       </div>

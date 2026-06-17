@@ -418,21 +418,15 @@ export function DataProvider({ children }) {
     }}>
       {children}
       {sessionExpired && (
-        <div style={{
-          position:'fixed', inset:0, background:'rgba(15,23,42,.65)',
-          display:'flex', alignItems:'center', justifyContent:'center', zIndex:5000,
-        }}>
-          <div style={{
-            background:'#fff', borderRadius:12, padding:'24px 28px', maxWidth:420,
-            boxShadow:'0 20px 60px rgba(0,0,0,.4)',
-          }}>
-            <h2 style={{ marginTop:0, color:'#7c2d12' }}>Session expired</h2>
-            <p style={{ fontSize:'.92em', color:'#475569' }}>
+        <div className="fixed inset-0 bg-slate-900/65 flex items-center justify-center z-[5000]">
+          <div className="bg-white dark:bg-gray-800 rounded-xl px-7 py-6 max-w-[420px] w-full mx-4 shadow-2xl">
+            <h2 className="mt-0 mb-2 text-red-800 dark:text-red-400 font-bold text-lg">Session expired</h2>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               You were signed out automatically after a period of inactivity (HIPAA technical safeguard).
               Please sign in again to continue.
             </p>
-            <div style={{ marginTop:14, textAlign:'right' }}>
-              <button className="btn btn-primary"
+            <div className="mt-3.5 text-right">
+              <button className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg"
                 onClick={() => { window.location.href = '/login' }}>
                 Sign in again
               </button>

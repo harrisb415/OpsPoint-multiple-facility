@@ -41,45 +41,45 @@ export default function TreatmentPlans() {
       {rows.length === 0
         ? <EmptyState>No treatment plans{filter !== 'all' ? ' for this resident' : ''} yet.</EmptyState>
         : (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div className="grid gap-2.5">
             {rows.map(p => {
               const goals = Array.isArray(p.goals) ? p.goals : []
               return (
-                <div key={p.id} style={card}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: '.92rem', marginBottom: 3 }}>{clientLabel(clients, p.client_id)}</div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div key={p.id} className={card}>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-[.92rem] mb-0.5 text-gray-900 dark:text-white">{clientLabel(clients, p.client_id)}</div>
+                      <div className="flex gap-1.5 items-center flex-wrap">
                         <StatusBadge status={p.status} />
-                        <Chip bg="#e0f2fe" fg="#0369a1">{goals.length} goal{goals.length !== 1 ? 's' : ''}</Chip>
-                        <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>Plan {fmtDate(p.plan_date)}</span>
-                        {p.review_date && <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>· Review {fmtDate(p.review_date)}</span>}
-                        {p.signed_at && <Chip bg="#dcfce7" fg="#15803d">🔒 Signed</Chip>}
+                        <Chip className="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">{goals.length} goal{goals.length !== 1 ? 's' : ''}</Chip>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">Plan {fmtDate(p.plan_date)}</span>
+                        {p.review_date && <span className="text-xs text-gray-400 dark:text-gray-500">· Review {fmtDate(p.review_date)}</span>}
+                        {p.signed_at && <Chip className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300">Signed</Chip>}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                      <button style={btnSm} onClick={() => setEditing(p)}>Edit</button>
-                      {!p.signed_at && <button style={btnSmGreen} onClick={() => finalise(p.id)}>Sign</button>}
-                      <button style={btnSmRed} onClick={() => remove(p.id)}>Delete</button>
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      <button className={btnSm} onClick={() => setEditing(p)}>Edit</button>
+                      {!p.signed_at && <button className={btnSmGreen} onClick={() => finalise(p.id)}>Sign</button>}
+                      <button className={btnSmRed} onClick={() => remove(p.id)}>Delete</button>
                     </div>
                   </div>
                   {p.presenting_problem && (
-                    <div style={{ marginTop: 8, fontSize: '.82rem', color: '#334155', lineHeight: 1.5 }}>
-                      <strong style={{ color: '#64748b' }}>Presenting problem: </strong>{p.presenting_problem}
+                    <div className="mt-2 text-[.82rem] text-gray-800 dark:text-gray-200 leading-relaxed">
+                      <strong className="text-gray-500 dark:text-gray-400">Presenting problem: </strong>{p.presenting_problem}
                     </div>
                   )}
                   {goals.length > 0 && (
-                    <ul style={{ margin: '8px 0 0', paddingLeft: 18, fontSize: '.82rem', color: '#334155' }}>
+                    <ul className="mt-2 pl-4 text-[.82rem] text-gray-800 dark:text-gray-200 space-y-0.5">
                       {goals.map((g, i) => {
                         const linked = milestones.filter(m => m.treatment_plan_id === p.id && g.id && m.goal_id === g.id)
                         const done = linked.filter(m => m.status === 'completed').length
                         return (
-                          <li key={g.id || i} style={{ marginBottom: 3 }}>
-                            {g.goal || <em style={{ color: '#cbd5e1' }}>(untitled goal)</em>}
+                          <li key={g.id || i}>
+                            {g.goal || <em className="text-gray-400">(untitled goal)</em>}
                             {linked.length > 0 && (
-                              <span style={{ marginLeft: 6 }}>
-                                <Chip bg={done === linked.length ? '#dcfce7' : '#fef9c3'} fg={done === linked.length ? '#15803d' : '#854d0e'}>
-                                  🏆 {done}/{linked.length} milestone{linked.length !== 1 ? 's' : ''}
+                              <span className="ml-1.5">
+                                <Chip className={done === linked.length ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'}>
+                                  {done}/{linked.length} milestone{linked.length !== 1 ? 's' : ''}
                                 </Chip>
                               </span>
                             )}
@@ -113,13 +113,12 @@ function PlanModal({ clients, record, onClose, onSaved, busy, setBusy }) {
   const [barriers, setBarriers] = useState(record?.barriers || '')
   const [goals, setGoals] = useState(
     Array.isArray(record?.goals) && record.goals.length ? record.goals.map(g => ({
-      id: g.id,   // preserve stable id so milestone links survive edits
+      id: g.id,
       goal: g.goal || '', objectives: g.objectives?.length ? [...g.objectives] : [''], interventions: g.interventions?.length ? [...g.interventions] : [''],
     })) : [emptyGoal()]
   )
   const [err, setErr] = useState('')
 
-  // goal mutators
   const setGoal = (gi, patch) => setGoals(gs => gs.map((g, i) => i === gi ? { ...g, ...patch } : g))
   const setListItem = (gi, key, li, val) => setGoal(gi, { [key]: goals[gi][key].map((v, i) => i === li ? val : v) })
   const addListItem = (gi, key) => setGoal(gi, { [key]: [...goals[gi][key], ''] })
@@ -128,7 +127,7 @@ function PlanModal({ clients, record, onClose, onSaved, busy, setBusy }) {
   function cleanGoals() {
     return goals
       .map(g => ({
-        ...(g.id ? { id: g.id } : {}),   // keep existing id; server stamps new goals
+        ...(g.id ? { id: g.id } : {}),
         goal: g.goal.trim(),
         objectives: g.objectives.map(s => s.trim()).filter(Boolean),
         interventions: g.interventions.map(s => s.trim()).filter(Boolean),
@@ -153,60 +152,60 @@ function PlanModal({ clients, record, onClose, onSaved, busy, setBusy }) {
   return (
     <Modal title={isEdit ? 'Edit Treatment Plan' : 'New Treatment Plan'} onClose={onClose} maxWidth={680}
       footer={<>
-        <button className="btn-cancel" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Plan'}</button>
+        <button className={btnSm} onClick={onClose}>Cancel</button>
+        <button className={btnSmGreen} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Plan'}</button>
       </>}>
-      {err && <div className="auth-error" style={{ marginBottom: 12 }}>{err}</div>}
-      <div style={field}>
-        <label style={lbl}>Resident</label>
-        <select style={inp} value={clientId} disabled={isEdit} onChange={e => setClientId(e.target.value)}>
+      {err && <div className="mb-3 p-2.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded dark:bg-red-900/20 dark:text-red-400 dark:border-red-800">{err}</div>}
+      <div className={field}>
+        <label className={lbl}>Resident</label>
+        <select className={inp} value={clientId} disabled={isEdit} onChange={e => setClientId(e.target.value)}>
           <option value="">Select resident…</option>
           {activeClients(clients).map(c => <option key={c.id} value={c.id}>{clientLabel(clients, c.id)}</option>)}
         </select>
       </div>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ ...field, flex: 1, minWidth: 120 }}><label style={lbl}>Plan date</label><input style={inp} type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} /></div>
-        <div style={{ ...field, flex: 1, minWidth: 120 }}><label style={lbl}>Target date</label><input style={inp} type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} /></div>
-        <div style={{ ...field, flex: 1, minWidth: 120 }}><label style={lbl}>Review date</label><input style={inp} type="date" value={reviewDate} onChange={e => setReviewDate(e.target.value)} /></div>
-        <div style={{ ...field, flex: 1, minWidth: 120 }}><label style={lbl}>Status</label>
-          <select style={inp} value={status} onChange={e => setStatus(e.target.value)}>
+      <div className="flex gap-3 flex-wrap">
+        <div className={`${field} flex-1 min-w-[120px]`}><label className={lbl}>Plan date</label><input className={inp} type="date" value={planDate} onChange={e => setPlanDate(e.target.value)} /></div>
+        <div className={`${field} flex-1 min-w-[120px]`}><label className={lbl}>Target date</label><input className={inp} type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} /></div>
+        <div className={`${field} flex-1 min-w-[120px]`}><label className={lbl}>Review date</label><input className={inp} type="date" value={reviewDate} onChange={e => setReviewDate(e.target.value)} /></div>
+        <div className={`${field} flex-1 min-w-[120px]`}><label className={lbl}>Status</label>
+          <select className={inp} value={status} onChange={e => setStatus(e.target.value)}>
             {STATUSES.map(s => <option key={s} value={s}>{s[0].toUpperCase() + s.slice(1)}</option>)}
           </select>
         </div>
       </div>
-      <div style={field}><label style={lbl}>Presenting problem</label><textarea style={{ ...inp, minHeight: 60, resize: 'vertical' }} value={presenting} onChange={e => setPresenting(e.target.value)} /></div>
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ ...field, flex: 1 }}><label style={lbl}>Strengths</label><textarea style={{ ...inp, minHeight: 56, resize: 'vertical' }} value={strengths} onChange={e => setStrengths(e.target.value)} /></div>
-        <div style={{ ...field, flex: 1 }}><label style={lbl}>Barriers</label><textarea style={{ ...inp, minHeight: 56, resize: 'vertical' }} value={barriers} onChange={e => setBarriers(e.target.value)} /></div>
+      <div className={field}><label className={lbl}>Presenting problem</label><textarea className={`${inp} min-h-[60px] resize-y`} value={presenting} onChange={e => setPresenting(e.target.value)} /></div>
+      <div className="flex gap-3">
+        <div className={`${field} flex-1`}><label className={lbl}>Strengths</label><textarea className={`${inp} min-h-[56px] resize-y`} value={strengths} onChange={e => setStrengths(e.target.value)} /></div>
+        <div className={`${field} flex-1`}><label className={lbl}>Barriers</label><textarea className={`${inp} min-h-[56px] resize-y`} value={barriers} onChange={e => setBarriers(e.target.value)} /></div>
       </div>
 
-      <label style={lbl}>Goals</label>
+      <label className={lbl}>Goals</label>
       {goals.map((g, gi) => (
-        <div key={gi} style={{ border: '1px solid var(--line, #e2e8f0)', borderRadius: 8, padding: 12, marginBottom: 10, background: '#f8fafc' }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-            <input style={{ ...inp, fontWeight: 600 }} placeholder={`Goal ${gi + 1}`} value={g.goal} onChange={e => setGoal(gi, { goal: e.target.value })} />
-            {goals.length > 1 && <button style={btnSmRed} onClick={() => setGoals(gs => gs.filter((_, i) => i !== gi))}>✕</button>}
+        <div key={gi} className="border border-gray-200 dark:border-gray-600 rounded-lg p-3 mb-2.5 bg-gray-50 dark:bg-gray-700/40">
+          <div className="flex gap-2 items-center mb-2">
+            <input className={`${inp} font-semibold`} placeholder={`Goal ${gi + 1}`} value={g.goal} onChange={e => setGoal(gi, { goal: e.target.value })} />
+            {goals.length > 1 && <button className={btnSmRed} onClick={() => setGoals(gs => gs.filter((_, i) => i !== gi))}>✕</button>}
           </div>
-          <SubList label="Objectives" items={g.objectives} onChange={(li, v) => setListItem(gi, 'objectives', li, v)} onAdd={() => addListItem(gi, 'objectives')} onRemove={li => removeListItem(gi, 'objectives', li)} />
-          <SubList label="Interventions" items={g.interventions} onChange={(li, v) => setListItem(gi, 'interventions', li, v)} onAdd={() => addListItem(gi, 'interventions')} onRemove={li => removeListItem(gi, 'interventions', li)} />
+          <SubList label="Objectives" items={g.objectives} onChange={(li, v) => setListItem(gi, 'objectives', li, v)} onAdd={() => addListItem(gi, 'objectives')} onRemove={li => removeListItem(gi, 'objectives', li)} btnSm={btnSm} btnSmRed={btnSmRed} />
+          <SubList label="Interventions" items={g.interventions} onChange={(li, v) => setListItem(gi, 'interventions', li, v)} onAdd={() => addListItem(gi, 'interventions')} onRemove={li => removeListItem(gi, 'interventions', li)} btnSm={btnSm} btnSmRed={btnSmRed} />
         </div>
       ))}
-      <button style={{ ...btnSm, marginTop: 2 }} onClick={() => setGoals(gs => [...gs, emptyGoal()])}>+ Add Goal</button>
+      <button className={`${btnSm} mt-0.5`} onClick={() => setGoals(gs => [...gs, emptyGoal()])}>+ Add Goal</button>
     </Modal>
   )
 }
 
-function SubList({ label, items, onChange, onAdd, onRemove }) {
+function SubList({ label, items, onChange, onAdd, onRemove, btnSm, btnSmRed }) {
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: '.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>{label}</div>
+    <div className="mb-2">
+      <div className="text-[.68rem] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1">{label}</div>
       {items.map((v, li) => (
-        <div key={li} style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
-          <input style={{ ...inp, padding: '5px 8px', fontSize: '.8rem' }} value={v} onChange={e => onChange(li, e.target.value)} placeholder={`${label.slice(0, -1)} ${li + 1}`} />
-          {items.length > 1 && <button style={{ ...btnSm, padding: '2px 8px' }} onClick={() => onRemove(li)}>✕</button>}
+        <div key={li} className="flex gap-1.5 mb-1">
+          <input className={`${inp} py-[5px] px-2 text-[.8rem]`} value={v} onChange={e => onChange(li, e.target.value)} placeholder={`${label.slice(0, -1)} ${li + 1}`} />
+          {items.length > 1 && <button className={`${btnSmRed} px-2 py-0.5`} onClick={() => onRemove(li)}>✕</button>}
         </div>
       ))}
-      <button style={{ ...btnSm, padding: '2px 10px', fontSize: '.72rem' }} onClick={onAdd}>+ {label.slice(0, -1)}</button>
+      <button className={`${btnSm} px-2.5 py-0.5 text-[.72rem]`} onClick={onAdd}>+ {label.slice(0, -1)}</button>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useRef } from 'react'
 import { Button, Modal, ModalBody, ModalFooter, ModalHeader } from 'flowbite-react'
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { initials, avatarColor } from '../utils/ui.js'
 
 // ── Form field: label + control (dark-aware) ───────────────────────────────
@@ -100,5 +101,26 @@ export function FilterChip({ active, onClick, children }) {
     >
       {children}
     </button>
+  )
+}
+
+// ── KPI card delta / trend row ────────────────────────────────────────────────
+export function DeltaRow({ delta, label = 'vs prior period' }) {
+  if (!delta) return (
+    <div className="pt-3 mt-4 border-t border-gray-100 dark:border-gray-700">
+      <span className="inline-flex items-center text-sm font-medium text-gray-400">
+        <Minus className="w-4 h-4 mr-1" />{label}
+      </span>
+    </div>
+  )
+  const up = delta > 0
+  return (
+    <div className="pt-3 mt-4 border-t border-gray-100 dark:border-gray-700">
+      <span className={`inline-flex items-center text-sm font-medium ${up ? 'text-green-500' : 'text-red-500'}`}>
+        {up ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
+        {up ? '+' : ''}{delta}
+        <span className="ml-1.5 font-normal text-gray-400">{label}</span>
+      </span>
+    </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Alert, Badge, Button, Label, TextInput } from 'flowbite-react'
 import { AlertCircle, ArrowRight } from 'lucide-react'
@@ -14,6 +14,14 @@ export default function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
 
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = (e) => document.documentElement.classList.toggle('dark', e.matches)
+    apply(mq)
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!username || !password) { setError('Username and password required.'); return }
@@ -26,7 +34,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4 py-10 bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col items-center justify-center min-h-screen px-4 py-10 bg-gradient-to-br from-primary-50 via-white to-sky-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-900">
       <div className="w-full max-w-sm overflow-hidden bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700">
         <div className="flex flex-col items-center px-6 pt-8 pb-6 text-center">
           <img src="/static/icons/icon-192.png" alt="OpsPoint" className="w-16 h-16 rounded-xl shadow-sm" />

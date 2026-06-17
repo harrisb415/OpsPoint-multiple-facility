@@ -9,7 +9,11 @@ import { useConfirm } from '../../components/ui.jsx'
 
 const api = clinicalApi('group-notes')
 const PARTICIPATION = ['present', 'absent', 'excused']
-const PART_COLORS = { present: ['#dcfce7', '#15803d'], absent: ['#fee2e2', '#991b1b'], excused: ['#fef3c7', '#92400e'] }
+const PART_CLS = {
+  present: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  absent:  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  excused: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+}
 
 export default function GroupNotes() {
   const { groupNotes, data, refresh } = useData()
@@ -40,31 +44,31 @@ export default function GroupNotes() {
       {(groupNotes || []).length === 0
         ? <EmptyState>No group session notes yet.</EmptyState>
         : (
-          <div style={{ display: 'grid', gap: 10 }}>
+          <div className="grid gap-2.5">
             {groupNotes.map(g => {
               const att = g.attendees || []
               const present = att.filter(a => a.participation === 'present').length
               const isFinal = g.status === 'final'
               return (
-                <div key={g.id} style={card}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, fontSize: '.92rem', marginBottom: 3 }}>{g.group_name || '(untitled group)'}</div>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div key={g.id} className={card}>
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0">
+                      <div className="font-bold text-[.92rem] mb-0.5 text-gray-900 dark:text-white">{g.group_name || '(untitled group)'}</div>
+                      <div className="flex gap-1.5 items-center flex-wrap">
                         <StatusBadge status={g.status} />
-                        <span style={{ fontSize: '.75rem', color: '#94a3b8' }}>{fmtDate(g.session_date)}</span>
-                        {g.topic && <Chip bg="#e0f2fe" fg="#0369a1">{g.topic}</Chip>}
-                        <Chip bg="#f1f5f9" fg="#475569">{present}/{att.length} present</Chip>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">{fmtDate(g.session_date)}</span>
+                        {g.topic && <Chip className="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">{g.topic}</Chip>}
+                        <Chip>{present}/{att.length} present</Chip>
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexShrink: 0, alignItems: 'center' }}>
-                      <button style={btnSm} onClick={() => setViewing(g)}>View</button>
+                    <div className="flex gap-1.5 flex-shrink-0 items-center">
+                      <button className={btnSm} onClick={() => setViewing(g)}>View</button>
                       {isFinal
                         ? <SignedLine row={g} />
                         : <>
-                            <button style={btnSm} onClick={() => setEditing(g)}>Edit</button>
-                            <button style={btnSmGreen} onClick={() => finalise(g.id)}>Finalise</button>
-                            <button style={btnSmRed} onClick={() => remove(g.id)}>Delete</button>
+                            <button className={btnSm} onClick={() => setEditing(g)}>Edit</button>
+                            <button className={btnSmGreen} onClick={() => finalise(g.id)}>Finalise</button>
+                            <button className={btnSmRed} onClick={() => remove(g.id)}>Delete</button>
                           </>}
                     </div>
                   </div>
@@ -91,7 +95,6 @@ function GroupModal({ clients, record, groupNames, onClose, onSaved, busy, setBu
   const [content, setContent] = useState(record?.content || '')
   const [err, setErr] = useState('')
 
-  // attendee map: { [clientId]: { checked, participation, individual_note } }
   const [att, setAtt] = useState(() => {
     const m = {}
     ;(record?.attendees || []).forEach(a => { m[a.client_id] = { checked: true, participation: a.participation || 'present', individual_note: a.individual_note || '' } })
@@ -115,48 +118,49 @@ function GroupModal({ clients, record, groupNames, onClose, onSaved, busy, setBu
   return (
     <Modal title={isEdit ? 'Edit Group Note' : 'New Group Note'} onClose={onClose} maxWidth={680}
       footer={<>
-        <button className="btn-cancel" onClick={onClose}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Draft'}</button>
+        <button className={btnSm} onClick={onClose}>Cancel</button>
+        <button className={btnSmGreen} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save Draft'}</button>
       </>}>
-      {err && <div className="auth-error" style={{ marginBottom: 12 }}>{err}</div>}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ ...field, flex: 2, minWidth: 200 }}>
-          <label style={lbl}>Group name</label>
-          <input style={inp} list="group-name-list" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="e.g. Morning Process Group" />
+      {err && <div className="mb-3 p-2.5 text-sm text-red-700 bg-red-50 border border-red-200 rounded dark:bg-red-900/20 dark:text-red-400 dark:border-red-800">{err}</div>}
+      <div className="flex gap-3 flex-wrap">
+        <div className={`${field} flex-[2] min-w-[200px]`}>
+          <label className={lbl}>Group name</label>
+          <input className={inp} list="group-name-list" value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="e.g. Morning Process Group" />
           <datalist id="group-name-list">{groupNames.map(n => <option key={n} value={n} />)}</datalist>
         </div>
-        <div style={{ ...field, flex: 1, minWidth: 140 }}>
-          <label style={lbl}>Session date</label>
-          <input style={inp} type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <div className={`${field} flex-1 min-w-[140px]`}>
+          <label className={lbl}>Session date</label>
+          <input className={inp} type="date" value={date} onChange={e => setDate(e.target.value)} />
         </div>
       </div>
-      <div style={field}>
-        <label style={lbl}>Topic</label>
-        <input style={inp} value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Relapse prevention" />
+      <div className={field}>
+        <label className={lbl}>Topic</label>
+        <input className={inp} value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Relapse prevention" />
       </div>
-      <div style={field}>
-        <label style={lbl}>Session note</label>
-        <textarea style={{ ...inp, minHeight: 100, resize: 'vertical' }} value={content} onChange={e => setContent(e.target.value)} />
+      <div className={field}>
+        <label className={lbl}>Session note</label>
+        <textarea className={`${inp} min-h-[100px] resize-y`} value={content} onChange={e => setContent(e.target.value)} />
       </div>
 
-      <label style={lbl}>Attendees</label>
-      <div style={{ border: '1px solid var(--line, #e2e8f0)', borderRadius: 8, maxHeight: 240, overflowY: 'auto' }}>
+      <label className={lbl}>Attendees</label>
+      <div className="border border-gray-200 dark:border-gray-600 rounded-lg max-h-60 overflow-y-auto">
         {activeClients(clients).map(c => {
           const row = att[c.id] || {}
           return (
-            <div key={c.id} style={{ padding: '8px 10px', borderBottom: '1px solid #f1f5f9' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={!!row.checked} onChange={e => setOne(c.id, { checked: e.target.checked, participation: row.participation || 'present' })} />
-                <span style={{ flex: 1, fontSize: '.85rem', fontWeight: 600 }}>{c.name}{c.room ? ` · Rm ${c.room}` : ''}</span>
+            <div key={c.id} className="px-2.5 py-2 border-b border-gray-100 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <input type="checkbox" checked={!!row.checked} onChange={e => setOne(c.id, { checked: e.target.checked, participation: row.participation || 'present' })}
+                  className="w-3.5 h-3.5 accent-blue-600 cursor-pointer flex-shrink-0" />
+                <span className="flex-1 text-sm font-semibold text-gray-800 dark:text-gray-200">{c.name}{c.room ? ` · Rm ${c.room}` : ''}</span>
                 {row.checked && (
-                  <select style={{ ...inp, width: 'auto', padding: '3px 8px', fontSize: '.78rem' }}
+                  <select className={`${inp} w-auto py-[3px] px-2 text-xs`}
                     value={row.participation || 'present'} onChange={e => setOne(c.id, { participation: e.target.value })}>
                     {PARTICIPATION.map(p => <option key={p} value={p}>{p[0].toUpperCase() + p.slice(1)}</option>)}
                   </select>
                 )}
               </div>
               {row.checked && (
-                <input style={{ ...inp, marginTop: 6, padding: '5px 8px', fontSize: '.8rem' }}
+                <input className={`${inp} mt-1.5 py-[5px] px-2 text-[.8rem]`}
                   placeholder="Individual note (optional)" value={row.individual_note || ''} onChange={e => setOne(c.id, { individual_note: e.target.value })} />
               )}
             </div>
@@ -171,36 +175,33 @@ function ViewModal({ record, onClose }) {
   const att = record.attendees || []
   return (
     <Modal title={record.group_name || 'Group Note'} onClose={onClose} maxWidth={620}
-      footer={<button className="btn btn-primary" onClick={onClose}>Close</button>}>
-      <div style={{ marginBottom: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      footer={<button className={btnSm} onClick={onClose}>Close</button>}>
+      <div className="mb-2.5 flex gap-2 items-center flex-wrap">
         <StatusBadge status={record.status} />
-        <span style={{ color: '#94a3b8', fontSize: '.8rem' }}>{fmtDate(record.session_date)}</span>
-        {record.topic && <Chip bg="#e0f2fe" fg="#0369a1">{record.topic}</Chip>}
+        <span className="text-[.8rem] text-gray-400 dark:text-gray-500">{fmtDate(record.session_date)}</span>
+        {record.topic && <Chip className="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">{record.topic}</Chip>}
       </div>
-      {record.content && <div style={{ fontSize: '.85rem', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.5, marginBottom: 14 }}>{record.content}</div>}
-      <div style={{ fontSize: '.74rem', fontWeight: 800, color: 'var(--sidebar-bg, #0a4655)', marginBottom: 6 }}>Attendees ({att.length})</div>
+      {record.content && <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed mb-3.5">{record.content}</div>}
+      <div className="text-[.74rem] font-extrabold text-[#0a4655] dark:text-teal-300 mb-1.5">Attendees ({att.length})</div>
       {att.length === 0
-        ? <div style={{ color: '#94a3b8', fontSize: '.84rem' }}>No attendees recorded.</div>
+        ? <div className="text-sm text-gray-400 dark:text-gray-500">No attendees recorded.</div>
         : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.82rem' }}>
+          <table className="w-full text-sm border-collapse">
             <thead>
-              <tr style={{ textAlign: 'left', color: '#64748b' }}>
-                <th style={{ padding: '4px 6px' }}>Resident</th>
-                <th style={{ padding: '4px 6px' }}>Participation</th>
-                <th style={{ padding: '4px 6px' }}>Note</th>
+              <tr className="text-left text-gray-500 dark:text-gray-400">
+                <th className="px-1.5 py-1 text-xs font-semibold">Resident</th>
+                <th className="px-1.5 py-1 text-xs font-semibold">Participation</th>
+                <th className="px-1.5 py-1 text-xs font-semibold">Note</th>
               </tr>
             </thead>
             <tbody>
-              {att.map(a => {
-                const [bg, fg] = PART_COLORS[a.participation] || ['#f1f5f9', '#475569']
-                return (
-                  <tr key={a.client_id} style={{ borderTop: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '5px 6px', fontWeight: 600 }}>{a.client_name || `Client #${a.client_id}`}{a.room ? ` · Rm ${a.room}` : ''}</td>
-                    <td style={{ padding: '5px 6px' }}><Chip bg={bg} fg={fg}>{a.participation}</Chip></td>
-                    <td style={{ padding: '5px 6px', color: '#475569' }}>{a.individual_note || '—'}</td>
-                  </tr>
-                )
-              })}
+              {att.map(a => (
+                <tr key={a.client_id} className="border-t border-gray-100 dark:border-gray-700">
+                  <td className="px-1.5 py-1.5 font-semibold text-gray-900 dark:text-white">{a.client_name || `Client #${a.client_id}`}{a.room ? ` · Rm ${a.room}` : ''}</td>
+                  <td className="px-1.5 py-1.5"><Chip className={PART_CLS[a.participation] || 'bg-gray-100 text-gray-500'}>{a.participation}</Chip></td>
+                  <td className="px-1.5 py-1.5 text-gray-500 dark:text-gray-400">{a.individual_note || '—'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         )}

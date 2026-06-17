@@ -4,7 +4,7 @@ import {
   Breadcrumb, BreadcrumbItem, Button, Modal, ModalHeader, ModalBody, ModalFooter,
   TextInput, Select, Textarea, Checkbox, Label, Alert,
 } from 'flowbite-react'
-import { Field, useConfirm } from '../components/ui.jsx'
+import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
@@ -16,7 +16,7 @@ const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:bord
 function Panel({ title, right, flush, children }) {
   if (flush) {
     return (
-      <div className={`${CARD} mb-4`} style={{ padding: 0, overflow: 'hidden' }}>
+      <div className={`${CARD} mb-4 !p-0 overflow-hidden`}>
         <div className="flex flex-col gap-2 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
           {right}
@@ -47,17 +47,28 @@ const STATUS_OPTS = [
 ]
 
 
-const LOG_TYPE_STYLE = {
-  Wellness:      { bg: '#ccfbf1', color: '#0f766e' },
-  Walkthrough:   { bg: '#ccfbf1', color: '#0f766e' },
-  UA:            { bg: '#fef3c7', color: '#92400e' },
-  Lunch:         { bg: '#f0fdf9', color: '#6b7280' },
-  'Room Search': { bg: '#ede9fe', color: '#6d28d9' },
-  Mail:          { bg: '#dbeafe', color: '#1d4ed8' },
-  Infraction:    { bg: '#fee2e2', color: '#991b1b' },
-  Intake:        { bg: '#dcfce7', color: '#15803d' },
-  Discharge:     { bg: '#f0fdf9', color: '#6b7280' },
-  Note:          { bg: '#f1f5f9', color: '#475569' },
+const LOG_TYPE_CLS = {
+  Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+  Walkthrough:   'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
+  UA:            'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  Lunch:         'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  'Room Search': 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+  Mail:          'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  Infraction:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  Intake:        'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  Discharge:     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  Note:          'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-400',
+}
+
+const STATUS_BADGE_CLS = {
+  building: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  work:     'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  pass:     'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+  out:      'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
+  bhc:      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  efc:      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  hospital: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+  vacant:   'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500',
 }
 
 const DEFAULT_WALK_AREAS = [
@@ -592,51 +603,50 @@ export default function ReportTab() {
 
       {/* Shift Details */}
       <Panel title="Shift Details" right={activeId && <span className="text-xs text-gray-400">Report #{activeId} · {isClosed ? 'Closed' : 'Open'}</span>}>
-          <div className="meta-grid">
-            <div className="field">
-              <label>Date</label>
-              <input type="date" value={reportDate} disabled={isClosed}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Date">
+              <TextInput type="date" value={reportDate} disabled={isClosed}
                 onChange={e => handleMetaChange('date', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Shift</label>
-              <select value={shift} disabled={isClosed}
+            </Field>
+            <Field label="Shift">
+              <Select value={shift} disabled={isClosed}
                 onChange={e => handleMetaChange('shift', e.target.value)}>
                 <option value="Day Shift">Day Shift ({data?.shift_day_start || '7:00 AM'} – {data?.shift_swing_start || '3:00 PM'})</option>
                 <option value="Swing Shift">Swing Shift ({data?.shift_swing_start || '3:00 PM'} – {data?.shift_grave_start || '11:00 PM'})</option>
                 <option value="Graveyard Shift">Graveyard Shift ({data?.shift_grave_start || '11:00 PM'} – {data?.shift_day_start || '7:00 AM'})</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Program Assistant on Duty (PA)</label>
-              <input type="text" value={modName} placeholder="Name(s)" disabled={isClosed}
+              </Select>
+            </Field>
+            <Field label="Program Assistant on Duty (PA)">
+              <TextInput type="text" value={modName} placeholder="Name(s)" disabled={isClosed}
                 onChange={e => handleMetaChange('mod', e.target.value)} />
-            </div>
+            </Field>
           </div>
       </Panel>
 
       {/* Census */}
       <Panel title="Census" right={<span className="text-xs text-gray-400">{censusTotal} Residents</span>}>
-          <div className="census-grid">
-            {[
-              { key: 'building', label: 'In Building' },
-              { key: 'work',     label: 'Work' },
-              { key: 'pass',     label: 'Pass' },
-              { key: 'bhc',      label: 'BHC' },
-              { key: 'efc',      label: 'EFC' },
-              { key: 'hospital', label: 'Hospital' },
-              { key: 'out',      label: 'Out / Other' },
-            ].map(({ key, label }) => (
-              <div key={key} className="census-card">
-                <div className="count">{census[key]}</div>
-                <div className="clabel">{label}</div>
-              </div>
-            ))}
-            <div className="census-card hi">
-              <div className="count">{censusTotal}</div>
-              <div className="clabel">Total</div>
+        <div className="grid grid-cols-4 gap-2 xl:grid-cols-8">
+          {[
+            { key: 'building', label: 'In Building', dot: 'bg-green-500' },
+            { key: 'work',     label: 'Work',         dot: 'bg-blue-500' },
+            { key: 'pass',     label: 'Pass',          dot: 'bg-yellow-400' },
+            { key: 'bhc',      label: 'BHC',           dot: 'bg-purple-500' },
+            { key: 'efc',      label: 'EFC',           dot: 'bg-purple-400' },
+            { key: 'hospital', label: 'Hospital',      dot: 'bg-red-500' },
+            { key: 'out',      label: 'Out / Other',   dot: 'bg-gray-400' },
+          ].map(({ key, label, dot }) => (
+            <div key={key} className="flex flex-col items-center p-3 bg-white border border-gray-200 rounded-xl dark:bg-gray-700 dark:border-gray-600">
+              <div className={`w-2 h-2 rounded-full mb-2 shrink-0 ${dot}`} />
+              <div className="text-xl font-bold text-gray-900 dark:text-white">{census[key]}</div>
+              <div className="mt-1 text-xs text-center text-gray-500 dark:text-gray-400 leading-tight">{label}</div>
             </div>
+          ))}
+          <div className="flex flex-col items-center p-3 bg-primary-600 border border-primary-700 rounded-xl">
+            <div className="w-2 h-2 rounded-full mb-2 bg-white opacity-60 shrink-0" />
+            <div className="text-xl font-bold text-white">{censusTotal}</div>
+            <div className="mt-1 text-xs text-center text-primary-100 leading-tight">Total</div>
           </div>
+        </div>
       </Panel>
 
       {/* Reminder bar */}
@@ -644,7 +654,7 @@ export default function ReportTab() {
         (showWellness && wellnessReminder && !wellnessDismissed) ||
         (showWalkthrough && walkReminder && !walkDismissed)
       ) && (
-        <div className="reminder-bar">
+        <div className="flex flex-wrap gap-2 mb-4">
           {showWellness && wellnessReminder && !wellnessDismissed && (
             <ReminderCard
               label="Wellness Check"
@@ -673,10 +683,12 @@ export default function ReportTab() {
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">{logEntries.length} {logEntries.length === 1 ? 'Entry' : 'Entries'}</span>
             <div className="flex gap-1">
-              <button onClick={() => toggleLogSort('time')} title="Sort by time" style={sortBtnStyle(logSortKey === 'time', logSortDir)}>
+              <button onClick={() => toggleLogSort('time')} title="Sort by time"
+                className={`px-2 py-1 text-xs font-semibold rounded border cursor-pointer transition-colors ${logSortKey === 'time' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'}`}>
                 Time {logSortKey === 'time' ? (logSortDir > 0 ? '↑' : '↓') : ''}
               </button>
-              <button onClick={() => toggleLogSort('type')} title="Sort by type" style={sortBtnStyle(logSortKey === 'type', logSortDir)}>
+              <button onClick={() => toggleLogSort('type')} title="Sort by type"
+                className={`px-2 py-1 text-xs font-semibold rounded border cursor-pointer transition-colors ${logSortKey === 'type' ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'}`}>
                 Type {logSortKey === 'type' ? (logSortDir > 0 ? '↑' : '↓') : ''}
               </button>
             </div>
@@ -689,53 +701,60 @@ export default function ReportTab() {
       >
           {/* Quick-action pills */}
           {canLog && !isClosed && (
-            <div className="pill-bar">
+            <div className="flex flex-wrap gap-2 mb-3">
               {showWellness && (
-                <button className="pill pill-green" onClick={() => setQuickModal('wellness')}>
+                <button onClick={() => setQuickModal('wellness')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-green-100 text-green-700 border-green-200 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800 dark:hover:bg-green-900/50">
                   ✓ Wellness Check
                 </button>
               )}
               {showWalkthrough && (
-                <button className="pill pill-blue" onClick={() => setQuickModal('walk')}>
+                <button onClick={() => setQuickModal('walk')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/50">
                   ⊕ Walkthrough
                 </button>
               )}
-              <button className="pill pill-yellow" onClick={() => setQuickModal('lunch')}>
+              <button onClick={() => setQuickModal('lunch')}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/50">
                 🍕 Lunch Break
               </button>
-              <button className="pill pill-yellow" onClick={() => setQuickModal('ua')}>
+              <button onClick={() => setQuickModal('ua')}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/50">
                 🧪 UA
               </button>
-              <button className="pill pill-slate" onClick={() => setQuickModal('roomsearch')}>
+              <button onClick={() => setQuickModal('roomsearch')}
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600">
                 🔎 Room Search
               </button>
               {canMailLog && (
-                <button className="pill pill-slate" onClick={() => setQuickModal('mail')}>
+                <button onClick={() => setQuickModal('mail')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600">
                   ✉ Mail
                 </button>
               )}
               {canViolations && (
-                <button className="pill pill-red" onClick={() => setQuickModal('violation')}>
+                <button onClick={() => setQuickModal('violation')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-red-100 text-red-700 border-red-200 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800 dark:hover:bg-red-900/50">
                   ⚠ Infraction
                 </button>
               )}
             </div>
           )}
 
-          <div className="roster-wrap log-table-wrap">
+          <div className="overflow-x-auto -mx-4 sm:-mx-5">
             {logEntries.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 2px' }}>No entries yet.</div>
+              <div className="px-4 py-2 text-sm text-gray-400">No entries yet.</div>
             )}
             {logEntries.length > 0 && (
-              <table className="log-table">
+              <table className="w-full text-sm text-left">
                 <thead>
-                  <tr>
-                    <th className="log-th">Time</th>
-                    <th className="log-th">Type</th>
-                    <th className="log-th">Details</th>
+                  <tr className="text-xs font-medium text-gray-500 uppercase bg-gray-50 dark:bg-gray-700/50 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600">
+                    <th className="px-4 py-2 whitespace-nowrap">Time</th>
+                    <th className="px-4 py-2 whitespace-nowrap">Type</th>
+                    <th className="px-4 py-2">Details</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {logEntries.map(e => (
                     <LogEntry key={e.id ?? e.time + e.text} entry={e} canDelete={canDelLog} onDelete={handleDelLog} onPhotoSaved={loadData} />
                   ))}
@@ -744,66 +763,73 @@ export default function ReportTab() {
             )}
           </div>
           {canLog && !isClosed && (
-            <div className="log-add">
-              <input type="time" value={logTime} onChange={e => setLogTime(e.target.value)} />
-              <input
+            <div className="flex gap-2 mt-3">
+              <TextInput type="time" value={logTime} onChange={e => setLogTime(e.target.value)}
+                sizing="sm" className="w-[130px] shrink-0" />
+              <TextInput
                 ref={logTextRef} type="text" value={logText}
                 onChange={e => setLogText(e.target.value)}
                 placeholder="Entry text…"
+                sizing="sm"
+                className="flex-1"
                 onKeyDown={e => e.key === 'Enter' && handleAddLog()}
               />
-              <button className="btn-add btn-add-b" onClick={handleAddLog}>+ Add</button>
+              <Button size="xs" onClick={handleAddLog}>+ Add</Button>
             </div>
           )}
       </Panel>
 
       {/* Issues & Concerns + Medical Notes — side by side */}
-      <div className="report-2col">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
       <Panel title="Issues & Concerns">
-          <div className="issues-list">
+          <div className="space-y-1.5 mb-2">
             {issues.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 0' }}>None recorded.</div>
+              <p className="text-sm text-gray-400 italic py-1">None recorded.</p>
             )}
             {issues.map((v, i) => (
-              <div key={i} className="issue-item">
-                <span className="issue-text">{v}</span>
+              <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-gray-200 bg-gray-50 dark:bg-gray-700/40 dark:border-gray-600">
+                <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{v}</span>
                 {canIssues && !isClosed && (
-                  <button className="del-btn" onClick={() => handleRemoveIssue(i)}>&times;</button>
+                  <button onClick={() => handleRemoveIssue(i)}
+                    className="text-gray-400 hover:text-red-500 text-lg leading-none shrink-0 cursor-pointer"
+                    title="Remove">&times;</button>
                 )}
               </div>
             ))}
           </div>
           {canIssues && !isClosed && (
-            <div className="issue-add">
-              <input ref={issueRef} type="text" value={issueText}
+            <div className="flex gap-2">
+              <TextInput ref={issueRef} sizing="sm" className="flex-1" type="text" value={issueText}
                 onChange={e => setIssueText(e.target.value)}
                 placeholder="Add issue…" onKeyDown={e => e.key === 'Enter' && handleAddIssue()} />
-              <button className="btn-add btn-add-b" onClick={handleAddIssue}>+ Add</button>
+              <Button size="xs" onClick={handleAddIssue}>+ Add</Button>
             </div>
           )}
       </Panel>
 
       {/* Medical Notes */}
       <Panel title="Medical Notes">
-          <div className="issues-list">
+          <div className="space-y-1.5 mb-2">
             {medNotes.length === 0 && (
-              <div style={{ color: '#94a3b8', fontSize: '.84rem', padding: '4px 0' }}>None recorded.</div>
+              <p className="text-sm text-gray-400 italic py-1">None recorded.</p>
             )}
             {medNotes.map((v, i) => (
-              <div key={i} className="issue-item" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
-                <span className="issue-text">{v}</span>
+              <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+                <span className="flex-1 text-sm text-gray-800 dark:text-gray-200">{v}</span>
                 {canIssues && !isClosed && (
-                  <button className="del-btn" onClick={() => handleRemoveMed(i)}>&times;</button>
+                  <button onClick={() => handleRemoveMed(i)}
+                    className="text-gray-400 hover:text-red-500 text-lg leading-none shrink-0 cursor-pointer"
+                    title="Remove">&times;</button>
                 )}
               </div>
             ))}
           </div>
           {canIssues && !isClosed && (
-            <div className="issue-add">
-              <input ref={medRef} type="text" value={medText}
+            <div className="flex gap-2">
+              <TextInput ref={medRef} sizing="sm" className="flex-1" type="text" value={medText}
                 onChange={e => setMedText(e.target.value)}
                 placeholder="Add medical note…" onKeyDown={e => e.key === 'Enter' && handleAddMed()} />
-              <button className="btn-add btn-add-b" onClick={handleAddMed}>+ Add</button>
+              <Button size="xs" onClick={handleAddMed}>+ Add</Button>
             </div>
           )}
       </Panel>
@@ -814,27 +840,38 @@ export default function ReportTab() {
         title="Roster"
         flush
         right={
-          <input
+          <TextInput
             type="text" placeholder="Search residents…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className="px-3 py-1.5 text-sm text-gray-900 border border-gray-200 rounded-lg sm:w-56 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            sizing="sm" className="sm:w-56"
           />
         }
       >
-          <div className="roster-wrap">
-            <table>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
               <thead>
-                <tr>
-                  <SortTh k="room"    label="Rm"               sortKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortTh k="name"    label="Name"             sortKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortTh k="status"  label="Status"           sortKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortTh k="last_ua" label="Last UA"          sortKey={sortKey} dir={sortDir} onSort={handleSort} className="tc" />
-                  <SortTh k="last_rs" label="Last Room Search" sortKey={sortKey} dir={sortDir} onSort={handleSort} className="tc" />
-                  <th>Comment</th>
-                  {canUA && <th className="tc">Actions</th>}
+                <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-2">
+                      <span>Resident</span>
+                      <div className="flex gap-1">
+                        {['room','name'].map(k => (
+                          <button key={k} onClick={() => handleSort(k)}
+                            className={`px-1.5 py-px text-[10px] font-semibold rounded border transition-colors ${sortKey === k ? 'bg-primary-600 text-white border-primary-600' : 'bg-transparent text-gray-400 border-gray-300 dark:border-gray-600 hover:text-gray-600'}`}>
+                            {k === 'room' ? 'Rm' : 'Name'}{sortKey === k ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </th>
+                  <SortTh k="status"  label="Status"           sortKey={sortKey} dir={sortDir} onSort={handleSort} className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap" />
+                  <SortTh k="last_ua" label="Last UA"          sortKey={sortKey} dir={sortDir} onSort={handleSort} className="px-4 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap" />
+                  <SortTh k="last_rs" label="Last Room Search" sortKey={sortKey} dir={sortDir} onSort={handleSort} className="px-4 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap" />
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Comment</th>
+                  {canUA && <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>}
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {sortedClients.map(c => (
                   <RosterRow
                     key={c.id} client={c}
@@ -850,8 +887,8 @@ export default function ReportTab() {
                 ))}
                 {sortedClients.length === 0 && (
                   <tr>
-                    <td colSpan={canUA ? 7 : 6}
-                      style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: '.88rem' }}>
+                    <td colSpan={canUA ? 6 : 5}
+                      className="py-6 text-center text-sm text-gray-400">
                       No residents found.
                     </td>
                   </tr>
@@ -963,16 +1000,6 @@ export default function ReportTab() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
-function sortBtnStyle(active) {
-  return {
-    padding: '4px 8px', borderRadius: 4, cursor: 'pointer',
-    fontSize: '.7rem', fontWeight: 600,
-    background: active ? 'var(--accent)' : '#f1f5f9',
-    border: `1px solid ${active ? 'var(--accent)' : 'var(--border-light)'}`,
-    color: active ? '#fff' : 'var(--text-muted)',
-  }
-}
-
 function printActivityLogReport({ facility, report, entries, rangeLabel, includeReportContext }) {
   let subtitle = ''
   if (report) {
@@ -1033,32 +1060,24 @@ function printActivityLogReport({ facility, report, entries, rangeLabel, include
 
 // ── Reminder Card ─────────────────────────────────────────────────────
 function ReminderCard({ label, status, nextTime, overdueAt, onDismiss }) {
-  const cls  = status === 'overdue' ? 'reminder-card overdue' : 'reminder-card ok'
-  const icon = status === 'overdue' ? '🔴' : '🟢'
-  const text = status === 'overdue'
+  const overdue = status === 'overdue'
+  const icon = overdue ? '🔴' : '🟢'
+  const text = overdue
     ? `OVERDUE — ${label} missed at ${fmtSchedTime(overdueAt)}`
     : nextTime
       ? `${label} — next at ${fmtSchedTime(nextTime)}`
       : `${label} — no more checks scheduled today`
   return (
-    <div className={cls} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border ${overdue ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800' : 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800'}`}>
       <span>{icon}</span>
-      <span className="rtime">{text}</span>
+      <span className="font-mono text-[0.85rem]">{text}</span>
       {onDismiss && (
         <button
           type="button"
           onClick={onDismiss}
           title="Dismiss until next scheduled check"
           aria-label="Dismiss reminder"
-          style={{
-            marginLeft: 6, padding: '0 6px',
-            background: 'transparent', border: 'none',
-            color: 'currentColor', opacity: .55,
-            cursor: 'pointer', fontSize: '1.05rem', lineHeight: 1,
-            fontWeight: 700, borderRadius: 4,
-          }}
-          onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
-          onMouseLeave={e => { e.currentTarget.style.opacity = '.55' }}
+          className="ml-1 opacity-55 hover:opacity-100 cursor-pointer font-bold text-base leading-none rounded px-0.5 bg-transparent border-none text-current"
         >×</button>
       )}
     </div>
@@ -1139,31 +1158,15 @@ function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose
                   const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'
                   const marked = notLocated.has(c.id)
                   return (
-                    <div key={c.id} onClick={() => toggleNotLocated(c.id)} style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '7px 10px',
-                      borderBottom: i < activeClients.length - 1 ? '1px solid #f1f5f9' : 'none',
-                      cursor: 'pointer', userSelect: 'none',
-                      background: marked ? '#fee2e2' : 'transparent',
-                      transition: 'background .1s',
-                    }}>
+                    <div key={c.id} onClick={() => toggleNotLocated(c.id)}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 cursor-pointer select-none transition-colors ${i < activeClients.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''} ${marked ? 'bg-red-50 dark:bg-red-950/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}`}>
                       <input type="checkbox" checked={marked} onChange={() => {}}
-                        style={{ pointerEvents: 'none', accentColor: '#dc2626', flexShrink: 0, width: 14, height: 14 }} />
-                      <span style={{
-                        fontFamily: 'var(--mono)', fontSize: '.75rem', fontWeight: 700,
-                        color: marked ? '#dc2626' : '#94a3b8',
-                        background: marked ? '#fecaca' : '#f1f5f9',
-                        padding: '1px 6px', borderRadius: 4,
-                        flexShrink: 0, minWidth: 32, textAlign: 'center',
-                      }}>
+                        className="pointer-events-none accent-red-600 shrink-0 w-3.5 h-3.5" />
+                      <span className={`font-mono text-[0.75rem] font-bold shrink-0 min-w-[32px] text-center px-1.5 py-px rounded ${marked ? 'text-red-600 bg-red-100' : 'text-gray-400 bg-gray-100 dark:bg-gray-700 dark:text-gray-500'}`}>
                         {c.room}
                       </span>
-                      <span style={{
-                        flex: 1, fontSize: '.85rem',
-                        fontWeight: marked ? 700 : 500,
-                        color: marked ? '#991b1b' : '#1e293b',
-                      }}>{c.name}</span>
-                      <span style={{ fontSize: '.7rem', color: '#94a3b8', flexShrink: 0 }}>{stLabel[st] || st}</span>
+                      <span className={`flex-1 text-sm ${marked ? 'font-bold text-red-800 dark:text-red-300' : 'font-medium text-gray-800 dark:text-gray-200'}`}>{c.name}</span>
+                      <span className="text-[0.7rem] text-gray-400 shrink-0">{stLabel[st] || st}</span>
                     </div>
                   )
                 })}
@@ -1230,23 +1233,11 @@ function WalkthroughModal({ areas, onClose, onSubmit }) {
             </div>
             <div className="grid grid-cols-2 gap-1 p-2 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700">
               {areas.map(a => (
-                <div key={a} onClick={() => toggleArea(a)} style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: '.83rem', cursor: 'pointer',
-                  padding: '7px 10px', borderRadius: 5,
-                  background: checked[a] ? '#dcfce7' : '#fff',
-                  border: `1px solid ${checked[a] ? '#86efac' : '#e2e8f0'}`,
-                  transition: 'all .1s', userSelect: 'none',
-                  minWidth: 0,
-                }}>
+                <div key={a} onClick={() => toggleArea(a)}
+                  className={`flex items-center gap-2 text-[0.83rem] cursor-pointer px-2.5 py-1.5 rounded-md border transition-all select-none min-w-0 ${checked[a] ? 'bg-green-50 border-green-300 dark:bg-green-900/20 dark:border-green-700' : 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-600'}`}>
                   <input type="checkbox" checked={!!checked[a]} onChange={() => {}}
-                    style={{ pointerEvents: 'none', accentColor: '#16a34a', flexShrink: 0, width: 14, height: 14 }} />
-                  <span style={{
-                    lineHeight: 1.3,
-                    fontWeight: checked[a] ? 600 : 400,
-                    color: checked[a] ? '#15803d' : '#374151',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{a}</span>
+                    className="pointer-events-none accent-green-600 shrink-0 w-3.5 h-3.5" />
+                  <span className={`leading-snug truncate ${checked[a] ? 'font-semibold text-green-700 dark:text-green-400' : 'font-normal text-gray-700 dark:text-gray-300'}`}>{a}</span>
                 </div>
               ))}
             </div>
@@ -1416,39 +1407,26 @@ function MailQuickModal({ clients, onClose }) {
                 <Button type="button" size="xs" color="light" onClick={clearAll}>None</Button>
               </div>
             </div>
-            <div style={{ maxHeight: 260, overflowY: 'auto', overflowX: 'hidden', border: '1.5px solid var(--line)', borderRadius: 6, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div className="max-h-64 overflow-y-auto overflow-x-hidden border border-gray-200 dark:border-gray-700 rounded-md flex flex-col gap-0.5 p-1">
               {clients.map(c => {
                 const sel = selectedIds.has(c.id)
                 return (
                   <Fragment key={c.id}>
-                    <label style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      padding: '5px 6px', borderRadius: sel ? '5px 5px 0 0' : 5, cursor: 'pointer',
-                      background: sel ? '#eff6ff' : '#f8fafc',
-                      border: `1px solid ${sel ? '#93c5fd' : 'transparent'}`,
-                      borderBottom: sel ? '1px solid transparent' : undefined,
-                      fontSize: '.83rem', userSelect: 'none', color: 'var(--text)',
-                    }}>
+                    <label className={`flex items-center gap-2 px-1.5 py-1 text-[0.83rem] cursor-pointer select-none rounded border transition-colors ${sel ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-700 rounded-b-none' : 'bg-gray-50 border-transparent dark:bg-gray-700/30 hover:bg-gray-100 dark:hover:bg-gray-700/60'}`}>
                       <input type="checkbox" checked={sel} onChange={() => toggleClient(c.id)}
-                        style={{ accentColor: '#1d4ed8', flexShrink: 0 }} />
-                      <span style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: '#64748b', minWidth: 34, flexShrink: 0 }}>{c.room}</span>
-                      <span style={{ flex: 1, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                        className="accent-blue-700 shrink-0" />
+                      <span className="font-mono font-bold text-gray-500 min-w-[34px] shrink-0">{c.room}</span>
+                      <span className="flex-1 font-semibold truncate text-gray-800 dark:text-gray-200">{c.name}</span>
                     </label>
                     {sel && (
-                      <div style={{
-                        padding: '4px 8px 6px 34px',
-                        background: '#eff6ff',
-                        border: '1px solid #93c5fd', borderTop: 'none',
-                        borderRadius: '0 0 5px 5px', marginTop: -2,
-                        display: 'flex', gap: 6, alignItems: 'center',
-                      }}>
+                      <div className="flex gap-1.5 items-center pl-8 pr-2 py-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 border-t-0 rounded-b -mt-0.5 mb-0.5">
                         {['letter', 'package'].map(t => {
                           const checked = !!(clientTypes[c.id] || {})[t]
                           return (
-                            <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '.78rem', fontWeight: 600, cursor: 'pointer', textTransform: 'capitalize', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                            <label key={t} className="flex items-center gap-1 text-[0.78rem] font-semibold cursor-pointer capitalize select-none whitespace-nowrap">
                               <input type="checkbox" checked={checked}
                                 onChange={() => toggleType(c.id, t)}
-                                style={{ accentColor: '#1d4ed8', flexShrink: 0 }} />
+                                className="accent-blue-700 shrink-0" />
                               {t}
                             </label>
                           )
@@ -1458,11 +1436,7 @@ function MailQuickModal({ clients, onClose }) {
                           value={clientNotes[c.id] || ''}
                           onChange={e => setNote(c.id, e.target.value)}
                           placeholder="Notes (optional)"
-                          style={{
-                            flex: 1, minWidth: 0, fontSize: '.78rem', padding: '4px 8px',
-                            border: '1px solid #bfdbfe', borderRadius: 4, outline: 'none',
-                            background: '#fff', color: 'var(--text)', fontFamily: 'var(--sans)',
-                          }}
+                          className="flex-1 min-w-0 text-[0.78rem] px-2 py-1 border border-blue-200 dark:border-blue-700 rounded bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 outline-none focus:ring-1 focus:ring-blue-400"
                           onKeyDown={e => e.key === 'Enter' && handleSubmit()}
                         />
                       </div>
@@ -1470,12 +1444,12 @@ function MailQuickModal({ clients, onClose }) {
                   </Fragment>
                 )
               })}
-              {clients.length === 0 && <div style={{ color: '#94a3b8', fontSize: '.82rem', padding: '6px 4px' }}>No active residents.</div>}
+              {clients.length === 0 && <p className="text-gray-400 text-[0.82rem] p-1.5">No active residents.</p>}
             </div>
             {selectedIds.size > 0 && (
-              <div style={{ fontSize: '.74rem', color: '#1d4ed8', fontWeight: 600, marginTop: 4 }}>
+              <p className="text-[0.74rem] text-blue-700 dark:text-blue-400 font-semibold mt-1">
                 {selectedIds.size} recipient{selectedIds.size !== 1 ? 's' : ''} selected
-              </div>
+              </p>
             )}
           </div>
           <Field label="Time" className="max-w-[180px]"><TextInput type="time" value={time} onChange={e => setTime(e.target.value)} /></Field>
@@ -1562,10 +1536,9 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
 function SortTh({ k, label, sortKey, dir, onSort, className }) {
   const active = sortKey === k
   return (
-    <th className={className} onClick={() => onSort(k)}
-      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+    <th className={className} onClick={() => onSort(k)}>
       {label}
-      {active && <span style={{ marginLeft: 3, opacity: .65, fontSize: '.7em' }}>{dir === 1 ? '▲' : '▼'}</span>}
+      {active && <span className="ml-0.5 opacity-65 text-[0.7em]">{dir === 1 ? '▲' : '▼'}</span>}
     </th>
   )
 }
@@ -1573,47 +1546,79 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
 function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
   const opt = stOpt(cur)
-  // In-pass clients can use any status except Weekend Pass
   const statusOpts = hasInPass ? STATUS_OPTS.filter(o => o.v !== 'pass') : STATUS_OPTS
+  const badgeCls = STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
+
+  const ResidentCell = () => {
+    if (c.is_special) return (
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold italic text-gray-400 dark:text-gray-500">{c.name}</p>
+          <p className="font-mono text-xs text-gray-400 dark:text-gray-600">Rm {c.room}</p>
+        </div>
+      </div>
+    )
+    if (c.name === 'VACANT') return (
+      <div className="flex items-center gap-2.5">
+        <div className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-700 shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-gray-400 dark:text-gray-500">Vacant</p>
+          <p className="font-mono text-xs text-gray-400 dark:text-gray-600">Rm {c.room}</p>
+        </div>
+      </div>
+    )
+    return (
+      <div className="flex items-center gap-2.5">
+        {c.photo
+          ? <img src={c.photo} alt={c.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
+          : <ColoredAvatar name={c.name} />
+        }
+        <div>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</p>
+          <p className="font-mono text-xs text-gray-500 dark:text-gray-400">Rm {c.room}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <tr className={c.is_special ? 'srow' : ''}>
-      <td className="rm">{c.room}</td>
-      <td className="name-cell">{c.name}</td>
-      <td>
+    <tr className={`${c.is_special ? 'italic text-gray-400 dark:text-gray-500' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}`}>
+      <td className="px-4 py-2"><ResidentCell /></td>
+      <td className="px-4 py-2">
         {c.is_special ? (
-          <span style={{ color: '#cbd5e1' }}>—</span>
+          <span className="text-gray-300 dark:text-gray-600">—</span>
         ) : c.name === 'VACANT' ? (
-          <span className="ss s-vacant" style={{ display: 'inline-block', pointerEvents: 'none' }}>Vacant</span>
+          <span className="inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500">Vacant</span>
         ) : isClosed || !canStatus || passLocked ? (
-          <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>
+          <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${badgeCls}`}>{opt.l}</span>
         ) : (
-          <select className={`ss ${opt.c}`} value={cur} onChange={e => onStatusChange(c.id, e.target.value)}>
-            {statusOpts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-          </select>
+          <div className="relative inline-flex items-center">
+            <span className={`inline-flex items-center text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap pointer-events-none select-none ${badgeCls}`}>
+              {opt.l} <span className="ml-1 opacity-60">▾</span>
+            </span>
+            <select value={cur} onChange={e => onStatusChange(c.id, e.target.value)}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer">
+              {statusOpts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+            </select>
+          </div>
         )}
       </td>
-      <td className="date-cell tc">{!c.is_special ? (lastUA || '—') : ''}</td>
-      <td className="date-cell tc">{!c.is_special ? (lastRS || '—') : ''}</td>
-      <td>
+      <td className="px-4 py-2 text-center font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{!c.is_special ? (lastUA || '—') : ''}</td>
+      <td className="px-4 py-2 text-center font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{!c.is_special ? (lastRS || '—') : ''}</td>
+      <td className="px-4 py-2">
         {!c.is_special && (
           <input type="text" value={comment} placeholder="—" disabled={isClosed}
             onChange={e => onCommentChange(c.id, e.target.value)}
-            style={{
-              width: '100%', fontSize: '.84rem',
-              padding: '4px 8px',
-              background: isClosed ? '#f8fafc' : '#fff', color: 'var(--text)',
-            }}
+            className={`w-full text-sm px-2 py-1 rounded border border-transparent focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary-500 ${isClosed ? 'bg-slate-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400' : 'bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100'}`}
           />
         )}
       </td>
       {canUA && (
-        <td style={{ textAlign: 'center' }}>
+        <td className="px-4 py-2 text-center">
           {!c.is_special && c.name !== 'VACANT' && (
             <button onClick={() => onUARequest(c.id, c.name, c.room)}
-              style={{
-                fontSize: '.7rem', padding: '3px 8px', background: '#C8500A',
-                color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer', whiteSpace: 'nowrap',
-              }}
+              className="px-2 py-0.5 text-xs font-medium rounded border cursor-pointer whitespace-nowrap bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800"
               title={`Request UA for ${c.name}`}>
               🧪 UA
             </button>
@@ -1628,7 +1633,7 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
   const isPos   = e.text && /POS:/.test(e.text)
   const isUA    = e.text && /— UA:/i.test(e.text)
   const type    = classifyLogEntry(e.text)
-  const ts      = LOG_TYPE_STYLE[type] || LOG_TYPE_STYLE.Note
+  const cls     = LOG_TYPE_CLS[type] || LOG_TYPE_CLS.Note
   const fileRef = useRef(null)
   const [uploading, setUploading] = useState(false)
   const [photoSrc, setPhotoSrc]   = useState(null)
@@ -1670,49 +1675,45 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
 
   return (
     <>
-      <tr style={isPos ? { background: '#fff5f5' } : {}}>
-        <td className="log-td-time" style={isPos ? { borderLeft: '3px solid #DC2626' } : {}}>
+      <tr className={isPos ? 'bg-red-50 dark:bg-red-950/20' : 'bg-white dark:bg-gray-800'}>
+        <td className={`px-4 py-2 font-mono text-xs whitespace-nowrap text-blue-600 dark:text-blue-400${isPos ? ' border-l-2 border-red-500' : ''}`}>
           {e.time}
         </td>
-        <td className="log-td-type">
-          <span className="log-type-badge" style={{ background: ts.bg, color: ts.color }}>
+        <td className="px-4 py-2 whitespace-nowrap">
+          <span className={`inline-flex text-xs font-medium px-2 py-0.5 rounded-md whitespace-nowrap ${cls}`}>
             {type}
           </span>
         </td>
-        <td className="log-td-details">
-          <span className="msg">
-            {isPos
-              ? e.text.split(/(POS:[^|<]+)/).map((part, i) =>
-                  /^POS:/.test(part)
-                    ? <strong key={i} style={{ color: '#DC2626' }}>{part}</strong>
-                    : part
-                )
-              : e.text
-            }
-          </span>
+        <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
+          {isPos
+            ? e.text.split(/(POS:[^|<]+)/).map((part, i) =>
+                /^POS:/.test(part)
+                  ? <strong key={i} className="text-red-600">{part}</strong>
+                  : part
+              )
+            : e.text
+          }
           {isUA && e.id && (
             e.ua_photo
               ? <button onClick={handleViewPhoto} title="View UA photo"
-                  style={{ marginLeft: 6, fontSize: '.72rem', cursor: 'pointer', background: '#eff6ff',
-                    border: '1px solid #bfdbfe', borderRadius: 4, padding: '1px 7px', color: '#3b82f6', lineHeight: 1.6 }}>
+                  className="ml-2 px-1.5 py-px text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
                   📷 View
                 </button>
               : <button onClick={() => fileRef.current?.click()} title="Attach UA photo"
                   disabled={uploading}
-                  style={{ marginLeft: 6, fontSize: '.72rem', cursor: uploading ? 'not-allowed' : 'pointer',
-                    background: 'none', border: '1px solid #e2e8f0', borderRadius: 4,
-                    padding: '1px 7px', color: '#94a3b8', lineHeight: 1.6 }}>
+                  className="ml-2 px-1.5 py-px text-xs text-gray-400 border border-gray-200 rounded hover:bg-gray-50 dark:border-gray-600 dark:text-gray-500 disabled:opacity-50">
                   {uploading ? '⏳' : '📷 Photo'}
                 </button>
           )}
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
           {canDelete && e.id && (
-            <button className="del-btn" onClick={() => onDelete(e.id)} title="Delete">&times;</button>
+            <button onClick={() => onDelete(e.id)} title="Delete"
+              className="ml-2 text-gray-400 hover:text-red-500 text-lg leading-none cursor-pointer bg-transparent border-none">&times;</button>
           )}
         </td>
       </tr>
       {showPhoto && photoSrc && (
-        <tr><td colSpan={3} style={{ padding: 0, border: 'none' }}>
+        <tr><td colSpan={3} className="p-0 border-none">
           <Modal show size="lg" onClose={() => setShowPhoto(false)}>
             <ModalHeader>UA Photo</ModalHeader>
             <ModalBody>

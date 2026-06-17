@@ -37,6 +37,17 @@ const STATUS_OPTS = [
 
 function stOpt(v) { return STATUS_OPTS.find(o => o.v === v) || { v, l: v, c: '' } }
 
+const STATUS_BADGE_CLS = {
+  building: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  work:     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  pass:     'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  out:      'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+  bhc:      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  efc:      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  hospital: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  vacant:   'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
+}
+
 function parseTimeMins(t) {
   const m = t?.match(/(\d+):(\d+)\s*(AM|PM)/i)
   if (!m) return 0
@@ -329,16 +340,19 @@ function ReportDetail({ report: r, data, onBack }) {
       {/* Census */}
       {Object.keys(census).length > 0 && (
         <Panel title="Census">
-          <div className="census-grid">
-            {[['building','In Building'],['work','Work'],['pass','Pass'],['bhc','BHC'],['efc','EFC'],['hospital','Hospital'],['out','Out/Other']].map(([k, l]) => (
-              <div key={k} className={`census-card${(census[k] || 0) > 0 ? ' hi' : ''}`}>
-                <div className="count">{census[k] || 0}</div>
-                <div className="clabel">{l}</div>
-              </div>
-            ))}
-            <div className="census-card hi">
-              <div className="count">{Object.values(census).reduce((a, b) => a + b, 0)}</div>
-              <div className="clabel">Total</div>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+            {[['building','In Building'],['work','Work'],['pass','Pass'],['bhc','BHC'],['efc','EFC'],['hospital','Hospital'],['out','Out/Other']].map(([k, l]) => {
+              const n = census[k] || 0
+              return (
+                <div key={k} className={`flex flex-col items-center p-3 border rounded-xl ${n > 0 ? 'bg-white border-teal-200 dark:bg-gray-700 dark:border-teal-700' : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}>
+                  <div className={`text-xl font-bold font-mono ${n > 0 ? 'text-teal-700 dark:text-teal-400' : 'text-gray-400 dark:text-gray-600'}`}>{n}</div>
+                  <div className="mt-1 text-[10px] text-center font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 leading-tight">{l}</div>
+                </div>
+              )
+            })}
+            <div className="flex flex-col items-center p-3 bg-teal-700 border border-teal-800 rounded-xl dark:bg-teal-900">
+              <div className="text-xl font-bold font-mono text-amber-300">{Object.values(census).reduce((a, b) => a + b, 0)}</div>
+              <div className="mt-1 text-[10px] text-center font-semibold uppercase tracking-wide text-teal-100 leading-tight">Total</div>
             </div>
           </div>
         </Panel>
@@ -347,13 +361,20 @@ function ReportDetail({ report: r, data, onBack }) {
       {/* Log */}
       {logEntries.length > 0 && (
         <Panel title="Activity Log" count={`${logEntries.length} entries`}>
-          <div className="log-entries">
-            {logEntries.map((e, i) => (
-              <div key={i} className="log-entry" style={e.text && /POS:/.test(e.text) ? { borderLeft: '4px solid #DC2626', background: '#fff5f5' } : {}}>
-                <span className="ts">{e.time}</span>
-                <span className="msg">{e.text}</span>
-              </div>
-            ))}
+          <div className="overflow-x-auto -mx-4 sm:-mx-5">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {logEntries.map((e, i) => {
+                  const isPos = e.text && /POS:/.test(e.text)
+                  return (
+                    <tr key={i} className={isPos ? 'bg-red-50 dark:bg-red-950/20' : 'bg-white dark:bg-gray-800'}>
+                      <td className={`px-4 py-2 font-mono text-xs whitespace-nowrap text-blue-600 dark:text-blue-400${isPos ? ' border-l-2 border-red-500' : ''}`}>{e.time}</td>
+                      <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{e.text}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </Panel>
       )}
@@ -361,9 +382,11 @@ function ReportDetail({ report: r, data, onBack }) {
       {/* Issues */}
       {(r.issues || []).length > 0 && (
         <Panel title="Issues & Concerns">
-          <div className="issues-list">
+          <div className="space-y-1.5">
             {r.issues.map((v, i) => (
-              <div key={i} className="issue-item"><span className="issue-text">{v}</span></div>
+              <div key={i} className="flex items-start gap-2 px-2.5 py-1.5 rounded-md border border-gray-200 bg-gray-50 dark:bg-gray-700/40 dark:border-gray-600">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{v}</span>
+              </div>
             ))}
           </div>
         </Panel>
@@ -372,10 +395,10 @@ function ReportDetail({ report: r, data, onBack }) {
       {/* Med Notes */}
       {(r.med_notes || []).length > 0 && (
         <Panel title="Medical Notes">
-          <div className="issues-list">
+          <div className="space-y-1.5">
             {r.med_notes.map((v, i) => (
-              <div key={i} className="issue-item" style={{ background: '#eff6ff', borderColor: '#bfdbfe' }}>
-                <span className="issue-text">{v}</span>
+              <div key={i} className="flex items-start gap-2 px-2.5 py-1.5 rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+                <span className="text-sm text-gray-800 dark:text-gray-200">{v}</span>
               </div>
             ))}
           </div>
@@ -384,32 +407,35 @@ function ReportDetail({ report: r, data, onBack }) {
 
       {/* Roster */}
       <Panel title="Roster">
-        <div className="roster-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Rm</th><th>Name</th><th>Status</th><th>Comment</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.filter(c => c.is_active).map(c => {
-                const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
-                const opt = stOpt(cur)
-                return (
-                  <tr key={c.id} className={c.is_special ? 'srow' : ''}>
-                    <td className="rm">{c.room}</td>
-                    <td className="name-cell">{c.name}</td>
-                    <td>
-                      {c.is_special ? <span style={{ color: '#cbd5e1' }}>—</span>
-                        : <span className={`ss ${opt.c}`} style={{ display: 'inline-block', pointerEvents: 'none' }}>{opt.l}</span>}
-                    </td>
-                    <td style={{ fontSize: '.84rem', color: '#475569' }}>{comments[c.id] || ''}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeadCell className="w-14">Rm</TableHeadCell>
+              <TableHeadCell>Name</TableHeadCell>
+              <TableHeadCell>Status</TableHeadCell>
+              <TableHeadCell>Comment</TableHeadCell>
+            </TableRow>
+          </TableHead>
+          <TableBody className="divide-y">
+            {clients.filter(c => c.is_active).map(c => {
+              const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
+              const opt = stOpt(cur)
+              const badgeCls = STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
+              return (
+                <TableRow key={c.id} className={c.is_special ? 'italic' : ''}>
+                  <TableCell className="font-mono text-xs text-center text-gray-500 dark:text-gray-400">{c.room}</TableCell>
+                  <TableCell className={`font-semibold ${c.is_special ? 'text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'}`}>{c.name}</TableCell>
+                  <TableCell>
+                    {c.is_special
+                      ? <span className="text-gray-300 dark:text-gray-600">—</span>
+                      : <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${badgeCls}`}>{opt.l}</span>}
+                  </TableCell>
+                  <TableCell className="text-sm text-gray-600 dark:text-gray-300">{comments[c.id] || ''}</TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
       </Panel>
     </div>
   )

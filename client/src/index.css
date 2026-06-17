@@ -32,6 +32,24 @@
   --steel:          #9ca3af;
   --teal-50:        #374151;   /* legacy hover bg */
   --teal-200:       #374151;   /* legacy light borders */
+
+  /* Clinical card buttons (dark flips) */
+  --btn-sm-green-bg:     rgba(6,78,59,.3);
+  --btn-sm-green-color:  #86efac;
+  --btn-sm-green-border: rgba(22,101,52,.4);
+  --btn-sm-red-bg:       rgba(127,29,29,.3);
+  --btn-sm-red-color:    #fca5a5;
+  --btn-sm-red-border:   rgba(153,27,27,.4);
+
+  /* Chore log (dark flips) */
+  --chore-done-bg:     rgba(6,78,59,.3);
+  --chore-done-text:   #86efac;
+  --chore-done-border: rgba(22,101,52,.4);
+  --chore-today-bg:    rgba(30,64,175,.2);
+  --chore-today-text:  #93c5fd;
+  --chore-skip-bg:     rgba(0,0,0,.15);
+  --chore-chip-bg:     #374151;
+  --chore-warn-text:   #fbbf24;
 }
 
 /* Console redesign — blue primary ramp (gray/green/red/etc. are TW defaults) */
@@ -62,6 +80,24 @@
   --inp-border: #cbd5e1;
   --inp-text:   #111827;
   --inp-label:  #64748b;
+
+  /* Chore log (light defaults) */
+  --chore-done-bg:     #dcfce7;
+  --chore-done-text:   #15803d;
+  --chore-done-border: #86efac;
+  --chore-today-bg:    #eff6ff;
+  --chore-today-text:  #1d4ed8;
+  --chore-skip-bg:     #f8fafc;
+  --chore-chip-bg:     #e2e8f0;
+  --chore-warn-text:   #92400e;
+
+  /* Clinical card buttons (light defaults) */
+  --btn-sm-green-bg:     #dcfce7;
+  --btn-sm-green-color:  #15803d;
+  --btn-sm-green-border: #bbf7d0;
+  --btn-sm-red-bg:       #fee2e2;
+  --btn-sm-red-color:    #b91c1c;
+  --btn-sm-red-border:   #fecaca;
 
   /* -- Brand (Console rebrand: names kept, values now blue/sky/gray) -- */
   --sidebar-bg:       #1e40af;
@@ -333,19 +369,6 @@
   border-radius: 6px; cursor: pointer; transition: background 150ms;
 }
 .btn-cancel:hover { background: var(--teal-50); }
-.btn-add {
-  font-family: var(--sans); font-size: 13px; font-weight: 600;
-  padding: 0 14px; border: none; border-radius: 6px; cursor: pointer;
-  white-space: nowrap; flex-shrink: 0; height: 36px; transition: background 150ms;
-}
-.btn-add-b { background: var(--accent); color: #fff; }
-.btn-add-b:hover { background: var(--accent-hover); }
-.del-btn {
-  background: none; border: none; color: var(--border-light);
-  cursor: pointer; font-size: 1rem; padding: 0 2px; flex-shrink: 0; transition: color 120ms;
-}
-.del-btn:hover { color: var(--danger); }
-
 /* - Inputs ------------------------------------------------------- */
 /* Global base � every bare input gets a visible border and no browser outline */
 @layer base {
@@ -394,12 +417,10 @@
   border-color: var(--gold-500);
   box-shadow: var(--glow-gold);
 }
-.meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; }
-
 /* - Tables ------------------------------------------------------- */
 /* Bordered, rounded card around every legacy/raw table — matches the design
    prototype's table wrapper (border border-gray-200 rounded-xl). */
-.roster-wrap { overflow-x: auto; border: 1px solid var(--border-light); border-radius: 12px; }
+.roster-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 thead th {
   font-size: 12px; font-weight: 500; text-transform: uppercase;
@@ -411,13 +432,9 @@ thead th.tc { text-align: center; }
 tbody tr { border-bottom: 1px solid var(--border-light); transition: background .12s; }
 tbody tr:nth-child(even) { background: var(--table-row-alt); }
 tbody tr:hover { background: var(--teal-50); }
-tbody tr.srow td { color: var(--text-muted); font-style: italic; }
-tbody tr.drow { opacity: .45; }
 td { padding: 10px 12px; vertical-align: middle; }
 td.rm { font-family: var(--mono); font-size: 12px; text-align: center; color: var(--text-muted); font-weight: 500; }
 td.name-cell { font-weight: 600; color: var(--text-primary); }
-td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-muted); }
-
 /* - Badges ------------------------------------------------------- */
 .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
 .badge-green  { background: var(--status-green-bg); color: #15803d; }
@@ -444,17 +461,6 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
 .s-vacant   { background: #eef2f5; color: #8597a6; border-color: #cfd9e0; font-style: italic; }
 .s-out      { background: #ffe4cc; color: #9a3d12; border-color: #fbb277; }
 
-/* - Activity log (div entries) --------------------------------- */
-.log-entries { display: flex; flex-direction: column; gap: 3px; margin-bottom: 10px; min-height: 28px; }
-.log-entry {
-  display: flex; align-items: baseline; gap: 10px; border-radius: 6px;
-  padding: 6px 10px; border: 1px solid var(--border-light); background: #fff;
-  font-size: 13px; animation: fi .2s ease;
-}
-@keyframes fi { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
-.log-entry .ts { font-family: var(--mono); font-size: 12px; color: var(--teal-600); font-weight: 500; white-space: nowrap; flex-shrink: 0; }
-.log-entry .msg { flex: 1; }
-
 /* - Activity log table ------------------------------------------ */
 .log-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 620px; }
 .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -475,76 +481,6 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
 .log-table tbody tr { transition: background .12s; }
 .log-table tbody tr:hover { background: var(--teal-50); }
 
-/* - Log add row ------------------------------------------------- */
-.log-add { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
-.log-add input[type="time"] {
-  font-family: var(--mono); font-size: 13px; padding: 0 10px; height: 36px;
-  border: 1px solid var(--border-light); border-radius: 6px; background: #fff;
-  color: var(--text-primary); outline: none; width: 100px; flex-shrink: 0;
-  transition: border-color 150ms;
-}
-.log-add input[type="time"]:focus { border-color: var(--gold-500); box-shadow: var(--glow-gold); }
-.log-add input[type="text"] {
-  flex: 1; font-family: var(--sans); font-size: 13px; padding: 0 12px; height: 36px;
-  border: 1px solid var(--border-light); border-radius: 6px; background: #fff;
-  color: var(--text-primary); outline: none; transition: border-color 150ms;
-}
-.log-add input[type="text"]:focus { border-color: var(--gold-500); box-shadow: var(--glow-gold); }
-
-/* - Census cards ------------------------------------------------ */
-.census-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px,1fr)); gap: 10px; }
-.census-card {
-  background: #fff; border: 1px solid var(--teal-200);
-  border-radius: 10px; padding: 14px 11px; text-align: center; box-shadow: var(--shadow-card);
-}
-.census-card.hi { background: var(--grad-census); border-color: transparent; box-shadow: var(--shadow-drop); }
-.census-card .count { font-family: var(--mono); font-size: 1.9rem; font-weight: 700; color: var(--teal-600); line-height: 1; font-variant-numeric: tabular-nums; }
-.census-card.hi .count { color: var(--gold-300); }
-.census-card .clabel { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
-.census-card.hi .clabel { color: rgba(255,255,255,.82); }
-
-/* - Issues ------------------------------------------------------- */
-.issues-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
-.issue-item {
-  display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px;
-  background: #fff; border: 1px solid var(--border-light); border-radius: 8px; font-size: 13px;
-}
-.issue-item .issue-text { flex: 1; }
-/* medical-note entries use inline style with #eff6ff — bump to correct status-work blue */
-.issues-list .issue-item[style*="eff6ff"] { background: #d8e9fe !important; border-color: #88b6f5 !important; }
-.issue-add { display: flex; gap: 8px; }
-.issue-add input {
-  flex: 1; font-family: var(--sans); font-size: 13px; padding: 0 12px; height: 36px;
-  border: 1px solid var(--border-light); border-radius: 6px; background: #fff;
-  color: var(--text-primary); outline: none; transition: border-color 150ms;
-}
-.issue-add input:focus { border-color: var(--gold-500); box-shadow: var(--glow-gold); }
-
-/* - Pills -------------------------------------------------------- */
-.pill-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.pill {
-  display: inline-flex; align-items: center; gap: 5px; padding: 4px 12px;
-  border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; cursor: pointer;
-  background: #fff; transition: box-shadow 150ms, transform 120ms; font-family: var(--sans);
-}
-.pill:hover { transform: translateY(-1px); box-shadow: var(--shadow-drop); }
-.pill-green  { border-color: #6fdc9c; color: #13733e; background: #d7f5e1; }
-.pill-blue   { border-color: #88b6f5; color: #1652c4; background: #d8e9fe; }
-.pill-yellow { border-color: #f6c75a; color: #8a5a08; background: #fdeec4; }
-.pill-orange { border-color: #fbb277; color: #9a3d12; background: #ffe4cc; }
-.pill-red    { border-color: #f59a9a; color: #b81d1d; background: #fdd9d9; }
-.pill-slate  { border-color: var(--border-light); color: var(--text-muted); background: var(--raised-bg); }
-
-/* - Reminder bar ------------------------------------------------ */
-.reminder-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-.reminder-card {
-  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
-  border-radius: 8px; border: 1px solid; font-size: 13px; font-weight: 600; min-width: 180px;
-}
-.reminder-card.ok      { border-color: #6fdc9c; background: #d7f5e1; color: #13733e; }
-.reminder-card.warn    { border-color: #f6c75a; background: #fdeec4; color: #8a5a08; }
-.reminder-card.overdue { border-color: #f59a9a; background: #fdd9d9; color: #b81d1d; }
-.reminder-card .rtime  { font-family: var(--mono); font-size: .85rem; margin-left: auto; }
 
 /* - Modals: now flowbite-react <Modal>; legacy .modal-overlay/.modal/.xbtn removed - */
 
@@ -562,13 +498,6 @@ td.date-cell { font-family: var(--mono); font-size: 12px; color: var(--text-mute
 .save-status .sindot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 @keyframes spulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 .save-status.saving .sindot { animation: spulse .8s infinite; }
-
-/* - Violation badges -------------------------------------------- */
-.vbadge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; white-space: nowrap; border: 1px solid; }
-.vbadge-pending  { background: #fdeec4; color: #8a5a08; border-color: #f6c75a; }
-.vbadge-assigned { background: #ffe4cc; color: #9a3d12; border-color: #fbb277; }
-.vbadge-waived   { background: #eef2f5; color: #8597a6; border-color: #cfd9e0; }
-.vbadge-completed{ background: var(--status-green-bg); color: #15803d; border-color: #6fdc9c; }
 
 /* - Sortable th ------------------------------------------------- */
 th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
@@ -588,10 +517,6 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
 .rc-date { font-family: var(--mono); font-size: 12px; color: var(--teal-600); font-weight: 500; white-space: nowrap; }
 .rc-shift { font-size: 13px; font-weight: 700; flex: 1; }
 .rc-mod { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-.rc-total { font-family: var(--mono); font-size: 13px; font-weight: 500; background: var(--raised-bg); padding: 3px 8px; border-radius: 10px; border: 1px solid var(--teal-200); white-space: nowrap; }
-.rc-del { background: none; border: none; color: var(--border-light); cursor: pointer; font-size: 1rem; padding: 2px 5px; transition: color .12s; }
-.rc-del:hover { color: var(--danger); }
-.empty-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 14px; }
 
 /* - Loading screen ---------------------------------------------- */
 .loading-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--grad-sidebar); }
@@ -648,29 +573,6 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
 .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
 .legend-dot { width: 10px; height: 10px; border-radius: 3px; }
 
-/* - Section ----------------------------------------------------- */
-.section { background: #fff; border: 1px solid var(--teal-200); border-radius: 12px; margin-bottom: 16px; overflow: hidden; box-shadow: var(--shadow-card); }
-.section-head {
-  background: var(--raised-bg); padding: 11px 16px; min-height: 44px;
-  font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-  color: var(--teal-700); display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; border-bottom: 1px solid var(--teal-200);
-}
-/* section head title span */
-.section-head .sh-left > span:not(.sh-dot) {
-  font-family: var(--sans); font-size: 11px; font-weight: 700;
-  letter-spacing: .07em; text-transform: uppercase; color: var(--teal-700); line-height: 1.2;
-}
-/* right-side meta (counts, status badges) */
-.section-head > span,
-.section-head > div > span {
-  font-family: var(--sans); font-size: 11px; font-weight: 700;
-  letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted);
-}
-.sh-left { display: flex; align-items: center; gap: 6px; }
-.sh-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--gold-500); flex-shrink: 0; box-shadow: 0 0 6px rgba(232,146,15,.5); }
-.section-body { padding: 16px; }
-
 /* - Report hero ------------------------------------------------- */
 .report-hero {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
@@ -705,75 +607,6 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
 .report-hero-btn-gold:hover:not(:disabled) { background: var(--gold-700); }
 .report-hero-btn-gold:disabled { opacity: .6; cursor: not-allowed; }
 
-/* - Report 2-column (Issues + Med Notes) ----------------------- */
-.report-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; align-items: start; }
-.report-2col > .section { margin-bottom: 0; }
-@media (max-width: 720px) { .report-2col { grid-template-columns: 1fr; } }
-
-/* - Admin shell (clinical-style panels; scoped � no global bleed) -- */
-/* Re-skins the legacy boxed `.section` chrome to match the clinical look:
-   light bordered card, no gold dot, readable normal-case title. Panels
-   fill the content width; form inputs stay capped so they don't stretch. */
-.admin-shell .section {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  margin-bottom: 16px;
-}
-.admin-shell .section-head {
-  background: #fff;
-  border-bottom: 1px solid var(--line, #e2e8f0);
-  padding: 14px 18px;
-  min-height: 0;
-  text-transform: none;
-  letter-spacing: normal;
-}
-.admin-shell .sh-dot { display: none; }
-.admin-shell .section-head .sh-left > span:not(.sh-dot) {
-  font-size: 1.02rem; font-weight: 800;
-  letter-spacing: -.01em; text-transform: none; color: #0f172a;
-}
-.admin-shell .section-body { padding: 18px; }
-
-/* Keep inputs readable now that cards span the full width. */
-.admin-shell .section-body .field input:not([type=checkbox]):not([type=radio]),
-.admin-shell .section-body .field select { max-width: 440px; }
-
-/* Field rows that should fill the width flow into responsive columns. */
-.admin-shell .adm-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 0 18px;
-}
-.admin-shell .adm-row .field input:not([type=checkbox]):not([type=radio]),
-.admin-shell .adm-row .field select { max-width: none; }
-
-/* Console polish for admin panel internals — align legacy controls/tables
-   to the Console (Flowbite-style) look used everywhere else. */
-.admin-shell .section-head .sh-left > span:not(.sh-dot) {
-  font-size: .875rem; font-weight: 600; color: #374151;
-}
-.admin-shell .field > label {
-  font-size: 11px; font-weight: 500; letter-spacing: .03em;
-  text-transform: uppercase; color: #6b7280;
-}
-.admin-shell .field input:not([type=checkbox]):not([type=radio]),
-.admin-shell .field select,
-.admin-shell .field textarea {
-  height: 38px; border-radius: 8px; border-color: #e5e7eb; font-size: 14px;
-}
-.admin-shell .field textarea { height: auto; }
-.admin-shell .btn-add,
-.admin-shell .btn-cancel { height: 38px; border-radius: 8px; }
-/* Tables → Console: gray-50 head, gray-500 uppercase labels, clean row borders */
-.admin-shell table thead th {
-  color: #6b7280; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
-  font-size: 11px; letter-spacing: .05em;
-}
-.admin-shell table tbody tr { border-bottom: 1px solid #f3f4f6; }
-.admin-shell table tbody tr:nth-child(even) { background: #f9fafb; }
-.admin-shell table tbody tr:hover { background: rgba(239, 246, 255, .6); }
 
 /* - Print ------------------------------------------------------- */
 @media print {
@@ -796,29 +629,7 @@ th.sortable.desc::after { content: ' ↓'; opacity: 1; color: var(--gold-500); }
 .dark .field select,
 .dark .field textarea { background: #374151; color: #f9fafb; }
 
-.dark .section { background: #1f2937; }
-.dark .section-head,
-.dark .section-head .sh-left > span:not(.sh-dot) { color: #e5e7eb; }
 .dark thead th,
 .dark .log-th { color: #d1d5db; }
 .dark th.sortable:hover { color: #93c5fd; }
-.dark .census-card { background: #1f2937; }
-.dark .issue-item { background: #1f2937; }
-.dark .log-entry { background: #1f2937; }
-.dark .report-card { background: #1f2937; }
-.dark .report-card:hover { border-color: #60a5fa; }
-.dark .empty-state { color: #9ca3af; }
-
-/* Admin shell hardcodes light hex (overrides token flips) — restate for dark */
-.dark .admin-shell .section { background: #1f2937; border-color: #374151; }
-.dark .admin-shell .section-head { background: #1f2937; border-bottom-color: #374151; }
-.dark .admin-shell .section-head .sh-left > span:not(.sh-dot) { color: #f9fafb; }
-.dark .admin-shell .field > label { color: #9ca3af; }
-.dark .admin-shell .field input:not([type=checkbox]):not([type=radio]),
-.dark .admin-shell .field select,
-.dark .admin-shell .field textarea { border-color: #4b5563; }
-.dark .admin-shell table thead th { color: #9ca3af; background: #374151; border-bottom-color: #4b5563; }
-.dark .admin-shell table tbody tr { border-bottom-color: #374151; }
-.dark .admin-shell table tbody tr:nth-child(even) { background: #1f2937; }
-.dark .admin-shell table tbody tr:hover { background: #374151; }
 

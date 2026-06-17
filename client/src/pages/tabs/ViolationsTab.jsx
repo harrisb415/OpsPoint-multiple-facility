@@ -24,14 +24,7 @@ function fmtDate(d) {
 }
 
 function VioStatusBadge({ status }) {
-  const cls = {
-    pending:   'vbadge vbadge-pending',
-    assigned:  'vbadge vbadge-assigned',
-    waived:    'vbadge vbadge-waived',
-    completed: 'vbadge vbadge-completed',
-  }
-  const labels = { pending: 'Pending Review', assigned: 'Consequence Assigned', waived: 'Waived', completed: 'Completed' }
-  return <span className={cls[status] || 'vbadge vbadge-pending'}>{labels[status] || status}</span>
+  return <StatusBadge color={VIO_BADGE[status] || 'gray'}>{VIO_LABEL[status] || status}</StatusBadge>
 }
 
 const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', notes: '' }
@@ -218,7 +211,7 @@ export default function ViolationsTab() {
     return [...seen.values()].sort((a,b) => (parseInt(a.room)||0) - (parseInt(b.room)||0))
   }, [violations])
 
-  if (loadErr) return <div className="empty-state" style={{ color: '#DC2626' }}>{loadErr}</div>
+  if (loadErr) return <div className="py-10 text-center text-sm text-red-600 dark:text-red-400">{loadErr}</div>
 
   return (
     <div>
@@ -344,7 +337,7 @@ export default function ViolationsTab() {
 
       {/* BY CLIENT VIEW */}
       {viewMode === 'by_client' && (
-        <div className={CARD} style={{ padding: 0, overflow: 'hidden' }}>
+        <div className={`${CARD} !p-0 overflow-hidden`}>
           {byClient.length === 0
             ? <div className="p-8 text-sm text-center text-gray-400">No violations found.</div>
             : byClient.map(cg => {
@@ -354,34 +347,33 @@ export default function ViolationsTab() {
                 const completed = cg.rows.filter(v => v.status === 'completed').length
                 const waived    = cg.rows.filter(v => v.status === 'waived').length
                 return (
-                  <div key={cg.id} style={{ borderBottom: '1px solid var(--line)' }}>
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 10,
-                      padding: '10px 14px', cursor: 'pointer',
-                      background: isExp ? '#f8fafc' : '#fff',
-                    }} onClick={() => setExpanded(e => ({ ...e, [cg.id]: !e[cg.id] }))}>
-                      <span style={{ fontWeight: 700, fontSize: '.82rem', minWidth: 30 }}>Rm {cg.room}</span>
-                      <span style={{ fontWeight: 600, flex: 1 }}>{cg.name}</span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: '.75rem', color: '#64748b' }}>{cg.rows.length} violation{cg.rows.length !== 1 ? 's' : ''}</span>
-                      <div style={{ display: 'flex', gap: 5 }}>
-                        {pending > 0    && <span className="vbadge vbadge-pending">{pending} pending</span>}
-                        {assigned > 0   && <span className="vbadge vbadge-assigned">{assigned} assigned</span>}
-                        {completed > 0  && <span className="vbadge vbadge-completed">{completed} done</span>}
-                        {waived > 0     && <span className="vbadge vbadge-waived">{waived} waived</span>}
+                  <div key={cg.id} className="border-b border-gray-200 dark:border-gray-700 last:border-0">
+                    <div className={`flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer transition-colors ${isExp ? 'bg-gray-50 dark:bg-gray-700/50' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}`}
+                      onClick={() => setExpanded(e => ({ ...e, [cg.id]: !e[cg.id] }))}>
+                      <span className="text-[0.82rem] font-bold min-w-[30px] text-gray-700 dark:text-gray-300">Rm {cg.room}</span>
+                      <span className="font-semibold flex-1 text-gray-800 dark:text-gray-200">{cg.name}</span>
+                      <span className="font-mono text-[0.75rem] text-gray-500 dark:text-gray-400">{cg.rows.length} violation{cg.rows.length !== 1 ? 's' : ''}</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {pending > 0    && <StatusBadge color="warning">{pending} pending</StatusBadge>}
+                        {assigned > 0   && <StatusBadge color="info">{assigned} assigned</StatusBadge>}
+                        {completed > 0  && <StatusBadge color="success">{completed} done</StatusBadge>}
+                        {waived > 0     && <StatusBadge color="gray">{waived} waived</StatusBadge>}
                       </div>
-                      <span style={{ color: '#94a3b8', fontSize: '.8rem' }}>{isExp ? '▲' : '▼'}</span>
+                      <span className="text-gray-400 text-[0.8rem]">{isExp ? '▲' : '▼'}</span>
                     </div>
                     {isExp && (
-                      <div className="roster-wrap" style={{ margin: '0 14px 10px' }}>
-                        <table>
+                      <div className="overflow-x-auto mx-3.5 mb-2.5">
+                        <table className="w-full text-sm border-collapse">
                           <thead>
-                            <tr>
-                              <th>Date</th><th>Description</th><th>Status</th>
-                              <th>Consequence</th>
-                              {(canReview || canComplete || canDelete) && <th className="tc">Actions</th>}
+                            <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Date</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Description</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Consequence</th>
+                              {(canReview || canComplete || canDelete) && <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>}
                             </tr>
                           </thead>
-                          <tbody>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                             {cg.rows.slice().sort((a,b) => b.id - a.id).map(v => (
                               <ViolationRow
                                 key={v.id} v={v} compact
@@ -544,32 +536,32 @@ function printViolationsReport({ facility, subtitle, entries }) {
 
 function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview, onComplete, onDelete }) {
   return (
-    <tr>
-      {!compact && <td className="rm">{v.room}</td>}
-      {!compact && <td className="name-cell">{v.client_name}</td>}
-      <td className="date-cell">{fmtDate(v.violation_date)}</td>
-      <td style={{ fontSize: '.84rem', maxWidth: 220 }}>{v.description}</td>
-      <td><VioStatusBadge status={v.status} /></td>
-      <td style={{ fontSize: '.82rem', color: '#475569', maxWidth: 180 }}>
+    <tr className="bg-white dark:bg-gray-800">
+      {!compact && <td className="px-3 py-2 font-mono text-xs text-center text-gray-500 dark:text-gray-400">{v.room}</td>}
+      {!compact && <td className="px-3 py-2 font-semibold text-sm text-gray-900 dark:text-white">{v.client_name}</td>}
+      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(v.violation_date)}</td>
+      <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">{v.description}</td>
+      <td className="px-3 py-2"><VioStatusBadge status={v.status} /></td>
+      <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[180px]">
         {v.consequence || (v.status === 'waived' ? '—' : '')}
         {v.consequence && v.consequence_by && (
-          <div style={{ fontSize: '.7rem', color: '#94a3b8' }}>by {v.consequence_by}</div>
+          <div className="text-[0.7rem] text-gray-400">by {v.consequence_by}</div>
         )}
         {v.completed_at && (
-          <div style={{ fontSize: '.7rem', color: '#15803d' }}>✓ {fmtDate(v.completed_at?.slice?.(0,10))}</div>
+          <div className="text-[0.7rem] text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0,10))}</div>
         )}
       </td>
-      {!compact && <td style={{ fontSize: '.78rem', color: '#64748b' }}>{v.logged_by}</td>}
+      {!compact && <td className="px-3 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.logged_by}</td>}
       {(canReview || canComplete || canDelete) && (
-        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+        <td className="px-3 py-2 text-center whitespace-nowrap">
           {canReview && v.status === 'pending' && (
-            <button className="btn btn-sm btn-primary" style={{ marginRight: 4 }} onClick={onReview}>Review</button>
+            <Button size="xs" className="mr-1" onClick={onReview}>Review</Button>
           )}
           {canComplete && v.status === 'assigned' && (
-            <button className="btn btn-sm btn-green" style={{ marginRight: 4 }} onClick={onComplete}>Complete</button>
+            <Button size="xs" color="success" className="mr-1" onClick={onComplete}>Complete</Button>
           )}
           {canDelete && (
-            <button className="btn-danger-sm" onClick={onDelete}>✕</button>
+            <Button size="xs" color="failure" onClick={onDelete}>✕</Button>
           )}
         </td>
       )}

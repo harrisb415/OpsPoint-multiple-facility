@@ -10,29 +10,27 @@ const session = require('express-session');
 const WebSocket = require('ws');
 const fs      = require('fs');
 const path    = require('path');
-const os      = require('os');
 const crypto  = require('crypto');
 const db      = require('./db');
 
+// ── Modular foundation (Part A refactor — see server/ARCHITECTURE.md) ──────
+// Pure, low-coupling pieces extracted from this file. Behaviour is identical;
+// these are the seams the cloud migration (config, real-time backplane) needs.
+const config = require('./server/config');
+const { hashPw, verifyPw, validatePw } = require('./server/lib/crypto');
+const { nowLocal, timeToMins }         = require('./server/lib/time');
+const { getLocalIP }                   = require('./server/lib/net');
+const { sanitizeText: _sanitizeText, validTime: _validTime } = require('./server/lib/text');
+const { broadcast, setWss }            = require('./server/realtime/broadcast');
+
 const app  = express();
 app.disable('x-powered-by');
-const PORT = 3000;
-const BASE = __dirname;
+const PORT = config.PORT;
+const BASE = config.BASE;
 
-// ── Local timestamp helper ────────────────────────────────────────────────
-// Returns "YYYY-MM-DD HH:MM:SS" in the SERVER's local timezone.
-// Use this everywhere a human-readable timestamp is stored/displayed.
-// Do NOT use new Date().toISOString() for display timestamps — that returns
-// UTC and browsers will parse the stored string as local, causing a time offset.
-function nowLocal() {
-  const d = new Date(), p = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
-}
-const DATA = path.join(BASE, 'data');
-// OPSPOINT_DB env override lets tests point at an isolated database without
-// touching the production data/opspoint.db. Defaults to the real DB.
-const DB_PATH      = process.env.OPSPOINT_DB || path.join(DATA, 'opspoint.db');
-const LEGACY_DB_PATH = path.join(DATA, 'shift.db');
+const DATA           = config.DATA_DIR;
+const DB_PATH        = config.DB_PATH;
+const LEGACY_DB_PATH = config.LEGACY_DB_PATH;
 
 // One-time rename: data/shift.db → data/opspoint.db (legacy DB filename)
 try {
@@ -45,61 +43,16 @@ try {
   }
 } catch (e) { console.warn('  DB rename failed:', e.message); }
 // React SPA — always served
-const REACT_DIST = path.join(BASE, 'client', 'dist');
+const REACT_DIST = config.REACT_DIST;
 const serveSPA = (res) => res.sendFile(path.join(REACT_DIST, 'index.html'));
 
-fs.mkdirSync(DATA,                    { recursive:true });
-fs.mkdirSync(path.join(DATA,'photos'),{ recursive:true });
+fs.mkdirSync(DATA,             { recursive:true });
+fs.mkdirSync(config.PHOTOS_DIR,{ recursive:true });
 
-// ── Password helpers ─────────────────────────────────────────────
-function hashPw(pw, salt) {
-  salt = salt || crypto.randomBytes(16).toString('hex');
-  return { hash: crypto.pbkdf2Sync(pw,salt,600000,64,'sha512').toString('hex'), salt };
-}
-function verifyPw(pw, hash, salt) {
-  // Try 600000 first (new), fall back to 100000 (legacy hashes from before security update)
-  try {
-    const r600 = crypto.pbkdf2Sync(pw,salt,600000,64,'sha512').toString('hex');
-    if (crypto.timingSafeEqual(Buffer.from(r600,'hex'), Buffer.from(hash,'hex'))) return true;
-  } catch(e) {}
-  try {
-    const r100 = crypto.pbkdf2Sync(pw,salt,100000,64,'sha512').toString('hex');
-    if (crypto.timingSafeEqual(Buffer.from(r100,'hex'), Buffer.from(hash,'hex'))) {
-      return true; // legacy hash — will be re-hashed at 600000 on next password change
-    }
-  } catch(e) {}
-  return false;
-}
-function validatePw(pw) {
-  if (!pw||pw.length<8)       return 'At least 8 characters required';
-  if (!/[A-Z]/.test(pw))      return 'Needs an uppercase letter';
-  if (!/[a-z]/.test(pw))      return 'Needs a lowercase letter';
-  if (!/[0-9]/.test(pw))      return 'Needs a number';
-  if (!/[^A-Za-z0-9]/.test(pw)) return 'Needs a symbol (!@#$%^&* etc.)';
-  return null;
-}
-
-function getLocalIP() {
-  try {
-    for (const iface of Object.values(os.networkInterfaces()).flat())
-      if (iface.family==='IPv4'&&!iface.internal) return iface.address;
-  } catch(e) {} return 'localhost';
-}
-function timeToMins(t) {
-  if (!t) return 0;
-  const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!m) return 0;
-  let h=parseInt(m[1]),mn=parseInt(m[2]),ap=m[3].toUpperCase();
-  if(ap==='AM'&&h===12)h=0; if(ap==='PM'&&h!==12)h+=12;
-  return h*60+mn;
-}
-
-let wss;
-function broadcast(msg) {
-  if (!wss) return;
-  const s = JSON.stringify(msg);
-  wss.clients.forEach(c=>{ if(c.readyState===WebSocket.OPEN) c.send(s); });
-}
+// Password helpers (hashPw/verifyPw/validatePw), time helpers (nowLocal/
+// timeToMins), getLocalIP, and broadcast now live in ./server/lib +
+// ./server/realtime and are required at the top of this file.
+let wss;  // the live WebSocket.Server; handed to the broadcast module via setWss()
 
 // Restart the server. Under the bootstrap supervisor (run.bat → bootstrap.js,
 // sets OPSPOINT_BOOTSTRAP=1) we simply exit and let bootstrap relaunch +
@@ -134,7 +87,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit:'50mb' })); // 50mb needed for base64 photo uploads
+app.use(express.json({ limit: config.JSON_LIMIT })); // large limit needed for base64 photo uploads
 // CORS: only allow same-host origins (localhost variants and LAN IP)
 app.use((req,res,next)=>{
   const origin = req.headers.origin;
@@ -155,19 +108,14 @@ app.use((req,res,next)=>{
   next();
 });
 
-const SECRET_FILE = path.join(DATA,'secret.key');
-if (!fs.existsSync(SECRET_FILE)) {
-  fs.writeFileSync(SECRET_FILE, crypto.randomBytes(32).toString('hex'), {mode:0o600});
-  try { fs.chmodSync(SECRET_FILE, 0o600); } catch(e) {}
-}
-const SESSION_SECRET = fs.readFileSync(SECRET_FILE,'utf8').trim();
+const SESSION_SECRET = config.loadSessionSecret();
 
 // Force-change middleware applied after session
 var _sessionMiddleware = null;
 function buildSession(secure) {
   return session({
     secret:SESSION_SECRET, resave:false, saveUninitialized:false,
-    cookie:{ secure:!!secure, httpOnly:true, sameSite:'lax', maxAge:12*60*60*1000 }
+    cookie:{ secure:!!secure, httpOnly:true, sameSite:'lax', maxAge:config.SESSION_MAX_AGE_MS }
   });
 }
 _sessionMiddleware = buildSession(false);
@@ -180,7 +128,7 @@ app.use((req,res,next) => _sessionMiddleware(req,res,next));
 // left open without user interaction will still time out.
 function idleSessionCheck(req, res, next) {
   if (!req.session || !req.session.userId) return next();
-  const idleMins = parseInt(db.getSetting('session_idle_mins', 30)) || 30;
+  const idleMins = parseInt(db.getSetting('session_idle_mins', config.SESSION_IDLE_DEFAULT_MINS)) || config.SESSION_IDLE_DEFAULT_MINS;
   const maxIdleMs = idleMins * 60 * 1000;
   const now = Date.now();
   if (req.session.last_activity && (now - req.session.last_activity) > maxIdleMs) {
@@ -212,7 +160,7 @@ app.use(idleSessionCheck);
 // without bumping last_activity. (POST /api/heartbeat bumps activity.)
 app.get('/api/heartbeat', (req,res) => {
   if (!req.session || !req.session.userId) return res.status(401).json({ok:false});
-  res.json({ok:true, idleMins:parseInt(db.getSetting('session_idle_mins',30))||30});
+  res.json({ok:true, idleMins:parseInt(db.getSetting('session_idle_mins',config.SESSION_IDLE_DEFAULT_MINS))||config.SESSION_IDLE_DEFAULT_MINS});
 });
 
 const requireForceChangePw = (req,res,next) => {
@@ -250,20 +198,7 @@ function _userPerms(req) {
   return u.permissions ? JSON.parse(u.permissions) : (db.ROLE_PRESETS[u.role] || []);
 }
 
-// Validation helpers — used by /api/data POST and PATCH to lock down user-controlled fields.
-const _TIME_RE = /^\d{1,2}:\d{2} (AM|PM)$/;
-function _validTime(s) {
-  if (typeof s !== 'string') return false;
-  const m = s.match(_TIME_RE);
-  if (!m) return false;
-  const h = parseInt(s.split(':')[0]);
-  return h >= 1 && h <= 12;
-}
-// Strip ASCII control chars (incl. nulls, newlines) and clip to N chars.
-// Use for free-text fields that get persisted and re-rendered (mod_name, names, etc).
-function _sanitizeText(s, max) {
-  return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max);
-}
+// _validTime / _sanitizeText now live in ./server/lib/text (required up top).
 // Is the named report closed? Used to gate edits to sealed shift reports.
 function _isReportClosed(reportId) {
   const r = db.query1('SELECT is_closed FROM reports WHERE id=?', [reportId]);
@@ -2760,6 +2695,7 @@ if (require.main === module) (()=>{
       else cb(false,401,'Unauthorized');
     });
   }});
+  setWss(wss);  // hand the live server to the broadcast module
   wss.on('connection',ws=>{
     // C1: Drop all incoming messages from clients — server-only broadcasts
     // Clients must use REST API; no peer-to-peer relay allowed

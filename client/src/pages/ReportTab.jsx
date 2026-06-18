@@ -209,7 +209,7 @@ export default function ReportTab() {
   const [sortKey, setSortKey]         = useState('room')
   const [sortDir, setSortDir]         = useState(1)
   const [search, setSearch]           = useState('')
-  const [showAllRooms, setShowAllRooms] = useState(true)
+  const [showAllRooms, setShowAllRooms] = useState(false)
   const [creating, setCreating] = useState(false)
 
   // Quick modal

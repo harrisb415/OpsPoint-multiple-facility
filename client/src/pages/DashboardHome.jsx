@@ -112,9 +112,9 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
 
   const census = useMemo(() => {
     const c = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
-    residents.forEach(r => { const s = statuses[r.id] || 'building'; if (c[s] != null) c[s]++ })
+    allResidents.forEach(r => { const s = statuses[String(r.id)] || statuses[r.id] || 'building'; if (c[s] != null) c[s]++ })
     return c
-  }, [residents, statuses])
+  }, [allResidents, statuses])
 
   const onSite       = census.building
   const offSite      = total - onSite
@@ -247,7 +247,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {residents.map(r => {
-                  const meta = STATUS_META[statuses[r.id] || 'building'] || STATUS_META.building
+                  const meta = STATUS_META[statuses[String(r.id)] || statuses[r.id] || 'building'] || STATUS_META.building
                   return (
                     <tr key={r.id} className="hover:bg-primary-50/60 dark:hover:bg-gray-700/40">
                       <td className="px-4 py-2.5">

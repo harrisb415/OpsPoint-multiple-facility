@@ -48,14 +48,14 @@ const STATUS_OPTS = [
 
 
 const LOG_TYPE_CLS = {
-  Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-  Walkthrough:   'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
-  UA:            'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-  Lunch:         'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  Wellness:      'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  Walkthrough:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  UA:            'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+  Lunch:         'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   'Room Search': 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-  Mail:          'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  Mail:          'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
   Infraction:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  Intake:        'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  Intake:        'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
   Discharge:     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   Note:          'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-400',
 }
@@ -719,16 +719,16 @@ export default function ReportTab() {
                 🍕 Lunch Break
               </button>
               <button onClick={() => setQuickModal('ua')}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/50">
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 dark:hover:bg-yellow-900/50">
                 🧪 UA
               </button>
               <button onClick={() => setQuickModal('roomsearch')}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600">
+                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900/50">
                 🔎 Room Search
               </button>
               {canMailLog && (
                 <button onClick={() => setQuickModal('mail')}
-                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600">
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-sky-100 text-sky-700 border-sky-200 hover:bg-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-800 dark:hover:bg-sky-900/50">
                   ✉ Mail
                 </button>
               )}

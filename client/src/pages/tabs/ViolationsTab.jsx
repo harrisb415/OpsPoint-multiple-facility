@@ -366,15 +366,15 @@ export default function ViolationsTab() {
                       <span className="text-gray-400 text-[0.8rem]">{isExp ? '▲' : '▼'}</span>
                     </div>
                     {isExp && (
-                      <div className="overflow-x-auto mx-3.5 mb-2.5">
+                      <div className="overflow-x-auto mb-2.5">
                         <table className="w-full text-sm border-collapse">
                           <thead>
                             <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Date</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Description</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
-                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Consequence</th>
-                              {(canReview || canComplete || canDelete) && <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>}
+                              <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Date</th>
+                              <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Description</th>
+                              <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
+                              <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Consequence</th>
+                              {(canReview || canComplete || canDelete) && <th className="px-3.5 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -541,12 +541,12 @@ function printViolationsReport({ facility, subtitle, entries }) {
 function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview, onComplete, onDelete }) {
   return (
     <tr className="bg-white dark:bg-gray-800">
-      {!compact && <td className="px-3 py-2 font-mono text-xs text-center text-gray-500 dark:text-gray-400">{v.room}</td>}
-      {!compact && <td className="px-3 py-2 font-semibold text-sm text-gray-900 dark:text-white">{v.client_name}</td>}
-      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(v.violation_date)}</td>
-      <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">{v.description}</td>
-      <td className="px-3 py-2"><VioStatusBadge status={v.status} /></td>
-      <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[180px]">
+      {!compact && <td className="px-3.5 py-2 font-mono text-xs text-center text-gray-500 dark:text-gray-400">{v.room}</td>}
+      {!compact && <td className="px-3.5 py-2 font-semibold text-sm text-gray-900 dark:text-white">{v.client_name}</td>}
+      <td className="px-3.5 py-2 font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(v.violation_date)}</td>
+      <td className="px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">{v.description}</td>
+      <td className="px-3.5 py-2"><VioStatusBadge status={v.status} /></td>
+      <td className="px-3.5 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[180px]">
         {v.consequence || (v.status === 'waived' ? '—' : '')}
         {v.consequence && v.consequence_by && (
           <div className="text-[0.7rem] text-gray-400">by {v.consequence_by}</div>
@@ -555,9 +555,9 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
           <div className="text-[0.7rem] text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0,10))}</div>
         )}
       </td>
-      {!compact && <td className="px-3 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.logged_by}</td>}
+      {!compact && <td className="px-3.5 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.logged_by}</td>}
       {(canReview || canComplete || canDelete) && (
-        <td className="px-3 py-2 text-center whitespace-nowrap">
+        <td className="px-3.5 py-2 text-center whitespace-nowrap">
           {canReview && v.status === 'pending' && (
             <Button size="xs" className="mr-1" onClick={onReview}>Review</Button>
           )}

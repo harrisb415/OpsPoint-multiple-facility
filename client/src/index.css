@@ -217,6 +217,15 @@
 .dark textarea,
 .dark select { background: #374151; color: #f9fafb; }
 
+/* - Dark-mode autofill (browser injects white bg via -webkit-autofill) - */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #374151 inset !important;
+  -webkit-text-fill-color: #f9fafb !important;
+  border-color: #4b5563 !important;
+}
+
 /* - Dark-mode scrollbar ----------------------------------------- */
 .dark { scrollbar-color: #4b5563 #1f2937; scrollbar-width: thin; }
 .dark ::-webkit-scrollbar { width: 7px; height: 7px; background: #1f2937; }

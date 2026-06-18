@@ -22,6 +22,12 @@ const { nowLocal, timeToMins }         = require('./server/lib/time');
 const { getLocalIP }                   = require('./server/lib/net');
 const { sanitizeText: _sanitizeText, validTime: _validTime } = require('./server/lib/text');
 const { broadcast, setWss }            = require('./server/realtime/broadcast');
+const { securityHeaders, cors }        = require('./server/middleware/security');
+const { csrfCheck }                    = require('./server/middleware/csrf');
+const { audit }                        = require('./server/middleware/audit');
+const { userPerms: _userPerms, requireAuth, requirePermission, requireAnyPermission } = require('./server/middleware/auth');
+const { idleSessionCheck, requireForceChangePw } = require('./server/middleware/session');
+const { loginRateCheck, loginRateClear } = require('./server/middleware/rateLimit');
 
 const app  = express();
 app.disable('x-powered-by');
@@ -66,47 +72,13 @@ function restartServer() {
 }
 
 // ── Middleware ───────────────────────────────────────────────────
+// Request guards (securityHeaders, cors, csrfCheck, audit, requireAuth,
+// requirePermission(+Any), idleSessionCheck, requireForceChangePw, login
+// rate-limit) now live in ./server/middleware and are required up top.
 
-// ── Security headers ─────────────────────────────────────────
-app.use((req, res, next) => {
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'same-origin');
-  res.setHeader('Permissions-Policy', 'camera=(self)');
-  // CSP: scoped for local-network app (VULN-15)
-  res.setHeader('Content-Security-Policy',
-    "default-src 'self'; " +
-    "script-src 'self' https://cdnjs.cloudflare.com; " + // VULN-11: unsafe-eval removed; VULN-8: unsafe-inline removed (Tier 3)
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-    "font-src 'self' data: https://fonts.gstatic.com; " +
-    "img-src 'self' data: blob:; " +
-    "connect-src 'self' ws: wss:; " +
-    "worker-src blob:; " +
-    "object-src 'none'; frame-src 'none';"
-  );
-  next();
-});
-
+app.use(securityHeaders);
 app.use(express.json({ limit: config.JSON_LIMIT })); // large limit needed for base64 photo uploads
-// CORS: only allow same-host origins (localhost variants and LAN IP)
-app.use((req,res,next)=>{
-  const origin = req.headers.origin;
-  // Build CORS allowlist dynamically — handles DHCP IP changes without restart
-  const localIP = getLocalIP();
-  const allowed = new Set([
-    'http://localhost:3000','https://localhost:3000',
-    'http://127.0.0.1:3000','https://127.0.0.1:3000',
-    'http://'+localIP+':3000','https://'+localIP+':3000'
-  ]);
-  if (origin && allowed.has(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials','true');
-  }
-  res.setHeader('Access-Control-Allow-Methods','GET,POST,PUT,PATCH,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers','Content-Type');
-  if(req.method==='OPTIONS') return res.sendStatus(200);
-  next();
-});
+app.use(cors);
 
 const SESSION_SECRET = config.loadSessionSecret();
 
@@ -121,40 +93,7 @@ function buildSession(secure) {
 _sessionMiddleware = buildSession(false);
 app.use((req,res,next) => _sessionMiddleware(req,res,next));
 
-// ── HIPAA: idle session timeout ──────────────────────────────────
-// Forces logout after N minutes of inactivity. Configurable via the
-// session_idle_mins facility setting (default 30). Static asset and
-// /api/heartbeat requests do NOT bump the activity timestamp so a tab
-// left open without user interaction will still time out.
-function idleSessionCheck(req, res, next) {
-  if (!req.session || !req.session.userId) return next();
-  const idleMins = parseInt(db.getSetting('session_idle_mins', config.SESSION_IDLE_DEFAULT_MINS)) || config.SESSION_IDLE_DEFAULT_MINS;
-  const maxIdleMs = idleMins * 60 * 1000;
-  const now = Date.now();
-  if (req.session.last_activity && (now - req.session.last_activity) > maxIdleMs) {
-    const uid = req.session.userId;
-    const name = req.session.displayName || req.session.username || '';
-    try { db.auditLog(uid, name, req.ip||'', 'auth.idle_timeout','user',String(uid),name,{idleMins}); } catch(e) {}
-    return req.session.destroy(() => {
-      if (req.path.startsWith('/api/')) return res.status(401).json({error:'Session expired (idle)', code:'IDLE_TIMEOUT'});
-      return res.redirect('/login');
-    });
-  }
-  // Only state-changing requests count as user activity. GET requests are passive
-  // (DataContext polls, WebSocket-driven reloads, etc.) — keeping the session
-  // alive on those would defeat the purpose of HIPAA §164.312(a)(2)(iii).
-  // Explicit user activity can also be signalled via the X-User-Activity header.
-  const isMutation = req.method === 'POST' || req.method === 'PUT'
-    || req.method === 'PATCH' || req.method === 'DELETE';
-  if (isMutation || req.headers['x-user-activity'] === '1') {
-    req.session.last_activity = now;
-  } else if (!req.session.last_activity) {
-    // First request of a session — start the idle clock
-    req.session.last_activity = now;
-  }
-  next();
-}
-app.use(idleSessionCheck);
+app.use(idleSessionCheck);  // HIPAA idle timeout — server/middleware/session.js
 
 // Lightweight passive endpoint — client can poll this to check session validity
 // without bumping last_activity. (POST /api/heartbeat bumps activity.)
@@ -163,83 +102,13 @@ app.get('/api/heartbeat', (req,res) => {
   res.json({ok:true, idleMins:parseInt(db.getSetting('session_idle_mins',config.SESSION_IDLE_DEFAULT_MINS))||config.SESSION_IDLE_DEFAULT_MINS});
 });
 
-const requireForceChangePw = (req,res,next) => {
-  // If user must change password, only allow specific routes until they do
-  if (req.session && req.session.must_change_pw) {
-    const allowed = ['/change-password', '/api/force-change-password', '/logout', '/api/me', '/api/login'];
-    if (allowed.includes(req.path)) return next();
-    // Always allow static assets — they don't contain sensitive data and the React
-    // SPA needs its CSS/JS to render the change-password page itself
-    if (req.path.startsWith('/assets/') || req.path.startsWith('/static/') ||
-        req.path.startsWith('/js/') || req.path.startsWith('/css/')) return next();
-    if (req.path.startsWith('/api/')) return res.status(403).json({error:'Password change required'});
-    return res.redirect('/change-password');
-  }
-  next();
-};
-
-app.use(requireForceChangePw);
-
-const requireAuth = (req,res,next) => {
-  if (req.session&&req.session.userId) {
-    // Verify user still exists — catches deleted accounts that still have an active session
-    if (db.query1('SELECT id FROM users WHERE id=?',[req.session.userId])) return next();
-    req.session.destroy(()=>{});
-  }
-  if (req.path.startsWith('/api/')) return res.status(401).json({error:'Not authenticated'});
-  req.session.returnTo = req.originalUrl; res.redirect('/login');
-};
-// Resolve the live permission set for the current session.
-// Always reads from DB (never trust session.permissions) so revokes take effect immediately.
-function _userPerms(req) {
-  if (!req.session || !req.session.userId) return [];
-  const u = db.query1('SELECT permissions,role FROM users WHERE id=?', [req.session.userId]);
-  if (!u) return [];
-  return u.permissions ? JSON.parse(u.permissions) : (db.ROLE_PRESETS[u.role] || []);
-}
+app.use(requireForceChangePw);  // forced-password-change gate — server/middleware/session.js
 
 // _validTime / _sanitizeText now live in ./server/lib/text (required up top).
 // Is the named report closed? Used to gate edits to sealed shift reports.
 function _isReportClosed(reportId) {
   const r = db.query1('SELECT is_closed FROM reports WHERE id=?', [reportId]);
   return !!(r && r.is_closed);
-}
-
-function requirePermission(perm) {
-  return function(req,res,next) {
-    if (!req.session||!req.session.userId) {
-      if (req.path.startsWith('/api/')) return res.status(401).json({error:'Not authenticated'});
-      req.session.returnTo = req.originalUrl; return res.redirect('/login');
-    }
-    // Always read from DB — permission changes take effect immediately without re-login
-    const _u = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-    if (!_u) {
-      if (req.path.startsWith('/api/')) return res.status(401).json({error:'Not authenticated'});
-      return res.redirect('/login');
-    }
-    const perms = _u.permissions ? JSON.parse(_u.permissions) : (db.ROLE_PRESETS[_u.role]||[]);
-    if (perms.includes(perm)) return next();
-    if (req.path.startsWith('/api/')) return res.status(403).json({error:'Permission denied'});
-    return res.status(403).send('Access denied.');
-  };
-}
-
-function requireAnyPermission(...perms) {
-  return function(req,res,next) {
-    if (!req.session||!req.session.userId) {
-      if (req.path.startsWith('/api/')) return res.status(401).json({error:'Not authenticated'});
-      req.session.returnTo = req.originalUrl; return res.redirect('/login');
-    }
-    const _u = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-    if (!_u) {
-      if (req.path.startsWith('/api/')) return res.status(401).json({error:'Not authenticated'});
-      return res.redirect('/login');
-    }
-    const userPerms = _u.permissions ? JSON.parse(_u.permissions) : (db.ROLE_PRESETS[_u.role]||[]);
-    if (perms.some(p => userPerms.includes(p))) return next();
-    if (req.path.startsWith('/api/')) return res.status(403).json({error:'Permission denied'});
-    return res.status(403).send('Access denied.');
-  };
 }
 
 // ── Admin count helper — counts users with admin.users permission ─
@@ -250,43 +119,10 @@ function _countAdmins(excludeUserId) {
   }).length;
 }
 
-// ── Audit helper — wraps db.auditLog with request context ────────
-function audit(req, action, targetType, targetId, targetLabel, detail, override) {
-  try {
-    const ip = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
-    const actorId   = (override && override.actorId   != null) ? override.actorId   : (req.session && req.session.userId)   || null;
-    const actorName = (override && override.actorName)          ? override.actorName  : (req.session && (req.session.displayName || req.session.username)) || 'system';
-    db.auditLog(actorId, actorName, ip, action, targetType || '', targetId != null ? String(targetId) : '', targetLabel || '', detail || '');
-  } catch(e) {}
-}
-
-// VULN-1: CSRF defence — reject cross-origin state-changing requests
-function originHost(origin) {
-  try { return new URL(origin).host; } catch { return null; }
-}
-function csrfCheck(req, res, next) {
-  var origin = req.headers.origin;
-  if (origin && originHost(origin) !== req.headers.host) {
-    return res.status(403).json({error:'Forbidden'});
-  }
-  next();
-}
+// audit / csrfCheck / loginRateCheck / loginRateClear now live in
+// ./server/middleware (audit.js, csrf.js, rateLimit.js) — required up top.
 
 // ── Login ────────────────────────────────────────────────────────
-
-// ── Login rate limiting ──────────────────────────────────────
-var _loginAttempts = {}; // in-memory only — resets on server restart (intentional)
-function loginRateCheck(ip) {
-  var now = Date.now();
-  if (!_loginAttempts[ip]) _loginAttempts[ip] = {count:0, resetAt: now + 15*60*1000};
-  if (now > _loginAttempts[ip].resetAt) _loginAttempts[ip] = {count:0, resetAt: now + 15*60*1000};
-  _loginAttempts[ip].count++;
-  return _loginAttempts[ip].count > 10;
-}
-function loginRateClear(ip) {
-  delete _loginAttempts[ip];
-}
-
 // Login / logout — React SPA handles the UI
 app.get('/login',(req,res)=>{
   if(req.session&&req.session.userId) return res.redirect('/');

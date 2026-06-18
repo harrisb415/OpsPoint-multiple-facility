@@ -19,9 +19,9 @@ server/
     text.js              ← validTime / sanitizeText                                         ✅ DONE
   realtime/
     broadcast.js         ← setWss + broadcast (cloud seam → swap for Redis pub/sub later)   ✅ DONE
-  middleware/            ← requireAuth, requirePermission(+Any), csrfCheck, audit,
-                           idleSessionCheck, requireForceChangePw, loginRateCheck,
-                           securityHeaders, cors                                            ⬜ next
+  middleware/            ← security.js (headers+cors), csrf.js, auth.js (requireAuth,
+                           requirePermission(+Any), userPerms), session.js (idle +
+                           force-pw), audit.js, rateLimit.js                                ✅ DONE
   db/
     connection.js        ← opens the DB; the ONLY file that knows it's SQLite               ⬜
     migrate.js           ← schema + ALTER-TABLE migrations                                  ⬜
@@ -55,8 +55,12 @@ server/
 1. ✅ **Foundation** — config + lib/* + realtime/broadcast. Pure extraction,
    zero behaviour change. Verified: `node --check`, unit smoke test, full
    `require('./server.js')` module-graph load (guarded by `require.main`).
-2. ⬜ **Middleware module** — extract the closure-based auth/csrf/audit/idle/
-   rate-limit middleware (they close over `db`; module imports the db singleton).
+2. ✅ **Middleware module** — auth/csrf/audit/idle/force-pw/rate-limit/security
+   extracted to server/middleware/* (they require the `db` singleton directly).
+   server.js imports them with the same names (`userPerms` aliased `_userPerms`).
+   Session bootstrap (buildSession/_sessionMiddleware) stays in the composition
+   root — its cookie.secure flag is rebuilt after TLS is known. Verified via
+   isolated module-graph load + guard/rate-limit assertions.
 3. ⬜ **db/ split** — `connection.js` + `migrate.js`, then per-entity repositories.
 4. ⬜ **Domain modules** — pilot one (clients or staff) end-to-end through
    routes/service/repository, prove the pattern, then roll the rest.

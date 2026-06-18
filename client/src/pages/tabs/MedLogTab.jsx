@@ -9,7 +9,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
@@ -34,7 +34,7 @@ const BLANK = {
 }
 
 export default function MedLogTab() {
-  const { data, loadData } = useData()
+  const { data, loadData, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canWitness = hasPerm('med.witness')
   const canDelete  = hasPerm('med.delete')
@@ -50,6 +50,7 @@ export default function MedLogTab() {
   )
 
   const [filterClient, setFilterClient] = useState('')
+  const [sort, setSort] = useState('newest')
   const [modal, setModal] = useState(null) // null | 'add' | { record }
   const [form, setForm] = useState(BLANK)
   const [saving, setSaving] = useState(false)
@@ -62,12 +63,17 @@ export default function MedLogTab() {
 
   const filtered = useMemo(() => {
     const q = globalSearch.trim().toLowerCase()
-    return records.filter(r => {
+    let rows = records.filter(r => {
       if (filterClient && String(r.client_id) !== filterClient) return false
       if (q && !`${r.client_name} ${r.room} ${r.medication} ${r.dose} ${r.witnessed_by_name}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [records, filterClient, globalSearch])
+    if (sort === 'oldest') rows = [...rows].sort((a, b) => (a.administered_at || '').localeCompare(b.administered_at || ''))
+    else if (sort === 'room') rows = [...rows].sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
+    else if (sort === 'name') rows = [...rows].sort((a, b) => (a.client_name || '').localeCompare(b.client_name || ''))
+    else rows = [...rows].sort((a, b) => (b.administered_at || '').localeCompare(a.administered_at || ''))
+    return rows
+  }, [records, filterClient, globalSearch, sort])
 
   const today = new Date().toISOString().slice(0, 10)
   const todayCount  = records.filter(r => (r.administered_at || '').slice(0, 10) === today).length
@@ -171,14 +177,19 @@ export default function MedLogTab() {
         ))}
       </div>
 
-      {/* Resident filter */}
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-2 mb-2">
         <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Resident:</span>
-        <Select sizing="sm" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
+        <Select sizing="sm" className="w-44" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
           <option value="">All residents</option>
           {clients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
         </Select>
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+        {[['newest','Newest First'],['oldest','Oldest First'],['room','By Room'],['name','By Name']].map(([v, l]) => (
+          <FilterChip key={v} active={sort === v} onClick={() => setSort(v)}>{l}</FilterChip>
+        ))}
       </div>
 
       {filtered.length === 0
@@ -203,7 +214,7 @@ export default function MedLogTab() {
                     <div className="flex items-center gap-3">
                       <ColoredAvatar name={r.client_name} />
                       <div>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-white">{r.client_name}</p>
+                        <button onClick={() => openProfile(r.client_id)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{r.client_name}</button>
                         <p className="font-mono text-xs text-gray-400">Rm {r.room}</p>
                       </div>
                     </div>

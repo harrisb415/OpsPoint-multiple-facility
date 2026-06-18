@@ -83,8 +83,8 @@ function Kpi({ label, value, sub, Icon, tone }) {
   )
 }
 
-export default function DashboardHome({ onNavigate }) {
-  const { data, notif } = useData()
+export default function DashboardHome({ onNavigate, globalSearch = '' }) {
+  const { data, notif, openProfile } = useData()
   const { hasPerm } = usePermission()
   const dark = useIsDark()
   // Dark-aware chart colors (ApexCharts is JS-rendered — no Tailwind dark: here)
@@ -99,11 +99,16 @@ export default function DashboardHome({ onNavigate }) {
   const issues   = report?.issues || []
   const facility = data?.facility_name || 'OpsPoint'
 
-  const residents = useMemo(
+  const allResidents = useMemo(
     () => (data?.clients || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT'),
     [data]
   )
-  const total = residents.length
+  const gq = globalSearch.trim().toLowerCase()
+  const residents = useMemo(
+    () => !gq ? allResidents : allResidents.filter(r => r.name.toLowerCase().includes(gq) || String(r.room || '').includes(gq)),
+    [allResidents, gq]
+  )
+  const total = allResidents.length
 
   const census = useMemo(() => {
     const c = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
@@ -136,7 +141,8 @@ export default function DashboardHome({ onNavigate }) {
     return { labels, series, colors }
   }, [census])
 
-  const recent = logs.slice(-8).reverse()
+  const recentAll = logs.slice(-8).reverse()
+  const recent = !gq ? recentAll : recentAll.filter(l => (l.text || '').toLowerCase().includes(gq))
   const lastWellness = [...logs].reverse().find(l => (l.text || '').toLowerCase().startsWith('wellness check'))
   const lastWalk     = [...logs].reverse().find(l => (l.text || '').toLowerCase().includes('walkthrough'))
 
@@ -223,14 +229,14 @@ export default function DashboardHome({ onNavigate }) {
       </div>
 
       {/* Roster + activity */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:items-start">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Roster */}
-        <div className={`${cardCls} lg:col-span-2 overflow-hidden`}>
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className={`${cardCls} lg:col-span-2 overflow-hidden flex flex-col`}>
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
             <h2 className="text-base font-semibold text-gray-900 dark:text-white">Roster</h2>
             <button onClick={() => onNavigate?.('clients')} className="text-xs font-medium text-primary-600 hover:text-primary-700">View all</button>
           </div>
-          <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead className="sticky top-0 bg-gray-50 dark:bg-gray-700">
                 <tr>
@@ -248,7 +254,7 @@ export default function DashboardHome({ onNavigate }) {
                         <div className="flex items-center gap-3">
                           <ColoredAvatar name={r.name} />
                           <div>
-                            <div className="text-sm font-semibold text-gray-900 dark:text-white">{r.name}</div>
+                            <button onClick={() => openProfile(r.id)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{r.name}</button>
                             <div className="text-xs text-gray-400 font-mono">Rm {r.room}</div>
                           </div>
                         </div>

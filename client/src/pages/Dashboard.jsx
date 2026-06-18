@@ -35,7 +35,7 @@ const ALL_TABS = [
 
 // ── Dashboard ─────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const { activeTab, setActiveTab, requestedTab, clearRequestedTab } = useOutletContext() || {}
+  const { activeTab, setActiveTab, requestedTab, clearRequestedTab, globalSearch = '' } = useOutletContext() || {}
   const { hasPerm }  = usePermission()
   const { loading, data } = useData()
 
@@ -80,7 +80,7 @@ export default function Dashboard() {
 
   const currentTab = activeTab || 'dashboard'
   if (currentTab === 'dashboard') {
-    return <DashboardHome onNavigate={setActiveTab} />
+    return <DashboardHome onNavigate={setActiveTab} globalSearch={globalSearch} />
   }
   const active = visibleTabs.find(t => t.id === currentTab) || visibleTabs[0]
 

@@ -11,7 +11,7 @@ import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
 import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge, DeltaRow, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -33,13 +33,16 @@ const REASON_LABEL = {
 const RESULT_BADGE = { pending: 'gray', pass: 'success', fail: 'failure', dilute: 'warning', refused: 'failure', invalid: 'gray' }
 
 // Small avatar + name cell used across the three tables.
-function NameCell({ name, room }) {
+function NameCell({ name, room, clientId, openProfile }) {
   return (
     <TableCell>
       <div className="flex items-center gap-3">
         <ColoredAvatar name={name} />
         <div>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">{name}</p>
+          {clientId && openProfile
+            ? <button onClick={() => openProfile(clientId)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{name}</button>
+            : <p className="text-sm font-semibold text-gray-900 dark:text-white">{name}</p>
+          }
           <p className="font-mono text-xs text-gray-400">Rm {room}</p>
         </div>
       </div>
@@ -48,7 +51,7 @@ function NameCell({ name, room }) {
 }
 
 export default function UARequestsTab() {
-  const { data, loadData } = useData()
+  const { data, loadData, openProfile } = useData()
   const { hasPerm } = usePermission()
   const canRequest = hasPerm('ua.request')
   const canAck     = hasPerm('ua.acknowledge')
@@ -73,6 +76,7 @@ export default function UARequestsTab() {
   // Sort/filter for records section
   const [filterClient, setFilterClient] = useState('')
   const [filterResult, setFilterResult] = useState('')
+  const [sortRecords, setSortRecords] = useState('newest')
 
   const activeClients = useMemo(() =>
     clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT')
@@ -89,9 +93,12 @@ export default function UARequestsTab() {
     if (filterClient) rows = rows.filter(r => String(r.client_id) === filterClient)
     if (filterResult) rows = rows.filter(r => r.result === filterResult)
     if (gq) rows = rows.filter(r => (r.client_name || '').toLowerCase().includes(gq) || String(r.room || '').includes(gq))
-    rows.sort((a, b) => String(b.tested_at || '').localeCompare(String(a.tested_at || '')))
+    if (sortRecords === 'oldest') rows.sort((a, b) => String(a.tested_at || '').localeCompare(String(b.tested_at || '')))
+    else if (sortRecords === 'room') rows.sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
+    else if (sortRecords === 'name') rows.sort((a, b) => (a.client_name || '').localeCompare(b.client_name || ''))
+    else rows.sort((a, b) => String(b.tested_at || '').localeCompare(String(a.tested_at || '')))
     return rows
-  }, [uaRecords, filterClient, filterResult, globalSearch])
+  }, [uaRecords, filterClient, filterResult, globalSearch, sortRecords])
 
   function openModal() {
     setForm({ client_id: '', is_interview: false, interview_name: '' })
@@ -307,17 +314,22 @@ export default function UARequestsTab() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">UA records</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <Select sizing="sm" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
+          <Select sizing="sm" className="w-44" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
             <option value="">All residents</option>
             {activeClients.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
           </Select>
-          <Select sizing="sm" value={filterResult} onChange={e => setFilterResult(e.target.value)}>
+          <Select sizing="sm" className="w-36" value={filterResult} onChange={e => setFilterResult(e.target.value)}>
             <option value="">All results</option>
             {Object.entries(RESULT_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </Select>
           <span className="text-sm text-gray-400">{filteredRecords.length} records</span>
           {canRecord && <Button size="xs" onClick={() => setConductModal({ clientId: '' })}><Plus className="w-3.5 h-3.5 mr-1" /> New UA</Button>}
         </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        {[['newest','Newest First'],['oldest','Oldest First'],['room','By Room'],['name','By Name']].map(([v, l]) => (
+          <FilterChip key={v} active={sortRecords === v} onClick={() => setSortRecords(v)}>{l}</FilterChip>
+        ))}
       </div>
       <Table hoverable>
         <TableHead>
@@ -339,7 +351,7 @@ export default function UARequestsTab() {
             const posSubs = Object.entries(pr).filter(([, v]) => v === 'pos').map(([k]) => k)
             return (
               <TableRow key={r.id} className={r.result === 'fail' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:border-gray-700 dark:bg-gray-800'}>
-                <NameCell name={r.client_name} room={r.room} />
+                <NameCell name={r.client_name} room={r.room} clientId={r.client_id} openProfile={openProfile} />
                 <TableCell className="font-mono">{fmtDT(r.tested_at)}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{REASON_LABEL[r.reason] || r.reason || '—'}</TableCell>
                 <TableCell><StatusBadge color={RESULT_BADGE[r.result] || 'gray'}>{RESULT_LABEL[r.result] || r.result}</StatusBadge></TableCell>

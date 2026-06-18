@@ -18,9 +18,13 @@ const cx = (...c) => c.filter(Boolean).join(' ')
 const TableCtx = createContext({ hoverable: false })
 const HeadCtx = createContext(false)
 
-export function Table({ children, hoverable = false, striped = false, className, ...rest }) {
+export function Table({ children, hoverable = false, striped = false, flush = false, className, ...rest }) {
   return (
-    <div className={cx('overflow-x-auto bg-white border border-gray-200 rounded-xl dark:bg-gray-800 dark:border-gray-700', className)} {...rest}>
+    <div className={cx(
+      'overflow-x-auto',
+      !flush && 'bg-white border border-gray-200 rounded-xl dark:bg-gray-800 dark:border-gray-700',
+      className
+    )} {...rest}>
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <TableCtx.Provider value={{ hoverable, striped }}>{children}</TableCtx.Provider>
       </table>

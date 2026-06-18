@@ -15,6 +15,11 @@ export default function Login() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    const stored = localStorage.getItem('opspoint-theme')
+    if (stored) {
+      document.documentElement.classList.toggle('dark', stored === 'dark')
+      return
+    }
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (e) => document.documentElement.classList.toggle('dark', e.matches)
     apply(mq)

@@ -410,8 +410,7 @@ function CurrentStaff({ users, groups, reload }) {
     <div>
       <Section title="Current Staff" noPad
         right={<span className="font-mono text-xs text-gray-400">{users.length} account{users.length !== 1 ? 's' : ''}</span>}>
-        <div className="overflow-x-auto">
-          <Table hoverable>
+        <Table hoverable flush>
             <TableHead>
               <TableHeadCell>Username</TableHeadCell>
               <TableHeadCell>Display Name</TableHeadCell>
@@ -456,7 +455,6 @@ function CurrentStaff({ users, groups, reload }) {
               ))}
             </TableBody>
           </Table>
-        </div>
       </Section>
 
       {groupModal && (
@@ -1711,8 +1709,7 @@ function AuditLogTab() {
         {loading ? <p className="text-sm text-gray-400 py-8 text-center dark:text-gray-500">Loading…</p>
           : rows.length === 0 ? <p className="text-sm text-gray-400 py-8 text-center dark:text-gray-500">No audit entries found.</p>
           : (
-            <div className="overflow-x-auto">
-              <Table hoverable>
+            <Table hoverable flush>
                 <TableHead>
                   <TableHeadCell className="w-36">Time</TableHeadCell>
                   <TableHeadCell className="w-28">User</TableHeadCell>
@@ -1747,7 +1744,6 @@ function AuditLogTab() {
                   ))}
                 </TableBody>
               </Table>
-            </div>
           )
         }
 

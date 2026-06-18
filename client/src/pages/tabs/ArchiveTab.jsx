@@ -4,6 +4,7 @@ import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lu
 import {
   Breadcrumb, BreadcrumbItem, Button, Pagination,
 } from 'flowbite-react'
+import { FilterChip } from '../../components/ui.jsx'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
@@ -62,17 +63,20 @@ export default function ArchiveTab() {
   const { hasPerm } = usePermission()
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState(null)
+  const [sort, setSort] = useState('newest')
   const canDelete = hasPerm('reports.delete')
   const { globalSearch = '' } = useOutletContext() || {}
   const confirm = useConfirm()
 
   const sorted = useMemo(() => {
     const q = globalSearch.trim().toLowerCase()
-    return [...(data?.reports || [])]
+    const rows = [...(data?.reports || [])]
       .filter(r => r.id !== data?.active_report_id)
       .filter(r => !q || `${r.shift} ${r.mod_name} ${r.report_date}`.toLowerCase().includes(q))
-      .sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '') || (b.updated_at || '').localeCompare(a.updated_at || ''))
-  }, [data?.reports, data?.active_report_id, globalSearch])
+    if (sort === 'oldest') rows.sort((a, b) => (a.report_date || '').localeCompare(b.report_date || '') || (a.updated_at || '').localeCompare(b.updated_at || ''))
+    else rows.sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '') || (b.updated_at || '').localeCompare(a.updated_at || ''))
+    return rows
+  }, [data?.reports, data?.active_report_id, globalSearch, sort])
 
   const closedCount = sorted.filter(r => r.is_closed).length
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
@@ -118,6 +122,13 @@ export default function ArchiveTab() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+        {[['newest','Newest First'],['oldest','Oldest First']].map(([v, l]) => (
+          <FilterChip key={v} active={sort === v} onClick={() => { setSort(v); setPage(0) }}>{l}</FilterChip>
+        ))}
+        <span className="ml-auto text-sm text-gray-400">{sorted.length} reports</span>
       </div>
 
       {sorted.length === 0 ? (

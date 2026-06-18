@@ -33,7 +33,7 @@ const VIO_LABEL = { pending: 'Pending Review', assigned: 'Consequence Assigned',
 const VIO_STATUS_KEYS = [null, 'pending', 'assigned', 'waived', 'completed']
 
 export default function ViolationsTab() {
-  const { data }                = useData()
+  const { data, openProfile }   = useData()
   const { hasPerm }             = usePermission()
 
   const canLog      = hasPerm('violations.log')
@@ -107,30 +107,34 @@ export default function ViolationsTab() {
     return true
   }
 
-  const filtered = useMemo(() => {
+  const preFiltered = useMemo(() => {
     const gq = globalSearch.toLowerCase().trim()
     const skey = VIO_STATUS_KEYS[statusFilter]
-    let rows = violations.filter(v => {
+    return violations.filter(v => {
       if (clientFilter && String(v.client_id) !== clientFilter) return false
       if (skey && v.status !== skey) return false
       if (gq && !((v.client_name || '').toLowerCase().includes(gq) || String(v.room || '').includes(gq) || (v.description || '').toLowerCase().includes(gq))) return false
       return inRange(v)
     })
-    if (sort === 'newest')      rows = [...rows].sort((a,b) => b.id - a.id)
-    else if (sort === 'oldest') rows = [...rows].sort((a,b) => a.id - b.id)
-    else if (sort === 'room')   rows = [...rows].sort((a,b) => (parseInt(a.room)||0) - (parseInt(b.room)||0))
-    else if (sort === 'name')   rows = [...rows].sort((a,b) => String(a.client_name||'').localeCompare(String(b.client_name||'')))
+  }, [violations, clientFilter, dateRange, statusFilter, globalSearch])
+
+  const filtered = useMemo(() => {
+    let rows = [...preFiltered]
+    if (sort === 'newest')      rows.sort((a,b) => b.id - a.id)
+    else if (sort === 'oldest') rows.sort((a,b) => a.id - b.id)
+    else if (sort === 'room')   rows.sort((a,b) => (parseInt(a.room)||0) - (parseInt(b.room)||0))
+    else if (sort === 'name')   rows.sort((a,b) => String(a.client_name||'').localeCompare(String(b.client_name||'')))
     else if (sort === 'status') {
       const order = { pending: 0, assigned: 1, waived: 2, completed: 3 }
-      rows = [...rows].sort((a,b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
+      rows.sort((a,b) => (order[a.status] ?? 9) - (order[b.status] ?? 9))
     }
     return rows
-  }, [violations, clientFilter, dateRange, sort, statusFilter, globalSearch])
+  }, [preFiltered, sort])
 
-  // By-client grouping
+  // By-client grouping — uses preFiltered so status/date/client/search filters apply
   const byClient = useMemo(() => {
     const map = {}
-    violations.forEach(v => {
+    preFiltered.forEach(v => {
       if (!map[v.client_id]) map[v.client_id] = { id: v.client_id, name: v.client_name, room: v.room, rows: [] }
       map[v.client_id].rows.push(v)
     })
@@ -138,7 +142,7 @@ export default function ViolationsTab() {
       if (sort === 'most') return b.rows.length - a.rows.length
       return (parseInt(a.room)||0) - (parseInt(b.room)||0)
     })
-  }, [violations, sort])
+  }, [preFiltered, sort])
 
   // Add form
   function openAdd() {
@@ -266,7 +270,7 @@ export default function ViolationsTab() {
             <FilterChip key={m} active={viewMode === m} onClick={() => setViewMode(m)}>{m === 'list' ? 'List' : 'By Client'}</FilterChip>
           ))}
         </div>
-        <Select sizing="sm" value={sort} onChange={e => setSort(e.target.value)}>
+        <Select sizing="sm" className="w-40" value={sort} onChange={e => setSort(e.target.value)}>
           <option value="newest">Newest First</option>
           <option value="oldest">Oldest First</option>
           <option value="room">By Room</option>
@@ -274,12 +278,12 @@ export default function ViolationsTab() {
           <option value="status">By Status</option>
           {viewMode === 'by_client' && <option value="most">Most Violations</option>}
         </Select>
-        <Select sizing="sm" value={dateRange} onChange={e => setDateRange(e.target.value)}>
+        <Select sizing="sm" className="w-36" value={dateRange} onChange={e => setDateRange(e.target.value)}>
           <option value="all">All Time</option>
           <option value="this_month">This Month</option>
           <option value="this_week">This Week</option>
         </Select>
-        <Select sizing="sm" value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
+        <Select sizing="sm" className="w-44" value={clientFilter} onChange={e => setClientFilter(e.target.value)}>
           <option value="">All Residents</option>
           {clientOptions.map(c => <option key={c.id} value={c.id}>Rm {c.room} — {c.name}</option>)}
         </Select>
@@ -309,7 +313,7 @@ export default function ViolationsTab() {
                       <div className="flex items-center gap-3">
                         <ColoredAvatar name={v.client_name} />
                         <div>
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{v.client_name}</p>
+                          <button onClick={() => openProfile(v.client_id)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{v.client_name}</button>
                           <p className="font-mono text-xs text-gray-400">Rm {v.room}</p>
                         </div>
                       </div>
@@ -351,7 +355,7 @@ export default function ViolationsTab() {
                     <div className={`flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer transition-colors ${isExp ? 'bg-gray-50 dark:bg-gray-700/50' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'}`}
                       onClick={() => setExpanded(e => ({ ...e, [cg.id]: !e[cg.id] }))}>
                       <span className="text-[0.82rem] font-bold min-w-[30px] text-gray-700 dark:text-gray-300">Rm {cg.room}</span>
-                      <span className="font-semibold flex-1 text-gray-800 dark:text-gray-200">{cg.name}</span>
+                      <button onClick={e => { e.stopPropagation(); openProfile(cg.id) }} className="font-semibold flex-1 text-gray-800 dark:text-gray-200 hover:text-primary-600 dark:hover:text-primary-400 text-left">{cg.name}</button>
                       <span className="font-mono text-[0.75rem] text-gray-500 dark:text-gray-400">{cg.rows.length} violation{cg.rows.length !== 1 ? 's' : ''}</span>
                       <div className="flex gap-1 flex-wrap">
                         {pending > 0    && <StatusBadge color="warning">{pending} pending</StatusBadge>}

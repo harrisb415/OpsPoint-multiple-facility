@@ -99,6 +99,16 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
   const issues   = report?.issues || []
   const facility = data?.facility_name || 'OpsPoint'
 
+  // Clients on active passes should always show "pass" regardless of what
+  // statuses says — mirrors the passOverride logic in ReportTab.jsx
+  const passOverride = useMemo(() => {
+    const po = {}
+    ;(data?.passes || []).filter(p => p.status === 'Out' || p.status === 'Extended').forEach(p => { po[p.client_id] = 'pass' })
+    return po
+  }, [data?.passes])
+
+  const resolveStatus = (id) => passOverride[id] ?? statuses[String(id)] ?? statuses[id] ?? 'building'
+
   const allResidents = useMemo(
     () => (data?.clients || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT'),
     [data]
@@ -112,9 +122,9 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
 
   const census = useMemo(() => {
     const c = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
-    allResidents.forEach(r => { const s = statuses[String(r.id)] || statuses[r.id] || 'building'; if (c[s] != null) c[s]++ })
+    allResidents.forEach(r => { const s = resolveStatus(r.id); if (c[s] != null) c[s]++ })
     return c
-  }, [allResidents, statuses])
+  }, [allResidents, statuses, passOverride])
 
   const onSite       = census.building
   const offSite      = total - onSite
@@ -247,7 +257,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {residents.map(r => {
-                  const meta = STATUS_META[statuses[String(r.id)] || statuses[r.id] || 'building'] || STATUS_META.building
+                  const meta = STATUS_META[resolveStatus(r.id)] || STATUS_META.building
                   return (
                     <tr key={r.id} className="hover:bg-primary-50/60 dark:hover:bg-gray-700/40">
                       <td className="px-4 py-2.5">

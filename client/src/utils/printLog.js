@@ -191,7 +191,7 @@ export function classifyLogEntry(text) {
   const t = String(text || '').toLowerCase()
   if (t.includes('wellness check'))         return 'Wellness'
   if (t.includes('walkthrough'))            return 'Walkthrough'
-  if (t.includes('lunch break'))            return 'Lunch'
+  if (t.includes('lunch'))                  return 'Lunch'
   if (t.includes(' — ua:') || t.match(/\bua:/i)) return 'UA'
   if (t.includes('room search'))            return 'Room Search'
   if (t.includes('mail logged') || t.includes('mail delivered') || t.startsWith('mail received')) return 'Mail'

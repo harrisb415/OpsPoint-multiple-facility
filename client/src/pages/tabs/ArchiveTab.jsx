@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
 import {
-  Breadcrumb, BreadcrumbItem, Button, Pagination,
+  Breadcrumb, BreadcrumbItem, Button, Pagination, Select,
 } from 'flowbite-react'
 import { FilterChip } from '../../components/ui.jsx'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
@@ -64,19 +64,26 @@ export default function ArchiveTab() {
   const [page, setPage] = useState(0)
   const [selected, setSelected] = useState(null)
   const [sort, setSort] = useState('newest')
+  const [shiftFilter, setShiftFilter] = useState('')
   const canDelete = hasPerm('reports.delete')
   const { globalSearch = '' } = useOutletContext() || {}
   const confirm = useConfirm()
+
+  const shiftOptions = useMemo(() => {
+    const names = new Set((data?.reports || []).filter(r => r.id !== data?.active_report_id).map(r => r.shift).filter(Boolean))
+    return [...names].sort()
+  }, [data?.reports, data?.active_report_id])
 
   const sorted = useMemo(() => {
     const q = globalSearch.trim().toLowerCase()
     const rows = [...(data?.reports || [])]
       .filter(r => r.id !== data?.active_report_id)
+      .filter(r => !shiftFilter || r.shift === shiftFilter)
       .filter(r => !q || `${r.shift} ${r.mod_name} ${r.report_date}`.toLowerCase().includes(q))
     if (sort === 'oldest') rows.sort((a, b) => (a.report_date || '').localeCompare(b.report_date || '') || (a.updated_at || '').localeCompare(b.updated_at || ''))
     else rows.sort((a, b) => (b.report_date || '').localeCompare(a.report_date || '') || (b.updated_at || '').localeCompare(a.updated_at || ''))
     return rows
-  }, [data?.reports, data?.active_report_id, globalSearch, sort])
+  }, [data?.reports, data?.active_report_id, globalSearch, sort, shiftFilter])
 
   const closedCount = sorted.filter(r => r.is_closed).length
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
@@ -124,10 +131,16 @@ export default function ArchiveTab() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         {[['newest','Newest First'],['oldest','Oldest First']].map(([v, l]) => (
           <FilterChip key={v} active={sort === v} onClick={() => { setSort(v); setPage(0) }}>{l}</FilterChip>
         ))}
+        {shiftOptions.length > 0 && (
+          <Select sizing="sm" value={shiftFilter} onChange={e => { setShiftFilter(e.target.value); setPage(0) }} className="w-48">
+            <option value="">All Shifts</option>
+            {shiftOptions.map(s => <option key={s} value={s}>{s}</option>)}
+          </Select>
+        )}
         <span className="ml-auto text-sm text-gray-400">{sorted.length} reports</span>
       </div>
 

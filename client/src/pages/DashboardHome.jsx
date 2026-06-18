@@ -275,7 +275,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
         </div>
 
         {/* Reminders + recent activity */}
-        <div className="space-y-4">
+        <div className="space-y-4 lg:min-h-[460px]">
           {hasPerm('reminders.view') && (
             <div className={`${cardCls} p-4 sm:p-5`}>
               <h2 className="text-base font-semibold text-gray-900 dark:text-white">Reminders</h2>

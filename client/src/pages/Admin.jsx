@@ -7,9 +7,9 @@ import {
 } from 'lucide-react'
 import {
   Alert, Badge, Button, Checkbox, Label, Modal, ModalHeader, ModalBody, ModalFooter,
-  Select, Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow,
-  Textarea, TextInput,
+  Select, Textarea, TextInput,
 } from 'flowbite-react'
+import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from '../components/table.jsx'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'

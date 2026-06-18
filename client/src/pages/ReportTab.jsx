@@ -206,9 +206,10 @@ export default function ReportTab() {
   const [medText, setMedText]   = useState('')
 
   // Roster UI
-  const [sortKey, setSortKey] = useState('room')
-  const [sortDir, setSortDir] = useState(1)
-  const [search, setSearch]   = useState('')
+  const [sortKey, setSortKey]         = useState('room')
+  const [sortDir, setSortDir]         = useState(1)
+  const [search, setSearch]           = useState('')
+  const [showAllRooms, setShowAllRooms] = useState(true)
   const [creating, setCreating] = useState(false)
 
   // Quick modal
@@ -514,6 +515,7 @@ export default function ReportTab() {
   const lastRs = activeReport?.last_room_search || {}
   const sortedClients = useMemo(() => {
     return clients.filter(c => c.is_active)
+      .filter(c => showAllRooms || (!c.is_special && c.name !== 'VACANT'))
       .filter(c => {
         if (!search) return true
         const q = search.toLowerCase()
@@ -537,7 +539,7 @@ export default function ReportTab() {
         }
         return av < bv ? -sortDir : av > bv ? sortDir : 0
       })
-  }, [clients, search, sortKey, sortDir, statuses, lastUa, lastRs, passOverride])
+  }, [clients, search, sortKey, sortDir, statuses, lastUa, lastRs, passOverride, showAllRooms])
 
   const isClosed = activeReport?.is_closed ?? false
 
@@ -840,11 +842,23 @@ export default function ReportTab() {
         title="Roster"
         flush
         right={
-          <TextInput
-            type="text" placeholder="Search residents…" value={search}
-            onChange={e => setSearch(e.target.value)}
-            sizing="sm" className="sm:w-56"
-          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAllRooms(v => !v)}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-colors whitespace-nowrap ${
+                showAllRooms
+                  ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600'
+                  : 'bg-primary-600 text-white border-primary-600 hover:bg-primary-700'
+              }`}
+            >
+              {showAllRooms ? 'All Rooms' : 'Residents Only'}
+            </button>
+            <TextInput
+              type="text" placeholder="Search residents…" value={search}
+              onChange={e => setSearch(e.target.value)}
+              sizing="sm" className="sm:w-56"
+            />
+          </div>
         }
       >
           <div className="overflow-x-auto">

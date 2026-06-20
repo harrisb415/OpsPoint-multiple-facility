@@ -13,4 +13,4 @@ function csrfCheck(req, res, next) {
   next();
 }
 
-module.exports = { csrfCheck };
+module.exports = { csrfCheck, originHost };

@@ -24,7 +24,7 @@ server/
                            force-pw), audit.js, rateLimit.js                                ✅ DONE
   db/
     connection.js        ← opens the DB; the ONLY file that knows it's SQLite               ⬜
-    migrate.js           ← schema + ALTER-TABLE migrations                                  ⬜
+    migrate.js           ← schema (createSchema) + ALTER-TABLE migrations                   ✅ DONE
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
     reports/  clients/  staff/  chores/  passes/  ua/  mail/  groups/
     clinical/  admin/  facility/  users/  auth/                                             ⬜
@@ -61,7 +61,10 @@ server/
    Session bootstrap (buildSession/_sessionMiddleware) stays in the composition
    root — its cookie.secure flag is rebuilt after TLS is known. Verified via
    isolated module-graph load + guard/rate-limit assertions.
-3. ⬜ **db/ split** — `connection.js` + `migrate.js`, then per-entity repositories.
+3. 🟡 **db/ split** — `migrate.js` ✅ DONE (`createSchema`/`runColumnMigrations`
+   extracted from db.js; init() calls them; all 25 tables verified on temp-DB
+   boot). Remaining: `connection.js` (own the better-sqlite3 handle + `_run`/`_q`/
+   `_q1` primitives) ⬜, then per-entity repositories ⬜.
 4. ⬜ **Domain modules** — pilot one (clients or staff) end-to-end through
    routes/service/repository, prove the pattern, then roll the rest.
 5. ⬜ **storage/photoStore** — interface + local impl (cloud impl later).

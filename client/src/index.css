@@ -217,13 +217,22 @@
 .dark textarea,
 .dark select { background: #374151; color: #f9fafb; }
 
-/* - Dark-mode autofill (browser injects white bg via -webkit-autofill) - */
+/* - Autofill: freeze browser background-color animation (fires before .dark exists) - */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+/* - Dark-mode autofill override - */
 .dark input:-webkit-autofill,
 .dark input:-webkit-autofill:hover,
-.dark input:-webkit-autofill:focus {
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
   -webkit-box-shadow: 0 0 0px 1000px #374151 inset !important;
   -webkit-text-fill-color: #f9fafb !important;
   border-color: #4b5563 !important;
+  transition: background-color 5000s ease-in-out 0s !important;
 }
 
 /* - Dark-mode scrollbar ----------------------------------------- */

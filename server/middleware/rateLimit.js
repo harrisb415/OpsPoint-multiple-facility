@@ -18,4 +18,16 @@ function loginRateClear(ip) {
   delete _loginAttempts[ip];
 }
 
-module.exports = { loginRateCheck, loginRateClear };
+// General API rate limiting — 300 requests per IP per minute. In-memory; resets
+// on restart (intentional). Same future shared-store seam as the login limiter.
+const _apiHits = {};
+function apiRateCheck(req) {
+  const ip = req.ip || req.connection.remoteAddress || '?';
+  const now = Date.now();
+  if (!_apiHits[ip]) _apiHits[ip] = { count: 0, resetAt: now + 60000 };
+  if (now > _apiHits[ip].resetAt) _apiHits[ip] = { count: 0, resetAt: now + 60000 };
+  _apiHits[ip].count++;
+  return _apiHits[ip].count > 300; // 300 requests/min per IP
+}
+
+module.exports = { loginRateCheck, loginRateClear, apiRateCheck };

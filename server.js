@@ -27,7 +27,7 @@ const { csrfCheck, originHost }        = require('./server/middleware/csrf');
 const { audit }                        = require('./server/middleware/audit');
 const { userPerms: _userPerms, requireAuth, requirePermission, requireAnyPermission } = require('./server/middleware/auth');
 const { idleSessionCheck, requireForceChangePw } = require('./server/middleware/session');
-const { loginRateCheck, loginRateClear } = require('./server/middleware/rateLimit');
+const { loginRateCheck, loginRateClear, apiRateCheck } = require('./server/middleware/rateLimit');
 
 const app  = express();
 app.disable('x-powered-by');
@@ -384,16 +384,7 @@ function _validImageMagicBytes(dataUri) {
   } catch(e) { return false; }
 }
 
-// ── API rate limiting (per IP, in-memory) ────────────────────────
-var _apiHits = {};
-function apiRateCheck(req) {
-  var ip = req.ip||req.connection.remoteAddress||'?';
-  var now = Date.now();
-  if (!_apiHits[ip]) _apiHits[ip] = {count:0, resetAt: now + 60000};
-  if (now > _apiHits[ip].resetAt) _apiHits[ip] = {count:0, resetAt: now + 60000};
-  _apiHits[ip].count++;
-  return _apiHits[ip].count > 300; // 300 requests/min per IP
-}
+// API rate limiting (apiRateCheck) now lives in server/middleware/rateLimit.js
 
 // ── Data API ──────────────────────────────────────────────────────
 app.get('/api/data', requireAuth,(req,res)=>{
@@ -1139,78 +1130,8 @@ app.post('/api/broadcasts', requireAuth, csrfCheck, requirePermission('broadcast
 // ── Mail Log (modular: server/modules/mail) ─────────
 require('./server/modules/mail/routes').register(app);
 
-// ── Violations ───────────────────────────────────────────────────
-function _violationCounts() {
-  const r=db.query1('SELECT COUNT(*) as c FROM violations WHERE status=?',['pending']);
-  const a=db.query1('SELECT COUNT(*) as c FROM violations WHERE status=?',['assigned']);
-  return {pendingReview:r?r.c:0, pendingConsequences:a?a.c:0};
-}
-
-app.get('/api/violations', requireAuth, (req,res)=>{
-  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
-  const{status,client_id}=req.query;
-  let sql='SELECT * FROM violations';
-  const params=[];
-  if(status&&status!=='all'){sql+=' WHERE status=?';params.push(status);}
-  if(client_id){sql+=(params.length?' AND':' WHERE')+' client_id=?';params.push(parseInt(client_id));}
-  sql+=' ORDER BY logged_at DESC';
-  res.json(db.query(sql,params));
-});
-
-app.post('/api/violations', requireAuth, csrfCheck, requirePermission('violations.log'), (req,res)=>{
-  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
-  const{client_id,client_name,room,violation_date,description,notes}=req.body;
-  if(!client_id||!description) return res.status(400).json({error:'client_id and description required'});
-  const loggedBy=req.session.displayName||req.session.username;
-  db.run('INSERT INTO violations (client_id,client_name,room,violation_date,description,notes,logged_by) VALUES (?,?,?,?,?,?,?)',
-    [client_id,client_name||'',room||'',violation_date||'',description,notes||'',loggedBy]);
-  const v=db.query1('SELECT * FROM violations ORDER BY id DESC LIMIT 1');
-  audit(req,'violation.log','violation',v?v.id:null,String(client_name||client_id),{description});
-  broadcast({type:'violations_updated',..._violationCounts()});
-  res.json({ok:true,id:v?v.id:null});
-});
-
-app.put('/api/violations/:id/review', requireAuth, csrfCheck, requirePermission('violations.review'), (req,res)=>{
-  const id=parseInt(req.params.id);
-  const v=db.query1('SELECT * FROM violations WHERE id=?',[id]);
-  if(!v) return res.status(404).json({error:'Not found'});
-  if(v.status!=='pending') return res.status(400).json({error:'Violation is not pending review'});
-  const{action,consequence}=req.body;
-  const by=req.session.displayName||req.session.username;
-  const now=nowLocal();
-  if(action==='waive'){
-    db.run('UPDATE violations SET status=?,consequence_by=?,consequence_at=? WHERE id=?',['waived',by,now,id]);
-  } else {
-    if(!consequence) return res.status(400).json({error:'consequence required'});
-    db.run('UPDATE violations SET status=?,consequence=?,consequence_by=?,consequence_at=? WHERE id=?',['assigned',consequence,by,now,id]);
-  }
-  audit(req,'violation.review','violation',id,v.client_name,{action,consequence});
-  broadcast({type:'violations_updated',..._violationCounts()});
-  res.json({ok:true});
-});
-
-app.put('/api/violations/:id/complete', requireAuth, csrfCheck, requirePermission('violations.complete'), (req,res)=>{
-  const id=parseInt(req.params.id);
-  const v=db.query1('SELECT * FROM violations WHERE id=?',[id]);
-  if(!v) return res.status(404).json({error:'Not found'});
-  if(v.status!=='assigned') return res.status(400).json({error:'Violation must have an assigned consequence'});
-  const by=req.session.displayName||req.session.username;
-  const now=nowLocal();
-  db.run('UPDATE violations SET status=?,completed_by=?,completed_at=? WHERE id=?',['completed',by,now,id]);
-  audit(req,'violation.complete','violation',id,v.client_name);
-  broadcast({type:'violations_updated',..._violationCounts()});
-  res.json({ok:true});
-});
-
-app.delete('/api/violations/:id', requireAuth, csrfCheck, requirePermission('violations.delete'), (req,res)=>{
-  const id=parseInt(req.params.id);
-  const v=db.query1('SELECT client_name FROM violations WHERE id=?',[id]);
-  if(!v) return res.status(404).json({error:'Not found'});
-  db.run('DELETE FROM violations WHERE id=?',[id]);
-  audit(req,'violation.delete','violation',id,v.client_name);
-  broadcast({type:'violations_updated',..._violationCounts()});
-  res.json({ok:true});
-});
+// ── Violations (modular: server/modules/violations) ─────────
+require('./server/modules/violations/routes').register(app);
 
 // ── Server restart (admin only) ───────────────────────────────────
 app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.system'), (req,res)=>{

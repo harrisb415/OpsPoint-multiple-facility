@@ -1155,76 +1155,8 @@ app.delete('/api/group-sessions/:id', requireAuth, csrfCheck, requirePermission(
   res.json({ok:true});
 });
 
-// ── Weekend Passes ────────────────────────────────────────────────
-app.get('/api/passes', requireAuth,(req,res)=>{
-  res.json(db.query(`SELECT * FROM passes ORDER BY
-    CASE status WHEN 'Out' THEN 0 WHEN 'Extended' THEN 1 ELSE 2 END, return_date ASC`));
-});
-app.post('/api/passes', requireAuth, csrfCheck, requirePermission('passes.edit'),(req,res)=>{
-  const{client_id,room,name,departure,return_date,ua_notes,notes,status}=req.body;
-  if(!client_id||!name) return res.status(400).json({error:'client_id and name required'});
-  const client=db.query1('SELECT id,room,name FROM clients WHERE id=?',[parseInt(client_id)]);
-  if(!client) return res.status(404).json({error:'Client not found'});
-  if(ua_notes && ua_notes.length > 500) return res.status(400).json({error:'UA notes too long (max 500 chars)'});
-  if(notes && notes.length > 1000) return res.status(400).json({error:'Notes too long (max 1000 chars)'});
-  db.run(`INSERT INTO passes (client_id,room,name,departure,return_date,ua_notes,notes,status)
-    VALUES (?,?,?,?,?,?,?,?)`,
-    [parseInt(client_id),room||client.room,name||client.name,
-     departure||'',return_date||'',ua_notes||'',notes||'',status||'Out']);
-  db.save();
-  audit(req,'passes.add','pass',null,name||client.name,{departure:departure||'',return_date:return_date||'',status:status||'Out'});
-  broadcast({type:'passes_updated',user:req.session.displayName});
-  res.json({ok:true,pass:db.query1('SELECT * FROM passes ORDER BY id DESC LIMIT 1')});
-});
-app.put('/api/passes/:id', requireAuth, csrfCheck, requireAnyPermission('passes.edit','passes.status'),(req,res)=>{
-  const id=parseInt(req.params.id);
-  if(!db.query1('SELECT id FROM passes WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{departure,return_date,ua_notes,notes,status}=req.body;
-
-  // Status-only callers (passes.status) cannot touch any other field
-  const _pu = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-  const _perms = (_pu && _pu.permissions) ? JSON.parse(_pu.permissions) : (db.ROLE_PRESETS[req.session.role]||[]);
-  const hasEdit = _perms.includes('passes.edit');
-  const touchingNonStatusField = departure !== undefined || return_date !== undefined || ua_notes !== undefined || notes !== undefined;
-  if (!hasEdit && touchingNonStatusField) {
-    return res.status(403).json({error:'Permission denied (passes.edit required to change pass details)'});
-  }
-
-  if(departure!==undefined)   db.run('UPDATE passes SET departure=? WHERE id=?',[departure,id]);
-  if(return_date!==undefined) db.run('UPDATE passes SET return_date=? WHERE id=?',[return_date,id]);
-  if(ua_notes!==undefined)    db.run('UPDATE passes SET ua_notes=? WHERE id=?',[ua_notes,id]);
-  if(notes!==undefined)       db.run('UPDATE passes SET notes=? WHERE id=?',[notes,id]);
-  if(status!==undefined&&['Out','Extended','Returned'].includes(status))
-    db.run('UPDATE passes SET status=? WHERE id=?',[status,id]);
-  db.save();
-  const _psE=db.query1('SELECT name,status FROM passes WHERE id=?',[id]);
-  if(status!==undefined&&_psE) audit(req,'passes.status','pass',id,_psE.name,{status});
-  else audit(req,'passes.edit','pass',id,_psE?_psE.name:String(id));
-  broadcast({type:'passes_updated',user:req.session.displayName});
-  res.json({ok:true});
-});
-app.delete('/api/passes/:id', requireAuth, csrfCheck, requirePermission('passes.edit'),(req,res)=>{
-  const id=parseInt(req.params.id);
-  const _psD=db.query1('SELECT name FROM passes WHERE id=?',[id]);
-  if(!_psD) return res.status(404).json({error:'Not found'});
-  db.run('DELETE FROM passes WHERE id=?',[id]); db.save();
-  audit(req,'passes.delete','pass',id,_psD.name);
-  broadcast({type:'passes_updated',user:req.session.displayName});
-  res.json({ok:true});
-});
-// Pass notice board
-app.get('/api/pass-notice', requireAuth,(req,res)=>{
-  res.json({notice:db.getSetting('pass_notice','')});
-});
-app.put('/api/pass-notice', requireAuth, csrfCheck, requirePermission('passes.edit'),(req,res)=>{
-  const{notice}=req.body;
-  if(String(notice||'').length > 1000) return res.status(400).json({error:'Notice too long (max 1000 chars)'});
-  db.setSetting('pass_notice',String(notice||''));
-  db.save();
-  audit(req,'passes.notice','settings',null,'Pass Notice',{notice:String(notice||'').slice(0,100)});
-  broadcast({type:'pass_notice_updated',user:req.session.displayName,notice:notice||''});
-  res.json({ok:true});
-});
+// ── Weekend Passes (modular: server/modules/passes) ─────────
+require('./server/modules/passes/routes').register(app);
 
 
 // ── UA Requests ────────────────────────────────────────────────────

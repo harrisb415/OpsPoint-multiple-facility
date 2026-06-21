@@ -28,7 +28,9 @@ server/
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
     staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅  ua/ ✅  violations/ ✅  groups/ ✅
     broadcasts/ ✅  clients/ ✅  reports/ ✅  facility/ ✅  users/ ✅  admin/ ✅  auth/ ✅
-    clinical/                                                                                ⬜
+    clinical/ ✅  (UA records, med log, milestones, incidents, discharge, consent,
+                  disclosures, unlock, + Structured Clinical Lite notes/treatment/
+                  assessments/discharge-summaries/group-notes)   ALL DOMAINS DONE
   storage/
     photoStore.js        ← put/getUrl interface (cloud seam → swap local disk for S3/GCS)   ⬜
   app.js                 ← express wiring / composition root (was the top of server.js)     ⬜
@@ -68,13 +70,16 @@ server/
    its not-yet-extracted direct `.transaction`/`.prepare`/`.exec` calls).
    Remaining: per-entity repositories ⬜ (move the SQL out of db.js domain by
    domain, each importing `connection` instead of touching the handle).
-4. 🟡 **Domain modules** — extracted so far: **staff ✅, passes ✅, mail ✅,
-   chores ✅, ua ✅, violations ✅, groups ✅, broadcasts ✅, clients ✅,
-   reports ✅, facility ✅, users ✅, admin ✅, auth ✅** (reports = core /api/data;
-   facility = settings/rooms/photos/ehr-config; users = accounts/profiles/groups/
-   password, `_countAdmins` now in users/repository; admin = restart+audit-log,
-   restartServer injected; auth = login/logout/me/change-password, serveSPA
-   injected, session regenerate stays in the route). **Only clinical remains.**
+4. ✅ **Domain modules — DONE.** All 15 extracted: **staff, passes, mail, chores,
+   ua, violations, groups, broadcasts, clients, reports, facility, users, admin,
+   auth, clinical.** (reports = core /api/data; facility = settings/rooms/photos/
+   ehr-config; users = accounts/profiles/groups/password, `_countAdmins` in
+   users/repository; admin = restart+audit-log, restartServer injected; auth =
+   login/logout/me/change-password, serveSPA injected, session regenerate in the
+   route; clinical = the EHR set, done in 4 installments behind middleware/
+   recordLock). server.js ~2,796 → 591 lines; the composition root now holds only
+   app/session bootstrap, SPA page routes, the WS server, and the updater +
+   central-HQ integration routes (infra, intentionally not domain modules).
    FOLLOW-UP now unblocked: mail/groups/clients repos hold temporary
    getActiveReportId/insertLogEntry/touchReport copies for the active-report log
    entry — those can now delegate to reports/repository and the dupes deleted.

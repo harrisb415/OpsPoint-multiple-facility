@@ -27,8 +27,8 @@ server/
     migrate.js           ← schema (createSchema) + ALTER-TABLE migrations                   ✅ DONE
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
     staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅  ua/ ✅  violations/ ✅  groups/ ✅
-    reports/  clients/  broadcasts/
-    clinical/  admin/  facility/  users/  auth/                                             ⬜
+    broadcasts/ ✅  clients/ ✅   (clients = the 3 resident routes; facility rooms TBD)
+    reports/  facility/  users/  admin/  clinical/  auth/                                    ⬜
   storage/
     photoStore.js        ← put/getUrl interface (cloud seam → swap local disk for S3/GCS)   ⬜
   app.js                 ← express wiring / composition root (was the top of server.js)     ⬜
@@ -69,7 +69,9 @@ server/
    Remaining: per-entity repositories ⬜ (move the SQL out of db.js domain by
    domain, each importing `connection` instead of touching the handle).
 4. 🟡 **Domain modules** — extracted so far: **staff ✅, passes ✅, mail ✅,
-   chores ✅, ua ✅, violations ✅, groups ✅** (each route→service→repository;
+   chores ✅, ua ✅, violations ✅, groups ✅, broadcasts ✅, clients ✅**
+   (clients = POST/PUT/profile resident routes; facility-rooms routes still
+   inline, pending a facility module). (each route→service→repository;
    `routes.register(app)` keeps Express precedence identical; each verified with a
    dedicated end-to-end HTTP test — staff 24, passes 20, mail 21, chores 17,
    ua 23, violations 23, groups 18 assertions). Two shared helpers were promoted

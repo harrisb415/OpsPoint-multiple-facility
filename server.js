@@ -1034,69 +1034,8 @@ app.post('/api/login', express.json(), (req,res)=>{
   });
 });
 
-// ── Staff Directory ───────────────────────────────────────────────
-app.get('/api/staff', requireAuth,(req,res)=>{
-  res.json(db.query('SELECT * FROM staff ORDER BY sort_order, id'));
-});
-app.post('/api/staff', requireAuth, csrfCheck, requirePermission('staff.edit'),(req,res)=>{
-  const{category,name,phone,phone2,notes}=req.body;
-  if(!name||!name.trim()) return res.status(400).json({error:'Name required'});
-  if(name.trim().length > 200) return res.status(400).json({error:'Name too long (max 200 chars)'});
-  if(phone && phone.length > 30) return res.status(400).json({error:'Phone too long (max 30 chars)'});
-  if(phone2 && phone2.length > 30) return res.status(400).json({error:'Phone2 too long (max 30 chars)'});
-  if(notes && notes.length > 2000) return res.status(400).json({error:'Notes too long (max 2000 chars)'});
-  if(category && category.length > 100) return res.status(400).json({error:'Category too long (max 100 chars)'});
-  const maxSort=db.query1('SELECT MAX(sort_order) as m FROM staff');
-  const so=(maxSort&&maxSort.m!=null)?maxSort.m+1:0;
-  db.run('INSERT INTO staff (category,name,phone,phone2,notes,sort_order) VALUES (?,?,?,?,?,?)',
-    [category||'',name.trim(),phone||'',phone2||'',notes||'',so]);
-  db.save();
-  audit(req,'staff.add','staff',null,name.trim(),{category:category||''});
-  broadcast({type:'staff_updated',user:req.session.displayName});
-  res.json({ok:true,staff:db.query1('SELECT * FROM staff ORDER BY id DESC LIMIT 1')});
-});
-app.put('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'),(req,res)=>{
-  const id=parseInt(req.params.id);
-  if(!db.query1('SELECT id FROM staff WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{category,name,phone,phone2,notes,sort_order}=req.body;
-  if(name!==undefined&&name.trim().length>200) return res.status(400).json({error:'Name too long'});
-  if(phone!==undefined&&phone.length>30) return res.status(400).json({error:'Phone too long'});
-  if(phone2!==undefined&&phone2.length>30) return res.status(400).json({error:'Phone2 too long'});
-  if(notes!==undefined&&notes.length>2000) return res.status(400).json({error:'Notes too long'});
-  if(category!==undefined&&category.length>100) return res.status(400).json({error:'Category too long'});
-  if(category!==undefined) db.run('UPDATE staff SET category=? WHERE id=?',[category,id]);
-  if(name!==undefined)     db.run('UPDATE staff SET name=? WHERE id=?',[name.trim(),id]);
-  if(phone!==undefined)    db.run('UPDATE staff SET phone=? WHERE id=?',[phone,id]);
-  if(phone2!==undefined)   db.run('UPDATE staff SET phone2=? WHERE id=?',[phone2,id]);
-  if(notes!==undefined)    db.run('UPDATE staff SET notes=? WHERE id=?',[notes,id]);
-  if(sort_order!==undefined) db.run('UPDATE staff SET sort_order=? WHERE id=?',[parseInt(sort_order),id]);
-  db.save();
-  const _stfE=db.query1('SELECT name FROM staff WHERE id=?',[id]);
-  audit(req,'staff.edit','staff',id,_stfE?_stfE.name:String(id));
-  broadcast({type:'staff_updated',user:req.session.displayName});
-  res.json({ok:true});
-});
-app.delete('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'),(req,res)=>{
-  const id=parseInt(req.params.id);
-  const _stfD=db.query1('SELECT name,category FROM staff WHERE id=?',[id]);
-  if(!_stfD) return res.status(404).json({error:'Not found'});
-  db.run('DELETE FROM staff WHERE id=?',[id]); db.save();
-  audit(req,'staff.delete','staff',id,_stfD.name,{category:_stfD.category});
-  broadcast({type:'staff_updated',user:req.session.displayName});
-  res.json({ok:true});
-});
-// Staff categories setting
-app.get('/api/staff/categories', requireAuth,(req,res)=>{
-  res.json(db.getSetting('staff_categories',['Director','Case Manager','Program Assistant','Other']));
-});
-app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staff.edit'),(req,res)=>{
-  const{categories}=req.body;
-  if(!Array.isArray(categories)) return res.status(400).json({error:'categories must be array'});
-  db.setSetting('staff_categories',categories.filter(c=>c&&c.trim()));
-  db.save();
-  audit(req,'staff.categories','settings',null,'Staff Categories',{categories:categories.filter(c=>c&&c.trim())});
-  res.json({ok:true});
-});
+// ── Staff Directory (modular: server/modules/staff) ─────────
+require('./server/modules/staff/routes').register(app);
 
 // ── Chores — chore assignments live on clients, log per day ──────
 // Get master chore list

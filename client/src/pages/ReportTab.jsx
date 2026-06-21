@@ -1728,7 +1728,7 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
       </tr>
       {showPhoto && photoSrc && (
         <tr><td colSpan={3} className="p-0 border-none">
-          <Modal show size="lg" onClose={() => setShowPhoto(false)}>
+          <Modal show dismissible size="lg" onClose={() => setShowPhoto(false)}>
             <ModalHeader>UA Photo</ModalHeader>
             <ModalBody>
               <img src={photoSrc} alt="UA photo" className="object-contain mx-auto rounded-lg max-h-[70vh]" />

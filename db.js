@@ -3,11 +3,11 @@
  * Writes go directly to disk on every statement — no manual flush needed.
  */
 'use strict';
-const Database = require('better-sqlite3');
 const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const migrate = require('./server/db/migrate'); // schema DDL + column migrations
+const migrate    = require('./server/db/migrate');    // schema DDL + column migrations
+const connection = require('./server/db/connection'); // better-sqlite3 handle + primitives
 
 let _db     = null;
 let _dbPath = null;
@@ -140,9 +140,7 @@ const ROLE_PRESETS = {
 function init(dbPath) {
   _dbPath = dbPath;
   const isNew = !fs.existsSync(dbPath);
-  _db = new Database(dbPath);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
+  _db = connection.open(dbPath);   // owns new Database() + WAL/FK pragmas
   console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
 
   migrate.createSchema(_db);
@@ -453,15 +451,10 @@ function deleteGroup(id) {
 }
 
 // ── Core helpers ──────────────────────────────────────────────────────
-function _run(sql, params = []) {
-  return _db.prepare(sql).run(...params);
-}
-function _q(sql, params = []) {
-  return _db.prepare(sql).all(...params);
-}
-function _q1(sql, params = []) {
-  return _db.prepare(sql).get(...params) || null;
-}
+// Primitives delegate to server/db/connection.js (single source of SQL truth).
+function _run(sql, params = []) { return connection.run(sql, params); }
+function _q(sql, params = [])   { return connection.query(sql, params); }
+function _q1(sql, params = [])  { return connection.query1(sql, params); }
 // No-op: better-sqlite3 writes directly to disk on every statement
 function _save() {}
 function _j(str, def) { try { return JSON.parse(str); } catch(e) { return def; } }

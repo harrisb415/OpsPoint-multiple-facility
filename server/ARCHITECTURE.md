@@ -27,8 +27,8 @@ server/
     migrate.js           ← schema (createSchema) + ALTER-TABLE migrations                   ✅ DONE
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
     staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅  ua/ ✅  violations/ ✅  groups/ ✅
-    broadcasts/ ✅  clients/ ✅  reports/ ✅  facility/ ✅  users/ ✅
-    admin/  clinical/  auth/                                                                 ⬜
+    broadcasts/ ✅  clients/ ✅  reports/ ✅  facility/ ✅  users/ ✅  admin/ ✅  auth/ ✅
+    clinical/                                                                                ⬜
   storage/
     photoStore.js        ← put/getUrl interface (cloud seam → swap local disk for S3/GCS)   ⬜
   app.js                 ← express wiring / composition root (was the top of server.js)     ⬜
@@ -70,9 +70,11 @@ server/
    domain, each importing `connection` instead of touching the handle).
 4. 🟡 **Domain modules** — extracted so far: **staff ✅, passes ✅, mail ✅,
    chores ✅, ua ✅, violations ✅, groups ✅, broadcasts ✅, clients ✅,
-   reports ✅, facility ✅, users ✅** (reports = core /api/data engine; facility
-   = settings/rooms/photos/ehr-config; users = accounts/profiles/groups/password,
-   with `_countAdmins` now in users/repository).
+   reports ✅, facility ✅, users ✅, admin ✅, auth ✅** (reports = core /api/data;
+   facility = settings/rooms/photos/ehr-config; users = accounts/profiles/groups/
+   password, `_countAdmins` now in users/repository; admin = restart+audit-log,
+   restartServer injected; auth = login/logout/me/change-password, serveSPA
+   injected, session regenerate stays in the route). **Only clinical remains.**
    FOLLOW-UP now unblocked: mail/groups/clients repos hold temporary
    getActiveReportId/insertLogEntry/touchReport copies for the active-report log
    entry — those can now delegate to reports/repository and the dupes deleted.

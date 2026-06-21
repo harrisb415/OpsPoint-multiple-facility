@@ -112,36 +112,9 @@ app.use(requireForceChangePw);  // forced-password-change gate — server/middle
 // audit / csrfCheck / loginRateCheck / loginRateClear now live in
 // ./server/middleware (audit.js, csrf.js, rateLimit.js) — required up top.
 
-// ── Login ────────────────────────────────────────────────────────
-// Login / logout — React SPA handles the UI
-app.get('/login',(req,res)=>{
-  if(req.session&&req.session.userId) return res.redirect('/');
-  serveSPA(res);
-});
+// ── Auth: login / logout / me / change-password (modular: server/modules/auth) ─────────
+require('./server/modules/auth/routes').register(app, { serveSPA });
 
-app.post('/logout', csrfCheck, (req,res)=>{
-  audit(req,'auth.logout','user',req.session.userId,req.session.displayName||req.session.username);
-  req.session.destroy(()=>res.json({ok:true}));
-});
-
-
-// ── Force password change ────────────────────────────────────
-app.get('/change-password', requireAuth, (req, res) => serveSPA(res));
-
-app.post('/api/force-change-password', requireAuth, csrfCheck, (req, res) => {
-  // H2: Only usable when the account is actually in must_change_pw state
-  if (!req.session.must_change_pw)
-    return res.status(403).json({error:'Not applicable'});
-  const{newPassword}=req.body;
-  if(!newPassword) return res.status(400).json({error:'Password required'});
-  const err=validatePw(newPassword); if(err) return res.status(400).json({error:err});
-  const{hash,salt}=hashPw(newPassword);
-  db.run('UPDATE users SET hash=?,salt=?,must_change_pw=0 WHERE id=?',[hash,salt,req.session.userId]);
-  db.save();
-  audit(req,'auth.pw_change','user',req.session.userId,req.session.displayName||req.session.username,{type:'forced_change'});
-  req.session.must_change_pw=false;
-  res.json({ok:true});
-});
 
 // ── Page routes (React SPA handles client-side routing) ──────────
 app.get('/', requireAuth, (req,res)=> serveSPA(res));
@@ -195,51 +168,6 @@ require('./server/modules/facility/routes').register(app);
 require('./server/modules/clients/routes').register(app);
 
 
-app.get('/api/me', requireAuth,(req,res)=>{
-  const _u = db.query1('SELECT permissions,role FROM users WHERE id=?',[req.session.userId]);
-  const perms = (_u&&_u.permissions)?JSON.parse(_u.permissions):(db.ROLE_PRESETS[req.session.role]||[]);
-  res.json({
-    id:req.session.userId, username:req.session.username,
-    displayName:req.session.displayName, role:req.session.role,
-    permissions:perms, mustChangePw:!!req.session.must_change_pw
-  });
-});
-
-// JSON login endpoint for React frontend
-app.post('/api/login', express.json(), (req,res)=>{
-  const loginOrigin = req.headers.origin;
-  if (loginOrigin && originHost(loginOrigin) !== req.headers.host) {
-    return res.status(403).json({error:'Forbidden'});
-  }
-  const ip = req.ip||req.connection.remoteAddress||'unknown';
-  if (loginRateCheck(ip)) return res.status(429).json({error:'Too many login attempts. Wait 15 minutes.'});
-  const {username,password} = req.body||{};
-  const u = db.query1('SELECT * FROM users WHERE LOWER(username)=LOWER(?)',[username||'']);
-  if (!u) {
-    const _dummy = crypto.randomBytes(16).toString('hex');
-    crypto.pbkdf2Sync('dummy',_dummy,600000,64,'sha512');
-    audit(req,'auth.login_fail','user',null,username||'?',{reason:'user_not_found'},{actorId:null,actorName:username||'?'});
-    return res.status(401).json({error:'Invalid username or password.'});
-  }
-  try { if (!verifyPw(password||'',u.hash,u.salt)) {
-    audit(req,'auth.login_fail','user',u.id,u.username,{reason:'bad_password'},{actorId:null,actorName:u.username});
-    return res.status(401).json({error:'Invalid username or password.'});
-  }} catch(e){ return res.status(500).json({error:'Login error.'}); }
-  const savedReturnTo = req.session.returnTo;
-  req.session.regenerate(function(err) {
-    if (err) return res.status(500).json({error:'Login error.'});
-    req.session.userId=u.id; req.session.username=u.username;
-    req.session.displayName=u.display_name; req.session.role=u.role;
-    const _pu=db.query1('SELECT permissions FROM users WHERE id=?',[u.id]);
-    req.session.permissions=(_pu&&_pu.permissions)?JSON.parse(_pu.permissions):(db.ROLE_PRESETS[u.role]||[]);
-    audit(req,'auth.login','user',u.id,u.display_name||u.username,null,{actorId:u.id,actorName:u.display_name||u.username});
-    if (u.must_change_pw) {
-      req.session.must_change_pw = true;
-      return req.session.save(()=>res.json({ok:true,mustChangePw:true}));
-    }
-    req.session.save(()=>res.json({ok:true,mustChangePw:false}));
-  });
-});
 
 // ── Staff Directory (modular: server/modules/staff) ─────────
 require('./server/modules/staff/routes').register(app);
@@ -266,13 +194,8 @@ require('./server/modules/mail/routes').register(app);
 // ── Violations (modular: server/modules/violations) ─────────
 require('./server/modules/violations/routes').register(app);
 
-// ── Server restart (admin only) ───────────────────────────────────
-app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.system'), (req,res)=>{
-  audit(req,'server.restart','server',null,'Server Restart',{by:req.session.displayName||req.session.username});
-  broadcast({type:'server_restarting',user:req.session.displayName||req.session.username});
-  res.json({ok:true});
-  setTimeout(()=>restartServer(), 600);
-});
+// ── Admin: server restart + audit log (modular: server/modules/admin) ─────────
+require('./server/modules/admin/routes').register(app, { restartServer });
 
 // ════════════════════════════════════════════════════════════════════
 // EHR EXPANSION — clinical records, immutability, consent, idle session
@@ -680,19 +603,6 @@ app.post('/api/:table/:id/unlock', requireAuth, csrfCheck, requirePermission('re
 });
 
 
-// ── Audit Log API ─────────────────────────────────────────────────
-app.get('/api/audit-log', requireAuth, requirePermission('admin.audit'), (req,res)=>{
-  const{action,actorId,from,to,search,limit,offset}=req.query;
-  const prefixes=action?action.split(',').map(s=>s.trim()).filter(Boolean):[];
-  const result=db.getAuditLog({
-    actionPrefixes:prefixes,
-    actorId:actorId?parseInt(actorId):null,
-    from:from||null, to:to||null, search:search||null,
-    limit:Math.min(parseInt(limit)||100,500),
-    offset:parseInt(offset)||0
-  });
-  res.json(result);
-});
 
 // ════════════════════════════════════════════════════════════════════════
 // Structured Clinical Lite — clinical_notes, treatment_plans, assessments,

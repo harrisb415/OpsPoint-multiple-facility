@@ -24,7 +24,7 @@ const { sanitizeText: _sanitizeText, validTime: _validTime } = require('./server
 const { broadcast, setWss }            = require('./server/realtime/broadcast');
 const { securityHeaders, cors }        = require('./server/middleware/security');
 const { csrfCheck, originHost }        = require('./server/middleware/csrf');
-const { audit }                        = require('./server/middleware/audit');
+const { audit, auditRead }             = require('./server/middleware/audit');
 const { userPerms: _userPerms, requireAuth, requirePermission, requireAnyPermission } = require('./server/middleware/auth');
 const { idleSessionCheck, requireForceChangePw } = require('./server/middleware/session');
 const { loginRateCheck, loginRateClear, apiRateCheck } = require('./server/middleware/rateLimit');
@@ -1031,75 +1031,8 @@ require('./server/modules/staff/routes').register(app);
 // ── Chores (modular: server/modules/chores) ─────────
 require('./server/modules/chores/routes').register(app);
 
-// ── Group Sessions ────────────────────────────────────────────────
-app.get('/api/master-groups', requireAuth,(req,res)=>{
-  res.json(db.getSetting('master_groups',[]));
-});
-app.put('/api/master-groups', requireAuth, csrfCheck, requirePermission('groups.log'),(req,res)=>{
-  const{groups}=req.body;
-  if(!Array.isArray(groups)) return res.status(400).json({error:'groups must be array'});
-  db.setSetting('master_groups',groups.filter(g=>g&&g.trim()));
-  db.save();
-  audit(req,'groups.master_edit','settings',null,'Master Groups',{count:groups.length});
-  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
-  res.json({ok:true});
-});
-app.get('/api/group-sessions', requireAuth, requirePermission('groups.view'),(req,res)=>{
-  const{date,from,to}=req.query;
-  const sessions=db.getGroupSessions({date,from,to});
-  sessions.forEach(s=>{s.attendance=db.getGroupAttendance(s.id);});
-  auditRead(req,'group_sessions',null,`Group sessions (${sessions.length})`);
-  res.json(sessions);
-});
-app.post('/api/group-sessions', requireAuth, csrfCheck, requirePermission('groups.log'),(req,res)=>{
-  const b=req.body||{};
-  if(!b.group_name) return res.status(400).json({error:'group_name required'});
-  if(!b.session_date) return res.status(400).json({error:'session_date required'});
-  const me=req.session;
-  const sess=db.createGroupSession({
-    session_date:  b.session_date,
-    group_name:    b.group_name,
-    time_of_day:   b.time_of_day||'',
-    facilitator:   b.facilitator||'',
-    notes:         b.notes||'',
-    created_by_id:   me.userId,
-    created_by_name: me.displayName||me.username||'',
-  });
-  // Save attendance if provided
-  if(Array.isArray(b.attendance)&&b.attendance.length>0){
-    db.saveGroupAttendance(sess.id,b.attendance);
-  }
-  // Log to active shift report
-  const _activeId=db.getSetting('active_report_id',null);
-  if(_activeId){
-    const _n=new Date(),_h=_n.getHours(),_m=String(_n.getMinutes()).padStart(2,'0');
-    const _ap=_h>=12?'PM':'AM',_h12=_h%12||12;
-    const _ts=`${_h12}:${_m} ${_ap}`;
-    const _att=Array.isArray(b.attendance)?b.attendance:[];
-    const _present=_att.filter(a=>a.present).length;
-    const _total=_att.length;
-    const _timePart=b.time_of_day?` (${b.time_of_day})`:'';
-    const _facPart=b.facilitator?`. Facilitator: ${b.facilitator}.`:'';
-    const _cntPart=_total>0?` — ${_present}/${_total} attended`:'';
-    db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
-      [_activeId,_ts,`Group: ${b.group_name}${_timePart}${_cntPart}${_facPart}`]);
-    db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),_activeId]);
-  }
-  db.save();
-  audit(req,'groups.session_create','group_sessions',sess.id,b.group_name,{date:b.session_date});
-  broadcast({type:'data_saved',user:me.displayName||me.username});
-  res.json({ok:true,session:sess});
-});
-app.delete('/api/group-sessions/:id', requireAuth, csrfCheck, requirePermission('groups.log'),(req,res)=>{
-  const id=parseInt(req.params.id);
-  const s=db.query1('SELECT id,group_name FROM group_sessions WHERE id=?',[id]);
-  if(!s) return res.status(404).json({error:'Not found'});
-  db.deleteGroupSession(id);
-  db.save();
-  audit(req,'groups.session_delete','group_sessions',id,s.group_name);
-  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
-  res.json({ok:true});
-});
+// ── Group Sessions (modular: server/modules/groups) ─────────
+require('./server/modules/groups/routes').register(app);
 
 // ── Weekend Passes (modular: server/modules/passes) ─────────
 require('./server/modules/passes/routes').register(app);
@@ -1146,10 +1079,6 @@ app.post('/api/admin/restart', requireAuth, csrfCheck, requirePermission('admin.
 // ════════════════════════════════════════════════════════════════════
 
 // Helper: audit PHI read events. action='record.read' per HIPAA Security Rule.
-function auditRead(req, table, targetId, label, detail) {
-  audit(req, 'record.read', table, targetId, label||'', detail||'');
-}
-
 // Helper: 403 if the named clinical record is locked (24h immutability).
 // Records.unlock holders can bypass by calling the /unlock route first.
 function requireUnlocked(table) {

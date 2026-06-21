@@ -11,4 +11,9 @@ function audit(req, action, targetType, targetId, targetLabel, detail, override)
   } catch (e) {}
 }
 
-module.exports = { audit };
+// PHI-read audit — logs that a record/list was viewed (HIPAA access logging).
+function auditRead(req, table, targetId, label, detail) {
+  audit(req, 'record.read', table, targetId, label || '', detail || '');
+}
+
+module.exports = { audit, auditRead };

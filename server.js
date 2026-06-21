@@ -1037,53 +1037,8 @@ app.post('/api/login', express.json(), (req,res)=>{
 // ── Staff Directory (modular: server/modules/staff) ─────────
 require('./server/modules/staff/routes').register(app);
 
-// ── Chores — chore assignments live on clients, log per day ──────
-// Get master chore list
-app.get('/api/master-chores', requireAuth,(req,res)=>{
-  res.json(db.getSetting('master_chores',[]));
-});
-app.put('/api/master-chores', requireAuth, csrfCheck, requirePermission('chores.assign'),(req,res)=>{
-  const{chores}=req.body;
-  if(!Array.isArray(chores)) return res.status(400).json({error:'chores must be array'});
-  db.setSetting('master_chores',chores.filter(c=>c&&c.trim()));
-  db.save();
-  audit(req,'chore.master_edit','settings',null,'Master Chores',{count:chores.length});
-  res.json({ok:true});
-});
-// Update a single client's chore assignment (supervisor only)
-app.patch('/api/clients/:id/chore', requireAuth, csrfCheck, requirePermission('chores.assign'),(req,res)=>{
-  const id=parseInt(req.params.id);
-  if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{chore,chore_time,chore_days,chore_day_shifts}=req.body;
-  if(chore!==undefined)            db.run('UPDATE clients SET chore=? WHERE id=?',[chore||'',id]);
-  if(chore_time!==undefined)       db.run('UPDATE clients SET chore_time=? WHERE id=?',[chore_time||'',id]);
-  if(chore_days!==undefined)       db.run('UPDATE clients SET chore_days=? WHERE id=?',[chore_days!=null?JSON.stringify(chore_days):null,id]);
-  if(chore_day_shifts!==undefined) db.run('UPDATE clients SET chore_day_shifts=? WHERE id=?',[chore_day_shifts!=null?JSON.stringify(chore_day_shifts):null,id]);
-  db.save();
-  const _cc=db.query1('SELECT name,room FROM clients WHERE id=?',[id]);
-  audit(req,'chore.assign','client',id,_cc?(_cc.name+' Rm.'+_cc.room):String(id),{chore:chore||''});
-  broadcast({type:'data_saved',user:req.session.displayName});
-  res.json({ok:true});
-});
-// Get chore log — single date or date range (?from=YYYY-MM-DD&to=YYYY-MM-DD)
-app.get('/api/chore-log', requireAuth,(req,res)=>{
-  if(req.query.from && req.query.to){
-    return res.json(db.query('SELECT * FROM chore_log WHERE log_date>=? AND log_date<=? ORDER BY log_date',[req.query.from,req.query.to]));
-  }
-  const date=req.query.date||new Date().toISOString().slice(0,10);
-  res.json(db.query('SELECT * FROM chore_log WHERE log_date=?',[date]));
-});
-// Upsert a chore log entry
-app.put('/api/chore-log', requireAuth, csrfCheck, requirePermission('chores.log'),(req,res)=>{
-  const{client_id,log_date,initials}=req.body;
-  if(!client_id||!log_date) return res.status(400).json({error:'client_id and log_date required'});
-  db.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials) VALUES (?,?,?)',
-    [parseInt(client_id),log_date,initials||'']);
-  db.save();
-  audit(req,'chore.initial','client',client_id,String(client_id),{log_date,initials:initials||''});
-  broadcast({type:'chore_log_updated',user:req.session.displayName,client_id,log_date,initials});
-  res.json({ok:true});
-});
+// ── Chores (modular: server/modules/chores) ─────────
+require('./server/modules/chores/routes').register(app);
 
 // ── Group Sessions ────────────────────────────────────────────────
 app.get('/api/master-groups', requireAuth,(req,res)=>{

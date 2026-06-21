@@ -11,7 +11,7 @@
  */
 const { requireAuth, requirePermission } = require('../../middleware/auth');
 const { csrfCheck } = require('../../middleware/csrf');
-const { requireUnlocked } = require('../../middleware/recordLock');
+const { requireUnlocked, requireConsent } = require('../../middleware/recordLock');
 const { audit, auditRead } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
 const service = require('./service');
@@ -184,6 +184,82 @@ function register(app) {
       service.deleteIncident(id);
       audit(req, 'incident.delete', 'incidents', id, '');
       broadcast({ type: 'incidents_updated' });
+      res.json({ ok: true });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+
+  // ── Discharge Records (Phase 6) ──────────────────────────────────
+  app.get('/api/discharge-records', requireAuth, (req, res) => {
+    const rows = service.listDischarges();
+    auditRead(req, 'discharge_records', null, `Discharge records list (${rows.length})`);
+    res.json(rows);
+  });
+  app.get('/api/discharge-records/:client_id', requireAuth, (req, res) => {
+    const cid = parseInt(req.params.client_id);
+    const rows = service.listDischargesForClient(cid);
+    auditRead(req, 'discharge_records', null, `Discharges for client ${cid}`, { client_id: cid });
+    res.json(rows);
+  });
+  app.post('/api/discharge-records', requireAuth, csrfCheck, requirePermission('residents.edit'), (req, res) => {
+    try {
+      const { record, client } = service.createDischarge(req.body || {}, req.session);
+      audit(req, 'discharge.create', 'discharge_records', record.id, client.name, { reason: record.reason });
+      broadcast({ type: 'data_saved', user: req.session.displayName || req.session.username });
+      broadcast({ type: 'discharge_records_updated' });
+      res.json({ ok: true, record });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+
+  // ── 42 CFR Part 2 Consent (Phase 7) ──────────────────────────────
+  app.get('/api/consent-records/:client_id', requireAuth, requirePermission('consent.manage'), (req, res) => {
+    const cid = parseInt(req.params.client_id);
+    const rows = service.listConsents(cid);
+    auditRead(req, 'consent_records', null, `Consents for client ${cid}`, { client_id: cid });
+    res.json(rows);
+  });
+  app.post('/api/consent-records', requireAuth, csrfCheck, requirePermission('consent.manage'), (req, res) => {
+    try {
+      const b = req.body || {};
+      const rec = service.createConsent(b, req.session);
+      audit(req, 'consent.create', 'consent_records', rec.id, b.recipient_name,
+        { client_id: b.client_id, information_type: b.information_type, expires: b.expiration_date });
+      res.json({ ok: true, record: rec });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+  app.put('/api/consent-records/:id/revoke', requireAuth, csrfCheck, requirePermission('consent.manage'), (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { record, recipientName, clientId } = service.revokeConsent(id, req.session);
+      audit(req, 'consent.revoke', 'consent_records', id, recipientName, { client_id: clientId });
+      res.json({ ok: true, record });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+
+  app.get('/api/disclosures/:client_id', requireAuth, requirePermission('disclosures.view'), (req, res) => {
+    const cid = parseInt(req.params.client_id);
+    const rows = service.listDisclosures(cid);
+    auditRead(req, 'disclosures', null, `Disclosures for client ${cid}`, { client_id: cid });
+    res.json(rows);
+  });
+  // Log an external disclosure — gated by requireConsent (valid consent on file).
+  app.post('/api/disclosures', requireAuth, csrfCheck,
+    requireConsent(req => req.body && req.body.client_id, 'all'), (req, res) => {
+    try {
+      const b = req.body || {};
+      const rec = service.logDisclosure(b, req.session, req._consent);
+      audit(req, 'disclosure.log', 'disclosures', rec.id, b.recipient || '',
+        { client_id: b.client_id, information_type: b.information_type, method: b.method });
+      res.json({ ok: true, record: rec });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+
+  // ── Phase 8: Supervisor unlock for clinical records ──────────────
+  app.post('/api/:table/:id/unlock', requireAuth, csrfCheck, requirePermission('records.unlock'), (req, res) => {
+    try {
+      const table = String(req.params.table || '');
+      const id = parseInt(req.params.id);
+      const { reason } = service.unlockRecord(table, id, req.body || {}, req.session);
+      audit(req, 'record.unlock', table, id, '', { reason });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

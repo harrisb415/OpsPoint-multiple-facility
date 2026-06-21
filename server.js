@@ -25,6 +25,7 @@ const { broadcast, setWss }            = require('./server/realtime/broadcast');
 const { securityHeaders, cors }        = require('./server/middleware/security');
 const { csrfCheck, originHost }        = require('./server/middleware/csrf');
 const { audit, auditRead }             = require('./server/middleware/audit');
+const { requireUnlocked, requireConsent } = require('./server/middleware/recordLock');
 const { userPerms: _userPerms, requireAuth, requirePermission, requireAnyPermission } = require('./server/middleware/auth');
 const { idleSessionCheck, requireForceChangePw } = require('./server/middleware/session');
 const { loginRateCheck, loginRateClear, apiRateCheck } = require('./server/middleware/rateLimit');
@@ -202,45 +203,7 @@ require('./server/modules/admin/routes').register(app, { restartServer });
 // ════════════════════════════════════════════════════════════════════
 
 // Helper: audit PHI read events. action='record.read' per HIPAA Security Rule.
-// Helper: 403 if the named clinical record is locked (24h immutability).
-// Records.unlock holders can bypass by calling the /unlock route first.
-function requireUnlocked(table) {
-  return function(req, res, next) {
-    const id = parseInt(req.params.id);
-    if (!id) return res.status(400).json({error:'Invalid id'});
-    if (db.isRecordLocked(table, id)) {
-      return res.status(403).json({
-        error:'Record is locked (24h immutability window has elapsed). A supervisor must unlock it first.',
-        code:'RECORD_LOCKED'
-      });
-    }
-    next();
-  };
-}
-
-// Helper: 42 CFR Part 2 consent gate — used by external-disclosure routes only.
-// Internal staff reads are exempt under the 2024 rule update (treatment/operations)
-// but are still audit-logged via auditRead().
-function requireConsent(clientIdFn, informationType) {
-  return function(req, res, next) {
-    try {
-      const cid = parseInt(typeof clientIdFn === 'function' ? clientIdFn(req) : req.params.client_id);
-      if (!cid) return res.status(400).json({error:'client_id required'});
-      const consent = db.findActiveConsent(cid, informationType);
-      if (!consent) {
-        audit(req,'consent.blocked','consent',cid,'External disclosure blocked',{informationType});
-        return res.status(403).json({
-          error:'42 CFR Part 2: No valid consent on file for this disclosure. Obtain written consent first.',
-          code:'CONSENT_REQUIRED'
-        });
-      }
-      req._consent = consent;
-      next();
-    } catch(e) {
-      res.status(500).json({error:'Consent check failed'});
-    }
-  };
-}
+// requireUnlocked / requireConsent now live in server/middleware/recordLock.js.
 
 // Compute days_in_program for a discharge record.
 function _daysBetween(a, b) {

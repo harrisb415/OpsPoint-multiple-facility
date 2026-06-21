@@ -763,128 +763,8 @@ app.get('/api/facility/rooms/vacant', requireAuth,(req,res)=>{
      ORDER BY CAST(room AS INTEGER), room`));
 });
 
-// ── Add new client ─────────────────────────────────────────────
-app.post('/api/clients', requireAuth, csrfCheck, requirePermission('residents.edit'),(req,res)=>{
-  const{room,name,case_manager,phone,intake_date,
-        referral_source,program_track,emergency_contacts,intake_notes}=req.body;
-  if(!name||!String(name).trim()) return res.status(400).json({error:'Name is required'});
-  if(!room||!String(room).trim())  return res.status(400).json({error:'Room is required'});
-  // Block if a real (non-VACANT) resident already has this room
-  const occ=db.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0`,[String(room)]);
-  if(occ) return res.status(409).json({error:'Room '+room+' is already occupied by '+occ.name});
-  const ecJson = Array.isArray(emergency_contacts) ? JSON.stringify(emergency_contacts) : '[]';
-  // If a VACANT row exists for this room, update it in-place (avoids duplicates)
-  const vacant=db.query1(`SELECT id FROM clients WHERE room=? AND name='VACANT' AND is_active=1`,[String(room)]);
-  let resultId;
-  if(vacant){
-    db.run(`UPDATE clients SET name=?,case_manager=?,phone=?,intake_date=?,is_active=1,
-            referral_source=?,program_track=?,emergency_contacts=?,intake_notes=? WHERE id=?`,
-      [String(name).trim(),case_manager||'',phone||'',intake_date||null,
-       referral_source||'', program_track||'', ecJson, intake_notes||'',
-       vacant.id]);
-    resultId=vacant.id;
-  } else {
-    const maxRow=db.query1('SELECT MAX(sort_order) AS m FROM clients');
-    const sortOrder=(maxRow&&maxRow.m!=null?maxRow.m:0)+1;
-    db.run(`INSERT INTO clients (room,name,case_manager,phone,intake_date,is_active,is_special,sort_order,
-            referral_source,program_track,emergency_contacts,intake_notes)
-      VALUES (?,?,?,?,?,1,0,?,?,?,?,?)`,
-      [String(room),String(name).trim(),case_manager||'',phone||'',intake_date||null,sortOrder,
-       referral_source||'', program_track||'', ecJson, intake_notes||'']);
-    const newId=db.query1('SELECT last_insert_rowid() AS id');
-    resultId=newId?newId.id:null;
-  }
-  // Add intake log entry to active shift report
-  const _intakeActiveId = db.getSetting('active_report_id', null);
-  if (_intakeActiveId) {
-    const _n=new Date(),_h=_n.getHours(),_m=String(_n.getMinutes()).padStart(2,'0');
-    const _ap=_h>=12?'PM':'AM',_h12=_h%12||12;
-    const _ts=`${_h12}:${_m} ${_ap}`;
-    let _intakeStr='';
-    if(intake_date){try{const _d=new Date(intake_date+'T12:00:00');_intakeStr=' Intake: '+_d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})+'.';}catch(e){}}
-    db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)',
-      [_intakeActiveId,_ts,`Resident admitted: ${String(name).trim()}, Rm. ${String(room)}.${_intakeStr}`]);
-    db.run('UPDATE reports SET updated_at=? WHERE id=?',[new Date().toISOString(),_intakeActiveId]);
-  }
-  db.save();
-  const newClient=resultId?db.query1('SELECT * FROM clients WHERE id=?',[resultId]):null;
-  audit(req,'client.add','client',resultId,String(name).trim()+' Rm.'+String(room));
-  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
-  res.json({ok:true,id:resultId,client:newClient});
-});
-
-// ── Direct client update (all authenticated roles) ─────────────
-app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents.edit'),(req,res)=>{
-
-  const id=parseInt(req.params.id,10);
-  if(!db.query1('SELECT id FROM clients WHERE id=?',[id])) return res.status(404).json({error:'Not found'});
-  const{room,name,case_manager,phone,intake_date,discharge_date,photo,is_active,
-        referral_source,program_track,emergency_contacts,intake_notes}=req.body;
-  if(name!==undefined&&!name.trim()) return res.status(400).json({error:'Name cannot be empty'});
-  // Check room conflict if room is changing
-  if(room!==undefined){
-    const cur=db.query1('SELECT room,is_active FROM clients WHERE id=?',[id]);
-    if(cur&&String(room)!==String(cur.room)){
-      const occ=db.query1(
-        `SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0 AND id!=?`,
-        [String(room),id]);
-      if(occ) return res.status(409).json({error:'Room '+room+' is already occupied by '+occ.name});
-    }
-    // Remove any VACANT placeholder for the target room when the client is active (or being reactivated)
-    const becomingActive = is_active !== undefined ? !!is_active : !!(cur && cur.is_active);
-    if(becomingActive) {
-      db.run(`DELETE FROM clients WHERE room=? AND name='VACANT' AND id!=?`,[String(room),id]);
-    }
-    db.run('UPDATE clients SET room=? WHERE id=?',[String(room),id]);
-  }
-  if(name!==undefined)          db.run('UPDATE clients SET name=? WHERE id=?',[name.trim(),id]);
-  if(case_manager!==undefined)  db.run('UPDATE clients SET case_manager=? WHERE id=?',[case_manager,id]);
-  if(phone!==undefined)         db.run('UPDATE clients SET phone=? WHERE id=?',[phone,id]);
-  if(intake_date!==undefined)   db.run('UPDATE clients SET intake_date=? WHERE id=?',[intake_date||null,id]);
-  if(discharge_date!==undefined)db.run('UPDATE clients SET discharge_date=? WHERE id=?',[discharge_date||null,id]);
-  if(is_active!==undefined)     db.run('UPDATE clients SET is_active=? WHERE id=?',[is_active?1:0,id]);
-  if(referral_source!==undefined)  db.run('UPDATE clients SET referral_source=? WHERE id=?',[String(referral_source||''),id]);
-  if(program_track!==undefined)    db.run('UPDATE clients SET program_track=? WHERE id=?',[String(program_track||''),id]);
-  if(emergency_contacts!==undefined) db.run('UPDATE clients SET emergency_contacts=? WHERE id=?',
-    [JSON.stringify(Array.isArray(emergency_contacts)?emergency_contacts:[]),id]);
-  if(intake_notes!==undefined)     db.run('UPDATE clients SET intake_notes=? WHERE id=?',[String(intake_notes||''),id]);
-  if(photo!==undefined){
-    let pval=null;
-    if(photo&&typeof photo==='string'&&photo.startsWith('data:image/')){
-      const b64Part=photo.split(',')[1]||'';
-      if(b64Part.length<=5592406){
-        try{
-          const bytes=Buffer.from(b64Part.slice(0,12),'base64');
-          const isJpeg=bytes[0]===0xFF&&bytes[1]===0xD8&&bytes[2]===0xFF;
-          const isPng =bytes[0]===0x89&&bytes[1]===0x50&&bytes[2]===0x4E&&bytes[3]===0x47;
-          const isGif =bytes[0]===0x47&&bytes[1]===0x49&&bytes[2]===0x46;
-          const isWebp=bytes[8]===0x57&&bytes[9]===0x45&&bytes[10]===0x42&&bytes[11]===0x50;
-          if(isJpeg||isPng||isGif||isWebp){
-            const ext=isGif?'gif':isPng?'png':isWebp?'webp':'jpg';
-            pval=db.savePhoto(photo,`client_${id}.${ext}`);
-          }
-        }catch{}
-      }
-    }
-    db.run('UPDATE clients SET photo=? WHERE id=?',[pval,id]);
-  }
-  db.save();
-  const _clt=db.query1('SELECT * FROM clients WHERE id=?',[id]);
-  audit(req,'client.edit','client',id,_clt?(_clt.name+' Rm.'+_clt.room):String(id),{fields:Object.keys(req.body)});
-  broadcast({type:'data_saved',user:req.session.displayName||req.session.username});
-  res.json({ok:true,client:_clt});
-});
-// ── Client profile view (audit gate — HIPAA §164.312(b)) ─────────────
-app.get('/api/clients/:id/profile', requireAuth, (req,res)=>{
-  if(apiRateCheck(req)) return res.status(429).json({error:'Too many requests'});
-  const id=parseInt(req.params.id,10);
-  if(isNaN(id)) return res.status(400).json({error:'Invalid id'});
-  const c=db.query1('SELECT id,name,room FROM clients WHERE id=?',[id]);
-  if(!c) return res.status(404).json({error:'Not found'});
-  // auditRead is defined later in the file but hoisted as a function declaration
-  audit(req,'record.read','client_profile',id,c.name+' Rm.'+c.room,'Profile drawer opened');
-  res.json({ok:true});
-});
+// ── Clients: add / update / profile-view (modular: server/modules/clients) ─────────
+require('./server/modules/clients/routes').register(app);
 
 app.put('/api/facility/rooms/:id', requireAuth, csrfCheck, requirePermission('facility.manage'),(req,res)=>{
   const id=parseInt(req.params.id);
@@ -1041,24 +921,8 @@ require('./server/modules/passes/routes').register(app);
 // ── UA Requests + Draws (modular: server/modules/ua) ─────────
 require('./server/modules/ua/routes').register(app);
 
-// ── Broadcasts ─────────────────────────────────────────────────────
-app.get('/api/broadcasts', requireAuth, (req,res)=>{
-  const hours = parseInt(req.query.hours)||24;
-  res.json(db.getBroadcasts(hours));
-});
-
-app.post('/api/broadcasts', requireAuth, csrfCheck, requirePermission('broadcast.send'), (req,res)=>{
-  const text = String(req.body.message||'').trim().slice(0,500);
-  if (!text) return res.status(400).json({error:'message required'});
-  const msg = db.createBroadcast(
-    req.session.userId,
-    req.session.displayName||req.session.username,
-    text
-  );
-  audit(req,'broadcast.send','broadcast',msg.id,text.slice(0,80));
-  broadcast({type:'broadcast_message', message:msg});
-  res.json({ok:true, message:msg});
-});
+// ── Broadcasts (modular: server/modules/broadcasts) ─────────
+require('./server/modules/broadcasts/routes').register(app);
 
 // ── Mail Log (modular: server/modules/mail) ─────────
 require('./server/modules/mail/routes').register(app);

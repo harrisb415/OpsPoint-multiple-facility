@@ -53,10 +53,19 @@ export function ConfirmProvider({ children }) {
 export const useConfirm = () => useContext(ConfirmCtx)
 
 // ── Colored initials avatar (matches the design prototype) ─────────────────
-export function ColoredAvatar({ name, size = 'sm' }) {
-  const dim = size === 'lg' ? 'w-11 h-11 text-sm' : 'w-9 h-9 text-xs'
+// Shows a photo thumbnail when `photo` is provided (a data URI / URL), else the
+// deterministic colored initials. Used everywhere a client/person avatar appears.
+export function ColoredAvatar({ name, photo, size = 'sm' }) {
+  const dim = size === 'lg' ? 'w-11 h-11' : 'w-9 h-9'
+  const txt = size === 'lg' ? 'text-sm' : 'text-xs'
+  if (photo) {
+    return (
+      <img src={photo} alt={name || ''} title={name || ''}
+        className={`object-cover rounded-full shrink-0 ${dim}`} />
+    )
+  }
   return (
-    <span className={`flex items-center justify-center font-semibold rounded-full shrink-0 ${dim} ${avatarColor(name)}`}>
+    <span className={`flex items-center justify-center font-semibold rounded-full shrink-0 ${dim} ${txt} ${avatarColor(name)}`}>
       {initials(name)}
     </span>
   )

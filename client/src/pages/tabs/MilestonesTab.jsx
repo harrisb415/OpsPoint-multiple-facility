@@ -246,7 +246,7 @@ export default function MilestonesTab() {
                 <TableRow key={m.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <ColoredAvatar name={m.client_name} />
+                      <ColoredAvatar name={m.client_name} photo={(data.clients || []).find(cl => cl.id === m.client_id)?.photo} />
                       <span className="text-sm font-semibold text-gray-900 whitespace-nowrap dark:text-white">{m.client_name}</span>
                     </div>
                   </TableCell>

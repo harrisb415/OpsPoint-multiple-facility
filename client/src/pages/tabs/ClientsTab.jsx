@@ -472,7 +472,7 @@ export default function ClientsTab() {
               <TableRow key={c.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <ColoredAvatar name={c.name} />
+                    <ColoredAvatar name={c.name} photo={c.photo} />
                     <div>
                       <button onClick={() => openProfile(c.id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{c.name}</button>
                       <p className="font-mono text-xs text-gray-400">Rm {c.room}</p>

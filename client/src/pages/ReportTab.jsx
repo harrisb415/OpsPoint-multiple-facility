@@ -1584,10 +1584,7 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
     )
     return (
       <div className="flex items-center gap-2.5">
-        {c.photo
-          ? <img src={c.photo} alt={c.name} className="w-9 h-9 rounded-full object-cover shrink-0" />
-          : <ColoredAvatar name={c.name} />
-        }
+        <ColoredAvatar name={c.name} photo={c.photo} />
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-white">{c.name}</p>
           <p className="font-mono text-xs text-gray-500 dark:text-gray-400">Rm {c.room}</p>

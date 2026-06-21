@@ -262,7 +262,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
                     <tr key={r.id} className="hover:bg-primary-50/60 dark:hover:bg-gray-700/40">
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-3">
-                          <ColoredAvatar name={r.name} />
+                          <ColoredAvatar name={r.name} photo={r.photo} />
                           <div>
                             <button onClick={() => openProfile(r.id)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{r.name}</button>
                             <div className="text-xs text-gray-400 font-mono">Rm {r.room}</div>

@@ -233,7 +233,7 @@ export default function MailTab() {
             <TableRow key={m.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
               <TableCell>
                 <div className="flex items-center gap-3">
-                  <ColoredAvatar name={m.client_name} />
+                  <ColoredAvatar name={m.client_name} photo={(data.clients || []).find(cl => cl.id === m.client_id)?.photo} />
                   <div>
                     {m.client_id
                       ? <button onClick={() => openProfile(m.client_id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{m.client_name}</button>

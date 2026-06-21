@@ -221,7 +221,7 @@ export default function IncidentsTab() {
                   <TableCell className="font-mono whitespace-nowrap">{fmtDate(i.incident_date)} {i.incident_time}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <ColoredAvatar name={i.client_name} />
+                      <ColoredAvatar name={i.client_name} photo={(data.clients || []).find(cl => cl.id === i.client_id)?.photo} />
                       <div>
                         <p className="text-sm font-semibold text-gray-900 dark:text-white">{i.client_name}</p>
                         <p className="font-mono text-xs text-gray-400">Rm {i.room}</p>

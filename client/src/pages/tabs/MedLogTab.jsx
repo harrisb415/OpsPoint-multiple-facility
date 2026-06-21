@@ -212,7 +212,7 @@ export default function MedLogTab() {
                   <TableCell className="font-mono">{fmtDT(r.administered_at)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <ColoredAvatar name={r.client_name} />
+                      <ColoredAvatar name={r.client_name} photo={(data.clients || []).find(cl => cl.id === r.client_id)?.photo} />
                       <div>
                         <button onClick={() => openProfile(r.client_id)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{r.client_name}</button>
                         <p className="font-mono text-xs text-gray-400">Rm {r.room}</p>

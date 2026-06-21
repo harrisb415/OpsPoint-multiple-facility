@@ -33,11 +33,11 @@ const REASON_LABEL = {
 const RESULT_BADGE = { pending: 'gray', pass: 'success', fail: 'failure', dilute: 'warning', refused: 'failure', invalid: 'gray' }
 
 // Small avatar + name cell used across the three tables.
-function NameCell({ name, room, clientId, openProfile }) {
+function NameCell({ name, room, clientId, openProfile, photo }) {
   return (
     <TableCell>
       <div className="flex items-center gap-3">
-        <ColoredAvatar name={name} />
+        <ColoredAvatar name={name} photo={photo} />
         <div>
           {clientId && openProfile
             ? <button onClick={() => openProfile(clientId)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{name}</button>
@@ -263,7 +263,7 @@ export default function UARequestsTab() {
               <TableRow><TableCell colSpan={5} className="text-sm text-center text-gray-400">No pending UA requests.</TableCell></TableRow>
             ) : pending.map(req => (
               <TableRow key={req.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
-                <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} room={req.room} />
+                <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} room={req.room} photo={(data.clients || []).find(cl => cl.id === req.client_id)?.photo} />
                 <TableCell><StatusBadge color={req.is_interview ? 'warning' : 'failure'}>{req.is_interview ? 'Pre-Intake' : 'UA Request'}</StatusBadge></TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{req.requested_by || '—'}</TableCell>
                 <TableCell className="font-mono">{fmtDT(req.requested_at)}</TableCell>
@@ -297,7 +297,7 @@ export default function UARequestsTab() {
             <TableBody className="divide-y">
               {acknowledged.slice(0, 20).map(req => (
                 <TableRow key={req.id} className="bg-white opacity-70 dark:border-gray-700 dark:bg-gray-800">
-                  <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} room={req.room} />
+                  <NameCell name={req.is_interview ? (req.interview_name || req.client_name) : req.client_name} room={req.room} photo={(data.clients || []).find(cl => cl.id === req.client_id)?.photo} />
                   <TableCell><StatusBadge color="gray">{req.is_interview ? 'Pre-Intake' : 'UA Request'}</StatusBadge></TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400">{req.requested_by || '—'}</TableCell>
                   <TableCell className="font-mono">{fmtDT(req.requested_at)}</TableCell>
@@ -351,7 +351,7 @@ export default function UARequestsTab() {
             const posSubs = Object.entries(pr).filter(([, v]) => v === 'pos').map(([k]) => k)
             return (
               <TableRow key={r.id} className={r.result === 'fail' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:border-gray-700 dark:bg-gray-800'}>
-                <NameCell name={r.client_name} room={r.room} clientId={r.client_id} openProfile={openProfile} />
+                <NameCell name={r.client_name} room={r.room} clientId={r.client_id} openProfile={openProfile} photo={(data.clients || []).find(cl => cl.id === r.client_id)?.photo} />
                 <TableCell className="font-mono">{fmtDT(r.tested_at)}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{REASON_LABEL[r.reason] || r.reason || '—'}</TableCell>
                 <TableCell><StatusBadge color={RESULT_BADGE[r.result] || 'gray'}>{RESULT_LABEL[r.result] || r.result}</StatusBadge></TableCell>

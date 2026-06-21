@@ -311,7 +311,7 @@ export default function ViolationsTab() {
                   <TableRow key={v.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <ColoredAvatar name={v.client_name} />
+                        <ColoredAvatar name={v.client_name} photo={(data.clients || []).find(cl => cl.id === v.client_id)?.photo} />
                         <div>
                           <button onClick={() => openProfile(v.client_id)} className="text-sm font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 text-left">{v.client_name}</button>
                           <p className="font-mono text-xs text-gray-400">Rm {v.room}</p>

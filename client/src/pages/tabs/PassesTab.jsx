@@ -103,7 +103,7 @@ export default function PassesTab() {
   const NameCell = ({ p }) => (
     <TableCell>
       <div className="flex items-center gap-3">
-        <ColoredAvatar name={p.name} />
+        <ColoredAvatar name={p.name} photo={(data.clients || []).find(cl => cl.id === p.client_id)?.photo} />
         <div>
           {p.client_id
             ? <button onClick={() => openProfile(p.client_id)} className="text-sm font-semibold text-left text-gray-900 dark:text-white hover:text-primary-700 hover:underline">{p.name}</button>

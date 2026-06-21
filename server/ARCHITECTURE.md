@@ -26,8 +26,8 @@ server/
     connection.js        ← opens the DB + run/query/query1; the ONLY file that knows SQLite ✅ DONE
     migrate.js           ← schema (createSchema) + ALTER-TABLE migrations                   ✅ DONE
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
-    staff/                 ← PILOT ✅ DONE (routes.register(app) + service + repository)
-    reports/  clients/  chores/  passes/  ua/  mail/  groups/
+    staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅   (each = routes.register(app)+service+repository)
+    reports/  clients/  ua/  groups/  violations/
     clinical/  admin/  facility/  users/  auth/                                             ⬜
   storage/
     photoStore.js        ← put/getUrl interface (cloud seam → swap local disk for S3/GCS)   ⬜
@@ -68,12 +68,17 @@ server/
    its not-yet-extracted direct `.transaction`/`.prepare`/`.exec` calls).
    Remaining: per-entity repositories ⬜ (move the SQL out of db.js domain by
    domain, each importing `connection` instead of touching the handle).
-4. 🟡 **Domain modules** — **staff pilot ✅ DONE** (`server/modules/staff/`,
-   route→service→repository; `routes.register(app)` keeps Express precedence
-   identical; verified with a 24-assertion end-to-end HTTP test). Pattern proven;
-   roll the remaining ~25 domains one at a time, each verified before the next.
-   Repo conventions: import `server/db/connection` (never the handle directly);
-   service throws `Error` with `.status`; routes do audit + broadcast.
+4. 🟡 **Domain modules** — extracted so far: **staff ✅, passes ✅, mail ✅,
+   chores ✅** (each route→service→repository; `routes.register(app)` keeps Express
+   precedence identical; each verified with a dedicated end-to-end HTTP test —
+   staff 24, passes 20, mail 21, chores 17 assertions). Pattern proven; roll the
+   remaining domains (reports, clients, ua, groups, violations, users, facility,
+   admin, clinical, auth) one at a time, each verified before the next.
+   Conventions: repo imports `server/db/connection` (never the handle directly);
+   service throws `Error` with `.status`; routes do audit + broadcast; settings
+   k/v reads mirror `db.getSetting` (JSON-parse w/ raw fallback). Cross-domain
+   SQL (e.g. consolidated active-report log entries) sits in the consuming
+   module's repo, isolated + commented, until its own domain is extracted.
 5. ⬜ **storage/photoStore** — interface + local impl (cloud impl later).
 6. ⬜ **Frontend** — `client/src/api/*` client layer; consider TanStack Query to
    retire the manual DataContext + WebSocket merge.

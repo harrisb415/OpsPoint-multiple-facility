@@ -469,7 +469,7 @@ function UAPhotoBtn({ logEntryId, hasPhoto, onSaved }) {
       <input ref={fileRef} type="file" accept="image/*"
         className="hidden" onChange={handleFile} />
       {showPhoto && photoSrc && (
-        <Modal show size="lg" onClose={() => setShowPhoto(false)}>
+        <Modal show dismissible size="lg" onClose={() => setShowPhoto(false)}>
           <ModalHeader>Chain-of-custody photo</ModalHeader>
           <ModalBody>
             <img src={photoSrc} alt="UA chain-of-custody" className="block object-contain mx-auto rounded-lg max-h-[70vh]" />

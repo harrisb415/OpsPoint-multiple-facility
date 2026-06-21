@@ -660,7 +660,7 @@ export default function ClientsTab() {
 
       {/* Photo Popout */}
       {photoPopout && (
-        <Modal show size="lg" onClose={() => setPhotoPopout(null)}>
+        <Modal show dismissible size="lg" onClose={() => setPhotoPopout(null)}>
           <ModalHeader>{photoPopout.name}</ModalHeader>
           <ModalBody>
             <img src={photoPopout.src} alt={photoPopout.name} className="object-contain mx-auto rounded-lg max-h-[70vh]" />

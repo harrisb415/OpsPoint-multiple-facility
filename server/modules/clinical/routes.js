@@ -9,12 +9,24 @@
  * installments add discharge/consent/disclosures/unlock and Structured Clinical
  * Lite to this same register().
  */
-const { requireAuth, requirePermission } = require('../../middleware/auth');
+const { requireAuth, requirePermission, requireAnyPermission, userPerms } = require('../../middleware/auth');
 const { csrfCheck } = require('../../middleware/csrf');
 const { requireUnlocked, requireConsent } = require('../../middleware/recordLock');
 const { audit, auditRead } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
 const service = require('./service');
+const repo = require('./repository');
+
+// Parse JSON columns (goals/content) before responding — clients get objects.
+function _clinicalParse(row, jsonFields) {
+  if (!row || !jsonFields || !jsonFields.length) return row;
+  jsonFields.forEach(f => {
+    if (typeof row[f] === 'string') {
+      try { row[f] = JSON.parse(row[f]); } catch (e) { row[f] = (f === 'content') ? {} : []; }
+    }
+  });
+  return row;
+}
 
 function register(app) {
   // ── UA Records (Phase 2) ─────────────────────────────────────────
@@ -262,6 +274,138 @@ function register(app) {
       audit(req, 'record.unlock', table, id, '', { reason });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+
+  // ── Structured Clinical Lite — notes / treatment-plans / assessments /
+  //    discharge-summaries via one route factory; goals/content JSON-parsed;
+  //    `locked` resources 400 on PUT/DELETE once status==='final'. ──────────
+  function registerClinical(opts) {
+    const { seg, perm, entity, required = [], jsonFields = [], locked = false, wsType, authorField = 'author_id' } = opts;
+    const base = `/api/clinical/${seg}`;
+    const ttype = seg.replace(/-/g, '_');
+
+    app.get(base, requireAuth, requirePermission(perm), (req, res) => {
+      const clientId = req.query.clientId ? parseInt(req.query.clientId) : null;
+      const rows = entity.getAll(undefined, clientId);
+      rows.forEach(r => _clinicalParse(r, jsonFields));
+      auditRead(req, ttype, null, `Clinical ${seg} list (${rows.length})`, clientId ? { clientId } : undefined);
+      res.json(rows);
+    });
+    app.get(`${base}/:id`, requireAuth, requirePermission(perm), (req, res) => {
+      const row = entity.getById(undefined, parseInt(req.params.id));
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      _clinicalParse(row, jsonFields);
+      auditRead(req, ttype, row.id, `Clinical ${seg} #${row.id}`);
+      res.json(row);
+    });
+    app.post(base, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+      const b = req.body || {};
+      for (const f of required) { if (b[f] == null || b[f] === '') return res.status(400).json({ error: `${f} required` }); }
+      const fields = { ...b, [authorField]: req.session.userId };
+      const rec = entity.create(undefined, fields);
+      _clinicalParse(rec, jsonFields);
+      audit(req, `${wsType}.create`, ttype, rec.id, '');
+      broadcast({ type: `${wsType}_created`, data: rec });
+      res.json({ ok: true, record: rec });
+    });
+    app.put(`${base}/:id`, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+      const id = parseInt(req.params.id);
+      const existing = entity.getById(undefined, id);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      if (locked && existing.status === 'final') return res.status(400).json({ error: 'Record is finalised and can no longer be edited.' });
+      const rec = entity.update(undefined, id, req.body || {}, req.session.userId);
+      _clinicalParse(rec, jsonFields);
+      audit(req, `${wsType}.update`, ttype, id, '');
+      broadcast({ type: `${wsType}_updated`, data: rec });
+      res.json({ ok: true, record: rec });
+    });
+    app.patch(`${base}/:id/sign`, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+      const id = parseInt(req.params.id);
+      const existing = entity.getById(undefined, id);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const rec = entity.sign(undefined, id, req.session.userId);
+      _clinicalParse(rec, jsonFields);
+      audit(req, `${wsType}.sign`, ttype, id, '');
+      broadcast({ type: `${wsType}_signed`, data: rec });
+      res.json({ ok: true, record: rec });
+    });
+    app.delete(`${base}/:id`, requireAuth, csrfCheck, requirePermission(perm), (req, res) => {
+      const id = parseInt(req.params.id);
+      const existing = entity.getById(undefined, id);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      if (locked && existing.status === 'final') return res.status(400).json({ error: 'Record is finalised and cannot be deleted.' });
+      entity.delete(undefined, id, req.session.userId);
+      audit(req, `${wsType}.delete`, ttype, id, '');
+      broadcast({ type: `${wsType}_deleted`, id });
+      res.json({ ok: true });
+    });
+  }
+
+  const cdb = repo.clinicalDb;
+  registerClinical({ seg: 'notes',               perm: 'clinical.notes',       entity: cdb.notes,              required: ['client_id'], locked: true, wsType: 'clinical_note' });
+  registerClinical({ seg: 'treatment-plans',     perm: 'clinical.treatment',   entity: cdb.treatmentPlans,     required: ['client_id'], jsonFields: ['goals'],   wsType: 'treatment_plan' });
+  registerClinical({ seg: 'assessments',         perm: 'clinical.assessments', entity: cdb.assessments,        required: ['client_id'], jsonFields: ['content'], wsType: 'assessment' });
+  registerClinical({ seg: 'discharge-summaries', perm: 'clinical.discharge',   entity: cdb.dischargeSummaries, required: ['client_id'], locked: true, wsType: 'discharge_summary' });
+
+  // ── Group notes — PA attendance + clinician note/sign on ONE record.
+  //    groups.log: attendance only (content/status stripped); clinical.groups:
+  //    full note + sign; groups.view: read-only. ────────────────────────────
+  const GN = cdb.groupNotes;
+  const hasClinicalGroups = (req) => userPerms(req).includes('clinical.groups');
+
+  app.get('/api/clinical/group-notes', requireAuth, requireAnyPermission('clinical.groups', 'groups.log', 'groups.view'), (req, res) => {
+    const clientId = req.query.clientId ? parseInt(req.query.clientId) : null;
+    const rows = GN.getAll(undefined, clientId);
+    auditRead(req, 'group_notes', null, `Group notes list (${rows.length})`, clientId ? { clientId } : undefined);
+    res.json(rows);
+  });
+  app.get('/api/clinical/group-notes/:id', requireAuth, requireAnyPermission('clinical.groups', 'groups.log', 'groups.view'), (req, res) => {
+    const row = GN.getById(undefined, parseInt(req.params.id));
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    auditRead(req, 'group_notes', row.id, `Group note #${row.id}`);
+    res.json(row);
+  });
+  app.post('/api/clinical/group-notes', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), (req, res) => {
+    const b = req.body || {};
+    if (!b.group_name) return res.status(400).json({ error: 'group_name required' });
+    const fields = { ...b, facilitator_id: req.session.userId };
+    if (!hasClinicalGroups(req)) { delete fields.content; delete fields.status; } // attendance-only
+    const rec = GN.create(undefined, fields);
+    audit(req, 'group_note.create', 'group_notes', rec.id, fields.group_name || '');
+    broadcast({ type: 'group_note_created', data: rec });
+    res.json({ ok: true, record: rec });
+  });
+  app.put('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = GN.getById(undefined, id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const clinical = hasClinicalGroups(req);
+    if (!clinical && existing.status === 'final') return res.status(400).json({ error: 'Finalised — only clinical staff can edit.' });
+    const b = { ...req.body };
+    if (!clinical) { delete b.content; delete b.status; } // attendance-only edit can't touch the note
+    const rec = GN.update(undefined, id, b, req.session.userId);
+    audit(req, 'group_note.update', 'group_notes', id, '');
+    broadcast({ type: 'group_note_updated', data: rec });
+    res.json({ ok: true, record: rec });
+  });
+  app.patch('/api/clinical/group-notes/:id/sign', requireAuth, csrfCheck, requirePermission('clinical.groups'), (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = GN.getById(undefined, id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const rec = GN.sign(undefined, id, req.session.userId);
+    audit(req, 'group_note.sign', 'group_notes', id, '');
+    broadcast({ type: 'group_note_signed', data: rec });
+    res.json({ ok: true, record: rec });
+  });
+  app.delete('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = GN.getById(undefined, id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (!hasClinicalGroups(req) && existing.status === 'final') return res.status(400).json({ error: 'Finalised — only clinical staff can delete.' });
+    GN.delete(undefined, id, req.session.userId);
+    audit(req, 'group_note.delete', 'group_notes', id, '');
+    broadcast({ type: 'group_note_deleted', id });
+    res.json({ ok: true });
   });
 }
 

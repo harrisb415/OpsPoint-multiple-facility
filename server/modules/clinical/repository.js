@@ -65,6 +65,11 @@ const clinicalTables = () => db.CLINICAL_TABLES;
 const isRecordLocked = (table, id) => db.isRecordLocked(table, id);
 const unlockRecord = (table, id, by, reason) => db.unlockRecord(table, id, by, reason);
 
+// ── Structured Clinical Lite entity bundle (notes/treatment-plans/assessments/
+// discharge-summaries/group-notes) — each is a getAll/getById/create/update/
+// sign/delete object implemented in db.js (clinicalDb). Used by the route factory.
+const clinicalDb = db.clinicalDb;
+
 module.exports = {
   getUARecords, getUARecord, createUARecord, updateUARecord, deleteUARecord,
   getMedLog, createMedLog, updateMedLog, deleteMedLog,
@@ -76,4 +81,5 @@ module.exports = {
   getConsentRecords, getConsentRecord, createConsentRecord, revokeConsent, getFacilityName,
   getDisclosures, logDisclosure,
   clinicalTables, isRecordLocked, unlockRecord,
+  clinicalDb,
 };

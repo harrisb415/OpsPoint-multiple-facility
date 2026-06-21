@@ -26,8 +26,8 @@ server/
     connection.js        ← opens the DB + run/query/query1; the ONLY file that knows SQLite ✅ DONE
     migrate.js           ← schema (createSchema) + ALTER-TABLE migrations                   ✅ DONE
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
-    staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅   (each = routes.register(app)+service+repository)
-    reports/  clients/  ua/  groups/  violations/
+    staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅  ua/ ✅  violations/ ✅  groups/ ✅
+    reports/  clients/  broadcasts/
     clinical/  admin/  facility/  users/  auth/                                             ⬜
   storage/
     photoStore.js        ← put/getUrl interface (cloud seam → swap local disk for S3/GCS)   ⬜
@@ -69,16 +69,19 @@ server/
    Remaining: per-entity repositories ⬜ (move the SQL out of db.js domain by
    domain, each importing `connection` instead of touching the handle).
 4. 🟡 **Domain modules** — extracted so far: **staff ✅, passes ✅, mail ✅,
-   chores ✅** (each route→service→repository; `routes.register(app)` keeps Express
-   precedence identical; each verified with a dedicated end-to-end HTTP test —
-   staff 24, passes 20, mail 21, chores 17 assertions). Pattern proven; roll the
-   remaining domains (reports, clients, ua, groups, violations, users, facility,
-   admin, clinical, auth) one at a time, each verified before the next.
-   Conventions: repo imports `server/db/connection` (never the handle directly);
-   service throws `Error` with `.status`; routes do audit + broadcast; settings
-   k/v reads mirror `db.getSetting` (JSON-parse w/ raw fallback). Cross-domain
-   SQL (e.g. consolidated active-report log entries) sits in the consuming
-   module's repo, isolated + commented, until its own domain is extracted.
+   chores ✅, ua ✅, violations ✅, groups ✅** (each route→service→repository;
+   `routes.register(app)` keeps Express precedence identical; each verified with a
+   dedicated end-to-end HTTP test — staff 24, passes 20, mail 21, chores 17,
+   ua 23, violations 23, groups 18 assertions). Two shared helpers were promoted
+   into middleware along the way: `apiRateCheck` → `middleware/rateLimit.js`,
+   `auditRead` → `middleware/audit.js`. Remaining domains: reports, clients,
+   broadcasts, users, facility, admin, clinical, auth — one at a time, each
+   verified before the next. Conventions: repo imports `server/db/connection`
+   (never the handle directly); service throws `Error` with `.status`; routes do
+   audit + broadcast; settings k/v reads mirror `db.getSetting` (JSON-parse w/ raw
+   fallback). Cross-domain SQL (e.g. consolidated active-report log entries) and
+   already-abstracted db.js helpers sit in the consuming module's repo, isolated +
+   commented, until their own domain is extracted.
 5. ⬜ **storage/photoStore** — interface + local impl (cloud impl later).
 6. ⬜ **Frontend** — `client/src/api/*` client layer; consider TanStack Query to
    retire the manual DataContext + WebSocket merge.

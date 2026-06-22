@@ -31,7 +31,10 @@ const REPO = 'harrisb415/opspoint-releases'; // PUBLIC releases repo (source rep
 
 // Runtime payload — must match RUNTIME_FILES / RUNTIME_DIRS in updater.js.
 const FILES = ['server.js', 'updater.js', 'db.js', 'bootstrap.js', 'package.json', 'package-lock.json', 'generate_cert.js'];
-const DIRS = ['migrations', path.join('client', 'dist')];
+// 'server' = the modular-monolith tree (config/lib/db/middleware/realtime/modules)
+// that server.js + db.js now require at runtime; MUST stay in sync with
+// updater.js RUNTIME_DIRS or an updated install boots without its modules.
+const DIRS = ['migrations', path.join('client', 'dist'), 'server'];
 
 const REL = path.join(ROOT, 'release');
 const STAGE = path.join(REL, `opspoint-${VER}`);

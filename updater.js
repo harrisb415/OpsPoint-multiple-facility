@@ -40,7 +40,10 @@ MCowBQYDK2VwAyEAFtGFXRfmB1goFWdp+CGmv+LqC6LsQOdmCZe79038Y0U=
 // Runtime files/dirs that an update bundle may replace. `data/` and
 // `node_modules/` are NEVER touched.
 const RUNTIME_FILES = ['server.js', 'updater.js', 'db.js', 'package.json', 'package-lock.json'];
-const RUNTIME_DIRS = ['migrations', path.join('client', 'dist')];
+// 'server' = the modular-monolith tree that server.js/db.js require at runtime
+// (added in v2.4.0). MUST stay in sync with scripts/release.mjs DIRS, else an
+// applied update swaps server.js without its modules and the install won't boot.
+const RUNTIME_DIRS = ['migrations', path.join('client', 'dist'), 'server'];
 
 // ── semver compare (numeric core only; ignores pre-release tags) ──────
 function cmpSemver(a, b) {

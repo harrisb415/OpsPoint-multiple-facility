@@ -1,14 +1,14 @@
 {
-  "version": "2.3.7",
-  "released": "2026-06-12T04:52:59.153Z",
+  "version": "2.4.0",
+  "released": "2026-06-22T00:47:30.859Z",
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.3.7/opspoint-2.3.7.tar.gz",
-  "sha256": "1448688da2a677435aeb533a28bf126b9107685a367a6a26a83ab3cfa0dfa82f",
-  "size": 348197,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.4.0/opspoint-2.4.0.tar.gz",
+  "sha256": "de53a977a541d4346b988d28752993ba10a9fad83ee2656d0aee8140f407f117",
+  "size": 921390,
   "sig_alg": "ed25519",
-  "signature": "W4+IERgmC0yW+BlcOHVWAo7S3JS2G0Xb5QxfOxwER2HCn7T/XS1RI+RtyDMBeLpp2SKrMhTnAAVOytcbjcDmCw==",
+  "signature": "XsbBkdi/DDQX+9lowSDJgphj9y6NfB+nvMI4LJ+wBz+2RWVoSOUl1ManSAe2kaGfYqOw6m0juPLszR8XoJwcBQ==",
   "changelog": [
     "HQ: remove a facility (deletes record, API key, and all backed-up data from HQ)"
   ]

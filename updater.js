@@ -34,7 +34,7 @@ const ALLOWED_HOST_SUFFIXES = ['github.com', 'githubusercontent.com'];
 // refuses any manifest without a valid signature over "version\nsize\nsha256", so
 // a compromised manifest host or HQ relay cannot push code this node will install.
 const RELEASE_PUBKEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAFtGFXRfmB1goFWdp+CGmv+LqC6LsQOdmCZe79038Y0U=
+MCowBQYDK2VwAyEAX0QuuIYyg9EvdxNF0BsNdA6KCbk+wu1u2Ec2m72YXlE=
 -----END PUBLIC KEY-----`;
 
 // Runtime files/dirs that an update bundle may replace. `data/` and

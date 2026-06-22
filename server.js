@@ -146,22 +146,6 @@ require('./server/modules/users/routes').register(app);
 // ── Data API + log/report deletion + UA photo (modular: server/modules/reports) ─────────
 require('./server/modules/reports/routes').register(app);
 
-// ── UA Log (log entries containing UA results) ────────────────────
-app.get('/api/ua-log', requireAuth, (req, res) => {
-  const limit  = Math.min(parseInt(req.query.limit)  || 200, 500);
-  const offset = parseInt(req.query.offset) || 0;
-  const rows = db.query(`
-    SELECT le.id, le.text, le.time, le.ua_photo, le.created_at,
-           r.report_date, r.shift, r.id AS report_id
-    FROM log_entries le
-    JOIN reports r ON r.id = le.report_id
-    WHERE le.text LIKE '% — UA:%'
-    ORDER BY r.report_date DESC, r.id DESC, le.id DESC
-    LIMIT ? OFFSET ?
-  `, [limit, offset]);
-  res.json(rows || []);
-});
-
 // ── Facility settings + rooms + photos + EHR config (modular: server/modules/facility) ─────────
 require('./server/modules/facility/routes').register(app);
 

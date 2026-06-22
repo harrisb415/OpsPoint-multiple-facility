@@ -9,6 +9,7 @@
  */
 const c = require('../../db/connection');
 const db = require('../../../db');
+const reportLog = require('../../db/reportLog'); // shared active-report log helpers
 
 // ── facility settings (k/v) ─────────────────────────────────────────
 function getFacilitySettings() {
@@ -96,12 +97,10 @@ function insertResetRoom(r, i) {
     [String(r.room), r.name || 'VACANT', r.is_special ? 1 : 0, r.special_label || null, i]);
 }
 
-// ── cross-domain active-report intake log (temporary) ───────────────
-function getActiveReportId() { return db.getSetting('active_report_id', null); }
-function insertLogEntry(reportId, time, text) {
-  c.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
-}
-function touchReport(reportId, iso) { c.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]); }
+// ── active-report intake log helpers — shared (server/db/reportLog) ──
+const getActiveReportId = reportLog.getActiveReportId;
+const insertLogEntry = reportLog.insertLogEntry;
+const touchReport = reportLog.touchReport;
 
 // ── EHR config (k/v) ────────────────────────────────────────────────
 function getEhrConfig() {

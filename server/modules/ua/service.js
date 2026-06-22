@@ -86,4 +86,11 @@ function createDraw(residents, { actor, actorId } = {}) {
   return { draw, count: residents.length };
 }
 
-module.exports = { listPending, createRequest, deleteRequest, acknowledgeRequest, getDraws, getRecentDrawn, createDraw };
+// UA log — log entries tagged with a UA result (bounded limit/offset).
+function getUALog(query = {}) {
+  const limit = Math.min(parseInt(query.limit) || 200, 500);
+  const offset = parseInt(query.offset) || 0;
+  return repo.getUALog(limit, offset);
+}
+
+module.exports = { listPending, createRequest, deleteRequest, acknowledgeRequest, getDraws, getRecentDrawn, createDraw, getUALog };

@@ -65,6 +65,11 @@ function register(app) {
       res.json({ ok: true, drawId: draw.id });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
+
+  // ── UA Log (log entries containing UA results) ────────────────────
+  app.get('/api/ua-log', requireAuth, (req, res) => {
+    res.json(service.getUALog(req.query) || []);
+  });
 }
 
 module.exports = { register };

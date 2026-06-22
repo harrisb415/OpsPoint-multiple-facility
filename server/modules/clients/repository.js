@@ -8,6 +8,7 @@
  */
 const c = require('../../db/connection');
 const db = require('../../../db');
+const reportLog = require('../../db/reportLog'); // shared active-report log helpers
 
 // ── occupancy / vacancy ─────────────────────────────────────────────
 function activeResidentInRoom(room) {
@@ -61,18 +62,10 @@ function applyUpdates(id, fields) {
 // photo disk write — delegated (transitional -> storage/photoStore)
 function savePhoto(dataUri, fname) { return db.savePhoto(dataUri, fname); }
 
-// ── cross-domain: intake log entry on the active report (temporary) ──
-function getActiveReportId() {
-  const row = c.query1('SELECT value FROM settings WHERE key=?', ['active_report_id']);
-  if (!row) return null;
-  try { return JSON.parse(row.value); } catch (e) { return row.value; }
-}
-function insertLogEntry(reportId, time, text) {
-  c.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
-}
-function touchReport(reportId, iso) {
-  c.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]);
-}
+// ── active-report intake log helpers — shared (server/db/reportLog) ──
+const getActiveReportId = reportLog.getActiveReportId;
+const insertLogEntry = reportLog.insertLogEntry;
+const touchReport = reportLog.touchReport;
 
 module.exports = {
   activeResidentInRoom, activeResidentInRoomExcept, vacantInRoom, deleteVacantForRoomExcept,

@@ -9,13 +9,14 @@
  */
 const c = require('../../db/connection');
 const db = require('../../../db');
+const reportLog = require('../../db/reportLog'); // shared active-report log helpers
 
 // ── delegated aggregates / settings (byte-exact with the originals) ──
 function getAllData(perms) { return db.getAllData(perms); }
 function upsertReport(r) { return db.upsertReport(r); }
 function savePhoto(uri, fname) { return db.savePhoto(uri, fname); }
 function getPhotoB64(p) { return db.getPhotoB64(p); }
-function getActiveReportId() { return db.getSetting('active_report_id', null); }
+const getActiveReportId = reportLog.getActiveReportId; // shared (server/db/reportLog)
 function setActiveReportId(v) { db.setSetting('active_report_id', v); }
 
 // ── report state ────────────────────────────────────────────────────
@@ -53,12 +54,8 @@ function updateReportField(id, col, value, iso) {
   if (!REPORT_JSON_COLS.includes(col)) throw new Error('bad column ' + col);
   c.run(`UPDATE reports SET ${col}=?,updated_at=? WHERE id=?`, [value, iso, id]);
 }
-function insertLogEntry(reportId, time, text) {
-  return c.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
-}
-function touchReport(id, iso) {
-  c.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, id]);
-}
+const insertLogEntry = reportLog.insertLogEntry; // shared (server/db/reportLog)
+const touchReport = reportLog.touchReport;       // shared (server/db/reportLog)
 function updateShiftData(id, report_date, shift, mod_name, iso) {
   c.run(`UPDATE reports SET
     report_date=COALESCE(?,report_date),

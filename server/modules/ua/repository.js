@@ -44,7 +44,18 @@ function getDraws(since) { return db.getUADraws(since); }
 function getRecentDrawnClientIds(days) { return db.getRecentDrawnClientIds(days); }
 function createDraw(byId, by, residents) { return db.createUADraw(byId, by, residents); }
 
+// ── UA log — log entries tagged with a UA result, newest first ──────
+const UA_LOG_SQL = `
+    SELECT le.id, le.text, le.time, le.ua_photo, le.created_at,
+           r.report_date, r.shift, r.id AS report_id
+    FROM log_entries le
+    JOIN reports r ON r.id = le.report_id
+    WHERE le.text LIKE '% — UA:%'
+    ORDER BY r.report_date DESC, r.id DESC, le.id DESC
+    LIMIT ? OFFSET ?`;
+function getUALog(limit, offset) { return c.query(UA_LOG_SQL, [limit, offset]); }
+
 module.exports = {
   listPending, insertRequest, getRequestBrief, getRequestNameRoom, deleteRequest,
-  acknowledgeRequest, getDraws, getRecentDrawnClientIds, createDraw,
+  acknowledgeRequest, getDraws, getRecentDrawnClientIds, createDraw, getUALog,
 };

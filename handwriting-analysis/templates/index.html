@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h1>Compare two signatures</h1>
+  <p class="lead">
+    Upload a <strong>reference</strong> signature and a
+    <strong>questioned</strong> signature. The tool normalises both samples
+    and scores their similarity across structure, stroke direction, local
+    features, and writing geometry.
+  </p>
+
+  {% if error %}
+    <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <form class="cmp-form" method="post" action="{{ url_for('compare') }}"
+        enctype="multipart/form-data">
+    <div class="drop-grid">
+      <label class="drop">
+        <span class="drop-title">Reference signature</span>
+        <input type="file" name="signature_a" accept="image/*" required>
+        <span class="drop-hint">PNG, JPG, BMP, TIFF, WEBP</span>
+      </label>
+      <label class="drop">
+        <span class="drop-title">Questioned signature</span>
+        <input type="file" name="signature_b" accept="image/*" required>
+        <span class="drop-hint">PNG, JPG, BMP, TIFF, WEBP</span>
+      </label>
+    </div>
+    <button type="submit" class="btn">Analyze &amp; compare</button>
+  </form>
+</section>
+
+<section class="card subtle">
+  <h2>How it works</h2>
+  <ol class="how">
+    <li><strong>Normalise</strong> — grayscale, denoise, Otsu binarise, crop
+        to the ink, and fit to a common canvas.</li>
+    <li><strong>Measure</strong> — SSIM (structure), HOG cosine (stroke
+        direction), ORB matches (local features), and geometry (ink density,
+        aspect ratio, stroke count).</li>
+    <li><strong>Score</strong> — combine into a weighted 0–100 similarity with
+        a plain-language verdict.</li>
+  </ol>
+</section>
+{% endblock %}

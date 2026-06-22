@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Signature Verification{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">✒️ Signature&nbsp;Forensics</div>
+    <div class="tagline">Handwriting &amp; signature comparison</div>
+  </header>
+  <main class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="foot">
+    <p>Decision-support aid only — scores are heuristic and not a certified
+       forensic determination. Confirm with a qualified examiner.</p>
+  </footer>
+</body>
+</html>

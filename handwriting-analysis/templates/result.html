@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Result — Signature Verification{% endblock %}
+{% block content %}
+<section class="card">
+  <div class="verdict {{ result.verdict_class }}">
+    <div class="score-ring">
+      <span class="score-num">{{ result.score }}</span>
+      <span class="score-unit">/ 100</span>
+    </div>
+    <div class="verdict-text">
+      <h1>{{ result.verdict }}</h1>
+      <p>Combined similarity score across all metrics.</p>
+    </div>
+  </div>
+
+  <div class="compare-grid">
+    <figure>
+      <img src="{{ result.display_a_uri() }}" alt="Reference signature">
+      <figcaption>Reference — {{ name_a }}</figcaption>
+    </figure>
+    <figure>
+      <img src="{{ result.display_b_uri() }}" alt="Questioned signature">
+      <figcaption>Questioned — {{ name_b }}</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Metric breakdown</h2>
+  <table class="metrics">
+    <thead>
+      <tr><th>Metric</th><th>Similarity</th><th>Weight</th><th>Contribution</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.label }}</td>
+        <td>
+          <div class="bar"><span style="width: {{ row.similarity }}%"></span></div>
+          <span class="bar-val">{{ row.similarity }}%</span>
+        </td>
+        <td>{{ row.weight }}%</td>
+        <td>{{ row.contribution }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <a class="btn ghost" href="{{ url_for('index') }}">← Compare another pair</a>
+</section>
+{% endblock %}

@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Label, TextInput } from 'flowbite-react'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 
-const VERSION = '2.3.7'
+const VERSION = '2.4.0'
 
 export default function Login() {
   const [username, setUsername] = useState('')

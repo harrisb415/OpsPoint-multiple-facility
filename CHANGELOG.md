@@ -2,6 +2,21 @@
 
 ---
 
+## v2.4.0 — Backend modular-monolith refactor + UI polish (2026-06-21)
+
+### Backend architecture (no behaviour change)
+- **`server.js` decomposed ~2,796 → ~575 lines.** All 15 domains extracted into `server/modules/<domain>/{routes,service,repository}.js` (staff, passes, mail, chores, ua, violations, groups, broadcasts, clients, reports, facility, users, admin, auth, clinical). Each is a clean route → service → repository split.
+- **db layer split:** `server/db/connection.js` (the only file that knows it's SQLite — opens the handle + `run`/`query`/`query1`) and `server/db/migrate.js` (schema + column migrations). All SQL now lives in repositories, making a future SQLite→Postgres move cheap.
+- **Shared middleware extracted** to `server/middleware/*`: security headers/CORS, CSRF, auth/permission guards, HIPAA idle timeout + force-password, audit + PHI-read audit, login/API rate limiting, clinical record-lock + consent guards. Plus `server/realtime/broadcast.js` (the WebSocket fan-out behind a stable API — the cloud pub/sub seam) and `server/db/reportLog.js` (shared active-report log helper).
+- Every domain verified with live end-to-end HTTP tests (real login/session/CSRF); behaviour is byte-for-byte unchanged.
+
+### UI
+- **Client photo thumbnails** — resident avatars now show the uploaded photo (rounded thumbnail) everywhere a client appears: Clients, Dashboard, Report roster, and the Mail/Violations/Med Log/Milestones/Incidents/Passes/UA Requests lists.
+- **Photo viewers close properly** — the UA photo, chain-of-custody, and client photo pop-out modals can now be dismissed (close button, backdrop click, or Esc).
+- **Login dark-mode autofill** no longer flashes a white field.
+
+---
+
 ## v2.3.7 — Chores overhaul, archive reorder, session fix (2026-06-11)
 
 ### Chores

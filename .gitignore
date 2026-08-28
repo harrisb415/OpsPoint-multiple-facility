@@ -3,6 +3,7 @@ node_modules/
 
 # Database & sensitive runtime data — NEVER commit these
 data/opspoint.db
+data/opspoint.db.*
 data/opspoint.db-shm
 data/opspoint.db-wal
 data/shift.db

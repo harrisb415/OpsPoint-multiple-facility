@@ -12,6 +12,7 @@ const fs      = require('fs');
 const path    = require('path');
 const crypto  = require('crypto');
 const db      = require('./db');
+const backup  = require('./backup');
 
 // ── Modular foundation (Part A refactor — see server/ARCHITECTURE.md) ──────
 // Pure, low-coupling pieces extracted from this file. Behaviour is identical;
@@ -543,6 +544,9 @@ if (require.main === module) (()=>{
     // Clients must use REST API; no peer-to-peer relay allowed
     ws.on('message',()=>{});
   });
+
+  // Scheduled database backup (45 CFR §164.308(a)(7)(ii)(A) — Required)
+  backup.start(db);
 
   // Hourly lock sweep — auto-locks clinical records past their 24h grace window
   setInterval(() => {

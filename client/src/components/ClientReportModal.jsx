@@ -129,27 +129,6 @@ function buildCard(c, data, sections, limit) {
     h += `</div>`
   }
 
-  // ── Medication Log ──
-  if (sections.meds) {
-    const recs = (data?.med_log || [])
-      .filter(r => r.client_id === c.id)
-      .sort((a, b) => (b.administered_at||b.logged_at||'').localeCompare(a.administered_at||a.logged_at||''))
-      .slice(0, limit)
-    h += `<div class="sec"><div class="slbl">Medication Log${recs.length ? ` <span class="sub">(${recs.length} most recent)</span>` : ''}</div>`
-    h += recs.length === 0
-      ? `<div class="empty">No medication records</div>`
-      : `<table class="dt"><thead><tr><th>Date/Time</th><th>Medication</th><th>Dose</th><th>Witnessed By</th><th>Notes</th></tr></thead><tbody>
-          ${recs.map(r => `<tr>
-            <td class="mo">${esc(fd(r.administered_at||r.logged_at))}</td>
-            <td>${esc(r.medication||r.medication_name||'—')}</td>
-            <td>${esc(r.dose||r.dosage||'—')}</td>
-            <td>${esc(r.witnessed_by_name||'—')}</td>
-            <td>${esc(r.notes||'')}</td>
-          </tr>`).join('')}
-        </tbody></table>`
-    h += `</div>`
-  }
-
   // ── Milestones ──
   if (sections.milestones) {
     const recs = (data?.milestones || [])
@@ -398,14 +377,13 @@ const SECTION_OPTS = [
   { key: 'basic',      label: 'Basic Info',         desc: 'Room, phone, intake date, program track' },
   { key: 'contacts',   label: 'Emergency Contacts',  desc: 'Names & phones on file' },
   { key: 'ua',         label: 'UA Records',          desc: 'Urinalysis results' },
-  { key: 'meds',       label: 'Med Log',             desc: 'Witnessed self-administrations' },
   { key: 'milestones', label: 'Milestones',          desc: 'Program milestone status' },
   { key: 'incidents',  label: 'Incident Reports',     desc: 'Behavioral incident reports' },
   { key: 'passes',     label: 'Passes',              desc: 'Pass history' },
   { key: 'discharge',  label: 'Discharge Info',      desc: 'Discharge record & aftercare plan' },
   { key: 'timeline',   label: 'Activity Timeline',   desc: 'Log entries mentioning this resident' },
 ]
-const LIMIT_SECTIONS = new Set(['ua', 'meds', 'incidents', 'passes'])
+const LIMIT_SECTIONS = new Set(['ua', 'incidents', 'passes'])
 
 // ── Modal component ───────────────────────────────────────────────────────
 
@@ -414,7 +392,7 @@ export default function ClientReportModal({ data, onClose }) {
   const [clientFilter, setClientFilter] = useState('active')
   const [selectedIds,  setSelectedIds]  = useState([])
   const [sections,     setSections]     = useState({
-    basic: true, contacts: false, ua: false, meds: false,
+    basic: true, contacts: false, ua: false,
     milestones: false, incidents: false, passes: false, discharge: false,
     timeline: false,
   })
@@ -533,7 +511,7 @@ export default function ClientReportModal({ data, onClose }) {
             <div className="mb-3.5">
               <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
                 Max records per section
-                <span className="font-normal text-gray-400 ml-1">(UA, Meds, Incident Reports, Passes)</span>
+                <span className="font-normal text-gray-400 ml-1">(UA, Incident Reports, Passes)</span>
               </label>
               <div className="flex items-center gap-2 mt-1">
                 <TextInput type="number" min={1} max={50} value={limit} className="w-20"

@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from 
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
+import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -185,7 +186,6 @@ const PERM_CATEGORIES = [
   { label: 'Mail Management',  perms: ['mail.log','mail.approve','mail.deliver','mail.delete'] },
   { label: 'Violations',      perms: ['violations.log','violations.review','violations.complete','violations.delete','violations.notify_review','violations.notify_consequence'] },
   { label: 'Announcements',    perms: ['broadcast.send','broadcast.receive'] },
-  { label: 'Med Witnessing',   perms: ['med.witness','med.delete'] },
   { label: 'Milestones',       perms: ['milestones.edit','milestones.signoff'] },
   { label: 'Incidents',        perms: ['incidents.log','incidents.review','incidents.delete'] },
   { label: '42 CFR Part 2',    perms: ['consent.manage','disclosures.view'] },
@@ -210,7 +210,7 @@ const PERM_LABELS = {
   'violations.notify_review':'Banner — pending review','violations.notify_consequence':'Banner — consequence assigned',
   'facility.manage':'Room & roster management','admin.users':'User management','admin.settings':'Facility settings',
   'admin.audit':'View audit log','admin.system':'Server controls','mobile.access':'Use mobile shift app',
-  'ua.record':'Create / edit UA records','med.witness':'Witness self-administration','med.delete':'Delete med admin entries',
+  'ua.record':'Create / edit UA records',
   'milestones.edit':'Create / edit milestones','milestones.signoff':'Sign off completed milestones (counselor)',
   'incidents.log':'Log a behavioral incident','incidents.review':'Supervisor review of incident','incidents.delete':'Delete incident reports',
   'consent.manage':'Manage 42 CFR Part 2 consent records','disclosures.view':'View disclosure audit',
@@ -1384,26 +1384,36 @@ function DisplaySettings({ settings, onSave, saving }) {
   const [vis, setVis] = useState(settings.ui_visibility || { tabs: {}, buttons: {} })
   const [saved, setSaved] = useState(false)
 
-  const TAB_OPTS = [
-    // People (Clients is core — cannot be hidden)
-    { key: 'staff',       label: 'Staff' },
-    { key: 'caseloads',   label: 'Caseloads' },
-    // Daily Ops (Report is core)
-    { key: 'chores',      label: 'Chores' },
-    { key: 'groups',      label: 'Groups' },
-    { key: 'passes',      label: 'Passes' },
-    { key: 'mail',        label: 'Mail' },
-    // Health & Compliance
-    { key: 'ua',          label: 'UA' },
-    { key: 'med_log',     label: 'Med Log' },
-    // Records (Archive is core; Incidents + Milestones live in Clinical section)
-    { key: 'violations',  label: 'Infractions' },
-    { key: 'consent',     label: 'Consents' },
+  // Grouped to mirror the sidebar, so what you switch off here maps onto what
+  // staff actually see. Core tabs (Clients, Report, Archive) are deliberately
+  // absent — the app has no usable state without them.
+  const NAV_GROUPS = [
+    { group: 'People', items: [
+      { key: 'staff',       label: 'Staff',      desc: 'Staff directory and contacts' },
+      { key: 'caseloads',   label: 'Caseloads',  desc: 'Residents grouped by case manager' },
+    ]},
+    { group: 'Daily Ops', items: [
+      { key: 'chores',      label: 'Chores',     desc: 'Chore assignments and completion log' },
+      { key: 'groups',      label: 'Groups',     desc: 'Group session scheduling and attendance' },
+      { key: 'passes',      label: 'Passes',     desc: 'Weekend and day pass tracking' },
+      { key: 'mail',        label: 'Mail',       desc: 'Incoming mail approve/deliver workflow' },
+    ]},
+    { group: 'Health & Compliance', items: [
+      { key: 'ua',          label: 'UA',         desc: 'UA requests, results and chain of custody' },
+      { key: 'ua_draw',     label: 'UA Draw',    desc: 'Random draw button in the sidebar' },
+    ]},
+    { group: 'Records', items: [
+      { key: 'violations',  label: 'Infractions', desc: 'Rule violations and consequences' },
+      { key: 'consent',     label: 'Consents',    desc: '42 CFR Part 2 consents and disclosures' },
+    ]},
   ]
+
   const BTN_OPTS = [
-    { key: 'wellness', label: 'Wellness Check button' },
-    { key: 'walkthrough', label: 'Walkthrough button' },
+    { key: 'wellness',    label: 'Wellness Check', desc: 'Quick-action button on the shift report' },
+    { key: 'walkthrough', label: 'Walkthrough',    desc: 'Quick-action button on the shift report' },
   ]
+
+  const clinicalOn = vis.tabs?.clinical !== false
 
   function setTab(key, val) { setVis(v => ({ ...v, tabs: { ...v.tabs, [key]: val } })) }
   function setBtn(key, val) { setVis(v => ({ ...v, buttons: { ...v.buttons, [key]: val } })) }
@@ -1416,25 +1426,67 @@ function DisplaySettings({ settings, onSave, saving }) {
   return (
     <div>
       <Section title="Feature Visibility" right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Feature Settings'}</Button></>}>
-        <p className="text-xs text-gray-400 mb-3 dark:text-gray-500">Uncheck any feature your facility does not use — it will be hidden for all staff. Core tabs (Clients, Report, Archive) and Clinical section features are managed separately via permissions.</p>
-        <div className="mb-4">
-          <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Navigation Tabs</p>
-          <div className="space-y-2">
-            {TAB_OPTS.map(t => (
-              <div key={t.key} className="flex items-center gap-2">
-                <Checkbox id={`tab-${t.key}`} checked={vis.tabs?.[t.key] !== false} onChange={e => setTab(t.key, e.target.checked)} />
-                <Label htmlFor={`tab-${t.key}`} className="cursor-pointer">{t.label}</Label>
+        <p className="mb-4 text-xs text-gray-400 dark:text-gray-500">
+          Turn off anything your facility does not use — it disappears from the sidebar for everyone,
+          regardless of their permissions. Clients, Report and Archive are always on; the app depends on them.
+        </p>
+
+        {NAV_GROUPS.map(g => (
+          <div key={g.group} className="mb-5">
+            <p className="mb-2 text-[11px] font-bold tracking-wider text-gray-500 uppercase dark:text-gray-400">{g.group}</p>
+            <div className="space-y-2.5">
+              {g.items.map(t => (
+                <div key={t.key} className="flex items-start gap-2.5">
+                  <Checkbox id={`tab-${t.key}`} className="mt-0.5" checked={vis.tabs?.[t.key] !== false} onChange={e => setTab(t.key, e.target.checked)} />
+                  <div className="leading-tight">
+                    <Label htmlFor={`tab-${t.key}`} className="cursor-pointer">{t.label}</Label>
+                    <p className="text-[11px] text-gray-400 dark:text-gray-500">{t.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Clinical — master switch plus the individual charting pages. */}
+        <div className="mb-5">
+          <p className="mb-2 text-[11px] font-bold tracking-wider text-gray-500 uppercase dark:text-gray-400">Clinical</p>
+          <div className="flex items-start gap-2.5">
+            <Checkbox id="tab-clinical" className="mt-0.5" checked={clinicalOn} onChange={e => setTab('clinical', e.target.checked)} />
+            <div className="leading-tight">
+              <Label htmlFor="tab-clinical" className="cursor-pointer">Clinical section</Label>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">
+                Charting rail — notes, treatment plans, assessments, group notes, milestones, incidents and discharge.
+                Turning this off hides the whole section.
+              </p>
+            </div>
+          </div>
+
+          <div className={`mt-3 ml-6 pl-3 border-l border-gray-200 dark:border-gray-700 space-y-2.5 ${clinicalOn ? '' : 'opacity-40'}`}>
+            {CLINICAL_NAV.map(n => (
+              <div key={n.key} className="flex items-center gap-2.5">
+                <Checkbox
+                  id={`tab-${n.key}`}
+                  disabled={!clinicalOn}
+                  checked={clinicalOn && vis.tabs?.[n.key] !== false}
+                  onChange={e => setTab(n.key, e.target.checked)}
+                />
+                <Label htmlFor={`tab-${n.key}`} className={clinicalOn ? 'cursor-pointer' : 'cursor-not-allowed'}>{n.label}</Label>
               </div>
             ))}
           </div>
         </div>
+
         <div>
-          <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Header Toolbar Buttons</p>
-          <div className="space-y-2">
+          <p className="mb-2 text-[11px] font-bold tracking-wider text-gray-500 uppercase dark:text-gray-400">Shift Report Quick Actions</p>
+          <div className="space-y-2.5">
             {BTN_OPTS.map(b => (
-              <div key={b.key} className="flex items-center gap-2">
-                <Checkbox id={`btn-${b.key}`} checked={vis.buttons?.[b.key] !== false} onChange={e => setBtn(b.key, e.target.checked)} />
-                <Label htmlFor={`btn-${b.key}`} className="cursor-pointer">{b.label}</Label>
+              <div key={b.key} className="flex items-start gap-2.5">
+                <Checkbox id={`btn-${b.key}`} className="mt-0.5" checked={vis.buttons?.[b.key] !== false} onChange={e => setBtn(b.key, e.target.checked)} />
+                <div className="leading-tight">
+                  <Label htmlFor={`btn-${b.key}`} className="cursor-pointer">{b.label}</Label>
+                  <p className="text-[11px] text-gray-400 dark:text-gray-500">{b.desc}</p>
+                </div>
               </div>
             ))}
           </div>

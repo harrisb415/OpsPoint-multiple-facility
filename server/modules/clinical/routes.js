@@ -5,7 +5,7 @@
  * on locked-immutable records go through requireUnlocked (server/middleware/
  * recordLock). Reads write the HIPAA read-audit via auditRead.
  *
- * Installment 2 covers ua-records, med-log, milestones, incidents. Later
+ * Installment 2 covers ua-records, milestones, incidents. Later
  * installments add discharge/consent/disclosures/unlock and Structured Clinical
  * Lite to this same register().
  */
@@ -67,41 +67,6 @@ function register(app) {
       const { clientName } = service.deleteUA(id);
       audit(req, 'ua.record.delete', 'ua_records', id, clientName);
       broadcast({ type: 'ua_records_updated' });
-      res.json({ ok: true });
-    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
-  });
-
-  // ── Med Administration Log (Phase 3) ─────────────────────────────
-  app.get('/api/med-log', requireAuth, (req, res) => {
-    const { rows, filter } = service.listMed(req.query);
-    auditRead(req, 'med_administration_log', null, `Med log list (${rows.length})`, filter);
-    res.json(rows);
-  });
-  app.post('/api/med-log', requireAuth, csrfCheck, requirePermission('med.witness'), (req, res) => {
-    try {
-      const rec = service.createMed(req.body || {}, req.session);
-      audit(req, 'med.witness', 'med_administration_log', rec.id, rec.client_name, { med: rec.medication });
-      broadcast({ type: 'med_log_updated' });
-      res.json({ ok: true, record: rec });
-    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
-  });
-  app.patch('/api/med-log/:id', requireAuth, csrfCheck, requirePermission('med.witness'),
-    requireUnlocked('med_administration_log'), (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      const { record, clientName } = service.updateMed(id, req.body || {});
-      audit(req, 'med.edit', 'med_administration_log', id, clientName);
-      broadcast({ type: 'med_log_updated' });
-      res.json({ ok: true, record });
-    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
-  });
-  app.delete('/api/med-log/:id', requireAuth, csrfCheck, requirePermission('med.delete'),
-    requireUnlocked('med_administration_log'), (req, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      service.deleteMed(id);
-      audit(req, 'med.delete', 'med_administration_log', id, '');
-      broadcast({ type: 'med_log_updated' });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

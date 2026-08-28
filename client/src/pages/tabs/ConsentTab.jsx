@@ -41,7 +41,6 @@ const INFO_TYPES = [
   { value:'ua_records',          label:'UA records only' },
   { value:'incidents',           label:'Behavioral incidents only' },
   { value:'milestones',          label:'Milestones only' },
-  { value:'med_administration_log', label:'Med admin log only' },
   { value:'discharge_records',   label:'Discharge record only' },
 ]
 const INFO_LABEL = Object.fromEntries(INFO_TYPES.map(t => [t.value, t.label]))

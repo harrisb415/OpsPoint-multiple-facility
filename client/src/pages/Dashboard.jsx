@@ -12,7 +12,6 @@ import CaseloadsTab from './tabs/CaseloadsTab.jsx'
 import MailTab from './tabs/MailTab.jsx'
 import UARequestsTab from './tabs/UARequestsTab.jsx'
 import ViolationsTab from './tabs/ViolationsTab.jsx'
-import MedLogTab     from './tabs/MedLogTab.jsx'
 import ConsentTab    from './tabs/ConsentTab.jsx'
 import GroupsTab     from './tabs/GroupsTab.jsx'
 import DashboardHome  from './DashboardHome.jsx'
@@ -28,7 +27,6 @@ const ALL_TABS = [
   { id: 'caseloads',  label: 'Caseloads' },
   { id: 'mail',       label: 'Mail' },
   { id: 'ua',         label: 'UA' },
-  { id: 'med_log',    label: 'Med Log',    perm: 'med.witness' },
   { id: 'violations', label: 'Infractions' },
   { id: 'consent',    label: 'Consents',   perm: 'consent.manage' },
 ]
@@ -95,7 +93,6 @@ export default function Dashboard() {
       {active?.id === 'caseloads'  && <CaseloadsTab />}
       {active?.id === 'mail'       && <MailTab />}
       {active?.id === 'ua'         && <UARequestsTab />}
-      {active?.id === 'med_log'    && <MedLogTab />}
       {active?.id === 'violations' && <ViolationsTab />}
       {active?.id === 'consent'    && <ConsentTab />}
       {active?.id === 'groups'     && <GroupsTab />}

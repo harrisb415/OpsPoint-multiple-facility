@@ -1,13 +1,33 @@
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom'
 import { Stethoscope, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext.jsx'
+import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { CLINICAL_NAV, navItemVisible } from './clinicalShared.jsx'
+import { CLINICAL_NAV, navItemVisible, isFeatureVisible, clinicalSectionEnabled } from './clinicalShared.jsx'
+
+// ui_visibility off the live data payload. Same shape/parse as AppShell and
+// Dashboard — an unset or unparseable value means "everything visible".
+function useUiVisibility() {
+  const { data } = useData()
+  const def = { tabs: {}, buttons: {} }
+  if (!data?.ui_visibility) return def
+  try { return typeof data.ui_visibility === 'string' ? JSON.parse(data.ui_visibility) : data.ui_visibility }
+  catch { return def }
+}
+
+// A clinical page is reachable only if the user has the permission AND the
+// facility has left both the section and that page switched on in
+// Admin → Features.
+function usableNav(hasPerm, vis) {
+  if (!clinicalSectionEnabled(vis)) return []
+  return CLINICAL_NAV.filter(n => navItemVisible(n, hasPerm) && isFeatureVisible(vis, n.key))
+}
 
 // /clinical index → redirect to the first section the user can actually use.
 export function ClinicalIndexRedirect() {
   const { hasPerm } = usePermission()
-  const first = CLINICAL_NAV.find(n => navItemVisible(n, hasPerm))
+  const vis = useUiVisibility()
+  const first = usableNav(hasPerm, vis)[0]
   return <Navigate to={first ? first.path : '/'} replace />
 }
 
@@ -18,12 +38,14 @@ export default function ClinicalLayout() {
   const { session } = useAuth()
   const { hasPerm } = usePermission()
   const navigate    = useNavigate()
+  const vis         = useUiVisibility()   // must run before any early return
 
   // Auth guard (belt-and-suspenders — route is already behind AuthGuard)
   if (!session) return <Navigate to="/login" replace />
 
-  const navItems = CLINICAL_NAV.filter(n => navItemVisible(n, hasPerm))
-  // No clinical access at all → bounce home
+  const navItems = usableNav(hasPerm, vis)
+  // Section switched off in Admin → Features, or no clinical access at all.
+  // Guards the direct-URL path, not just the hidden sidebar button.
   if (navItems.length === 0) return <Navigate to="/" replace />
 
   return (

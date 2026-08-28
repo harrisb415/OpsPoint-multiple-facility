@@ -221,27 +221,10 @@ function createSchema(db) {
     created_at         TEXT    DEFAULT (datetime('now'))
   )`);
 
-  // Phase 3: witnessed self-administration log
-  db.exec(`CREATE TABLE IF NOT EXISTS med_administration_log (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    client_id          INTEGER NOT NULL,
-    client_name        TEXT    NOT NULL DEFAULT '',
-    room               TEXT    NOT NULL DEFAULT '',
-    report_id          INTEGER DEFAULT NULL,
-    medication         TEXT    NOT NULL DEFAULT '',
-    dose               TEXT    DEFAULT '',
-    administered_at    TEXT    NOT NULL,
-    witnessed_by_id    INTEGER NOT NULL,
-    witnessed_by_name  TEXT    NOT NULL DEFAULT '',
-    notes              TEXT    DEFAULT '',
-    locked_at          TEXT    DEFAULT NULL,
-    unlocked_by        TEXT    DEFAULT '',
-    unlocked_at        TEXT    DEFAULT NULL,
-    unlock_reason      TEXT    DEFAULT '',
-    created_by_id      INTEGER NOT NULL,
-    created_by_name    TEXT    NOT NULL DEFAULT '',
-    created_at         TEXT    DEFAULT (datetime('now'))
-  )`);
+  // Phase 3 (REMOVED): the witnessed self-administration log was withdrawn.
+  // Free-text medication/dose is a transcription-error surface and the feature
+  // sat outside this app's "no medications" scope line. The table is NOT dropped:
+  // on an existing install it may hold records subject to retention. It is inert.
 
   // Phase 4: milestone tracker
   db.exec(`CREATE TABLE IF NOT EXISTS milestones (

@@ -9,6 +9,11 @@ data/shift.db
 data/shift.db-shm
 data/shift.db-wal
 data/secret.key
+# Database encryption key — NEVER commit. Losing it makes the database and
+# every backup permanently unreadable, so back it up outside the repo.
+data/.dbkey
+# Pre-encryption safety copies are plaintext PHI — including WAL/SHM sidecars
+data/*.pre-encryption-*
 data/photos/
 data/cert.pem
 data/key.pem

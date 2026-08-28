@@ -65,8 +65,9 @@ const PERMISSIONS = [
   'ua.draw',          // run the random UA draw
   // ── EHR / HIPAA expansion ───────────────────────────────────────
   'ua.record',           // create / edit a formal UA record (panel results, COC)
-  'med.witness',         // record witnessed self-administration doses
-  'med.delete',          // delete a med administration entry
+  // 'med.witness' / 'med.delete' RETIRED — med administration log removed.
+  // Absent from PERMISSIONS, so _migratePermissions strips them from users,
+  // groups, and profiles on next boot.
   'milestones.edit',     // create / edit program milestones
   'milestones.signoff',  // sign off on a completed milestone (counselor)
   'incidents.log',       // log a behavioral incident report
@@ -91,7 +92,7 @@ const ROLE_PRESETS = {
     'residents.edit', 'staff.edit', 'chores.assign', 'chores.log', 'passes.status',
     'reminders.view', 'ua.acknowledge', 'mail.log', 'mail.deliver', 'violations.log',
     'violations.notify_consequence', 'mobile.access',
-    'med.witness', 'incidents.log',
+    'incidents.log',
     'groups.view', 'groups.log',
   ],
   supervisor: [
@@ -102,8 +103,7 @@ const ROLE_PRESETS = {
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'mobile.access',
-    'ua.record', 'med.witness', 'med.delete',
-    'milestones.edit', 'incidents.log', 'incidents.review',
+    'ua.record', 'milestones.edit', 'incidents.log', 'incidents.review',
     'groups.view', 'groups.log',
     'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   ],
@@ -117,8 +117,7 @@ const ROLE_PRESETS = {
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'facility.manage', 'admin.users', 'admin.settings', 'admin.audit', 'admin.system',
     'mobile.access',
-    'ua.record', 'med.witness', 'med.delete',
-    'milestones.edit', 'milestones.signoff',
+    'ua.record', 'milestones.edit', 'milestones.signoff',
     'incidents.log', 'incidents.review', 'incidents.delete',
     'consent.manage', 'disclosures.view', 'records.unlock',
     'groups.view', 'groups.log',
@@ -154,7 +153,10 @@ function init(dbPath) {
   _migrateUserGroups();
   _migrateGroups(_bootNewPerms);
   _createSyncLayer();              // sync_outbox + triggers (multi-facility Phase 1)
-  pruneAuditLog(365);
+  // HIPAA §164.316(b)(2)(i): six-year retention. Setting exists so a facility
+  // under a stricter state rule can raise it; pruneAuditLog() floors it so it
+  // can never be configured below the statutory minimum.
+  pruneAuditLog(getSetting('audit_retention_days', AUDIT_RETENTION_MIN_DAYS));
   // Lock any clinical records past their 24h grace window (boot-time sweep)
   try { runLockSweep(); } catch(e) {}
 }
@@ -185,6 +187,7 @@ function setPermissionProfiles(profiles) {
 function _seedDefaults() {
   const defs = {
     facility_name:          'OpsPoint',
+    audit_retention_days:   String(AUDIT_RETENTION_MIN_DAYS),  // 6 years — statutory floor
     wellness_interval_mins: '120',
     walk_interval_mins:     '240',
     walk_areas:             JSON.stringify(DEFAULT_WALK_AREAS),
@@ -199,7 +202,7 @@ function _seedDefaults() {
     shift_day_start:        '07:00',
     shift_swing_start:      '15:00',
     shift_grave_start:      '23:00',
-    ui_visibility:          JSON.stringify({tabs:{staff:true,chores:true,passes:true,caseloads:true,mail:true,reports:true,violations:true,ua_records:true,med_log:true,milestones:true,incidents:true},buttons:{wellness:true,walkthrough:true}}),
+    ui_visibility:          JSON.stringify({"tabs":{"staff":true,"caseloads":true,"chores":true,"groups":true,"passes":true,"mail":true,"ua":true,"ua_draw":true,"violations":true,"consent":true,"clinical":true,"clinical_notes":true,"clinical_treatment":true,"clinical_milestones":true,"clinical_assessments":true,"clinical_groups":true,"clinical_incidents":true,"clinical_discharge":true},"buttons":{"wellness":true,"walkthrough":true}}),
     program_tracks:         JSON.stringify(['SUD Residential','Re-entry','Transitional','Sober Living']),
     program_phases:         JSON.stringify([
       { key:'orientation', label:'Orientation',  objectives:['Complete intake paperwork','Tour facility','Sign program agreement'] },
@@ -506,8 +509,7 @@ function resolveClientPhoto(photo) {
 // A user without ANY of these is non-clinical (PA, shift lead, front desk) and
 // must not see treatment narratives, medical observations, or intake details.
 const CLINICAL_PERMS = [
-  'ua.record', 'med.witness',
-  'milestones.edit', 'milestones.signoff',
+  'ua.record', 'milestones.edit', 'milestones.signoff',
   'incidents.log',   'incidents.review',
   'consent.manage',  'disclosures.view',
 ];
@@ -620,7 +622,7 @@ function saveGroupAttendance(session_id, attendees) {
 
 // ── Clinical record helpers (Phases 2-7) ──────────────────────────────
 // All clinical tables share the locked_at immutability pattern and audit-traced reads.
-const CLINICAL_TABLES = ['ua_records','med_administration_log','milestones','incidents'];
+const CLINICAL_TABLES = ['ua_records','milestones','incidents'];
 
 function _parseJsonFields(row, fields) {
   if (!row) return row;
@@ -713,41 +715,6 @@ function updateUARecord(id, patch) {
   return getUARecord(id);
 }
 function deleteUARecord(id) { _run('DELETE FROM ua_records WHERE id=?', [id]); }
-
-// ── Med Administration Log ────────────────────────────────────────────
-function createMedLog(rec) {
-  const r = _run(
-    `INSERT INTO med_administration_log
-     (client_id,client_name,room,report_id,medication,dose,administered_at,
-      witnessed_by_id,witnessed_by_name,notes,created_by_id,created_by_name)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [rec.client_id, rec.client_name||'', rec.room||'', rec.report_id||null,
-     rec.medication||'', rec.dose||'', rec.administered_at,
-     rec.witnessed_by_id, rec.witnessed_by_name||'', rec.notes||'',
-     rec.created_by_id, rec.created_by_name||'']
-  );
-  return _q1('SELECT * FROM med_administration_log WHERE id=?', [r.lastInsertRowid]);
-}
-function getMedLog(filter) {
-  filter = filter || {};
-  let sql = 'SELECT * FROM med_administration_log WHERE 1=1';
-  const p = [];
-  if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
-  if (filter.report_id) { sql += ' AND report_id=?'; p.push(filter.report_id); }
-  if (filter.from)      { sql += ' AND administered_at >= ?'; p.push(filter.from); }
-  sql += ' ORDER BY administered_at DESC, id DESC LIMIT 1000';
-  return _q(sql, p);
-}
-function updateMedLog(id, patch) {
-  const fields = [], vals = [];
-  ['medication','dose','administered_at','notes']
-    .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
-  if (!fields.length) return null;
-  vals.push(id);
-  _run(`UPDATE med_administration_log SET ${fields.join(',')} WHERE id=?`, vals);
-  return _q1('SELECT * FROM med_administration_log WHERE id=?', [id]);
-}
-function deleteMedLog(id) { _run('DELETE FROM med_administration_log WHERE id=?', [id]); }
 
 // ── Milestones ────────────────────────────────────────────────────────
 function createMilestone(rec) {
@@ -1055,8 +1022,14 @@ function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} 
   return { rows, total: countRow ? countRow.c : 0 };
 }
 
+// Statutory floor — HIPAA §164.316(b)(2)(i) requires six years retention of
+// documentation, which includes the audit trail. 6 x 365 = 2190.
+const AUDIT_RETENTION_MIN_DAYS = 2190;
+
 function pruneAuditLog(days) {
-  days = days || 365;
+  // Floor at the statutory minimum. A bad setting, a stale value, or a caller
+  // passing 0/null must never shorten retention below what the law requires.
+  days = Math.max(parseInt(days, 10) || AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MIN_DAYS);
   try {
     // Local-time cutoff to match the local-time ts written by auditLog().
     const d = new Date(Date.now() - days * 24 * 60 * 60 * 1000), p = n => String(n).padStart(2, '0');
@@ -1349,7 +1322,7 @@ const clinicalDb = {
 const SYNC_TABLES = [
   'clients','reports','log_entries','staff','passes','chore_log',
   'ua_requests','mail_log','violations',
-  'ua_records','med_administration_log','milestones','incidents',
+  'ua_records','milestones','incidents',
   'discharge_records','consent_records','disclosures',
   'group_sessions','group_attendance','ua_draws','broadcast_messages',
   'audit_log',
@@ -1521,13 +1494,15 @@ module.exports = {
   // Broadcasts
   createBroadcast, getBroadcast, getBroadcasts,
   auditLog, getAuditLog, pruneAuditLog,
+  // Scheduled backup (backup.js) — VACUUM INTO snapshot + the live DB path.
+  backupTo: (dest) => connection.backupTo(dest),
+  getDbPath: () => connection.getPath(),
   // ── EHR clinical records ──────────────────────────────────────
   CLINICAL_TABLES,
   isRecordLocked, unlockRecord, runLockSweep,
   // UA Records
   createUARecord, getUARecord, getUARecords, updateUARecord, deleteUARecord,
   // Med Administration Log
-  createMedLog, getMedLog, updateMedLog, deleteMedLog,
   // Milestones
   createMilestone, getMilestones, updateMilestone, signoffMilestone, deleteMilestone,
   // Incidents

@@ -54,36 +54,6 @@ function deleteUA(id) {
   return { clientName: cur.client_name };
 }
 
-// ── Med administration log ──────────────────────────────────────────
-function listMed(query = {}) {
-  const filter = {
-    client_id: query.client_id ? parseInt(query.client_id) : null,
-    report_id: query.report_id ? parseInt(query.report_id) : null,
-    from: query.from || null,
-  };
-  return { rows: repo.getMedLog(filter), filter };
-}
-function createMed(b = {}, session) {
-  if (!b.client_id) throw httpError(400, 'client_id required');
-  if (!b.administered_at) throw httpError(400, 'administered_at required');
-  if (!b.medication || !String(b.medication).trim()) throw httpError(400, 'medication required');
-  return repo.createMedLog({
-    ...b,
-    witnessed_by_id: b.witnessed_by_id || session.userId,
-    witnessed_by_name: b.witnessed_by_name || actorName(session),
-    created_by_id: session.userId,
-    created_by_name: actorName(session),
-  });
-}
-function updateMed(id, b = {}) {
-  const record = repo.updateMedLog(id, b);
-  if (!record) throw httpError(404, 'Not found');
-  return { record, clientName: record.client_name };
-}
-function deleteMed(id) {
-  repo.deleteMedLog(id); // mirrors original: no 404 check
-}
-
 // ── Milestones ──────────────────────────────────────────────────────
 function listMilestones(query = {}) {
   const filter = {
@@ -248,7 +218,6 @@ function unlockRecord(table, id, b = {}, session) {
 
 module.exports = {
   listUA, getUA, createUA, updateUA, deleteUA,
-  listMed, createMed, updateMed, deleteMed,
   listMilestones, createMilestone, updateMilestone, signoffMilestone, deleteMilestone,
   listIncidents, createIncident, updateIncident, reviewIncident, deleteIncident,
   listDischarges, listDischargesForClient, createDischarge,

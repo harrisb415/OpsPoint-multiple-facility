@@ -12,7 +12,6 @@
  *   Overview, Timeline    → always visible (all authenticated users)
  *   Passes, Mail          → always visible (passes/mail are non-clinical)
  *   UA                    → ua.acknowledge or ua.record
- *   Meds                  → med.witness
  *   Milestones            → milestones.edit or milestones.signoff
  *   Incidents             → incidents.log or incidents.review
  *   Consents              → consent.manage or disclosures.view
@@ -423,43 +422,6 @@ function UATab({ client, data, hasPerm }) {
           </div>
         ))
       }
-    </div>
-  )
-}
-
-function MedsTab({ client, data }) {
-  const records = (data?.med_log || [])
-    .filter(m => m.client_id === client.id)
-    .sort((a, b) => (b.administered_at || b.logged_at || '').localeCompare(a.administered_at || a.logged_at || ''))
-    .slice(0, 40)
-
-  if (records.length === 0) return (
-    <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No medication records for this resident.</p>
-  )
-
-  return (
-    <div>
-      {records.map((m, i) => (
-        <div key={m.id || i} className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-start gap-2">
-          <div>
-            <div className="font-bold text-sm text-gray-900 dark:text-gray-100">
-              {m.medication_name || 'Medication'}
-              {m.dosage ? <span className="font-normal text-gray-500"> · {m.dosage}</span> : null}
-            </div>
-            <div className="text-[11px] text-gray-400 mt-0.5">
-              {fmtDate(m.administered_at || m.logged_at)} · witnessed by {m.witnessed_by_name || '—'}
-            </div>
-          </div>
-          {m.refused && (
-            <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-              Refused
-            </span>
-          )}
-        </div>
-      ))}
-      {(data?.med_log || []).filter(m => m.client_id === client.id).length > 40 && (
-        <p className="px-4 py-2 text-xs text-gray-400 text-center">Showing 40 most recent records</p>
-      )}
     </div>
   )
 }
@@ -938,8 +900,6 @@ export default function ClientProfile({ onNavigateTab }) {
     ]
     if (hasPerm('ua.acknowledge') || hasPerm('ua.record'))
       t.push({ id: 'ua', label: '🧪 UA' })
-    if (hasPerm('med.witness'))
-      t.push({ id: 'meds', label: '💊 Meds' })
     if (hasPerm('milestones.edit') || hasPerm('milestones.signoff'))
       t.push({ id: 'milestones', label: '🏁 Milestones' })
     if (hasPerm('incidents.log') || hasPerm('incidents.review'))
@@ -1024,7 +984,6 @@ export default function ClientProfile({ onNavigateTab }) {
           {activeTab === 'passes'      && <PassesTab         client={client} data={data} />}
           {activeTab === 'mail'        && <MailSubTab        client={client} data={data} />}
           {activeTab === 'ua'          && <UATab             client={client} data={data} hasPerm={hasPerm} />}
-          {activeTab === 'meds'        && <MedsTab           client={client} data={data} />}
           {activeTab === 'milestones'  && <MilestonesTab     client={client} data={data} />}
           {activeTab === 'incidents'   && <IncidentsTab         client={client} data={data} />}
           {activeTab === 'violations'  && <ViolationsProfileTab client={client} />}

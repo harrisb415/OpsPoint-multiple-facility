@@ -89,29 +89,27 @@ export function DataProvider({ children }) {
   // ── Data load ─────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     try {
-      const [dataRes, mailRes, uaRes, uaRecRes, medRes, mileRes, incRes, disRes] = await Promise.all([
+      const [dataRes, mailRes, uaRes, uaRecRes, mileRes, incRes, disRes] = await Promise.all([
         fetch('/api/data',              { credentials: 'include' }),
         fetch('/api/mail',              { credentials: 'include' }),
         fetch('/api/ua-requests',       { credentials: 'include' }),
         fetch('/api/ua-records',        { credentials: 'include' }),
-        fetch('/api/med-log',           { credentials: 'include' }),
         fetch('/api/milestones',        { credentials: 'include' }),
         fetch('/api/incidents',         { credentials: 'include' }),
         fetch('/api/discharge-records', { credentials: 'include' }),
       ])
       if (!dataRes.ok) throw new Error('Failed to load data')
-      const [base, mail, ua_requests, ua_records, med_log, milestones, incidents, discharge_records] = await Promise.all([
+      const [base, mail, ua_requests, ua_records, milestones, incidents, discharge_records] = await Promise.all([
         dataRes.json(),
         mailRes.ok   ? mailRes.json()   : [],
         uaRes.ok     ? uaRes.json()     : [],
         uaRecRes.ok  ? uaRecRes.json()  : [],
-        medRes.ok    ? medRes.json()    : [],
         mileRes.ok   ? mileRes.json()   : [],
         incRes.ok    ? incRes.json()    : [],
         disRes.ok    ? disRes.json()    : [],
       ])
       const clinical = await fetchClinical()
-      setData({ ...base, mail, ua_requests, ua_records, med_log, milestones, incidents, discharge_records, ...clinical })
+      setData({ ...base, mail, ua_requests, ua_records, milestones, incidents, discharge_records, ...clinical })
 
       // Seed seen UA IDs so we don't re-fire sounds for already-known requests
       seenUAIds.current = new Set((ua_requests || []).map(r => r.id))
@@ -197,7 +195,6 @@ export function DataProvider({ children }) {
         case 'permissions_updated':
         case 'settings_updated':
         case 'ua_records_updated':
-        case 'med_log_updated':
         case 'milestones_updated':
         case 'incidents_updated':
         case 'discharge_records_updated':

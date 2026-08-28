@@ -14,7 +14,7 @@ import JSZip from 'jszip'
 import {
   Users, UserCheck, ClipboardList,
   FileText, CheckSquare, Ticket, Mail, CalendarCheck,
-  FlaskConical, Pill,
+  FlaskConical,
   Ban, PenLine, Archive,
   Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse, Stethoscope,
   Moon, Sun, MoreHorizontal, LayoutDashboard, Search,
@@ -44,7 +44,6 @@ const SIDEBAR_GROUPS = [
     label: 'HEALTH & COMPLIANCE',
     items: [
       { id: 'ua',         label: 'UA',         Icon: FlaskConical },
-      { id: 'med_log',    label: 'Med Log',    Icon: Pill,   perm: 'med.witness' },
     ]
   },
   {
@@ -450,8 +449,11 @@ function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis
             if (!isTabVisible(item.id)) return false
             return true
           })
-          const showDraw     = group.label === 'HEALTH & COMPLIANCE' && hasPerm('ua.draw')
-          const showClinical = group.label === 'HEALTH & COMPLIANCE' && CLINICAL_SECTION_PERMS.some(p => hasPerm(p))
+          // Both are sidebar actions rather than tabs, so they need the same
+          // Admin → Features gate the tabs get (isTabVisible) on top of perms.
+          const showDraw     = group.label === 'HEALTH & COMPLIANCE' && hasPerm('ua.draw') && isTabVisible('ua_draw')
+          const showClinical = group.label === 'HEALTH & COMPLIANCE' && isTabVisible('clinical') &&
+                               CLINICAL_SECTION_PERMS.some(p => hasPerm(p))
           if (visItems.length === 0 && !showDraw && !showClinical) return null
           return (
             <div key={group.label}>

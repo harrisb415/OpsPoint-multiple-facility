@@ -550,7 +550,6 @@ function reportOverview() {
       ua_total:        _count(f.id, 'ua_records'),
       // Facility stores UA outcome as pass/fail (fail = positive), NOT positive/negative.
       ua_positive:     _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='fail'"),
-      med_logs:        _count(f.id, 'med_administration_log'),
       rows_total:      ct.total,
       applied_through: ct.applied_through,
     };
@@ -567,7 +566,7 @@ function reportOverview() {
       residents: sum('residents'), vacant: sum('vacant'),
       incidents_open: sum('incidents_open'), incidents_total: sum('incidents_total'),
       ua_total: sum('ua_total'), ua_positive: sum('ua_positive'),
-      med_logs: sum('med_logs'), rows_total: sum('rows_total'),
+      rows_total: sum('rows_total'),
     },
   };
 }

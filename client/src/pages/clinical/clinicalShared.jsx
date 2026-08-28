@@ -8,15 +8,27 @@ import { Modal as FbModal, ModalHeader, ModalBody, ModalFooter } from 'flowbite-
 
 // Navigation entries for the clinical section. `perm` (single) or `perms`
 // (any-of) controls visibility. `icon` is a lucide-react component.
+// `key` is the ui_visibility.tabs key for the page — the same key the Admin
+// Features panel writes and the rail reads, so the two can't drift apart.
 export const CLINICAL_NAV = [
-  { path: '/clinical/notes',           label: 'Clinical Notes',      perm: 'clinical.notes',       icon: NotebookPen },
-  { path: '/clinical/treatment-plans', label: 'Treatment Plans',     perm: 'clinical.treatment',   icon: Target },
-  { path: '/clinical/milestones',      label: 'Milestones',          perms: ['milestones.edit', 'milestones.signoff'], icon: Award },
-  { path: '/clinical/assessments',     label: 'Assessments',         perm: 'clinical.assessments', icon: ClipboardList },
-  { path: '/clinical/group-notes',     label: 'Group Notes',         perm: 'clinical.groups',      icon: Users },
-  { path: '/clinical/incidents',       label: 'Incident Reports',    perms: ['incidents.log', 'incidents.review', 'incidents.delete'], icon: Siren },
-  { path: '/clinical/discharge',       label: 'Discharge Summaries', perm: 'clinical.discharge',   icon: DoorOpen },
+  { key: 'clinical_notes',      path: '/clinical/notes',           label: 'Clinical Notes',      perm: 'clinical.notes',       icon: NotebookPen },
+  { key: 'clinical_treatment',  path: '/clinical/treatment-plans', label: 'Treatment Plans',     perm: 'clinical.treatment',   icon: Target },
+  { key: 'clinical_milestones', path: '/clinical/milestones',      label: 'Milestones',          perms: ['milestones.edit', 'milestones.signoff'], icon: Award },
+  { key: 'clinical_assessments',path: '/clinical/assessments',     label: 'Assessments',         perm: 'clinical.assessments', icon: ClipboardList },
+  { key: 'clinical_groups',     path: '/clinical/group-notes',     label: 'Group Notes',         perm: 'clinical.groups',      icon: Users },
+  { key: 'clinical_incidents',  path: '/clinical/incidents',       label: 'Incident Reports',    perms: ['incidents.log', 'incidents.review', 'incidents.delete'], icon: Siren },
+  { key: 'clinical_discharge',  path: '/clinical/discharge',       label: 'Discharge Summaries', perm: 'clinical.discharge',   icon: DoorOpen },
 ]
+
+// ui_visibility gate. Everything defaults to visible, so a facility that has
+// never opened the Features panel — and any key added in a later version —
+// keeps working unchanged. `clinical` is the master switch for the section.
+export function isFeatureVisible(vis, key) {
+  return vis?.tabs?.[key] !== false
+}
+export function clinicalSectionEnabled(vis) {
+  return isFeatureVisible(vis, 'clinical')
+}
 
 // Every permission that grants access to *something* in the clinical section.
 // Drives the sidebar "Clinical" button, the /clinical route guard, and the

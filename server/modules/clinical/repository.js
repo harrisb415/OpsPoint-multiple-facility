@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Clinical repository — the clinical EHR tables (ua_records, med_administration_log,
+ * Clinical repository — the clinical EHR tables (ua_records,
  * milestones, incidents, and — in later installments — discharge/consent/
  * disclosures + the Structured Clinical Lite set) are implemented in db.js with
  * locking/immutability baked in. This repository delegates to those helpers so
@@ -17,10 +17,6 @@ const updateUARecord = (id, patch) => db.updateUARecord(id, patch);
 const deleteUARecord = (id) => db.deleteUARecord(id);
 
 // ── Med administration log ──────────────────────────────────────────
-const getMedLog = (f) => db.getMedLog(f);
-const createMedLog = (rec) => db.createMedLog(rec);
-const updateMedLog = (id, patch) => db.updateMedLog(id, patch);
-const deleteMedLog = (id) => db.deleteMedLog(id);
 
 // ── Milestones ──────────────────────────────────────────────────────
 const getMilestones = (f) => db.getMilestones(f);
@@ -72,7 +68,6 @@ const clinicalDb = db.clinicalDb;
 
 module.exports = {
   getUARecords, getUARecord, createUARecord, updateUARecord, deleteUARecord,
-  getMedLog, createMedLog, updateMedLog, deleteMedLog,
   getMilestones, createMilestone, updateMilestone, signoffMilestone, deleteMilestone,
   getIncidents, createIncident, updateIncident, reviewIncident, deleteIncident,
   getIncidentNotifications,

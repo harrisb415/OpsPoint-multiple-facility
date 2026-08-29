@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Plus, MoreHorizontal, Ticket, CalendarCheck, LogIn, LogOut } from 'lucide-react'
+import { Plus, MoreHorizontal, Ticket, CalendarCheck, LogIn, LogOut, Clock } from 'lucide-react'
 import {
   Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Pagination,
@@ -25,7 +25,7 @@ function fmtDT(s) {
 }
 function localDT(s) { if (!s) return ''; try { return new Date(s).toISOString().slice(0, 16) } catch { return '' } }
 
-const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'In' }
+const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'Approved' }
 
 export default function PassesTab() {
   const { data, openProfile, loadData } = useData()
@@ -45,6 +45,21 @@ export default function PassesTab() {
   const [form, setForm] = useState(BLANK_PASS)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+
+  // Mark Departed stays disabled until the scheduled departure time. Ticking
+  // every 30s so a page left open enables the button on its own rather than
+  // needing a refresh. A pass with no departure time is unconstrained.
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 30000)
+    return () => clearInterval(t)
+  }, [])
+  const departureAt = (p) => {
+    if (!p.departure) return null
+    const t = new Date(p.departure).getTime()
+    return Number.isNaN(t) ? null : t
+  }
+  const canDepart = (p) => { const t = departureAt(p); return t === null || nowTs >= t }
 
   const gq = globalSearch.toLowerCase().trim()
   const pmatch = p => !gq || (p.name || '').toLowerCase().includes(gq) || String(p.room || '').includes(gq)
@@ -72,7 +87,7 @@ export default function PassesTab() {
   }
   function openAdd() { setForm({ ...BLANK_PASS }); setError(''); setModal('add') }
   function openEdit(p) {
-    setForm({ client_id: String(p.client_id || ''), room: p.room || '', name: p.name || '', departure: localDT(p.departure), return_date: localDT(p.return_date), ua_notes: p.ua_notes || '', notes: p.notes || '', status: p.status || 'Out' })
+    setForm({ client_id: String(p.client_id || ''), room: p.room || '', name: p.name || '', departure: localDT(p.departure), return_date: localDT(p.return_date), ua_notes: p.ua_notes || '', notes: p.notes || '', status: p.status || 'Approved' })
     setError(''); setModal(p)
   }
   function handleClientSelect(clientId) {
@@ -212,7 +227,8 @@ export default function PassesTab() {
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
                     {canStatus && (
-                      <Button size="xs" onClick={() => quickStatus(p, 'Out')}>
+                      <Button size="xs" disabled={!canDepart(p)} onClick={() => quickStatus(p, 'Out')}
+                        title={canDepart(p) ? 'Mark this resident as departed' : `Not until ${fmtDT(p.departure)}`}>
                         <LogOut className="w-3.5 h-3.5 mr-1.5" /> Mark Departed
                       </Button>
                     )}
@@ -253,6 +269,12 @@ export default function PassesTab() {
                 <TableCell className="text-gray-500 dark:text-gray-400">{notesOf(p)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
+                    {canStatus && p.status !== 'Extended' && (
+                      <Button size="xs" color="light" onClick={() => quickStatus(p, 'Extended')}
+                        title="Flag this pass as running past its expected return">
+                        <Clock className="w-3.5 h-3.5 mr-1.5" /> Extend
+                      </Button>
+                    )}
                     {canStatus && (
                       <Button size="xs" color="light" onClick={() => quickStatus(p, 'Returned')}>
                         <LogIn className="w-3.5 h-3.5 mr-1.5" /> Mark Returned
@@ -326,13 +348,9 @@ export default function PassesTab() {
                 <Field label="Departure"><TextInput type="datetime-local" value={form.departure} onChange={e => setForm(f => ({ ...f, departure: e.target.value }))} /></Field>
                 <Field label="Expected Return"><TextInput type="datetime-local" value={form.return_date} onChange={e => setForm(f => ({ ...f, return_date: e.target.value }))} /></Field>
               </div>
-              <Field label="Status">
-                <Select value={form.status} disabled={!canStatus} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  <option value="Out">Out</option>
-                  <option value="Extended">Extended</option>
-                  <option value="In">In</option>
-                </Select>
-              </Field>
+              {/* Status is driven by the row actions (Mark Departed / Extend /
+                  Mark Returned), so the dropdown is gone. It also offered "In",
+                  which was never a valid status and was silently dropped on save. */}
               <Field label="UA Requirements / Notes"><TextInput value={form.ua_notes} onChange={e => setForm(f => ({ ...f, ua_notes: e.target.value }))} placeholder="e.g. UA required on return" /></Field>
               <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></Field>
             </div>

@@ -435,7 +435,7 @@ function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis
         </div>
       </button>
 
-      <nav className="flex-1 px-3 py-3 overflow-y-auto">
+      <nav className="flex-1 px-3 py-3 overflow-y-auto [scrollbar-color:theme(colors.slate.600)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
         <div className="space-y-1">
           <button onClick={() => onTabChange('dashboard')} className={`${navRowBase} ${activeTab === 'dashboard' ? navRowOn : navRowOff}`}>
             <LayoutDashboard className={`w-5 h-5 shrink-0 ${activeTab === 'dashboard' ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
@@ -535,7 +535,7 @@ function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
 }
 
 // ── Header / top bar (Console) ────────────────────────────────────────
-function Header({ onGoTab, offset = true, search = '', onSearch }) {
+function Header({ onGoTab, offset = true, search = '', onSearch, showSearch = true }) {
   const { session, logout }                 = useAuth()
   const { hasPerm }                         = usePermission()
   const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident } = useData()
@@ -840,16 +840,18 @@ function Header({ onGoTab, offset = true, search = '', onSearch }) {
           Server is restarting — page will reload in a moment…
         </div>
       )}
-      <nav className={`fixed top-0 ${offset ? 'left-64' : 'left-0'} right-0 z-30 h-16 bg-white border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
+      <nav className={`fixed top-0 ${offset ? 'left-64' : 'left-0'} right-0 z-30 h-16 bg-gray-50 border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
         <div className="flex items-center justify-between h-full px-5">
           {/* Left: global search */}
+          {showSearch ? (
           <form className="hidden md:block" onSubmit={e => e.preventDefault()}>
             <div className="relative md:w-72 lg:w-96">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none"><Search className="w-4 h-4 text-gray-400" /></div>
               <input type="text" value={search} onChange={e => onSearch?.(e.target.value)} placeholder="Search residents, rooms, logs…"
-                className="block w-full py-2.5 pl-10 pr-3 text-sm text-gray-900 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                className="block w-full py-2.5 pl-10 pr-3 text-sm text-gray-900 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
             </div>
           </form>
+          ) : <div />}
 
           {/* Right: save · live · actions ⋯ · notifications · gear · theme · avatar */}
           <div className="flex items-center gap-1 sm:gap-2">
@@ -976,7 +978,7 @@ function InnerShell() {
 
   return (
     <>
-      <Header onGoTab={setRequestedTab} offset={!fullBleed} search={globalSearch} onSearch={setGlobalSearch} />
+      <Header onGoTab={setRequestedTab} offset={!fullBleed} search={globalSearch} onSearch={setGlobalSearch} showSearch={!isAdmin} />
       {!fullBleed && (
         <Sidebar
           activeTab={activeTab}

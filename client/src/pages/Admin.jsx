@@ -125,7 +125,7 @@ export default function Admin() {
             <p className="text-[11px] text-slate-400">System configuration</p>
           </div>
         </div>
-        <nav className="flex-1 px-3 py-3 overflow-y-auto">
+        <nav className="flex-1 px-3 py-3 overflow-y-auto [scrollbar-color:theme(colors.slate.600)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
           {groups.map(g => (
             <div key={g.group} className="mb-1">
               <p className="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:text-gray-500">{g.group}</p>

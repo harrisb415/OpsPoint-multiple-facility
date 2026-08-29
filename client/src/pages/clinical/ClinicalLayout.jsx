@@ -51,14 +51,14 @@ export default function ClinicalLayout() {
   return (
     <div className="flex h-full min-h-0 overflow-hidden">
       {/* Clinical rail */}
-      <aside className="flex flex-col bg-white border-r border-gray-200 shrink-0 w-60 dark:bg-gray-800 dark:border-gray-700">
-        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-gray-200 dark:border-gray-700">
-          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300">
+      <aside className="flex flex-col bg-slate-800 border-r border-slate-900 shrink-0 w-60 dark:bg-gray-800 dark:border-gray-700">
+        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-slate-700 dark:border-gray-700">
+          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-600 text-white dark:bg-primary-900/50 dark:text-primary-300">
             <Stethoscope className="w-5 h-5" />
           </span>
           <div className="leading-tight">
-            <p className="text-base font-bold text-gray-900 dark:text-white">Clinical</p>
-            <p className="text-[11px] text-gray-400">Charting &amp; records</p>
+            <p className="text-base font-bold text-white">Clinical</p>
+            <p className="text-[11px] text-slate-400">Charting &amp; records</p>
           </div>
         </div>
         <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
@@ -68,11 +68,11 @@ export default function ClinicalLayout() {
               <NavLink
                 key={n.path}
                 to={n.path}
-                className={({ isActive }) => `flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg group ${isActive ? 'bg-primary-50 text-primary-700 dark:bg-gray-700 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}`}
+                className={({ isActive }) => `flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg group ${isActive ? 'bg-primary-600 text-white dark:bg-gray-700 dark:text-white' : 'text-slate-300 hover:bg-slate-700 hover:text-white dark:text-gray-300 dark:hover:bg-gray-700'}`}
               >
                 {({ isActive }) => (
                   <>
-                    <Icon className={`w-5 h-5 ${isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 group-hover:text-gray-700 dark:group-hover:text-white'}`} />
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
                     <span className="flex-1">{n.label}</span>
                   </>
                 )}
@@ -80,10 +80,10 @@ export default function ClinicalLayout() {
             )
           })}
         </nav>
-        <div className="p-3 border-t shrink-0 border-gray-200 dark:border-gray-700">
+        <div className="p-3 border-t shrink-0 border-slate-700 dark:border-gray-700">
           <button
             onClick={() => navigate('/')}
-            className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
+            className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-slate-200 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 hover:text-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700"
           >
             <ArrowLeft className="w-4 h-4" /> Return to shift
           </button>

@@ -150,29 +150,34 @@
   --glow-gold:    0 0 0 3px rgba(14,165,233,.18);
 }
 
-/* - Light-mode surface tint -------------------------------------
-   The Console shell paints white cards on a near-white page
-   (bg-white on bg-gray-50), which reads as glary on a bright screen
-   over a long shift. These three tokens pull the light-mode surfaces
-   down a step and give them a cool tint that picks up the blue accent.
+/* - Light mode: dark rail (option B) -----------------------------
+   The Console shell painted white cards on a near-white page with a
+   white sidebar and topbar, so chrome and content sat on the same
+   visual layer — reading as both glary and low-contrast at once.
 
-   BACKGROUNDS ONLY — text, borders, accents, and status colors are
-   untouched, and dark mode is unaffected (every rule is scoped to
-   html:not(.dark)). Retune here; nothing else needs to change. */
+   The fix is two-part: the navigation rail goes dark (in AppShell's
+   own Tailwind classes, since the base class IS the light style), and
+   the page drops to a soft blue-slate here so white cards float above
+   it. Cards, topbar and menus stay true white.
+
+   Dark mode is untouched — every rule below is scoped to
+   html:not(.dark). Retune the three tokens; nothing else changes. */
 :root {
-  --surface-sunken: #e7edf6;   /* page area behind the cards       */
-  --surface-raised: #f8fafd;   /* cards, sidebar, topbar, menus    */
-  --surface-hover:  #e2e9f4;   /* hover fills that were gray-100   */
+  --surface-sunken: #e8edf4;   /* page area behind the cards        */
+  --surface-raised: #ffffff;   /* cards, topbar, menus (true white) */
+  --surface-hover:  #eef2f7;   /* hover fills that were gray-100    */
+  --surface-line:   #d7dfe9;   /* a touch firmer than gray-200      */
 }
 
 /* Unlayered, so these beat Tailwind's @layer utilities regardless of
-   source order. Scoped to light mode via html:not(.dark).
-   (body picks the tint up through --page-bg below, so it isn't listed here.) */
-html:not(.dark) .bg-white       { background-color: var(--surface-raised); }
+   source order. body picks the page tint up via --page-bg above.
+   .bg-white is deliberately NOT overridden — cards stay white, and the
+   sidebar sets its own dark background in AppShell. */
 html:not(.dark) .bg-gray-50     { background-color: var(--surface-sunken); }
 html:not(.dark) .bg-gray-100    { background-color: var(--surface-hover); }
 html:not(.dark) .hover\:bg-gray-100:hover { background-color: var(--surface-hover); }
 html:not(.dark) .hover\:bg-gray-50:hover  { background-color: var(--surface-sunken); }
+html:not(.dark) .border-gray-200 { border-color: var(--surface-line); }
 
 /* - Reset & base ------------------------------------------------ */
 /* Layered into @layer base so Tailwind utilities (@layer utilities) can

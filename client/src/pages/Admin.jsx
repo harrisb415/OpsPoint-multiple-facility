@@ -113,9 +113,9 @@ export default function Admin() {
   }
 
   return (
-    <div className="flex h-full min-h-0 overflow-hidden">
+    <div className="h-full min-h-0 overflow-hidden">
       {/* Rail */}
-      <aside className="flex flex-col bg-slate-800 border-r border-slate-900 shrink-0 w-60 dark:bg-gray-800 dark:border-gray-700">
+      <aside className="fixed top-0 left-0 z-40 flex flex-col h-screen w-60 bg-slate-800 border-r border-slate-900 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-slate-700 dark:border-gray-700">
           <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-600 text-white dark:bg-primary-900/50 dark:text-primary-300">
             <Settings className="w-5 h-5" />
@@ -161,7 +161,7 @@ export default function Admin() {
       </aside>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 px-6 py-5 overflow-y-auto bg-gray-50 dark:bg-gray-900">
+      <div className="h-full ml-60 min-w-0 px-6 py-5 overflow-y-auto bg-gray-50 dark:bg-gray-900">
         {renderPanel()}
       </div>
     </div>

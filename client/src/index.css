@@ -169,12 +169,17 @@
   --surface-line:   #d7dfe9;   /* a touch firmer than gray-200      */
 }
 
-/* Unlayered, so these beat Tailwind's @layer utilities regardless of
+/* :not(input) matters. Flowbite's checkbox is `bg-gray-100` with
+   `checked:bg-current` for the checked fill; these overrides outrank that
+   on specificity, which left checked boxes pale with a near-invisible
+   white tick. Form controls keep their own styling.
+
+   Unlayered, so these beat Tailwind's @layer utilities regardless of
    source order. body picks the page tint up via --page-bg above.
    .bg-white is deliberately NOT overridden — cards stay white, and the
    sidebar sets its own dark background in AppShell. */
-html:not(.dark) .bg-gray-50     { background-color: var(--surface-sunken); }
-html:not(.dark) .bg-gray-100    { background-color: var(--surface-hover); }
+html:not(.dark) .bg-gray-50:not(input)  { background-color: var(--surface-sunken); }
+html:not(.dark) .bg-gray-100:not(input) { background-color: var(--surface-hover); }
 html:not(.dark) .hover\:bg-gray-100:hover { background-color: var(--surface-hover); }
 html:not(.dark) .hover\:bg-gray-50:hover  { background-color: var(--surface-sunken); }
 html:not(.dark) .border-gray-200 { border-color: var(--surface-line); }

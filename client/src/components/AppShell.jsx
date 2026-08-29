@@ -535,7 +535,7 @@ function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
 }
 
 // ── Header / top bar (Console) ────────────────────────────────────────
-function Header({ onGoTab, offset = true, search = '', onSearch, showSearch = true }) {
+function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSearch = true }) {
   const { session, logout }                 = useAuth()
   const { hasPerm }                         = usePermission()
   const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident } = useData()
@@ -840,7 +840,7 @@ function Header({ onGoTab, offset = true, search = '', onSearch, showSearch = tr
           Server is restarting — page will reload in a moment…
         </div>
       )}
-      <nav className={`fixed top-0 ${offset ? 'left-64' : 'left-0'} right-0 z-30 h-16 bg-gray-50 border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
+      <nav className={`fixed top-0 ${leftClass} right-0 z-30 h-16 bg-gray-50 border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
         <div className="flex items-center justify-between h-full px-5">
           {/* Left: global search */}
           {showSearch ? (
@@ -978,7 +978,8 @@ function InnerShell() {
 
   return (
     <>
-      <Header onGoTab={setRequestedTab} offset={!fullBleed} search={globalSearch} onSearch={setGlobalSearch} showSearch={!isAdmin} />
+      <Header onGoTab={setRequestedTab} leftClass={fullBleed ? 'left-60' : 'left-64'}
+              search={globalSearch} onSearch={setGlobalSearch} showSearch={!isAdmin} />
       {!fullBleed && (
         <Sidebar
           activeTab={activeTab}

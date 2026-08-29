@@ -287,11 +287,18 @@ export default function ReportTab() {
   }, [passes])
   // Census
   const census = useMemo(() => {
-    const cnt = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
+    // Seed from the configured statuses so a newly added one shows 0 rather
+    // than blank, and count whatever a resident actually holds — including a
+    // retired status — so the total always equals the resident count.
+    const cnt = {}
+    for (const st of statusList(data)) cnt[st.key] = 0
     clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT')
-      .forEach(c => { const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'; if (Object.hasOwn(cnt, st)) cnt[st]++ })
+      .forEach(c => {
+        const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'
+        cnt[st] = (cnt[st] || 0) + 1
+      })
     return cnt
-  }, [clients, statuses, passOverride])
+  }, [clients, statuses, passOverride, data])
   const censusTotal = Object.values(census).reduce((a, b) => a + b, 0)
 
   // Log entries — sortable by time or type

@@ -9,7 +9,7 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { initials, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../../utils/ui.js'
+import { initials, CARD_HEAD_INSET, CARD_HEAD_TITLE, CARD_HEAD_INSET_LG } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
@@ -166,8 +166,8 @@ export default function PassesTab() {
 
       {/* Pass notice board */}
       <Card className="mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Pass Notice Board</h3>
+        <div className={CARD_HEAD_INSET_LG}>
+          <h3 className={CARD_HEAD_TITLE}>Pass Notice Board</h3>
           {canEdit && <Button size="xs" onClick={saveNotice} isProcessing={noticeSaving} disabled={noticeSaving}>Save Notice</Button>}
         </div>
         <Textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} rows={2} disabled={!canEdit}

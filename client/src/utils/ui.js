@@ -43,3 +43,9 @@ export const CARD_HEAD_TITLE =
 // edges with negative margins instead of restructuring the card.
 export const CARD_HEAD_INSET =
   CARD_HEAD + ' -mx-4 -mt-4 mb-4 sm:-mx-5 sm:-mt-5 sm:mb-5'
+
+// Variant for flowbite <Card>, whose theme uses p-6 rather than the p-4/p-5
+// of the app's own card class — the bleed margins have to match the padding
+// or the strip sits inset from the card edge.
+export const CARD_HEAD_INSET_LG =
+  CARD_HEAD + ' -mx-6 -mt-6 mb-2'

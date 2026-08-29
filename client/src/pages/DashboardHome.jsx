@@ -144,10 +144,14 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
   const total = allResidents.length
 
   const census = useMemo(() => {
-    const c = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
-    allResidents.forEach(r => { const s = resolveStatus(r.id); if (c[s] != null) c[s]++ })
+    // Seeded from the configured statuses, and counts any key a resident
+    // actually holds — a status added in Admin was previously dropped on the
+    // floor here, so its residents vanished from the donut and from offSite.
+    const c = {}
+    for (const st of statusList(data)) c[st.key] = 0
+    allResidents.forEach(r => { const s = resolveStatus(r.id); c[s] = (c[s] || 0) + 1 })
     return c
-  }, [allResidents, statuses, passOverride])
+  }, [allResidents, statuses, passOverride, data])
 
   const onSite       = census.building
   const offSite      = total - onSite

@@ -2,7 +2,7 @@ import { useMemo, lazy, Suspense } from 'react'
 import { Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { allStatuses, statusList, offSiteStatuses, TONE_HEX, TONE_BADGE } from '../utils/statuses.js'
-import { CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../utils/ui.js'
+import { CARD_HEAD, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
 import { classifyLogEntry } from '../utils/printLog.js'
@@ -293,10 +293,8 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Roster */}
         <div className={`${cardCls} lg:col-span-2 overflow-hidden flex flex-col`}>
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
-            <div className={CARD_HEAD_INSET}>
-              <h2 className={CARD_HEAD_TITLE}>Roster</h2>
-            </div>
+          <div className={`${CARD_HEAD} shrink-0`}>
+            <h2 className={CARD_HEAD_TITLE}>Roster</h2>
             <button onClick={() => onNavigate?.('clients')} className="text-xs font-medium text-primary-600 hover:text-primary-700">View all</button>
           </div>
           <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">

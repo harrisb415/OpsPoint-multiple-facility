@@ -11,7 +11,6 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
-import { initials } from '../../utils/ui.js'
 import { ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 30

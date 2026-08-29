@@ -10,7 +10,6 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
-import { initials } from '../../utils/ui.js'
 import { Field, ColoredAvatar, DeltaRow } from '../../components/ui.jsx'
 
 // Prototype-style status badge class strings (rounded-md pill, not rounded-full)

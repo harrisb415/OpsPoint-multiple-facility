@@ -49,3 +49,12 @@ export const CARD_HEAD_INSET =
 // or the strip sits inset from the card edge.
 export const CARD_HEAD_INSET_LG =
   CARD_HEAD + ' -mx-6 -mt-6 mb-2'
+
+// Standalone section header — a heading that labels the block beneath it but
+// is NOT inside a padded card, so it must not use the bleed margins. Rounds
+// and borders itself so it reads as a band rather than a clipped strip.
+export const CARD_HEAD_BAND =
+  'flex flex-col gap-2 px-5 py-3.5 mb-3 rounded-xl border ' +
+  'bg-gradient-to-r from-primary-50 to-primary-100/60 border-primary-100 ' +
+  'sm:flex-row sm:items-center sm:justify-between ' +
+  'dark:from-gray-700/50 dark:to-gray-700/30 dark:border-gray-700'

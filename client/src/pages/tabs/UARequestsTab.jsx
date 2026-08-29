@@ -10,7 +10,7 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
-import { initials, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../../utils/ui.js'
+import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, DeltaRow, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 function fmtDT(s) {
@@ -246,7 +246,7 @@ export default function UARequestsTab() {
       </div>
 
       {/* Pending requests */}
-      <div className={CARD_HEAD_INSET}>
+      <div className={CARD_HEAD_BAND}>
           <h3 className={CARD_HEAD_TITLE}>Pending requests</h3>
         </div>
       <div className="mb-6">
@@ -284,7 +284,7 @@ export default function UARequestsTab() {
 
       {acknowledged.length > 0 && (
         <div className="mb-6">
-          <div className={CARD_HEAD_INSET}>
+          <div className={CARD_HEAD_BAND}>
           <h3 className={CARD_HEAD_TITLE}>Acknowledged</h3>
         </div>
           <Table hoverable>

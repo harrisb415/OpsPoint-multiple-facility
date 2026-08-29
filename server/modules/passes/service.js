@@ -5,7 +5,13 @@
  */
 const repo = require('./repository');
 
-const VALID_STATUS = ['Out', 'Extended', 'Returned'];
+// Pass lifecycle: Approved (granted, resident still on site) -> Out (departed)
+// -> Returned. Extended is Out that has run past its return date.
+//
+// The resident's shift-report status is derived from this, not stored twice:
+// ReportTab/DashboardHome map Out and Extended onto the 'pass' status, so an
+// Approved pass correctly leaves them In Building until they actually leave.
+const VALID_STATUS = ['Approved', 'Out', 'Extended', 'Returned'];
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -33,7 +39,7 @@ function create(input = {}) {
     return_date: return_date || '',
     ua_notes: ua_notes || '',
     notes: notes || '',
-    status: status || 'Out',
+    status: VALID_STATUS.includes(status) ? status : 'Approved',
   });
 }
 

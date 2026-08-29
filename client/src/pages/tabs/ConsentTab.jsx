@@ -7,7 +7,7 @@ import {
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
-import { initials, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../../utils/ui.js'
+import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
@@ -180,7 +180,7 @@ export default function ConsentTab() {
             ))}
           </div>
 
-          <div className={CARD_HEAD_INSET}>
+          <div className={CARD_HEAD_BAND}>
           <h3 className={CARD_HEAD_TITLE}>Active &amp; historical consents</h3>
         </div>
           {consents.length === 0

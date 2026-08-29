@@ -10,7 +10,6 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { initials } from '../../utils/ui.js'
 import { ColoredAvatar, FilterChip, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 function formatPhone(raw) {

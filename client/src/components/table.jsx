@@ -34,7 +34,7 @@ export function Table({ children, hoverable = false, striped = false, flush = fa
 
 export function TableHead({ children, className, ...rest }) {
   return (
-    <thead className={cx('bg-gradient-to-r from-primary-50 to-primary-100/70 dark:from-gray-700 dark:to-gray-700', className)} {...rest}>
+    <thead className={cx('bg-gradient-to-r from-primary-50 to-primary-100/60 dark:from-gray-700/50 dark:to-gray-700/30', className)} {...rest}>
       <HeadCtx.Provider value={true}>{children}</HeadCtx.Provider>
     </thead>
   )

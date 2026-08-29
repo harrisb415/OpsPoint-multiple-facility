@@ -13,14 +13,15 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
-import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
+import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
+import { CARD_HEAD, CARD_HEAD_TITLE } from '../utils/ui.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
   return (
     <div className={`mb-5 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden transition-shadow duration-200 hover:shadow-lg dark:bg-gray-800 dark:border-gray-700 ${className}`}>
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-primary-100 bg-gradient-to-r from-primary-50 to-transparent dark:border-gray-700 dark:from-gray-700/40">
-        <div className="flex items-center gap-2.5 font-display text-[.95rem] font-semibold tracking-tight text-gray-900 dark:text-white">
+      <div className={CARD_HEAD}>
+        <div className={`flex items-center gap-2.5 ${CARD_HEAD_TITLE}`}>
           <span className="w-2 h-2 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 shrink-0" />
           {title}
         </div>

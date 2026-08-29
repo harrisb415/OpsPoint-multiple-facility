@@ -2,6 +2,7 @@ import { useMemo, lazy, Suspense } from 'react'
 import { Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { allStatuses, statusList, offSiteStatuses, TONE_HEX, TONE_BADGE } from '../utils/statuses.js'
+import { CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
 import { classifyLogEntry } from '../utils/printLog.js'
@@ -176,7 +177,12 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
   const offSiteLbl  = useMemo(() => {
     const names = offSiteStatuses(data).map(s => s.label)
     if (!names.length) return 'no off-site statuses'
-    return names.length > 3 ? `${names.slice(0, 3).join(' · ')} +${names.length - 3}` : names.join(' · ')
+    // Other KPI subs read lowercase ('residents in building'), so match
+    // that rather than inheriting the capitalised status labels.
+    const txt = names.length > 3
+      ? `${names.slice(0, 3).join(' · ')} +${names.length - 3}`
+      : names.join(' · ')
+    return txt.toLowerCase()
   }, [data])
 
   const donut = useMemo(() => {
@@ -219,8 +225,12 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className={`${cardCls} p-4 sm:p-5 lg:col-span-2`}>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Activity over the shift</h2>
-          <p className="text-xs text-gray-400">Log entries per hour</p>
+          <div className={CARD_HEAD_INSET}>
+            <div>
+              <h2 className={CARD_HEAD_TITLE}>Activity over the shift</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Log entries per hour</p>
+            </div>
+          </div>
           {activity.series.length > 0 ? (
             <Suspense fallback={<ChartFallback />}>
             <Chart
@@ -246,8 +256,12 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
         </div>
 
         <div className={`${cardCls} p-4 sm:p-5`}>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Census by status</h2>
-          <p className="text-xs text-gray-400">{total} active residents</p>
+          <div className={CARD_HEAD_INSET}>
+            <div>
+              <h2 className={CARD_HEAD_TITLE}>Census by status</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{total} active residents</p>
+            </div>
+          </div>
           {donut.series.length > 0 ? (
             <Suspense fallback={<ChartFallback />}>
             <Chart
@@ -276,7 +290,9 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
         {/* Roster */}
         <div className={`${cardCls} lg:col-span-2 overflow-hidden flex flex-col`}>
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Roster</h2>
+            <div className={CARD_HEAD_INSET}>
+              <h2 className={CARD_HEAD_TITLE}>Roster</h2>
+            </div>
             <button onClick={() => onNavigate?.('clients')} className="text-xs font-medium text-primary-600 hover:text-primary-700">View all</button>
           </div>
           <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
@@ -321,7 +337,9 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
         <div className="space-y-4 lg:min-h-[460px]">
           {hasPerm('reminders.view') && (
             <div className={`${cardCls} p-4 sm:p-5`}>
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Reminders</h2>
+              <div className={CARD_HEAD_INSET}>
+              <h2 className={CARD_HEAD_TITLE}>Reminders</h2>
+            </div>
               <div className="mt-3 space-y-2.5 text-sm">
                 <div className="flex items-center gap-2.5">
                   <HeartPulse className="w-4 h-4 text-blue-500 shrink-0" />
@@ -338,7 +356,9 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
           )}
 
           <div className={`${cardCls} p-4 sm:p-5`}>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Recent activity</h2>
+            <div className={CARD_HEAD_INSET}>
+              <h2 className={CARD_HEAD_TITLE}>Recent activity</h2>
+            </div>
             {recent.length === 0
               ? <p className="mt-3 text-sm text-gray-400">No entries yet.</p>
               : (

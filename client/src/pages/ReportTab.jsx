@@ -7,6 +7,7 @@ import {
 import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
 import { useData } from '../contexts/DataContext.jsx'
 import { statusList, allStatuses, TONE_BADGE, TONE_DOT } from '../utils/statuses.js'
+import { CARD_HEAD, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
@@ -18,8 +19,8 @@ function Panel({ title, right, flush, children }) {
   if (flush) {
     return (
       <div className={`${CARD} mb-4 !p-0 overflow-hidden`}>
-        <div className="flex flex-col gap-2 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+        <div className={CARD_HEAD}>
+          <h3 className={CARD_HEAD_TITLE}>{title}</h3>
           {right}
         </div>
         {children}
@@ -27,12 +28,12 @@ function Panel({ title, right, flush, children }) {
     )
   }
   return (
-    <div className={`${CARD} mb-4`}>
-      <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+    <div className={`${CARD} mb-4 !p-0 overflow-hidden`}>
+      <div className={CARD_HEAD}>
+        <h3 className={CARD_HEAD_TITLE}>{title}</h3>
         {right}
       </div>
-      {children}
+      <div className="p-4">{children}</div>
     </div>
   )
 }
@@ -651,7 +652,7 @@ export default function ReportTab() {
 
       {/* Census */}
       <Panel title="Census" right={<span className="text-xs text-gray-400">{censusTotal} Residents</span>}>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(7rem,1fr))]">
           {/* Driven by the configured statuses, so a rename or recolour in
               Admin shows up here without a code change. */}
           {censusCells.map(({ key, label, dot }) => (

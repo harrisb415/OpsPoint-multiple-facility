@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import { CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { useOutletContext } from 'react-router-dom'
 import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
 import {
@@ -319,7 +320,7 @@ function Panel({ title, count, children }) {
   return (
     <div className={`${CARD} mb-4`}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+        <h3 className={CARD_HEAD_TITLE}>{title}</h3>
         {count != null && <span className="font-mono text-xs text-gray-400">{count}</span>}
       </div>
       {children}

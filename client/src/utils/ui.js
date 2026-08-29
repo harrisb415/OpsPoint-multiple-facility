@@ -32,7 +32,7 @@ export const avatarColor = (name) =>
 // Identical gradient stops everywhere — a gradient that varies by width
 // reads as inconsistent, so these are fixed.
 export const CARD_HEAD =
-  'flex items-center justify-between gap-2 px-5 py-3.5 border-b ' +
+  'flex flex-col gap-2 px-5 py-3.5 border-b sm:flex-row sm:items-center sm:justify-between ' +
   'bg-gradient-to-r from-primary-50 to-primary-100/60 border-primary-100 ' +
   'dark:from-gray-700/50 dark:to-gray-700/30 dark:border-gray-700'
 

@@ -9,7 +9,7 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { initials } from '../../utils/ui.js'
+import { initials, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
@@ -175,7 +175,9 @@ export default function PassesTab() {
       </Card>
 
       {/* Active passes */}
-      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Active passes</h3>
+      <div className={CARD_HEAD_INSET}>
+          <h3 className={CARD_HEAD_TITLE}>Active passes</h3>
+        </div>
       <div className="mb-6">
         <Table hoverable>
           <TableHead>
@@ -208,7 +210,9 @@ export default function PassesTab() {
       {/* Returned passes */}
       {returned.length > 0 && (
         <>
-          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Returned passes</h3>
+          <div className={CARD_HEAD_INSET}>
+          <h3 className={CARD_HEAD_TITLE}>Returned passes</h3>
+        </div>
           <Table hoverable>
             <TableHead>
               <TableRow>

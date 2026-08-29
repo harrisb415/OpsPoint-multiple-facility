@@ -25,6 +25,10 @@ function getFacilitySettings() {
     shift_swing_start:      db.getSetting('shift_swing_start',      '15:00'),
     shift_grave_start:      db.getSetting('shift_grave_start',      '23:00'),
     ui_visibility:          db.getSetting('ui_visibility',          { tabs: { staff: true, chores: true, passes: true, caseloads: true, mail: true, reports: true, violations: true }, buttons: { wellness: true, walkthrough: true } }),
+    // Must be returned here, not just from saveFacilitySettings — the Admin
+    // panel reads this endpoint, and an absent value made it fall back to the
+    // built-in defaults, so removed statuses reappeared on every refresh.
+    client_statuses:        db.getSetting('client_statuses',        []),
   };
 }
 

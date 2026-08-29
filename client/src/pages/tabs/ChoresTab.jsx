@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { CARD_HEAD, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { ListChecks, CheckCircle, Users, Printer, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Breadcrumb, BreadcrumbItem, Button, Select, TextInput } from 'flowbite-react'
 import { useData } from '../../contexts/DataContext.jsx'
@@ -258,7 +259,9 @@ export default function ChoresTab() {
 
       {/* Master Chore List */}
       <div className={`${CARD} mb-4`}>
-        <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Master Chore List</h3>
+        <div className={CARD_HEAD_INSET}>
+          <h3 className={CARD_HEAD_TITLE}>Master Chore List</h3>
+        </div>
         <div className="flex flex-wrap gap-2">
           {masterChores.map((chore, i) => (
             <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full dark:bg-gray-700 dark:text-gray-200">
@@ -281,9 +284,9 @@ export default function ChoresTab() {
 
       {/* Weekly Chore Log */}
       <div className={`${CARD} !p-0 overflow-hidden`}>
-        <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
+        <div className={CARD_HEAD}>
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Weekly Chore Log</h3>
+            <h3 className={CARD_HEAD_TITLE}>Weekly Chore Log</h3>
             {loadingWeek && <span className="text-xs text-gray-400">Loading…</span>}
           </div>
           <div className="flex items-center gap-2">

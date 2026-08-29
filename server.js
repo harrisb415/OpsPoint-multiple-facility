@@ -52,7 +52,14 @@ try {
 } catch (e) { console.warn('  DB rename failed:', e.message); }
 // React SPA — always served
 const REACT_DIST = config.REACT_DIST;
-const serveSPA = (res) => res.sendFile(path.join(REACT_DIST, 'index.html'));
+// index.html must never be cached: it names content-hashed asset files that
+// change on every build, so a stale copy asks the server for assets that no
+// longer exist — which used to surface as a blank page and a confusing MIME
+// error rather than a plain 404.
+const serveSPA = (res) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(REACT_DIST, 'index.html'));
+};
 
 fs.mkdirSync(DATA,             { recursive:true });
 fs.mkdirSync(config.PHOTOS_DIR,{ recursive:true });
@@ -134,7 +141,11 @@ app.get('/sw.js',(req,res)=>{
 });
 
 // ── React SPA static assets (served early — won't conflict with API routes) ──
-app.use(express.static(REACT_DIST));
+app.use(express.static(REACT_DIST, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  },
+}));
 
 // ── Users + permission profiles + groups (modular: server/modules/users) ─────────
 require('./server/modules/users/routes').register(app);
@@ -497,9 +508,16 @@ app.post('/api/central/pull-users', requireAuth, csrfCheck, requirePermission('a
 });
 
 // ── React SPA catch-all (MUST be last — after all API routes) ────
+const STATIC_EXT = /\.(js|mjs|css|map|png|jpe?g|gif|svg|ico|webp|avif|woff2?|ttf|eot|wasm|json|txt)$/i;
 app.get('*',(req,res)=>{
-  if (!req.path.startsWith('/api/')) res.sendFile(path.join(REACT_DIST,'index.html'));
-  else res.status(404).json({error:'Not found'});
+  if (req.path.startsWith('/api/')) return res.status(404).json({error:'Not found'});
+  // A missing static file is a real 404. Falling through to index.html here
+  // would answer a .js/.css request with HTML, which the browser rejects on
+  // MIME grounds — a blank page instead of an obvious missing-file error.
+  if (req.path.startsWith('/assets/') || STATIC_EXT.test(req.path)) {
+    return res.status(404).type('text/plain').send('Not found');
+  }
+  serveSPA(res);
 });
 
 // ── Start ─────────────────────────────────────────────────────────

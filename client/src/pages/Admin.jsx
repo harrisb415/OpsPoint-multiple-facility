@@ -806,6 +806,7 @@ function FacilitySetupTab({ panel }) {
   const sub = panel || 'general'   // driven by the Admin rail
   const [settings, setSettings] = useState(null)
   const [settingSaving, setSettingSaving] = useState(false)
+  const [settingError, setSettingError] = useState('')
 
   const loadSettings = useCallback(async () => {
     const r = await apiFetch('/api/facility/settings')

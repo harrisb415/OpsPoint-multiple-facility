@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const VERSION = '2.4.0'
+const VERSION = '2.5.0'
 
 const STACK = [
   'React 19', 'React Router v7', 'Vite', 'Node.js',
@@ -29,8 +29,8 @@ const FEATURES = [
   { icon: '🚪', title: 'Weekend Passes',   desc: 'Departure/return tracking with UA notes.' },
   { icon: '📬', title: 'Mail Log',         desc: 'Incoming mail with approve and deliver workflow.' },
   { icon: '🧪', title: 'UA Module',        desc: 'Random draw, request system, witnessed results, photo COC.' },
-  { icon: '🏥', title: 'HIPAA Clinical',   desc: 'UA records, milestones, incidents, discharge, 42 CFR Part 2.' },
-  { icon: '🔒', title: 'Secure',           desc: 'CSRF, rate limiting, session fixation prevention, audit log.' },
+  { icon: '🏥', title: 'Clinical Records', desc: 'UA records, milestones, incidents, discharge, 42 CFR Part 2.' },
+  { icon: '🔒', title: 'Secure',           desc: 'Encrypted at rest, CSRF, rate limiting, six-year audit trail.' },
 ]
 
 const SECTION_HDR = 'text-[.68rem] font-bold tracking-[.12em] uppercase text-[var(--crimson)] mb-[10px] pb-[5px] border-b-2 border-[var(--line)]'

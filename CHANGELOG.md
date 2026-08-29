@@ -2,6 +2,94 @@
 
 ---
 
+## v2.5.0 — Encryption at rest, six-year audit retention, scheduled backups, dark rail (2026-08-28)
+
+Security and compliance work from a code-level review of the clinical and records layer,
+plus the light-mode redesign.
+
+### Security & compliance
+
+- **Encryption at rest.** The database is now SQLCipher-encrypted via
+  `better-sqlite3-multiple-ciphers`. A key is generated on first run (32 random bytes, mode 0600, at
+  `data/.dbkey`) and an existing plaintext database is converted in place with `PRAGMA rekey`,
+  keeping a `*.pre-encryption-*.bak` safety copy. Backups inherit the same encryption.
+  **Key loss is unrecoverable by design — back `data/.dbkey` up separately from the database
+  backups.** This does not replace full-disk encryption, since the key lives on the same volume.
+  Set `OPSPOINT_ENCRYPT=0` to opt out.
+- **Audit retention raised to six years (45 CFR §164.316(b)(2)(i)).** `pruneAuditLog(365)` previously
+  ran unconditionally on every boot, silently and irreversibly destroying the audit trail at one
+  year against a six-year statutory requirement. Retention is now a setting
+  (`audit_retention_days`, default 2190) and `pruneAuditLog()` floors any value at the statutory
+  minimum, so a bad setting or caller cannot shorten it. **Rows already pruned on existing installs
+  are gone and cannot be recovered.**
+- **Scheduled database backups (45 CFR §164.308(a)(7)(ii)(A) — a Required specification).** No
+  scheduled backup existed; `data/opspoint.db` was the sole copy of all clinical and audit data.
+  New `backup.js` takes dated snapshots on an interval (default every 6h, keeping 28), prunes old
+  generations, and audit-logs each run. Snapshots use `VACUUM INTO`, which is atomic against a live
+  WAL-mode database and inherits its encryption. Warns when the destination shares a volume with the
+  database. Configure with `backup_enabled`, `backup_interval_hours`, `backup_keep`, `backup_dir`.
+
+### Removed
+
+- **Witnessed self-administration (Med Log) removed entirely.** Free-text medication and dose fields
+  with no drug dictionary are a transcription-error surface — look-alike/sound-alike pairs such as
+  clonidine and Klonopin are a known source of medication error — and the feature sat outside the
+  "no medications" scope line the schema already declared. Removes the table creation, CRUD helpers,
+  the clinical module's route/service/repository slices, `MedLogTab`, the client-profile and
+  client-report sections, the consent disclosure option, and the Central HQ rollup.
+  `med.witness` / `med.delete` are dropped from `PERMISSIONS`, so the existing retirement migration
+  strips them from users, groups, and profiles on next boot.
+  **The `med_administration_log` table is deliberately not dropped** — on an existing install it may
+  hold records subject to retention. It is inert; export and drop it manually if wanted.
+
+### Admin → Features
+
+- Rebuilt. The panel listed only 9 tabs and 2 buttons and offered no way to switch off the Clinical
+  section at all. It is now grouped to mirror the sidebar with a description per feature, and covers
+  everything hideable — adding **UA Draw** and a **Clinical master switch** with per-page toggles for
+  all seven charting pages.
+- `CLINICAL_NAV` entries carry a stable `key`, so the Admin panel and the clinical rail read the same
+  `ui_visibility` keys and cannot drift apart as pages are added.
+- Disabling Clinical now also guards the `/clinical` route, not just the sidebar button — a bookmark
+  or typed URL no longer walks past the setting.
+- Every key defaults to visible, so existing installs are unchanged until something is unchecked.
+
+### Light mode — dark navigation rail
+
+- The shell painted a white sidebar and topbar around white cards on a near-white page, so chrome
+  and content sat on the same visual layer — reading as glary and low-contrast at once.
+- Navigation rails (main, Admin, Clinical) are now slate-800. The page drops to a soft blue-slate
+  (`#e8edf4`) so white cards float; borders firm up slightly; cards, topbar and menus stay white.
+- The topbar now matches the page rather than being a second bright slab, and the global search is
+  hidden on `/admin`, where residents, rooms and logs do not apply.
+- Admin and Clinical rails are pinned to the top of the viewport, matching the main sidebar instead
+  of starting below the header.
+- Rail scrollbars are slate-toned; light mode previously had no scrollbar styling at all (the
+  existing rules are `.dark`-scoped) and fell back to the browser default.
+- Login background comes down to the rail family.
+- Dark mode is untouched — every CSS rule is scoped to `html:not(.dark)`, and semantic/status colors
+  are unchanged throughout.
+
+### Fixes
+
+- **Blank page after a rebuild.** `index.html` was cacheable but names content-hashed assets, so a
+  cached copy requested files from a previous build; the SPA catch-all then answered those with
+  `index.html`, producing HTTP 200 `text/html` for a `.js` request and a strict-MIME failure rather
+  than a plain 404. `index.html` is now served `no-store`, and `/assets/*` or any known static
+  extension 404s instead of falling through.
+- **Invisible checked checkboxes.** Flowbite's checkbox is `bg-gray-100` with `checked:bg-current`;
+  the new light-mode surface override outranked it on specificity, leaving checked boxes pale with a
+  near-invisible white tick. The overrides now exclude form controls.
+
+### Documentation
+
+- README gains a **Scope and limitations** section stating plainly that the software implements
+  technical safeguards but does not make an organization HIPAA compliant, what it does not do, and
+  what remains the operator's responsibility. "HIPAA clinical modules" and the "HIPAA Clinical"
+  About tile are retitled — accurate CFR citations in code comments are kept.
+
+---
+
 ## v2.4.0 — Backend modular-monolith refactor + UI polish (2026-06-21)
 
 ### Backend architecture (no behaviour change)

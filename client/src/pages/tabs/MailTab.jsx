@@ -173,7 +173,7 @@ export default function MailTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Mail</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mail Log</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Mail Log</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Incoming mail and packages</p>
         </div>
         <div className="flex items-center gap-2">

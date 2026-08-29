@@ -17,14 +17,14 @@ const FEED_TONE = {
   Intake: 'green', Discharge: 'gray', Note: 'gray',
 }
 const FEED_DOT = {
-  green: 'bg-green-500', blue: 'bg-blue-500', yellow: 'bg-yellow-400',
-  red: 'bg-red-500', sky: 'bg-sky-500', gray: 'bg-gray-400',
+  green: 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md', blue: 'bg-blue-500', yellow: 'bg-yellow-400',
+  red: 'bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-md', sky: 'bg-sky-500', gray: 'bg-gray-400',
 }
 const FEED_BADGE = {
-  green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  blue:   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  green:  'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md',
+  blue:   'bg-gradient-to-br from-primary-400 to-accent-500 text-white shadow-md',
   yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  red:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  red:    'bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-md',
   sky:    'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
   gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
 }
@@ -61,20 +61,20 @@ const fmtHour = h => { const ap = h < 12 ? 'a' : 'p'; const hr = h % 12 || 12; r
 
 // Literal class strings (Tailwind JIT can't see dynamically-built names)
 const KPI_TONE = {
-  green:  'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400',
-  orange: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400',
-  blue:   'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400',
-  red:    'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400',
+  green:  'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md',
+  orange: 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md',
+  blue:   'bg-gradient-to-br from-primary-400 to-accent-500 text-white shadow-md',
+  red:    'bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-md',
 }
 function Kpi({ label, value, sub, Icon, tone }) {
   return (
-    <div className="p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:bg-gray-800 dark:border-gray-700 sm:p-5">
+    <div className="p-5 bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700 sm:p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:border-primary-200 dark:hover:border-primary-800">
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900 dark:text-white font-mono tabular-nums">{value}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">{label}</p>
+          <p className="mt-2 font-display text-[2.6rem] leading-none font-semibold tracking-tight tabular-nums bg-gradient-to-br from-gray-900 to-primary-700 bg-clip-text text-transparent dark:from-white dark:to-primary-300">{value}</p>
         </div>
-        <span className={`flex items-center justify-center w-11 h-11 rounded-lg shrink-0 ${KPI_TONE[tone] || KPI_TONE.blue}`}>
+        <span className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 ${KPI_TONE[tone] || KPI_TONE.blue}`}>
           <Icon className="w-5 h-5" />
         </span>
       </div>
@@ -156,14 +156,14 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
   const lastWellness = [...logs].reverse().find(l => (l.text || '').toLowerCase().startsWith('wellness check'))
   const lastWalk     = [...logs].reverse().find(l => (l.text || '').toLowerCase().includes('walkthrough'))
 
-  const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-xl dark:bg-gray-800 dark:border-gray-700'
+  const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700 transition-shadow duration-200 hover:shadow-lg'
 
   return (
     <div className="flex-1 min-h-0 p-5 space-y-4 overflow-y-auto">
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          <h1 className="font-display text-[2rem] font-semibold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
             {report?.shift ? `${report.shift} · ` : ''}{facility}
             {report?.report_date ? <span className="font-mono"> · {report.report_date}</span> : ''}

@@ -173,7 +173,7 @@ export function Header({ title, clients, filter, setFilter, onNew, newLabel = 'N
         <nav className="flex items-center mb-1 text-xs text-gray-400">
           <span>Clinical</span><ChevronRight className="w-3.5 h-3.5 mx-1" /><span className="text-gray-600 dark:text-gray-300">{title}</span>
         </nav>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+        <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">{title}</h1>
       </div>
       <div className="flex items-center gap-2">
         {clients && setFilter && (

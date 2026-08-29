@@ -394,7 +394,7 @@ export default function ClientsTab() {
             <BreadcrumbItem>People</BreadcrumbItem>
             <BreadcrumbItem>Clients</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Clients</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Clients</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{active} residents · {data?.facility_name || 'Facility'}</p>
         </div>
         <div className="flex items-center gap-2">

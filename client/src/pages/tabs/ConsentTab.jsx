@@ -134,7 +134,7 @@ export default function ConsentTab() {
             <BreadcrumbItem>Records</BreadcrumbItem>
             <BreadcrumbItem>Consents</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Consents</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Consents</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">42 CFR Part 2 — consent &amp; disclosure tracking</p>
         </div>
         {canManage && selectedClient && (

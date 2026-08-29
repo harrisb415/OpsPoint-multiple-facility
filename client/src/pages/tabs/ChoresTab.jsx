@@ -230,7 +230,7 @@ export default function ChoresTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Chores</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Chores</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Chores</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Weekly chore assignments and completion log</p>
         </div>
         <Button color="light" onClick={() => printChoreAssignments(clients, weekStart)}><Printer className="w-4 h-4 mr-2" /> Print List</Button>

@@ -558,7 +558,7 @@ export default function ReportTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Shift Report</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Shift Report</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Shift Report</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">No active report for this shift</p>
         </div>
         <div className={`${CARD} flex flex-col items-center justify-center py-16 text-center`}>
@@ -592,7 +592,7 @@ export default function ReportTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Shift Report</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{shift} Report</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">{shift} Report</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {reportDate} · {shiftRange}{facilityName ? ' · ' + facilityName : ''}{activeId ? ' · #' + activeId : ''}{isClosed ? ' · Closed' : ''}
           </p>

@@ -100,7 +100,7 @@ export default function GroupsTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Groups</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Groups</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Groups</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Group attendance — clinicians add and sign session notes under Clinical</p>
         </div>
         {canLog && <Button onClick={() => setModal({})}><Plus className="w-4 h-4 mr-2" /> Log Attendance</Button>}

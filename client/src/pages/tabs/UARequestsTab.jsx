@@ -219,7 +219,7 @@ export default function UARequestsTab() {
             <BreadcrumbItem>Health &amp; Compliance</BreadcrumbItem>
             <BreadcrumbItem>UA</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Urinalysis</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Urinalysis</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">UA requests, results, and chain-of-custody records</p>
         </div>
         <div className="flex items-center gap-2">

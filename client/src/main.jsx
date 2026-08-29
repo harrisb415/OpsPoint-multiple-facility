@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 // numbers. Matches the prototype's type system; variable files cover all weights.
 import '@fontsource-variable/inter'
 import '@fontsource-variable/jetbrains-mono'
+import '@fontsource-variable/outfit'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'

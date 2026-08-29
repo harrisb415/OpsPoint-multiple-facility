@@ -5,7 +5,8 @@ import {
   TextInput, Select, Textarea, Checkbox, Label, Alert,
 } from 'flowbite-react'
 import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
-import { useData } from '../contexts/DataContext.jsx'
+import { useData } from '../contexts/DataContext.jsx'
+import { statusList, TONE_BADGE } from '../utils/statuses.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
@@ -36,6 +37,9 @@ function Panel({ title, right, flush, children }) {
   )
 }
 
+// Fallback only — the live list is editable in Admin -> Facility -> Statuses
+// and arrives on the data payload. Kept so a first paint (or a payload that
+// predates the setting) still renders real labels instead of raw slugs.
 const STATUS_OPTS = [
   { v: 'building', l: 'In Building', c: 's-building' },
   { v: 'work',     l: 'Work',        c: 's-work' },
@@ -109,7 +113,12 @@ function parseLogTimeToDate(timeStr) {
   if (d.getTime() > Date.now() + 30 * 60000) d.setDate(d.getDate() - 1)
   return d
 }
-function stOpt(v) { return STATUS_OPTS.find(o => o.v === v) || { v, l: v, c: '' } }
+function stOpt(v, opts) { return (opts || STATUS_OPTS).find(o => o.v === v) || { v, l: v, c: '' } }
+
+// Map the configured statuses onto the shape this file already uses.
+function optsFrom(data) {
+  return statusList(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
+}
 
 function dateStamp() {
   return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -513,6 +522,9 @@ export default function ReportTab() {
   // Sorted + filtered roster
   const lastUa = activeReport?.last_ua || {}
   const lastRs = activeReport?.last_room_search || {}
+  // Statuses configured in Admin -> Facility -> Statuses, memoised so the
+  // list identity is stable across renders.
+  const statusOptions = useMemo(() => optsFrom(data), [data])
   const sortedClients = useMemo(() => {
     return clients.filter(c => c.is_active)
       .filter(c => showAllRooms || (!c.is_special && c.name !== 'VACANT'))
@@ -894,6 +906,7 @@ export default function ReportTab() {
                     hasInPass={inPass.has(c.id)}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
+                    statusOptions={statusOptions}
                     onStatusChange={handleStatusChange}
                     onCommentChange={handleCommentChange}
                     onUARequest={handleUARequest}
@@ -1557,11 +1570,14 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
   )
 }
 
-function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, onStatusChange, onCommentChange, onUARequest }) {
+function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, statusOptions, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
-  const opt = stOpt(cur)
-  const statusOpts = hasInPass ? STATUS_OPTS.filter(o => o.v !== 'pass') : STATUS_OPTS
-  const badgeCls = STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
+  const allOpts = statusOptions && statusOptions.length ? statusOptions : STATUS_OPTS
+  const opt = stOpt(cur, allOpts)
+  const statusOpts = hasInPass ? allOpts.filter(o => o.v !== 'pass') : allOpts
+  // Prefer the configured tone; fall back to the legacy per-key map so any
+  // key predating the setting still renders with its original colour.
+  const badgeCls = (opt.tone && TONE_BADGE[opt.tone]) || STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
 
   const ResidentCell = () => {
     if (c.is_special) return (

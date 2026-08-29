@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Settings, ArrowLeft, Users, UserPlus, KeyRound, ShieldCheck,
   Tag, DoorOpen, MonitorCog, Map, FlaskConical, ClipboardList,
-  AlertTriangle, ScrollText,
-} from 'lucide-react'
+  AlertTriangle, ScrollText, Tags} from 'lucide-react'
 import {
   Alert, Badge, Button, Checkbox, Label, Modal, ModalHeader, ModalBody, ModalFooter,
   Select, Textarea, TextInput,
@@ -14,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
+import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES } from '../utils/statuses.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -81,6 +81,7 @@ const ADMIN_NAV = [
   { group: 'Facility', items: [
     { key: 'fac:general',   label: 'General',          icon: Tag,           perm: 'admin.settings' },
     { key: 'fac:rooms',     label: 'Rooms',            icon: DoorOpen,      perm: 'facility.manage' },
+    { key: 'fac:statuses',  label: 'Statuses',         icon: Tags,          perm: 'admin.settings' },
     { key: 'fac:display',   label: 'Features',         icon: MonitorCog,    perm: 'admin.settings' },
     { key: 'fac:walk',      label: 'Walk Areas',       icon: Map,           perm: 'admin.settings' },
     { key: 'fac:ua',        label: 'UA Panel',         icon: FlaskConical,  perm: 'admin.settings' },
@@ -820,7 +821,11 @@ function FacilitySetupTab({ panel }) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     setSettingSaving(false)
-    if (r.ok) { setSettings(body) }
+    if (r.ok) { setSettings(body); setSettingError('') }
+    else {
+      const d = await r.json().catch(() => ({}))
+      setSettingError(d.error || 'Save failed')
+    }
     return r.ok
   }
 
@@ -834,12 +839,109 @@ function FacilitySetupTab({ panel }) {
         <RemindersSettings settings={settings} onSave={saveSettings} saving={settingSaving} />
       </>}
       {sub === 'rooms'    && hasPerm('facility.manage') && <RoomsManager />}
+      {sub === 'statuses' && hasPerm('admin.settings')  && <StatusSettings settings={settings} onSave={saveSettings} saving={settingSaving} error={settingError} />}
       {sub === 'display'  && hasPerm('admin.settings')  && <DisplaySettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'walk'     && hasPerm('admin.settings')  && <WalkAreas settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ua'       && hasPerm('admin.settings')  && <UAPanelSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ehr'      && hasPerm('admin.settings')  && <EHRConfigSettings />}
       {sub === 'resetfac' && hasPerm('facility.manage') && <FacilityReset />}
     </div>
+  )
+}
+
+
+// ── Resident Statuses ─────────────────────────────────────────────────
+// `key` is what lives in reports.statuses, so it is fixed once a status
+// exists — renaming the label is safe, changing the key would orphan every
+// saved shift that references it. New rows derive their key from the label.
+// The server independently re-validates and refuses to drop a key still in
+// use, so a stale browser tab can't corrupt historical data.
+function slugifyKey(label) {
+  return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '').replace(/^([0-9])/, 's$1').slice(0, 24)
+}
+
+function StatusSettings({ settings, onSave, saving, error }) {
+  const [rows, setRows] = useState(() =>
+    (Array.isArray(settings.client_statuses) && settings.client_statuses.length
+      ? settings.client_statuses
+      : DEFAULT_STATUSES).map(r => ({ ...r, _existing: true })))
+  const [saved, setSaved] = useState(false)
+
+  const set = (i, patch) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const move = (i, d) => setRows(rs => {
+    const j = i + d
+    if (j < 0 || j >= rs.length) return rs
+    const n = [...rs]; [n[i], n[j]] = [n[j], n[i]]; return n
+  })
+  const add = () => setRows(rs => [...rs, { key: '', label: '', tone: 'gray', _existing: false }])
+  const remove = (i) => setRows(rs => rs.filter((_, j) => j !== i))
+
+  async function save() {
+    const payload = rows.map(r => ({
+      key: r._existing ? r.key : (r.key || slugifyKey(r.label)),
+      label: r.label, tone: r.tone,
+    }))
+    const ok = await onSave({ client_statuses: payload })
+    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  }
+
+  return (
+    <Section
+      title="Resident Statuses"
+      right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Statuses'}</Button></>}
+    >
+      <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+        These are the statuses staff can assign on the shift report. Renaming a label updates it
+        everywhere, including on past shifts. A status that any saved report still uses cannot be
+        deleted — rename it instead.
+      </p>
+
+      {error && (
+        <div className="p-3 mb-4 text-sm text-red-700 border border-red-200 rounded-lg bg-red-50 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-2.5">
+        {rows.map((r, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2.5 p-2.5 border border-gray-200 rounded-xl bg-gray-50/60 dark:bg-gray-700/30 dark:border-gray-700">
+            <div className="flex flex-col shrink-0">
+              <button type="button" aria-label="Move up" onClick={() => move(i, -1)} disabled={i === 0}
+                className="px-1 text-gray-400 hover:text-primary-600 disabled:opacity-30">▲</button>
+              <button type="button" aria-label="Move down" onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+                className="px-1 text-gray-400 hover:text-primary-600 disabled:opacity-30">▼</button>
+            </div>
+
+            <TextInput sizing="sm" className="flex-1 min-w-[10rem]" value={r.label} placeholder="Status name"
+              onChange={e => set(i, { label: e.target.value })} />
+
+            <div className="flex items-center gap-1">
+              {STATUS_TONES.map(t => (
+                <button key={t} type="button" onClick={() => set(i, { tone: t })}
+                  aria-label={`Colour ${t}`} title={t}
+                  className={`w-6 h-6 rounded-full ${TONE_DOT[t]} transition-transform ${r.tone === t ? 'ring-2 ring-offset-2 ring-primary-500 scale-110 dark:ring-offset-gray-800' : 'opacity-60 hover:opacity-100'}`} />
+              ))}
+            </div>
+
+            <span className={`px-2.5 py-1 text-xs font-semibold rounded-md whitespace-nowrap ${TONE_BADGE[r.tone] || TONE_BADGE.gray}`}>
+              {r.label || 'Preview'}
+            </span>
+
+            <code className="px-2 py-1 font-mono text-[11px] text-gray-500 bg-gray-100 rounded dark:bg-gray-700 dark:text-gray-400">
+              {r._existing ? r.key : (slugifyKey(r.label) || '…')}
+            </code>
+
+            {r.system
+              ? <span className="text-[11px] text-gray-400 px-1">required</span>
+              : <button type="button" onClick={() => remove(i)}
+                  className="px-2 py-1 text-xs font-medium text-red-600 rounded hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30">Remove</button>}
+          </div>
+        ))}
+      </div>
+
+      <Button size="xs" color="light" className="mt-3" onClick={add}>+ Add status</Button>
+    </Section>
   )
 }
 

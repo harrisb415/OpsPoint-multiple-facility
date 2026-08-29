@@ -16,9 +16,48 @@ function getSettings() {
 }
 
 // Validate + save facility settings. Returns { settings, facilityName }.
+// Tones map to a fixed badge palette on the client. Restricting to a set
+// (rather than free hex) keeps every status legible and dark-mode safe.
+const STATUS_TONES = ['green','blue','amber','purple','pink','red','orange','gray'];
+const KEY_RE = /^[a-z][a-z0-9_]{0,23}$/;
+
+// Validate the editable status list. Keys are what live in reports.statuses,
+// so this is stricter than a normal settings field: a bad key silently
+// corrupts how historical shifts render.
+function validateStatuses(list) {
+  if (!Array.isArray(list)) throw httpError(400, 'Statuses must be a list');
+  if (list.length < 1 || list.length > 20) throw httpError(400, 'Between 1 and 20 statuses required');
+  const seen = new Set();
+  const clean = list.map((raw, i) => {
+    const key   = String(raw?.key   || '').trim().toLowerCase();
+    const label = String(raw?.label || '').trim();
+    const tone  = String(raw?.tone  || 'gray').trim();
+    if (!KEY_RE.test(key)) throw httpError(400, `Status ${i + 1}: id must start with a letter and use only lowercase letters, numbers or underscores`);
+    if (seen.has(key))     throw httpError(400, `Duplicate status id "${key}"`);
+    if (!label)            throw httpError(400, `Status "${key}" needs a label`);
+    if (label.length > 40) throw httpError(400, `Status "${key}": label too long (max 40)`);
+    if (!STATUS_TONES.includes(tone)) throw httpError(400, `Status "${key}": unknown colour`);
+    seen.add(key);
+    return { key, label, tone, ...(key === 'building' ? { system: true } : {}) };
+  });
+
+  // 'building' is the default state every new report falls back to.
+  if (!seen.has('building')) throw httpError(400, 'The "In Building" status cannot be removed');
+
+  // Refuse to orphan historical data — a report holding a removed key would
+  // render the raw slug instead of a label.
+  const inUse  = repo.statusKeysInUse();
+  const orphan = inUse.filter(k => k !== 'vacant' && !seen.has(k));
+  if (orphan.length) {
+    throw httpError(409, `Cannot remove ${orphan.map(k => `"${k}"`).join(', ')} — still used by saved shift reports. Rename instead of deleting.`);
+  }
+  return clean;
+}
+
 function saveSettings(b = {}) {
   if (!b.facility_name || !b.facility_name.trim()) throw httpError(400, 'Facility name required');
   if (b.facility_name.trim().length > 200) throw httpError(400, 'Facility name too long (max 200 chars)');
+  if (b.client_statuses !== undefined) b.client_statuses = validateStatuses(b.client_statuses);
   const settings = repo.saveFacilitySettings(b);
   return { settings, facilityName: b.facility_name.trim() };
 }

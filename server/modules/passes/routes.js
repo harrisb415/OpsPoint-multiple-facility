@@ -34,7 +34,8 @@ function register(app) {
       const id = parseInt(req.params.id);
       const canEditDetails = userPerms(req).includes('passes.edit');
       const { status } = req.body;
-      const name = service.update(id, req.body, { canEditDetails });
+      const actor = req.session.displayName || req.session.username || '';
+      const name = service.update(id, req.body, { canEditDetails, actor });
       if (status !== undefined) audit(req, 'passes.status', 'pass', id, name, { status });
       else audit(req, 'passes.edit', 'pass', id, name);
       broadcast({ type: 'passes_updated', user: req.session.displayName });

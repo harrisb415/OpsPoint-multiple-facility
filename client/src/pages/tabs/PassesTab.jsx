@@ -10,7 +10,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { CARD_HEAD_TITLE, CARD_HEAD_INSET_LG, CARD_HEAD_BAND } from '../../utils/ui.js'
-import { Field, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
+import { Field, ErrLine, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
 const PASS_BADGE = { Approved: 'info', Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
@@ -116,9 +116,36 @@ export default function PassesTab() {
     } catch { setError('Network error') }
     finally { setSaving(false) }
   }
+  // Send only the status. Spreading the whole pass also sent departure,
+  // notes and so on, which the server counts as a details edit and rejects
+  // for a user who has passes.status but not passes.edit.
   async function quickStatus(p, newStatus) {
-    const r = await fetch(`/api/passes/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ...p, status: newStatus }) })
+    const r = await fetch(`/api/passes/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ status: newStatus }) })
     if (r.ok) loadData()
+  }
+
+  // Extend bundles the status with a new return date — the server treats that
+  // pair as a status-level action and appends a note recording the change.
+  const [extendFor, setExtendFor]   = useState(null)
+  const [extendDate, setExtendDate] = useState('')
+  const [extendErr, setExtendErr]   = useState('')
+  function openExtend(p) {
+    setExtendFor(p)
+    setExtendDate(localDT(p.return_date))
+    setExtendErr('')
+  }
+  async function submitExtend() {
+    if (!extendDate) { setExtendErr('Pick a new return date and time.'); return }
+    const prev = extendFor.return_date ? new Date(extendFor.return_date).getTime() : null
+    if (prev !== null && new Date(extendDate).getTime() <= prev) {
+      setExtendErr('The new return must be later than the current one.'); return
+    }
+    const r = await fetch(`/api/passes/${extendFor.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ status: 'Extended', return_date: extendDate }),
+    })
+    if (r.ok) { setExtendFor(null); loadData() }
+    else { const d = await r.json().catch(() => ({})); setExtendErr(d.error || 'Could not extend this pass.') }
   }
   async function del(p) {
     if (!await confirm({ title: `Delete pass for ${p.name}?`, confirmText: 'Delete', color: 'red' })) return
@@ -147,9 +174,9 @@ export default function PassesTab() {
     return (
       <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
         {canEdit && <DropdownItem onClick={() => openEdit(p)}>Edit</DropdownItem>}
-        {canStatus && p.status === 'Approved' && <DropdownItem onClick={() => quickStatus(p, 'Out')}>Mark Departed</DropdownItem>}
+        {canStatus && p.status === 'Approved' && <DropdownItem disabled={!canDepart(p)} onClick={() => quickStatus(p, 'Out')}>Mark Departed</DropdownItem>}
         {canStatus && p.status !== 'Returned' && p.status !== 'Approved' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => quickStatus(p, 'Returned')}>Mark Returned</DropdownItem>}
-        {canStatus && p.status === 'Out' && <DropdownItem onClick={() => quickStatus(p, 'Extended')}>Mark Extended</DropdownItem>}
+        {canStatus && (p.status === 'Out' || p.status === 'Extended') && <DropdownItem onClick={() => openExtend(p)}>Extend…</DropdownItem>}
         {canStatus && p.status === 'Returned' && <DropdownItem onClick={() => quickStatus(p, 'Out')}>Reopen as departed</DropdownItem>}
         {canEdit && <DropdownItem className="text-red-600" onClick={() => del(p)}>Delete</DropdownItem>}
       </Dropdown>
@@ -277,9 +304,9 @@ export default function PassesTab() {
                 <TableCell className="text-gray-500 dark:text-gray-400">{notesOf(p)}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2">
-                    {canStatus && p.status !== 'Extended' && (
-                      <Button size="xs" color="light" onClick={() => quickStatus(p, 'Extended')}
-                        title="Flag this pass as running past its expected return">
+                    {canStatus && (
+                      <Button size="xs" color="light" onClick={() => openExtend(p)}
+                        title="Push the expected return back; the change is noted on the pass">
                         <Clock className="w-3.5 h-3.5 mr-1.5" /> Extend
                       </Button>
                     )}
@@ -335,8 +362,31 @@ export default function PassesTab() {
         </>
       )}
 
+      {/* Extend — asks for the new return, server records the change on the pass */}
+      {extendFor && (
+        <Modal show size="md" onClose={() => setExtendFor(null)}>
+          <ModalHeader>Extend Pass &mdash; {extendFor.name}</ModalHeader>
+          <ModalBody>
+            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+              Current return <span className="font-mono text-gray-700 dark:text-gray-200">{fmtDT(extendFor.return_date)}</span>.
+              {' '}The pass is marked Extended and a note is added so the change is visible on the record.
+            </p>
+            <Field label="New expected return">
+              <TextInput type="datetime-local" value={extendDate}
+                onChange={e => { setExtendDate(e.target.value); setExtendErr('') }} />
+            </Field>
+            {extendErr && <ErrLine>{extendErr}</ErrLine>}
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setExtendFor(null)}>Cancel</Button>
+            <Button onClick={submitExtend}>Extend Pass</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
       {/* Add/Edit Modal */}
       {modal && (
+
         <Modal show size="lg" onClose={() => setModal(null)}>
           <ModalHeader>{modal === 'add' ? 'Add Weekend Pass' : `Edit Pass — ${modal.name}`}</ModalHeader>
           <ModalBody>

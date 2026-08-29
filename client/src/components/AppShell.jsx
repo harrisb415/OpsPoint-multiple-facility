@@ -840,7 +840,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
           Server is restarting — page will reload in a moment…
         </div>
       )}
-      <nav className={`fixed top-0 ${leftClass} right-0 z-30 h-16 bg-gray-50 border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
+      <nav className={`fixed top-0 ${leftClass} right-0 z-30 h-16 bg-gradient-to-r from-[var(--surface-sunken)] via-primary-50 to-[var(--surface-sunken)] border-b border-primary-100 dark:bg-gray-800 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 dark:border-gray-700`}>
         <div className="flex items-center justify-between h-full px-5">
           {/* Left: global search */}
           {showSearch ? (

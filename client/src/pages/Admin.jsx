@@ -18,15 +18,15 @@ import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
   return (
-    <div className={`mb-5 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700 ${className}`}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-white">
-          <span className="w-2 h-2 rounded-full bg-primary-500 shrink-0" />
+    <div className={`mb-5 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden transition-shadow duration-200 hover:shadow-lg dark:bg-gray-800 dark:border-gray-700 ${className}`}>
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-primary-100 bg-gradient-to-r from-primary-50 to-transparent dark:border-gray-700 dark:from-gray-700/40">
+        <div className="flex items-center gap-2.5 font-display text-[.95rem] font-semibold tracking-tight text-gray-900 dark:text-white">
+          <span className="w-2 h-2 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 shrink-0" />
           {title}
         </div>
         {right && <div className="flex items-center gap-2">{right}</div>}
       </div>
-      <div className={noPad ? '' : 'p-4'}>
+      <div className={noPad ? '' : 'p-5'}>
         {children}
       </div>
     </div>
@@ -115,32 +115,32 @@ export default function Admin() {
   return (
     <div className="h-full min-h-0 overflow-hidden">
       {/* Rail */}
-      <aside className="fixed top-0 left-0 z-40 flex flex-col h-screen w-60 bg-slate-800 border-r border-slate-900 dark:bg-gray-800 dark:border-gray-700">
-        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-slate-700 dark:border-gray-700">
-          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-600 text-white dark:bg-primary-900/50 dark:text-primary-300">
+      <aside className="fixed top-0 left-0 z-40 flex flex-col h-screen w-60 bg-gradient-to-b from-primary-950 via-[#241f52] to-[#2d1b4e] border-r border-primary-950/60 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 dark:border-gray-700">
+        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-white/10 dark:border-gray-700">
+          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-gradient-to-br from-primary-400 to-accent-500 text-white dark:from-primary-600 dark:to-accent-600">
             <Settings className="w-5 h-5" />
           </span>
           <div className="leading-tight">
-            <p className="text-base font-bold text-white">Administration</p>
-            <p className="text-[11px] text-slate-400">System configuration</p>
+            <p className="font-display text-lg font-semibold tracking-tight text-white">Administration</p>
+            <p className="text-[11px] text-indigo-200/60">System configuration</p>
           </div>
         </div>
         <nav className="flex-1 px-3 py-3 overflow-y-auto [scrollbar-color:theme(colors.slate.600)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
           {groups.map(g => (
             <div key={g.group} className="mb-1">
-              <p className="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:text-gray-500">{g.group}</p>
+              <p className="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-indigo-300/70 uppercase dark:text-gray-500">{g.group}</p>
               <div className="space-y-1">
                 {g.items.map(it => {
                   const isActive = active === it.key
                   const Icon = it.icon
                   const cls = isActive
-                    ? 'bg-primary-600 text-white dark:bg-gray-700 dark:text-white'
+                    ? 'bg-gradient-to-r from-primary-500 to-accent-500 text-white shadow-lg shadow-primary-900/40 dark:from-primary-600 dark:to-accent-600'
                     : it.danger
                       ? 'text-red-400 hover:bg-red-900/40 dark:text-red-400 dark:hover:bg-red-900/30'
-                      : 'text-slate-300 hover:bg-slate-700 hover:text-white dark:text-gray-300 dark:hover:bg-gray-700'
+                      : 'text-indigo-200/80 hover:bg-white/10 hover:text-white dark:text-gray-300 dark:hover:bg-gray-700'
                   const iconCls = isActive
                     ? 'text-white'
-                    : it.danger ? 'text-red-400' : 'text-slate-400 group-hover:text-white'
+                    : it.danger ? 'text-red-400' : 'text-indigo-300/70 group-hover:text-white'
                   return (
                     <button key={it.key} onClick={() => setActive(it.key)}
                       className={`flex items-center w-full gap-3 px-3 py-2 text-sm font-medium text-left rounded-lg group ${cls}`}>
@@ -153,8 +153,8 @@ export default function Admin() {
             </div>
           ))}
         </nav>
-        <div className="p-3 border-t shrink-0 border-slate-700 dark:border-gray-700">
-          <Link to="/" className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-slate-200 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 hover:text-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700">
+        <div className="p-3 border-t shrink-0 border-white/10 dark:border-gray-700">
+          <Link to="/" className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-indigo-100 bg-white/10 border border-white/20 rounded-lg hover:bg-white/20 hover:text-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700">
             <ArrowLeft className="w-4 h-4" /> Return to shift
           </Link>
         </div>

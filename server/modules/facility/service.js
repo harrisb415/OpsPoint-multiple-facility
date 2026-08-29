@@ -21,6 +21,12 @@ function getSettings() {
 const STATUS_TONES = ['green','blue','amber','purple','pink','red','orange','gray'];
 const KEY_RE = /^[a-z][a-z0-9_]{0,23}$/;
 
+// Statuses the app itself depends on. Every shift report and the census
+// assume these exist: 'building' is the default state, and the other three
+// are the off-site buckets the dashboard totals against. Labels and colours
+// stay editable — only removal is blocked.
+const SYSTEM_STATUS_KEYS = ['building', 'pass', 'hospital', 'out'];
+
 // Validate the editable status list. Keys are what live in reports.statuses,
 // so this is stricter than a normal settings field: a bad key silently
 // corrupts how historical shifts render.
@@ -38,11 +44,15 @@ function validateStatuses(list) {
     if (label.length > 40) throw httpError(400, `Status "${key}": label too long (max 40)`);
     if (!STATUS_TONES.includes(tone)) throw httpError(400, `Status "${key}": unknown colour`);
     seen.add(key);
-    return { key, label, tone, ...(key === 'building' ? { system: true } : {}) };
+    return { key, label, tone, ...(SYSTEM_STATUS_KEYS.includes(key) ? { system: true } : {}) };
   });
 
-  // 'building' is the default state every new report falls back to.
-  if (!seen.has('building')) throw httpError(400, 'The "In Building" status cannot be removed');
+  // The system set must survive every edit.
+  const missing = SYSTEM_STATUS_KEYS.filter(k => !seen.has(k));
+  if (missing.length) {
+    const labels = { building: 'In Building', pass: 'Weekend Pass', hospital: 'Hospital', out: 'Out / Other' };
+    throw httpError(400, `These statuses are built in and cannot be removed: ${missing.map(k => labels[k] || k).join(', ')}. Rename or recolour them instead.`);
+  }
 
   // A closed report is an immutable record — retiring a status it references
   // is fine. An OPEN shift is different: staff are using the value right now,
@@ -65,6 +75,9 @@ function validateStatuses(list) {
     if (!inAny.has(p.key)) continue;       // never used anywhere — really delete
     clean.push({ ...p, archived: true });  // used by history — retire it
   }
+
+  // A system key promoted after it had already been retired must come back.
+  for (const row of clean) if (row.system) delete row.archived;
 
   return clean;
 }

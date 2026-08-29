@@ -13,7 +13,7 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
-import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES } from '../utils/statuses.js'
+import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -943,7 +943,7 @@ function StatusSettings({ settings, onSave, saving, error }) {
               {r._existing ? r.key : (slugifyKey(r.label) || '…')}
             </code>
 
-            {r.system
+            {(r.system || isSystemStatus(r.key))
               ? <span className="text-[11px] text-gray-400 px-1">required</span>
               : <button type="button" onClick={() => remove(i)}
                   className="px-2 py-1 text-xs font-medium text-red-600 rounded hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30">Remove</button>}

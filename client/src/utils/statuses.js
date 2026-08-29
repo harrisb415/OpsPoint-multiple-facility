@@ -11,6 +11,17 @@
 
 // Fixed tone palette. Restricting to a set (rather than free hex) keeps every
 // status legible and dark-mode safe no matter what an admin picks.
+// Statuses the app depends on structurally: 'building' is the default state
+// and the rest are the off-site buckets the dashboard totals against. The
+// server enforces this too — these can be renamed and recoloured, not removed.
+export const SYSTEM_STATUS_KEYS = ['building', 'pass', 'hospital', 'out']
+export const isSystemStatus = (k) => SYSTEM_STATUS_KEYS.includes(k)
+
+// Everything that is not 'building' counts as off site.
+export function offSiteStatuses(data) {
+  return statusList(data).filter(s => s.key !== 'building')
+}
+
 export const STATUS_TONES = ['green', 'blue', 'amber', 'purple', 'pink', 'red', 'orange', 'gray']
 
 export const TONE_BADGE = {

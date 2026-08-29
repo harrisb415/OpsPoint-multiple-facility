@@ -6,7 +6,7 @@ import {
 } from 'flowbite-react'
 import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
 import { useData } from '../contexts/DataContext.jsx'
-import { statusList, allStatuses, TONE_BADGE } from '../utils/statuses.js'
+import { statusList, allStatuses, TONE_BADGE, TONE_DOT } from '../utils/statuses.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
@@ -532,6 +532,11 @@ export default function ReportTab() {
   // list identity is stable across renders.
   const statusOptions = useMemo(() => optsFrom(data), [data])
   const statusLookup  = useMemo(() => lookupFrom(data), [data])
+  // Census cells follow the configured statuses (order included). TONE_DOT
+  // keeps the pip in step with the colour chosen in Admin.
+  const censusCells = useMemo(
+    () => statusList(data).map(s => ({ key: s.key, label: s.label, dot: TONE_DOT[s.tone] || TONE_DOT.gray })),
+    [data])
   const sortedClients = useMemo(() => {
     return clients.filter(c => c.is_active)
       .filter(c => showAllRooms || (!c.is_special && c.name !== 'VACANT'))
@@ -646,16 +651,10 @@ export default function ReportTab() {
 
       {/* Census */}
       <Panel title="Census" right={<span className="text-xs text-gray-400">{censusTotal} Residents</span>}>
-        <div className="grid grid-cols-4 gap-2 xl:grid-cols-8">
-          {[
-            { key: 'building', label: 'In Building', dot: 'bg-green-500' },
-            { key: 'work',     label: 'Work',         dot: 'bg-blue-500' },
-            { key: 'pass',     label: 'Pass',          dot: 'bg-yellow-400' },
-            { key: 'bhc',      label: 'BHC',           dot: 'bg-purple-500' },
-            { key: 'efc',      label: 'EFC',           dot: 'bg-purple-400' },
-            { key: 'hospital', label: 'Hospital',      dot: 'bg-red-500' },
-            { key: 'out',      label: 'Out / Other',   dot: 'bg-gray-400' },
-          ].map(({ key, label, dot }) => (
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+          {/* Driven by the configured statuses, so a rename or recolour in
+              Admin shows up here without a code change. */}
+          {censusCells.map(({ key, label, dot }) => (
             <div key={key} className="flex flex-col items-center p-3 bg-white border border-gray-200 rounded-xl dark:bg-gray-700 dark:border-gray-600">
               <div className={`w-2 h-2 rounded-full mb-2 shrink-0 ${dot}`} />
               <div className="text-xl font-bold text-gray-900 dark:text-white">{census[key]}</div>

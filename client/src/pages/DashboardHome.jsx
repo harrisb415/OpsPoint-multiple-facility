@@ -1,6 +1,7 @@
 import { useMemo, lazy, Suspense } from 'react'
 import { Button } from 'flowbite-react'
-import { useData } from '../contexts/DataContext.jsx'
+import { useData } from '../contexts/DataContext.jsx'
+import { allStatuses, statusList, offSiteStatuses, TONE_HEX, TONE_BADGE } from '../utils/statuses.js'
 import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
 import { classifyLogEntry } from '../utils/printLog.js'
@@ -45,6 +46,27 @@ const STATUS_META = {
   out:      { label: 'Out / Other', color: '#f97316', badge: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' },
 }
 const STATUS_ORDER = ['building', 'work', 'pass', 'bhc', 'efc', 'hospital', 'out']
+
+// Live status metadata, derived from the configured list so a renamed or
+// recoloured status flows through to the census donut and the roster badges.
+// Falls back to STATUS_META for any key not in the list (e.g. a status
+// retired before archiving existed).
+function metaFrom(data) {
+  const m = {}
+  for (const st of allStatuses(data)) {
+    m[st.key] = {
+      label: st.label,
+      color: TONE_HEX[st.tone] || TONE_HEX.gray,
+      badge: TONE_BADGE[st.tone] || TONE_BADGE.gray,
+    }
+  }
+  return { ...STATUS_META, ...m }
+}
+// Census order follows the admin's ordering, with any legacy key appended.
+function orderFrom(data) {
+  const live = statusList(data).map(s => s.key)
+  return [...live, ...STATUS_ORDER.filter(k => !live.includes(k))]
+}
 
 // Parse an hour (0–23) from a log time like "14:30" or "2:30 PM"
 function parseHour(t) {
@@ -145,18 +167,29 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
     return { cats, series }
   }, [logs])
 
+  // Status metadata/order from the configured list, so renames and colour
+  // changes in Admin flow straight through to the donut and roster badges.
+  // Declared before `donut` — its callback runs during render, so a later
+  // const would be in the temporal dead zone.
+  const statusMeta  = useMemo(() => metaFrom(data), [data])
+  const statusOrder = useMemo(() => orderFrom(data), [data])
+  const offSiteLbl  = useMemo(() => {
+    const names = offSiteStatuses(data).map(s => s.label)
+    if (!names.length) return 'no off-site statuses'
+    return names.length > 3 ? `${names.slice(0, 3).join(' · ')} +${names.length - 3}` : names.join(' · ')
+  }, [data])
+
   const donut = useMemo(() => {
     const labels = [], series = [], colors = []
-    STATUS_ORDER.forEach(s => { if (census[s] > 0) { labels.push(STATUS_META[s].label); series.push(census[s]); colors.push(STATUS_META[s].color) } })
+    statusOrder.forEach(k => { const mt = statusMeta[k]; if (mt && census[k] > 0) { labels.push(mt.label); series.push(census[k]); colors.push(mt.color) } })
     return { labels, series, colors }
-  }, [census])
+  }, [census, statusMeta, statusOrder])
 
   const recentAll = logs.slice(-8).reverse()
   const recent = !gq ? recentAll : recentAll.filter(l => (l.text || '').toLowerCase().includes(gq))
   const lastWellness = [...logs].reverse().find(l => (l.text || '').toLowerCase().startsWith('wellness check'))
   const lastWalk     = [...logs].reverse().find(l => (l.text || '').toLowerCase().includes('walkthrough'))
-
-  const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700 transition-shadow duration-200 hover:shadow-lg'
+const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700 transition-shadow duration-200 hover:shadow-lg'
 
   return (
     <div className="flex-1 min-h-0 p-5 space-y-4 overflow-y-auto">
@@ -178,7 +211,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="On Site" value={`${onSite}/${total}`} sub="residents in building" Icon={MapPin} tone="green" />
-        <Kpi label="Off Site" value={offSite} sub="pass · work · appointment" Icon={DoorOpen} tone="orange" />
+        <Kpi label="Off Site" value={offSite} sub={offSiteLbl} Icon={DoorOpen} tone="orange" />
         <Kpi label="Wellness Checks" value={wellnessCnt} sub={`${walkCnt} walkthrough${walkCnt === 1 ? '' : 's'} logged`} Icon={HeartPulse} tone="blue" />
         <Kpi label="Open Items" value={openItems} sub={`${pendingUA} UA · ${issues.length} issue${issues.length === 1 ? '' : 's'}`} Icon={AlertTriangle} tone="red" />
       </div>
@@ -257,7 +290,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {residents.map(r => {
-                  const meta = STATUS_META[resolveStatus(r.id)] || STATUS_META.building
+                  const meta = statusMeta[resolveStatus(r.id)] || statusMeta.building || STATUS_META.building
                   return (
                     <tr key={r.id} className="hover:bg-primary-50/60 dark:hover:bg-gray-700/40">
                       <td className="px-4 py-2.5">

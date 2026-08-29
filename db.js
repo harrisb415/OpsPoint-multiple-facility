@@ -196,11 +196,11 @@ function _seedDefaults() {
     client_statuses:        JSON.stringify([
       { key: 'building', label: 'In Building',  tone: 'green',  system: true },
       { key: 'work',     label: 'At Work',      tone: 'blue'   },
-      { key: 'pass',     label: 'Weekend Pass', tone: 'amber'  },
+      { key: 'pass',     label: 'Weekend Pass', tone: 'amber',  system: true },
       { key: 'bhc',      label: 'BHC',          tone: 'purple' },
       { key: 'efc',      label: 'EFC',          tone: 'pink'   },
-      { key: 'hospital', label: 'Hospital',     tone: 'red'    },
-      { key: 'out',      label: 'Out / Other',  tone: 'orange' },
+      { key: 'hospital', label: 'Hospital',     tone: 'red',    system: true },
+      { key: 'out',      label: 'Out / Other',  tone: 'orange', system: true },
     ]),
     audit_retention_days:   String(AUDIT_RETENTION_MIN_DAYS),  // 6 years — statutory floor
     wellness_interval_mins: '120',

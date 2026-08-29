@@ -44,13 +44,28 @@ function validateStatuses(list) {
   // 'building' is the default state every new report falls back to.
   if (!seen.has('building')) throw httpError(400, 'The "In Building" status cannot be removed');
 
-  // Refuse to orphan historical data — a report holding a removed key would
-  // render the raw slug instead of a label.
-  const inUse  = repo.statusKeysInUse();
-  const orphan = inUse.filter(k => k !== 'vacant' && !seen.has(k));
-  if (orphan.length) {
-    throw httpError(409, `Cannot remove ${orphan.map(k => `"${k}"`).join(', ')} — still used by saved shift reports. Rename instead of deleting.`);
+  // A closed report is an immutable record — retiring a status it references
+  // is fine. An OPEN shift is different: staff are using the value right now,
+  // and pulling it would strand residents on a status that no longer exists.
+  const inOpen  = repo.statusKeysInUse({ openOnly: true });
+  const blocked = inOpen.filter(k => k !== 'vacant' && !seen.has(k));
+  if (blocked.length) {
+    throw httpError(409,
+      `Cannot remove ${blocked.map(k => `"${k}"`).join(', ')} — in use on the open shift report. ` +
+      `Close that shift first, or rename the status instead.`);
   }
+
+  // Anything dropped that closed reports still reference is archived rather
+  // than deleted: hidden from the picker, but its label is kept so historical
+  // shifts keep rendering 'Weekend Pass' instead of a raw 'pass' slug.
+  const inAny    = new Set(repo.statusKeysInUse());
+  const previous = repo.currentStatuses();
+  for (const p of previous) {
+    if (seen.has(p.key)) continue;         // still present, nothing to do
+    if (!inAny.has(p.key)) continue;       // never used anywhere — really delete
+    clean.push({ ...p, archived: true });  // used by history — retire it
+  }
+
   return clean;
 }
 

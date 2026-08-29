@@ -126,10 +126,11 @@ function saveEhrConfig(b) {
 // Status keys referenced by saved reports — lets the service refuse a status
 // removal that would orphan historical data. Delegates to db.js, which owns
 // the reports.statuses JSON shape.
-function statusKeysInUse() { return db.statusKeysInUse(); }
+function statusKeysInUse(opts) { return db.statusKeysInUse(opts); }
+function currentStatuses() { return db.getSetting('client_statuses', []) || []; }
 
 module.exports = {
-  getFacilitySettings, saveFacilitySettings, statusKeysInUse,
+  getFacilitySettings, saveFacilitySettings, statusKeysInUse, currentStatuses,
   roomsActive, vacantRooms, getClientId, getClientRoom, getClientFull,
   dupActiveRoom, dupActiveRoomExcept, maxSortOrder, updateRoomFields, insertRoom,
   deleteRoom, setSortOrder, deleteAllClients, insertResetRoom,

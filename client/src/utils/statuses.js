@@ -48,11 +48,19 @@ export const DEFAULT_STATUSES = [
   { key: 'out',      label: 'Out / Other',  tone: 'orange' },
 ]
 
-// Normalise whatever the payload gives us into a usable list.
-export function statusList(data) {
+// Every configured status, archived ones included. Use this for RENDERING —
+// a closed report may reference a retired status and should still show its
+// real label rather than a raw slug.
+export function allStatuses(data) {
   const raw = data?.client_statuses
   const arr = typeof raw === 'string' ? safeParse(raw) : raw
   return Array.isArray(arr) && arr.length ? arr : DEFAULT_STATUSES
+}
+
+// What staff can actually pick. Archived statuses are retired from the picker
+// but deliberately still resolve above.
+export function statusList(data) {
+  return allStatuses(data).filter(s => !s.archived)
 }
 function safeParse(s) { try { return JSON.parse(s) } catch { return null } }
 
@@ -60,7 +68,7 @@ function safeParse(s) { try { return JSON.parse(s) } catch { return null } }
 // existed, or 'vacant') degrade to a titlecased slug rather than blank.
 export function statusMap(data) {
   const m = {}
-  for (const s of statusList(data)) m[s.key] = s
+  for (const s of allStatuses(data)) m[s.key] = s   // includes archived
   return m
 }
 export function statusLabel(data, key) {

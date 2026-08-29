@@ -1042,13 +1042,17 @@ function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} 
 // documentation, which includes the audit trail. 6 x 365 = 2190.
 const AUDIT_RETENTION_MIN_DAYS = 2190;
 
-// Status keys still referenced by any saved report. Used to block removing
-// a status that historical data depends on — reports.statuses is a JSON map
-// of client id -> status key, so a removed key would render as a raw slug.
-function statusKeysInUse() {
+// Status keys referenced by reports. `openOnly` narrows to reports still
+// open (is_closed = 0) — a closed report is an immutable record, so a status
+// it references can be retired from the picker; one an open shift is actively
+// using cannot, or staff would lose the value mid-shift.
+function statusKeysInUse({ openOnly = false } = {}) {
   const keys = new Set();
   try {
-    for (const r of _q('SELECT statuses FROM reports')) {
+    const sql = openOnly
+      ? 'SELECT statuses FROM reports WHERE is_closed = 0'
+      : 'SELECT statuses FROM reports';
+    for (const r of _q(sql)) {
       let m; try { m = JSON.parse(r.statuses || '{}'); } catch (e) { continue; }
       for (const k of Object.values(m || {})) if (k) keys.add(String(k));
     }

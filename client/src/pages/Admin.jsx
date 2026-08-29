@@ -863,10 +863,19 @@ function slugifyKey(label) {
 }
 
 function StatusSettings({ settings, onSave, saving, error }) {
-  const [rows, setRows] = useState(() =>
-    (Array.isArray(settings.client_statuses) && settings.client_statuses.length
-      ? settings.client_statuses
-      : DEFAULT_STATUSES).map(r => ({ ...r, _existing: true })))
+  const initial = (Array.isArray(settings.client_statuses) && settings.client_statuses.length
+    ? settings.client_statuses : DEFAULT_STATUSES)
+  const [rows, setRows] = useState(() => initial.filter(r => !r.archived).map(r => ({ ...r, _existing: true })))
+  // Retired statuses: hidden from the shift-report picker, but their labels
+  // are kept so closed reports still render 'Weekend Pass', not a raw slug.
+  const [archived, setArchived] = useState(() => initial.filter(r => r.archived))
+
+  const restore = (key) => {
+    const row = archived.find(a => a.key === key)
+    if (!row) return
+    setArchived(as => as.filter(a => a.key !== key))
+    setRows(rs => [...rs, { ...row, archived: undefined, _existing: true }])
+  }
   const [saved, setSaved] = useState(false)
 
   const set = (i, patch) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
@@ -894,8 +903,9 @@ function StatusSettings({ settings, onSave, saving, error }) {
     >
       <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
         These are the statuses staff can assign on the shift report. Renaming a label updates it
-        everywhere, including on past shifts. A status that any saved report still uses cannot be
-        deleted — rename it instead.
+        everywhere, including on past shifts. Removing one retires it — it disappears from the
+        picker, but past shifts keep showing its label. A status in use on the currently open
+        shift can't be removed until that shift is closed.
       </p>
 
       {error && (
@@ -942,6 +952,25 @@ function StatusSettings({ settings, onSave, saving, error }) {
       </div>
 
       <Button size="xs" color="light" className="mt-3" onClick={add}>+ Add status</Button>
+
+      {archived.length > 0 && (
+        <div className="pt-4 mt-5 border-t border-gray-200 dark:border-gray-700">
+          <p className="mb-1 text-[11px] font-semibold tracking-wider text-gray-500 uppercase dark:text-gray-400">Retired</p>
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            No longer offered on the shift report. Kept so past shifts still show the right label.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {archived.map(a => (
+              <span key={a.key} className="inline-flex items-center gap-2 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700">
+                <span className={`px-2 py-0.5 rounded-md font-semibold ${TONE_BADGE[a.tone] || TONE_BADGE.gray}`}>{a.label}</span>
+                <code className="font-mono text-[11px] text-gray-400">{a.key}</code>
+                <button type="button" onClick={() => restore(a.key)}
+                  className="font-medium text-primary-600 hover:underline dark:text-primary-400">Restore</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </Section>
   )
 }

@@ -6,7 +6,7 @@ import {
 } from 'flowbite-react'
 import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
 import { useData } from '../contexts/DataContext.jsx'
-import { statusList, TONE_BADGE } from '../utils/statuses.js'
+import { statusList, allStatuses, TONE_BADGE } from '../utils/statuses.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
@@ -118,6 +118,12 @@ function stOpt(v, opts) { return (opts || STATUS_OPTS).find(o => o.v === v) || {
 // Map the configured statuses onto the shape this file already uses.
 function optsFrom(data) {
   return statusList(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
+}
+
+// Picker vs render: a row already sitting on a retired status must still
+// show its label, so lookups fall back to the full list (archived included).
+function lookupFrom(data) {
+  return allStatuses(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
 }
 
 function dateStamp() {
@@ -525,6 +531,7 @@ export default function ReportTab() {
   // Statuses configured in Admin -> Facility -> Statuses, memoised so the
   // list identity is stable across renders.
   const statusOptions = useMemo(() => optsFrom(data), [data])
+  const statusLookup  = useMemo(() => lookupFrom(data), [data])
   const sortedClients = useMemo(() => {
     return clients.filter(c => c.is_active)
       .filter(c => showAllRooms || (!c.is_special && c.name !== 'VACANT'))
@@ -906,7 +913,7 @@ export default function ReportTab() {
                     hasInPass={inPass.has(c.id)}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
-                    statusOptions={statusOptions}
+                    statusOptions={statusOptions} statusLookup={statusLookup}
                     onStatusChange={handleStatusChange}
                     onCommentChange={handleCommentChange}
                     onUARequest={handleUARequest}
@@ -1570,10 +1577,10 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
   )
 }
 
-function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, statusOptions, onStatusChange, onCommentChange, onUARequest }) {
+function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, statusOptions, statusLookup, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
   const allOpts = statusOptions && statusOptions.length ? statusOptions : STATUS_OPTS
-  const opt = stOpt(cur, allOpts)
+  const opt = stOpt(cur, (statusLookup && statusLookup.length ? statusLookup : allOpts))
   const statusOpts = hasInPass ? allOpts.filter(o => o.v !== 'pass') : allOpts
   // Prefer the configured tone; fall back to the legacy per-key map so any
   // key predating the setting still renders with its original colour.

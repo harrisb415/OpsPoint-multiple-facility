@@ -25,6 +25,9 @@ function fmtDT(s) {
 }
 function localDT(s) { if (!s) return ''; try { return new Date(s).toISOString().slice(0, 16) } catch { return '' } }
 
+// How early a resident may be marked departed, relative to the scheduled time.
+const EARLY_DEPART_MS = 10 * 60 * 1000
+
 const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'Approved' }
 
 export default function PassesTab() {
@@ -46,9 +49,12 @@ export default function PassesTab() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  // Mark Departed stays disabled until the scheduled departure time. Ticking
-  // every 30s so a page left open enables the button on its own rather than
-  // needing a refresh. A pass with no departure time is unconstrained.
+  // Mark Departed stays disabled until shortly before the scheduled departure.
+  // Residents routinely leave a few minutes early, so a hard gate on the exact
+  // time just means staff can't log what actually happened; the grace window
+  // keeps the log honest without letting a pass be opened hours ahead.
+  // Ticking every 30s so a page left open enables the button on its own.
+  // A pass with no departure time is unconstrained.
   const [nowTs, setNowTs] = useState(() => Date.now())
   useEffect(() => {
     const t = setInterval(() => setNowTs(Date.now()), 30000)
@@ -59,7 +65,9 @@ export default function PassesTab() {
     const t = new Date(p.departure).getTime()
     return Number.isNaN(t) ? null : t
   }
-  const canDepart = (p) => { const t = departureAt(p); return t === null || nowTs >= t }
+  const canDepart = (p) => { const t = departureAt(p); return t === null || nowTs >= t - EARLY_DEPART_MS }
+  // Earliest the button unlocks — used for the tooltip so the reason is exact.
+  const departUnlockAt = (p) => { const t = departureAt(p); return t === null ? null : new Date(t - EARLY_DEPART_MS) }
 
   const gq = globalSearch.toLowerCase().trim()
   const pmatch = p => !gq || (p.name || '').toLowerCase().includes(gq) || String(p.room || '').includes(gq)
@@ -228,7 +236,7 @@ export default function PassesTab() {
                   <div className="flex items-center justify-end gap-2">
                     {canStatus && (
                       <Button size="xs" disabled={!canDepart(p)} onClick={() => quickStatus(p, 'Out')}
-                        title={canDepart(p) ? 'Mark this resident as departed' : `Not until ${fmtDT(p.departure)}`}>
+                        title={canDepart(p) ? 'Mark this resident as departed' : `Available from ${fmtDT(departUnlockAt(p))} (10 min before departure)`}>
                         <LogOut className="w-3.5 h-3.5 mr-1.5" /> Mark Departed
                       </Button>
                     )}

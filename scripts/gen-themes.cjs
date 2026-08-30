@@ -8,7 +8,10 @@ const RAMPS = {
   blue:    ['#eff6ff','#dbeafe','#bfdbfe','#93c5fd','#60a5fa','#3b82f6','#2563eb','#1d4ed8','#1e40af','#1e3a8a','#172554'],
   teal:    ['#f0fdfa','#ccfbf1','#99f6e4','#5eead4','#2dd4bf','#14b8a6','#0d9488','#0f766e','#115e59','#134e4a','#042f2e'],
   emerald: ['#ecfdf5','#d1fae5','#a7f3d0','#6ee7b7','#34d399','#10b981','#059669','#047857','#065f46','#064e3b','#022c22'],
-  rose:    ['#fff1f2','#ffe4e6','#fecdd3','#fda4af','#fb7185','#f43f5e','#e11d48','#be123c','#9f1239','#881337','#4c0519'],
+  // Labelled "Rose" but built on Tailwind's pink ramp, not rose. rose-600
+  // (#e11d48) sits ~10 degrees of CIELab hue from the red the app uses for
+  // danger, so a rose primary button read as destructive. pink-600 clears it.
+  rose:    ['#fdf2f8','#fce7f3','#fbcfe8','#f9a8d4','#f472b6','#ec4899','#db2777','#be185d','#9d174d','#831843','#500724'],
 }
 const STEPS = [50,100,200,300,400,500,600,700,800,900,950]
 
@@ -31,6 +34,26 @@ const rgb2hex = c => '#' + c.map(v => Math.max(0,Math.min(255,Math.round(v))).to
 const lum = h => { const s = hex2rgb(h).map(v => { v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4) })
   return 0.2126*s[0] + 0.7152*s[1] + 0.0722*s[2] }
 const ratio = (a,b) => { const [x,y]=[lum(a),lum(b)].sort((m,n)=>n-m); return (x+0.05)/(y+0.05) }
+
+// sRGB -> CIELab -> hue angle, so a theme's brand hue can be compared against
+// the reds the app reserves for danger. RGB distance is not a usable proxy.
+function lab(h) {
+  const f = v => { v/=255; return v<=0.04045 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4) }
+  const [r,g,b] = hex2rgb(h).map(f)
+  const X = (0.4124*r + 0.3576*g + 0.1805*b) / 0.95047
+  const Y = (0.2126*r + 0.7152*g + 0.0722*b)
+  const Z = (0.0193*r + 0.1192*g + 0.9505*b) / 1.08883
+  const k = t => t > 0.008856 ? Math.cbrt(t) : (7.787*t + 16/116)
+  const [fx,fy,fz] = [k(X), k(Y), k(Z)]
+  return [116*fy - 16, 500*(fx-fy), 200*(fy-fz)]
+}
+const hueDeg = h => { const [,A,B] = lab(h); return (Math.atan2(B,A) * 180/Math.PI + 360) % 360 }
+const hueGap = (a,b) => { const d = Math.abs(hueDeg(a) - hueDeg(b)); return d > 180 ? 360-d : d }
+
+// The app's destructive colours: Button color="failure" renders bg-red-700,
+// and text-red-600 is the other danger tone.
+const DANGER = { 'red-600': '#dc2626', 'red-700': '#b91c1c' }
+const MIN_HUE_GAP = 25
 
 // indigo rail deltas, measured off the approved values
 const TOP = hex2rgb('#1e1b4b')
@@ -66,14 +89,21 @@ const CHECKS = [
   ['gray-900 on primary-50 (CARD_HEAD)', t => ratio('#111827', t.ramp[0]), 4.5],
 ]
 
+// A brand whose 600 sits too close in hue to the danger reds makes a primary
+// button read as destructive — the reason Rose is built on pink, not rose.
+const HUE_CHECKS = Object.entries(DANGER).map(([name, hex]) =>
+  ['hue gap from ' + name + ' (danger)', t => hueGap(t.ramp[6], hex), MIN_HUE_GAP])
+
 let css = '', fails = 0
 for (const name of Object.keys(RAMPS)) {
   const t = build(name)
   console.log('\n' + name.toUpperCase() + (SHIFT[name] ? '  (ramp shifted one step darker)' : ''))
-  for (const [label, fn, min] of CHECKS) {
+  for (const [label, fn, min] of CHECKS.concat(HUE_CHECKS)) {
     const r = fn(t), ok = r >= min
     if (!ok) fails++
-    console.log('   %s %-38s %s:1  (min %s)', ok ? 'PASS' : 'FAIL', label, r.toFixed(2), min)
+    const unit = label.startsWith('hue gap') ? ' deg' : ':1'
+    console.log('   ' + (ok ? 'PASS' : 'FAIL') + '  ' + label.padEnd(36) +
+                (r.toFixed(2) + unit).padStart(11) + '   min ' + min)
   }
   if (name === 'indigo') continue   // default lives in @theme, no override block
   const lines = STEPS.map((s,i) => '  --color-primary-' + String(s).padEnd(3) + ': ' + t.ramp[i] + ';')

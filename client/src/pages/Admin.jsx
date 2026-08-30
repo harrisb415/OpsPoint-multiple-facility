@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Settings, ArrowLeft, Users, UserPlus, KeyRound, ShieldCheck,
   Tag, DoorOpen, MonitorCog, Map, FlaskConical, ClipboardList,
-  AlertTriangle, ScrollText, Tags} from 'lucide-react'
+  AlertTriangle, ScrollText, Tags, Palette} from 'lucide-react'
 import {
   Alert, Badge, Button, Checkbox, Label, Modal, ModalHeader, ModalBody, ModalFooter,
   Select, Textarea, TextInput,
@@ -15,6 +15,7 @@ import { useConfirm } from '../components/ui.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
+import { THEMES, DEFAULT_THEME, applyTheme } from '../utils/themes.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -83,6 +84,7 @@ const ADMIN_NAV = [
     { key: 'fac:general',   label: 'General',          icon: Tag,           perm: 'admin.settings' },
     { key: 'fac:rooms',     label: 'Rooms',            icon: DoorOpen,      perm: 'facility.manage' },
     { key: 'fac:statuses',  label: 'Statuses',         icon: Tags,          perm: 'admin.settings' },
+    { key: 'fac:theme',     label: 'Appearance',       icon: Palette,       perm: 'admin.settings' },
     { key: 'fac:display',   label: 'Features',         icon: MonitorCog,    perm: 'admin.settings' },
     { key: 'fac:walk',      label: 'Walk Areas',       icon: Map,           perm: 'admin.settings' },
     { key: 'fac:ua',        label: 'UA Panel',         icon: FlaskConical,  perm: 'admin.settings' },
@@ -802,6 +804,76 @@ function GroupsManager({ groups, reload }) {
 // FACILITY SETUP TAB
 // ══════════════════════════════════════════════════════════════════
 
+function ThemeSettings({ settings, onSave, saving }) {
+  // Derived from the prop, not a ref: the parent re-renders with the new
+  // settings after a successful save, so this follows without extra state.
+  const savedTheme = settings.facility_theme || DEFAULT_THEME
+  const [pick, setPick] = useState(savedTheme)
+  const [saved, setSaved] = useState(false)
+
+  // Live preview, with the cleanup reverting to what is actually stored, so
+  // leaving the panel on an unsaved pick puts the theme back. applyTheme only
+  // sets the attribute — it never touches the cache — so an abandoned preview
+  // leaves nothing behind. Both values are deps: on any change the cleanup
+  // restores savedTheme and the body re-applies pick, so the net result is
+  // always pick while mounted and savedTheme once unmounted.
+  useEffect(() => {
+    applyTheme(pick)
+    return () => { applyTheme(savedTheme) }
+  }, [pick, savedTheme])
+
+  async function save() {
+    const ok = await onSave({ facility_theme: pick })
+    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  }
+
+  const dirty = pick !== savedTheme
+
+  return (
+    <div>
+      <Section
+        title="Appearance"
+        right={<><SaveMsg ok={saved} />
+          <Button size="xs" onClick={save} isProcessing={saving} disabled={saving || !dirty}>
+            {saving ? 'Saving…' : 'Save Theme'}
+          </Button></>}
+      >
+        <div className="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-3">
+          {THEMES.map(t => {
+            const on = pick === t.key
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setPick(t.key)}
+                aria-pressed={on}
+                className={`flex items-center gap-3 p-3 text-left border-2 rounded-xl transition-colors ${
+                  on ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'}`}
+              >
+                <span className="flex rounded-lg shrink-0 overflow-hidden w-11 h-11 shadow-sm">
+                  <span className="w-1/2 h-full" style={{ background: t.swatch[0] }} />
+                  <span className="w-1/2 h-full" style={{ background: t.swatch[1] }} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-900 truncate dark:text-white">{t.label}</span>
+                  <span className="block text-xs text-gray-500 truncate dark:text-gray-400">{t.hint}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Sets the brand colour for the whole facility — sidebar, buttons and headings —
+          for every user, on their next data refresh. Status colours, and the red/amber/green
+          used to signal state, are deliberately unaffected. Light and dark mode stay a
+          per-user choice.
+        </p>
+      </Section>
+    </div>
+  )
+}
+
 function FacilitySetupTab({ panel }) {
   const { hasPerm } = usePermission()
   const sub = panel || 'general'   // driven by the Admin rail
@@ -842,6 +914,7 @@ function FacilitySetupTab({ panel }) {
       </>}
       {sub === 'rooms'    && hasPerm('facility.manage') && <RoomsManager />}
       {sub === 'statuses' && hasPerm('admin.settings')  && <StatusSettings settings={settings} onSave={saveSettings} saving={settingSaving} error={settingError} />}
+      {sub === 'theme'    && hasPerm('admin.settings')  && <ThemeSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'display'  && hasPerm('admin.settings')  && <DisplaySettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'walk'     && hasPerm('admin.settings')  && <WalkAreas settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ua'       && hasPerm('admin.settings')  && <UAPanelSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}

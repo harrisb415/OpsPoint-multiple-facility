@@ -17,7 +17,7 @@ export const THEMES = [
   { key: 'blue',    label: 'Blue',    hint: 'Cool and corporate', swatch: ['#2563eb', '#06b6d4'] },
   { key: 'teal',    label: 'Teal',    hint: 'OpsPoint heritage',  swatch: ['#0f766e', '#10b981'] },
   { key: 'emerald', label: 'Emerald', hint: 'Fresh and calm',     swatch: ['#047857', '#14b8a6'] },
-  { key: 'rose',    label: 'Rose',    hint: 'Warm',               swatch: ['#e11d48', '#d946ef'] },
+  { key: 'rose',    label: 'Rose',    hint: 'Warm',               swatch: ['#db2777', '#d946ef'] },
 ]
 
 export const THEME_KEYS = THEMES.map(t => t.key)

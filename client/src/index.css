@@ -118,7 +118,10 @@
    already used, so every theme drifts the way the approved one does. Teal
    and emerald carry 500-800 one step darker because teal-600 and
    emerald-600 are only 3.1:1 and 3.3:1 behind white button text, under the
-   4.5 AA floor. Edit the generator, not these blocks. */
+   4.5 AA floor. Rose is built on the pink ramp, not rose: rose-600 sits
+   13 degrees of CIELab hue from the red used for danger, so a rose primary
+   button read as destructive; pink-600 clears it at 35. The generator
+   asserts a 25 degree minimum. Edit the generator, not these blocks. */
 :root[data-theme="blue"] {
   --color-primary-50 : #eff6ff;
   --color-primary-100: #dbeafe;
@@ -186,25 +189,25 @@
 }
 
 :root[data-theme="rose"] {
-  --color-primary-50 : #fff1f2;
-  --color-primary-100: #ffe4e6;
-  --color-primary-200: #fecdd3;
-  --color-primary-300: #fda4af;
-  --color-primary-400: #fb7185;
-  --color-primary-500: #f43f5e;
-  --color-primary-600: #e11d48;
-  --color-primary-700: #be123c;
-  --color-primary-800: #9f1239;
-  --color-primary-900: #881337;
-  --color-primary-950: #4c0519;
+  --color-primary-50 : #fdf2f8;
+  --color-primary-100: #fce7f3;
+  --color-primary-200: #fbcfe8;
+  --color-primary-300: #f9a8d4;
+  --color-primary-400: #f472b6;
+  --color-primary-500: #ec4899;
+  --color-primary-600: #db2777;
+  --color-primary-700: #be185d;
+  --color-primary-800: #9d174d;
+  --color-primary-900: #831843;
+  --color-primary-950: #500724;
   --color-accent-400: #e879f9;
   --color-accent-500: #d946ef;
   --color-accent-600: #c026d3;
-  --color-rail-top: #4c0519;
-  --color-rail-mid: #520920;
-  --color-rail-bot: #5b051c;
-  --color-rail-fg:     #fecdd3;
-  --color-rail-fg-dim: #fda4af;
+  --color-rail-top: #500724;
+  --color-rail-mid: #560b2b;
+  --color-rail-bot: #5f0727;
+  --color-rail-fg:     #fbcfe8;
+  --color-rail-fg-dim: #f9a8d4;
 }
 
 

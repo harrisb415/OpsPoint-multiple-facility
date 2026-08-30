@@ -182,7 +182,7 @@ function ViewModal({ record, onClose }) {
         {record.topic && <Chip className="bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">{record.topic}</Chip>}
       </div>
       {record.content && <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed mb-3.5">{record.content}</div>}
-      <div className="text-[.74rem] font-extrabold text-[#0a4655] dark:text-teal-300 mb-1.5">Attendees ({att.length})</div>
+      <div className="text-[.74rem] font-extrabold text-primary-700 dark:text-primary-300 mb-1.5">Attendees ({att.length})</div>
       {att.length === 0
         ? <div className="text-sm text-gray-400 dark:text-gray-500">No attendees recorded.</div>
         : (

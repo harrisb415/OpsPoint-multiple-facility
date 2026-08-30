@@ -69,12 +69,74 @@ function lab(h) {
   return [116*fy - 16, 500*(fx-fy), 200*(fy-fz)]
 }
 const hueDeg = h => { const [,A,B] = lab(h); return (Math.atan2(B,A) * 180/Math.PI + 360) % 360 }
+
+// Lab -> sRGB, so neutrals can be re-hued while their lightness is held
+// exactly. Holding L means every contrast ratio that was true of the original
+// neutral is still true of the tinted one; only the hue moves.
+function lab2hex([L, A, B]) {
+  const fy = (L + 16) / 116, fx = fy + A / 500, fz = fy - B / 200
+  const inv = t => { const c = t*t*t; return c > 0.008856 ? c : (t - 16/116) / 7.787 }
+  const X = inv(fx) * 0.95047, Y = inv(fy), Z = inv(fz) * 1.08883
+  const lin = [ 3.2406*X - 1.5372*Y - 0.4986*Z,
+               -0.9689*X + 1.8758*Y + 0.0415*Z,
+                0.0557*X - 0.2040*Y + 1.0570*Z ]
+  return rgb2hex(lin.map(v => 255 * (v <= 0.0031308 ? 12.92*v : 1.055*Math.pow(Math.max(v,0), 1/2.4) - 0.055)))
+}
+// Re-hue a neutral: keep its lightness, give it `chroma` at `hue`.
+// Rotate a neutral's existing cast to a new hue, keeping BOTH its lightness
+// and its chroma. Tailwind's grays are not neutral — they already carry a
+// blue cast (gray-900 is chroma 6 at hue 264) — so this only turns the cast
+// that is already there, rather than adding colour.
+const rotate = (hex, hue) => {
+  const [L, A, B] = lab(hex)
+  return reHue(hex, hue, Math.hypot(A, B))
+}
+const reHue = (hex, hue, chroma) => {
+  const r = hue * Math.PI / 180
+  return lab2hex([lab(hex)[0], Math.cos(r) * chroma, Math.sin(r) * chroma])
+}
 const hueGap = (a,b) => { const d = Math.abs(hueDeg(a) - hueDeg(b)); return d > 180 ? 360-d : d }
 
 // The app's destructive colours: Button color="failure" renders bg-red-700,
 // and text-red-600 is the other danger tone.
 const DANGER = { 'red-600': '#dc2626', 'red-700': '#b91c1c' }
 const MIN_HUE_GAP = 25
+
+// ---- Neutral surfaces -------------------------------------------------
+// index.css drives every neutral surface off four tokens, remapped onto
+// bg-gray-50 / bg-gray-100 / border-gray-200 app-wide: the page behind the
+// cards, the cards and top bar themselves, hover fills, and hairlines. They
+// were fixed values, which is why a theme changed the rail and the buttons
+// but left the page underneath looking the same in every theme.
+//
+// Base lightness is kept from the shipped values; the hue follows the theme
+// and the chroma is raised so the tint actually reads. Cards take a whisper
+// of tint rather than pure white so they still lift off the page.
+// Tailwind's neutral ramp, whose cast is rotated per theme so that every
+// dark:bg-gray-800 panel, every gray hairline and every muted label sits in
+// the same colour family as the rest of the theme. Lightness is untouched,
+// so all existing contrast ratios hold.
+const TW_GRAY = [
+  [50,'#f9fafb'], [100,'#f3f4f6'], [200,'#e5e7eb'], [300,'#d1d5db'], [400,'#9ca3af'],
+  [500,'#6b7280'], [600,'#4b5563'], [700,'#374151'], [800,'#1f2937'], [900,'#111827'],
+]
+
+const SURFACES = [
+  ['--surface-sunken', '#e8edf4',  9],   /* page behind the cards */
+  ['--surface-raised', '#ffffff',  2],   /* cards, top bar, menus */
+  ['--surface-hover',  '#eef2f7',  7],
+  ['--surface-line',   '#d7dfe9', 11],
+]
+// The same idea for dark mode, whose surfaces are hardcoded in :root.dark.
+const DARK_SURFACES = [
+  ['--page-bg',      '#111827',  7],
+  ['--bg',           '#111827',  7],
+  ['--card-bg',      '#1f2937',  8],
+  ['--white',        '#1f2937',  8],
+  ['--raised-bg',    '#374151',  9],
+  ['--border-light', '#374151',  9],
+  ['--line',         '#374151',  9],
+]
 
 // indigo rail deltas, measured off the approved values
 const TOP = hex2rgb('#1e1b4b')
@@ -99,6 +161,17 @@ function build(name) {
     accent: ACCENTS[name],
     rail: { top, mid: rgb2hex(rgb.map((v,i)=>v+D_MID[i])), bot: rgb2hex(rgb.map((v,i)=>v+D_BOT[i])) },
     fg: ramp[2], fgDim: ramp[3],
+    // Pale accent steps, so a header or bar can carry both brand colours
+    // rather than two shades of the same one.
+    accentPale: [reHue('#f7f8fa', hueDeg(ACCENTS[name][1]), 7),
+                 reHue('#eef1f5', hueDeg(ACCENTS[name][1]), 14)],
+    // Surfaces take their hue from the ramp's 100 step, not its 600. Lab is
+    // badly non-uniform in blue: a saturated blue reads at hue 292 but a pale
+    // blue tint reads at 265, and re-hueing a near-white to 292 comes out
+    // lavender rather than blue. The 100 step is the same pale, low-chroma
+    // regime as the surfaces, so its hue transfers correctly — blue-100 is
+    // 264.7, which is the shipped page tint's 264.6 almost exactly.
+    hue: hueDeg(ramp[1]),
   }
 }
 
@@ -126,7 +199,8 @@ for (const name of Object.keys(RAMPS)) {
     console.log('   ' + (ok ? 'PASS' : 'FAIL') + '  ' + label.padEnd(36) +
                 (r.toFixed(2) + unit).padStart(11) + '   min ' + min)
   }
-  if (name === 'indigo') continue   // default lives in @theme, no override block
+  // Every theme gets a block, indigo included: the neutral surfaces are
+  // per-theme now, so there is no longer a "do nothing" default.
   const lines = STEPS.map((s,i) => '  --color-primary-' + String(s).padEnd(3) + ': ' + t.ramp[i] + ';')
   css += '\n:root[data-theme="' + name + '"] {\n' + lines.join('\n') + '\n' +
          '  --color-accent-400: ' + t.accent[0] + ';\n' +
@@ -136,7 +210,16 @@ for (const name of Object.keys(RAMPS)) {
          '  --color-rail-mid: ' + t.rail.mid + ';\n' +
          '  --color-rail-bot: ' + t.rail.bot + ';\n' +
          '  --color-rail-fg:     ' + t.fg + ';\n' +
-         '  --color-rail-fg-dim: ' + t.fgDim + ';\n}\n'
+         '  --color-rail-fg-dim: ' + t.fgDim + ';\n' +
+         '  --color-accent-50:  ' + t.accentPale[0] + ';\n' +
+         '  --color-accent-100: ' + t.accentPale[1] + ';\n\n' +
+         SURFACES.map(([v, base, c]) =>
+           '  ' + v.padEnd(17) + ': ' + reHue(base, t.hue, c) + ';').join('\n') + '\n\n' +
+         TW_GRAY.map(([n, base]) =>
+           '  --gray-' + String(n).padEnd(4) + ': ' + rotate(base, t.hue) + ';').join('\n') + '\n}\n' +
+         '\n:root.dark[data-theme=\"' + name + '\"] {\n' +
+         DARK_SURFACES.map(([v, base, c]) =>
+           '  ' + v.padEnd(15) + ': ' + reHue(base, t.hue, c) + ';').join('\n') + '\n}\n'
 }
 
 // sanity: indigo must reproduce the shipped values exactly

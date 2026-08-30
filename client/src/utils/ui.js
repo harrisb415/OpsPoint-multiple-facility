@@ -33,8 +33,8 @@ export const avatarColor = (name) =>
 // reads as inconsistent, so these are fixed.
 export const CARD_HEAD =
   'flex flex-col gap-2 px-5 py-3.5 border-b sm:flex-row sm:items-center sm:justify-between ' +
-  'bg-gradient-to-r from-primary-50 to-primary-100/60 border-primary-100 ' +
-  'dark:from-gray-700/50 dark:to-gray-700/30 dark:border-gray-700'
+  'bg-gradient-to-r from-primary-100 via-primary-50 to-accent-100 border-primary-200 ' +
+  'dark:from-gray-700/50 dark:via-gray-700/40 dark:to-gray-700/30 dark:border-gray-700'
 
 export const CARD_HEAD_TITLE =
   'font-display text-[.95rem] font-semibold tracking-tight text-gray-900 dark:text-white'
@@ -55,9 +55,9 @@ export const CARD_HEAD_INSET_LG =
 // and borders itself so it reads as a band rather than a clipped strip.
 export const CARD_HEAD_BAND =
   'flex flex-col gap-2 px-5 py-3.5 mb-3 rounded-xl border ' +
-  'bg-gradient-to-r from-primary-50 to-primary-100/60 border-primary-100 ' +
+  'bg-gradient-to-r from-primary-100 via-primary-50 to-accent-100 border-primary-200 ' +
   'sm:flex-row sm:items-center sm:justify-between ' +
-  'dark:from-gray-700/50 dark:to-gray-700/30 dark:border-gray-700'
+  'dark:from-gray-700/50 dark:via-gray-700/40 dark:to-gray-700/30 dark:border-gray-700'
 
 // ── Navigation rail ───────────────────────────────────────────────────
 // The app sidebar, the Admin rail and the Clinical rail were byte-identical

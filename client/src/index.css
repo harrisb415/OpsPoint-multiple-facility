@@ -122,6 +122,56 @@
    13 degrees of CIELab hue from the red used for danger, so a rose primary
    button read as destructive; pink-600 clears it at 35. The generator
    asserts a 25 degree minimum. Edit the generator, not these blocks. */
+:root[data-theme="indigo"] {
+  --color-primary-50 : #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+  --color-primary-950: #1e1b4b;
+  --color-accent-400: #c084fc;
+  --color-accent-500: #a855f7;
+  --color-accent-600: #9333ea;
+  --color-rail-top: #1e1b4b;
+  --color-rail-mid: #241f52;
+  --color-rail-bot: #2d1b4e;
+  --color-rail-fg:     #c7d2fe;
+  --color-rail-fg-dim: #a5b4fc;
+  --color-accent-50:  #fdf5ff;
+  --color-accent-100: #faebff;
+
+  --surface-sunken : #e7ecfd;
+  --surface-raised : #feffff;
+  --surface-hover  : #eef1ff;
+  --surface-line   : #d8def3;
+
+  --gray-50  : #fafafb;
+  --gray-100 : #f3f4f6;
+  --gray-200 : #e6e7eb;
+  --gray-300 : #d3d4db;
+  --gray-400 : #9fa2af;
+  --gray-500 : #6d7180;
+  --gray-600 : #4f5463;
+  --gray-700 : #3a4051;
+  --gray-800 : #232837;
+  --gray-900 : #111827;
+}
+
+:root.dark[data-theme="indigo"] {
+  --page-bg      : #151821;
+  --bg           : #151821;
+  --card-bg      : #242833;
+  --white        : #242833;
+  --raised-bg    : #3c404e;
+  --border-light : #3c404e;
+  --line         : #3c404e;
+}
+
 :root[data-theme="blue"] {
   --color-primary-50 : #eff6ff;
   --color-primary-100: #dbeafe;
@@ -142,6 +192,34 @@
   --color-rail-bot: #262557;
   --color-rail-fg:     #bfdbfe;
   --color-rail-fg-dim: #93c5fd;
+  --color-accent-50:  #e8fbff;
+  --color-accent-100: #d0f7ff;
+
+  --surface-sunken : #e2eefe;
+  --surface-raised : #fdffff;
+  --surface-hover  : #e9f2ff;
+  --surface-line   : #d1e0f3;
+
+  --gray-50  : #f9fafb;
+  --gray-100 : #f3f4f6;
+  --gray-200 : #e4e7eb;
+  --gray-300 : #d1d5db;
+  --gray-400 : #9ba3af;
+  --gray-500 : #697380;
+  --gray-600 : #4a5563;
+  --gray-700 : #354251;
+  --gray-800 : #1d2937;
+  --gray-900 : #0a1927;
+}
+
+:root.dark[data-theme="blue"] {
+  --page-bg      : #111921;
+  --bg           : #111921;
+  --card-bg      : #202934;
+  --white        : #202934;
+  --raised-bg    : #37414e;
+  --border-light : #37414e;
+  --line         : #37414e;
 }
 
 :root[data-theme="teal"] {
@@ -164,6 +242,34 @@
   --color-rail-bot: #132f31;
   --color-rail-fg:     #99f6e4;
   --color-rail-fg-dim: #5eead4;
+  --color-accent-50:  #ecfcf3;
+  --color-accent-100: #d9f8e8;
+
+  --surface-sunken : #d9f2ec;
+  --surface-raised : #fbffff;
+  --surface-hover  : #e3f6f1;
+  --surface-line   : #c7e4de;
+
+  --gray-50  : #f9fafa;
+  --gray-100 : #f2f5f4;
+  --gray-200 : #e2e8e7;
+  --gray-300 : #ced7d5;
+  --gray-400 : #94a6a2;
+  --gray-500 : #617672;
+  --gray-600 : #435954;
+  --gray-700 : #2c4540;
+  --gray-800 : #152c28;
+  --gray-900 : #001c18;
+}
+
+:root.dark[data-theme="teal"] {
+  --page-bg      : #0c1b18;
+  --bg           : #0c1b18;
+  --card-bg      : #1b2c28;
+  --white        : #1b2c28;
+  --raised-bg    : #304440;
+  --border-light : #304440;
+  --line         : #304440;
 }
 
 :root[data-theme="emerald"] {
@@ -186,6 +292,34 @@
   --color-rail-bot: #112c25;
   --color-rail-fg:     #a7f3d0;
   --color-rail-fg-dim: #6ee7b7;
+  --color-accent-50:  #e9fcf8;
+  --color-accent-100: #d2f9f1;
+
+  --surface-sunken : #ddf1e7;
+  --surface-raised : #fcfffe;
+  --surface-hover  : #e6f5ed;
+  --surface-line   : #cce4d7;
+
+  --gray-50  : #f9faf9;
+  --gray-100 : #f2f5f3;
+  --gray-200 : #e3e8e5;
+  --gray-300 : #cfd6d2;
+  --gray-400 : #97a69e;
+  --gray-500 : #65766d;
+  --gray-600 : #46584f;
+  --gray-700 : #31453b;
+  --gray-800 : #1a2c23;
+  --gray-900 : #061c13;
+}
+
+:root.dark[data-theme="emerald"] {
+  --page-bg      : #0f1b15;
+  --bg           : #0f1b15;
+  --card-bg      : #1e2b25;
+  --white        : #1e2b25;
+  --raised-bg    : #34443c;
+  --border-light : #34443c;
+  --line         : #34443c;
 }
 
 :root[data-theme="rose"] {
@@ -208,6 +342,34 @@
   --color-rail-bot: #5f0727;
   --color-rail-fg:     #fbcfe8;
   --color-rail-fg-dim: #f9a8d4;
+  --color-accent-50:  #fff5ff;
+  --color-accent-100: #ffeaff;
+
+  --surface-sunken : #fbe7f2;
+  --surface-raised : #fffeff;
+  --surface-hover  : #fdeef6;
+  --surface-line   : #efd8e5;
+
+  --gray-50  : #fbfafa;
+  --gray-100 : #f6f3f5;
+  --gray-200 : #eae6e8;
+  --gray-300 : #dad3d7;
+  --gray-400 : #ad9fa7;
+  --gray-500 : #7d6d77;
+  --gray-600 : #605059;
+  --gray-700 : #4e3b46;
+  --gray-800 : #34232d;
+  --gray-900 : #24131d;
+}
+
+:root.dark[data-theme="rose"] {
+  --page-bg      : #1f151b;
+  --bg           : #1f151b;
+  --card-bg      : #31252c;
+  --white        : #31252c;
+  --raised-bg    : #4b3c45;
+  --border-light : #4b3c45;
+  --line         : #4b3c45;
 }
 
 :root[data-theme="salvation"] {
@@ -230,6 +392,34 @@
   --color-rail-bot: #222233;
   --color-rail-fg:     #bfdbfe;
   --color-rail-fg-dim: #93c5fd;
+  --color-accent-50:  #fff4f1;
+  --color-accent-100: #ffe8e3;
+
+  --surface-sunken : #e2eefe;
+  --surface-raised : #fdffff;
+  --surface-hover  : #e9f2ff;
+  --surface-line   : #d1e0f3;
+
+  --gray-50  : #f9fafb;
+  --gray-100 : #f3f4f6;
+  --gray-200 : #e4e7eb;
+  --gray-300 : #d1d5db;
+  --gray-400 : #9ba3af;
+  --gray-500 : #697380;
+  --gray-600 : #4a5563;
+  --gray-700 : #354251;
+  --gray-800 : #1d2937;
+  --gray-900 : #0a1927;
+}
+
+:root.dark[data-theme="salvation"] {
+  --page-bg      : #111921;
+  --bg           : #111921;
+  --card-bg      : #202934;
+  --white        : #202934;
+  --raised-bg    : #37414e;
+  --border-light : #37414e;
+  --line         : #37414e;
 }
 
 

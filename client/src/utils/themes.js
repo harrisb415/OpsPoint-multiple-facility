@@ -46,13 +46,12 @@ export function storeTheme(key) {
   catch { /* not fatal — the theme still applies for this page view */ }
 }
 
-// Indigo carries no attribute: it is the @theme default, so removing the
-// attribute is what selects it.
+// Every theme has its own block now, indigo included — the neutral page and
+// card surfaces are per-theme, so there is no "do nothing" default to fall
+// back to. The @theme values still cover the moment before this first runs.
 export function applyTheme(key) {
-  const el = document.documentElement
   const k = isValidTheme(key) ? key : DEFAULT_THEME
-  if (k === DEFAULT_THEME) delete el.dataset.theme
-  else el.dataset.theme = k
+  document.documentElement.dataset.theme = k
   return k
 }
 

@@ -9,12 +9,16 @@ import '@fontsource-variable/outfit'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
+import { ThemeProvider } from 'flowbite-react'
+import { opsTheme } from './utils/flowbiteTheme.js'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <App />
+        <ThemeProvider theme={opsTheme}>
+          <App />
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

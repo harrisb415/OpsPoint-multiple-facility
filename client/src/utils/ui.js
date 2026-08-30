@@ -58,3 +58,28 @@ export const CARD_HEAD_BAND =
   'bg-gradient-to-r from-primary-50 to-primary-100/60 border-primary-100 ' +
   'sm:flex-row sm:items-center sm:justify-between ' +
   'dark:from-gray-700/50 dark:to-gray-700/30 dark:border-gray-700'
+
+// ── Navigation rail ───────────────────────────────────────────────────
+// The app sidebar, the Admin rail and the Clinical rail were byte-identical
+// strings in three files. Shared here so a theme change lands in one place —
+// the gradient stops and the on-rail foregrounds are tokens now, not hex.
+// Width is NOT included: the app sidebar is w-64, the other two are w-60.
+// Dark mode must override all three gradient stops: `bg-gray-800` sets
+// background-color, which does not cover a gradient's background-image —
+// the Clinical rail was doing that and stayed purple in dark mode.
+export const RAIL_SHELL =
+  'bg-gradient-to-b from-rail-top via-rail-mid to-rail-bot ' +
+  'border-r border-rail-top/60 ' +
+  'dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 dark:border-gray-700'
+
+// Active nav item — brand gradient, white text.
+export const RAIL_ITEM_ON =
+  'bg-gradient-to-r from-primary-500 to-accent-500 text-white shadow-lg ' +
+  'shadow-primary-900/40 dark:from-primary-600 dark:to-accent-600'
+
+// Inactive nav item, and its icon (dimmer than the label).
+export const RAIL_ITEM_OFF =
+  'text-rail-fg/80 hover:bg-white/10 hover:text-white ' +
+  'dark:text-gray-300 dark:hover:bg-gray-700'
+export const RAIL_ICON_OFF = 'text-rail-fg-dim/70 group-hover:text-white'
+

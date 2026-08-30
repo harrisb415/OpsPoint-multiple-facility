@@ -39,7 +39,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen px-4 py-10 bg-gradient-to-br from-primary-950 via-[#2a1f5e] to-[#3b1f5e] dark:from-gray-950 dark:via-gray-900 dark:to-gray-900">
+    <div className="flex flex-col items-center justify-center min-h-screen px-4 py-10 bg-gradient-to-br from-rail-top via-rail-mid to-rail-bot dark:from-gray-950 dark:via-gray-900 dark:to-gray-900">
       <div className="w-full max-w-sm overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-primary-100 border border-white/60 shadow-2xl shadow-primary-950/40 ring-1 ring-white/50 rounded-2xl dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 dark:border-gray-700 dark:ring-0">
         <div className="flex flex-col items-center px-6 pt-8 pb-6 text-center">
           <img src="/static/icons/icon-192.png" alt="OpsPoint" className="w-16 h-16 rounded-xl shadow-sm" />

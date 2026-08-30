@@ -84,6 +84,21 @@
   --color-accent-400: #c084fc;
   --color-accent-500: #a855f7;
   --color-accent-600: #9333ea;
+
+  /* Navigation rail — the app sidebar, the Admin and Clinical rails, the
+     client drawer header and the login backdrop. Split out of the primary
+     ramp because the rail's mid and end gradient stops used to be literal
+     hex: re-theming primary moved only the first stop and left the rest
+     purple. Kept as their own tokens rather than folded into primary so a
+     theme can carry a rail that is darker or less saturated than its ramp. */
+  --color-rail-top: #1e1b4b;   /* was from-primary-950 */
+  --color-rail-mid: #241f52;   /* was via-[#241f52]   */
+  --color-rail-bot: #2d1b4e;   /* was to-[#2d1b4e]    */
+
+  /* Foregrounds on the rail. Used with an opacity modifier at the call site
+     (text-rail-fg/80), which resolves through color-mix on the variable. */
+  --color-rail-fg:     #c7d2fe;  /* was indigo-200 — labels, subtitles */
+  --color-rail-fg-dim: #a5b4fc;  /* was indigo-300 — icons, group headings */
 }
 
 /* - Design Tokens ----------------------------------------------- */

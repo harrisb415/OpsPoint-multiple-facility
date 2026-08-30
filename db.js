@@ -187,6 +187,10 @@ function setPermissionProfiles(profiles) {
 function _seedDefaults() {
   const defs = {
     facility_name:          'OpsPoint',
+    // Brand colour theme. Keys are defined in client/src/utils/themes.js and
+    // realised as :root[data-theme] blocks in client/src/index.css; the server
+    // only stores and allowlists the key.
+    facility_theme:         'indigo',
     // Selectable resident statuses, editable in Admin -> Facility -> Statuses.
     // `key` is what gets stored in reports.statuses, so renaming a label is
     // safe but changing a key would orphan historical data — the API blocks
@@ -596,6 +600,7 @@ function getAllData(perms) {
     session_idle_mins:      parseInt(getSetting('session_idle_mins', 30)) || 30,
     ui_visibility:          getSetting('ui_visibility',          {}),
     client_statuses:        getSetting('client_statuses',      []),
+    facility_theme:         getSetting('facility_theme',       'indigo'),
   };
 }
 

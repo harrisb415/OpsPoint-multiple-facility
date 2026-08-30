@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from './AuthContext.jsx'
+import { setTheme } from '../utils/themes.js'
 
 const DataContext = createContext(null)
 
@@ -120,6 +121,15 @@ export function DataProvider({ children }) {
       setLoading(false)
     }
   }, [fetchClinical])
+
+  // The facility record is authoritative for the brand theme. App.jsx applies
+  // a cached value before first paint (it has to — /login has no session and
+  // so no settings); this corrects it once the real value arrives and refreshes
+  // the cache. settings_updated falls through to loadData(), so an admin
+  // changing the theme re-colours every open session without a reload.
+  useEffect(() => {
+    if (data?.facility_theme) setTheme(data.facility_theme)
+  }, [data?.facility_theme])
 
   // Refresh only the clinical slices (used after a clinical mutation) without
   // re-pulling the entire dataset.

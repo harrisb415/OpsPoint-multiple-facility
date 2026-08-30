@@ -82,10 +82,20 @@ function validateStatuses(list) {
   return clean;
 }
 
+// Allowlist for the brand theme. Mirrors THEME_KEYS in
+// client/src/utils/themes.js — the colours live in client/src/index.css as
+// :root[data-theme] blocks, so an unknown key here would store fine and then
+// silently render as the default. Kept as a literal because the client list
+// is an ESM module in a separate build; add a theme in both places.
+const VALID_THEMES = ['indigo', 'blue', 'teal', 'emerald', 'rose'];
+
 function saveSettings(b = {}) {
   if (!b.facility_name || !b.facility_name.trim()) throw httpError(400, 'Facility name required');
   if (b.facility_name.trim().length > 200) throw httpError(400, 'Facility name too long (max 200 chars)');
   if (b.client_statuses !== undefined) b.client_statuses = validateStatuses(b.client_statuses);
+  if (b.facility_theme !== undefined) {
+    if (!VALID_THEMES.includes(b.facility_theme)) throw httpError(400, 'Unknown theme');
+  }
   const settings = repo.saveFacilitySettings(b);
   return { settings, facilityName: b.facility_name.trim() };
 }

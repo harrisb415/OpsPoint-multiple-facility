@@ -29,6 +29,7 @@ function getFacilitySettings() {
     // panel reads this endpoint, and an absent value made it fall back to the
     // built-in defaults, so removed statuses reappeared on every refresh.
     client_statuses:        db.getSetting('client_statuses',        []),
+    facility_theme:         db.getSetting('facility_theme',         'indigo'),
   };
 }
 
@@ -46,9 +47,11 @@ function saveFacilitySettings(b) {
   if (b.shift_grave_start && typeof b.shift_grave_start === 'string') db.setSetting('shift_grave_start', b.shift_grave_start.trim());
   if (b.ui_visibility && typeof b.ui_visibility === 'object') db.setSetting('ui_visibility', b.ui_visibility);
   if (Array.isArray(b.client_statuses)) db.setSetting('client_statuses', b.client_statuses);
+  if (b.facility_theme) db.setSetting('facility_theme', b.facility_theme);
   return {
     facility_name:          db.getSetting('facility_name'),
     client_statuses:        db.getSetting('client_statuses'),
+    facility_theme:         db.getSetting('facility_theme'),
     wellness_interval_mins: db.getSetting('wellness_interval_mins'),
     walk_interval_mins:     db.getSetting('walk_interval_mins'),
     walk_areas:             db.getSetting('walk_areas'),

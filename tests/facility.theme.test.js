@@ -109,7 +109,7 @@ describe('facility theme', () => {
   });
 
   test('every advertised theme key is accepted', async () => {
-    for (const k of ['indigo', 'blue', 'teal', 'emerald', 'rose']) {
+    for (const k of ['indigo', 'blue', 'teal', 'emerald', 'rose', 'salvation']) {
       const r = await put(admin, { facility_theme: k });
       expect(r.status).toBe(200);
       expect(db.getSetting('facility_theme')).toBe(k);

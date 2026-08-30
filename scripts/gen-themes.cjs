@@ -12,6 +12,20 @@ const RAMPS = {
   // (#e11d48) sits ~10 degrees of CIELab hue from the red the app uses for
   // danger, so a rose primary button read as destructive. pink-600 clears it.
   rose:    ['#fdf2f8','#fce7f3','#fbcfe8','#f9a8d4','#f472b6','#ec4899','#db2777','#be185d','#9d174d','#831843','#500724'],
+  // The Salvation Army. Their palette is SA Red #ef3e42 (dominant), SA Blue
+  // #002056, SA Navy #132230 and SA Gold #af8c46.
+  //
+  // SA Red cannot be the primary: it sits 4.4 degrees of hue from the red this
+  // app uses for destructive actions, and manages only 3.86:1 behind white
+  // text. A Save button in it would be indistinguishable from Delete and would
+  // fail AA. So red goes to the accent — decorative only, always paired with
+  // primary in a gradient, never a standalone action — which is also how their
+  // own materials read: navy and blue chrome, red as the mark.
+  //
+  // The ramp is Tailwind blue with 950 anchored to SA Blue. Not a substitution
+  // of convenience: SA Blue's hue is 291.0 and the blue ramp runs 291-296, so
+  // this is their blue at lightness steps already validated for contrast.
+  salvation: ['#eff6ff','#dbeafe','#bfdbfe','#93c5fd','#60a5fa','#3b82f6','#2563eb','#1d4ed8','#1e40af','#1e3a8a','#002056'],
 }
 const STEPS = [50,100,200,300,400,500,600,700,800,900,950]
 
@@ -22,12 +36,19 @@ const ACCENTS = {
   teal:    ['#34d399','#10b981','#059669'],  // emerald
   emerald: ['#2dd4bf','#14b8a6','#0d9488'],  // teal
   rose:    ['#e879f9','#d946ef','#c026d3'],  // fuchsia
+  // SA Red #ef3e42 exact at 500, with a lighter and a darker step around it.
+  salvation: ['#f4787b','#ef3e42','#cb2d31'],
 }
 
 // Green-family ramps are too light at 600 for white button text (teal-600 is
 // 3.1:1, emerald-600 3.3:1 — both under the 4.5 AA floor). Shift those two
 // themes' 500/600/700 one step darker so buttons stay legible.
 const SHIFT = { teal: true, emerald: true }
+
+// Themes whose rail is its own brand colour rather than the ramp's darkest
+// step. SA Navy is a distinct entry in their palette, so the rail uses it and
+// the mid/bot stops are derived from it by the usual delta.
+const RAIL_TOP = { salvation: '#132230' }
 
 const hex2rgb = h => [1,3,5].map(i => parseInt(h.slice(i,i+2),16))
 const rgb2hex = c => '#' + c.map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('')
@@ -71,7 +92,7 @@ function build(name) {
     const mix = (a,b,t) => rgb2hex(hex2rgb(a).map((v,i) => v + (hex2rgb(b)[i]-v)*t))
     ramp = o.slice(0,5).concat([o[6], o[7], o[8], o[9], mix(o[9], o[10], 0.5), o[10]])
   }
-  const top = ramp[10]
+  const top = RAIL_TOP[name] || ramp[10]
   const rgb = hex2rgb(top)
   return {
     ramp,

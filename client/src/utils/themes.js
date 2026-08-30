@@ -18,6 +18,9 @@ export const THEMES = [
   { key: 'teal',    label: 'Teal',    hint: 'OpsPoint heritage',  swatch: ['#0f766e', '#10b981'] },
   { key: 'emerald', label: 'Emerald', hint: 'Fresh and calm',     swatch: ['#047857', '#14b8a6'] },
   { key: 'rose',    label: 'Rose',    hint: 'Warm',               swatch: ['#db2777', '#d946ef'] },
+  // Their palette is red-dominant, but SA Red is the accent here, not the
+  // primary — see the note in scripts/gen-themes.cjs.
+  { key: 'salvation', label: 'Salvation Army', hint: 'Red Shield', swatch: ['#2563eb', '#ef3e42'] },
 ]
 
 export const THEME_KEYS = THEMES.map(t => t.key)

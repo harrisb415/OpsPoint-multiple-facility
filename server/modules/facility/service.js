@@ -87,7 +87,7 @@ function validateStatuses(list) {
 // :root[data-theme] blocks, so an unknown key here would store fine and then
 // silently render as the default. Kept as a literal because the client list
 // is an ESM module in a separate build; add a theme in both places.
-const VALID_THEMES = ['indigo', 'blue', 'teal', 'emerald', 'rose'];
+const VALID_THEMES = ['indigo', 'blue', 'teal', 'emerald', 'rose', 'salvation'];
 
 function saveSettings(b = {}) {
   if (!b.facility_name || !b.facility_name.trim()) throw httpError(400, 'Facility name required');

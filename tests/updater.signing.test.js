@@ -84,6 +84,6 @@ describe('pinned release key', () => {
   test('matches the expected fingerprint', () => {
     const spki = crypto.createPublicKey(RELEASE_PUBKEY_PEM)
       .export({ type: 'spki', format: 'der' }).toString('base64');
-    expect(spki).toBe('MCowBQYDK2VwAyEAX0QuuIYyg9EvdxNF0BsNdA6KCbk+wu1u2Ec2m72YXlE=');
+    expect(spki).toBe('MCowBQYDK2VwAyEAT+OjqALSKqG9ZCLj8kON/A1VpxDd3tBDWkWlNn91jY4=');
   });
 });

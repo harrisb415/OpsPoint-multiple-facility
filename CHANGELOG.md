@@ -2,6 +2,32 @@
 
 ---
 
+## v2.6.1 — Release signing key rotated (2026-08-31)
+
+### Security
+
+- **Release signing key rotated.** The private half of the previously pinned key
+  (`X0QuuIYyg9Ev…`) was not recoverable — the `release-private.pem` on the build machine
+  derived to the older `FtGFXRfmB1goFWdp…` instead, so no release could be signed at all.
+  A new Ed25519 pair was generated and its public half pinned in `updater.js` and
+  `central/updater.js`: `T+OjqALSKqG9ZCLj8kON/A1VpxDd3tBDWkWlNn91jY4=`.
+  Verified end to end — the new private key derives to the pinned public key and a signed
+  manifest round-trips through `verifyManifestSignature`.
+
+  **Consequence for existing installs:** any node still running a build that pins an older
+  key will reject updates signed with this one. Such a node has to be brought to a v2.6.1+
+  build by other means (git pull and rebuild, or a fresh install) before the updater will
+  accept releases again. Installs updated to v2.6.1 need no further action.
+
+### Fixed
+
+- **`tests/updater.signing.test.js` had been failing since the previous rotation.** Its
+  positive case used a signature checked into the file, produced with a key that no longer
+  matched the pinned one. It now signs with an ephemeral key generated at test time, so it
+  cannot go stale, and asserts the pinned key's fingerprint separately — a rotation now
+  reports itself as one named failure instead of looking like a broken updater.
+
+---
 ## v2.6.0 — Facility colour themes, themed modals, pass lifecycle (2026-08-30)
 
 A facility can now pick its brand colour, and that choice reaches every surface rather than

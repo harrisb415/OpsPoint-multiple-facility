@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const VERSION = '2.6.0'
+const VERSION = '2.6.1'
 
 const STACK = [
   'React 19', 'React Router v7', 'Vite', 'Node.js',

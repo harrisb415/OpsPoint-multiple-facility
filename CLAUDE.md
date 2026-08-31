@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Product:** OpsPoint v2.6.0
+**Product:** OpsPoint v2.6.1
 
 ---
 

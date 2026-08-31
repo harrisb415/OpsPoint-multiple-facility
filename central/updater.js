@@ -30,7 +30,7 @@ const ALLOWED_HOST_SUFFIXES = ['github.com', 'githubusercontent.com'];
 
 // Pinned Ed25519 release public key (same key the facility updater pins).
 const RELEASE_PUBKEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAX0QuuIYyg9EvdxNF0BsNdA6KCbk+wu1u2Ec2m72YXlE=
+MCowBQYDK2VwAyEAT+OjqALSKqG9ZCLj8kON/A1VpxDd3tBDWkWlNn91jY4=
 -----END PUBLIC KEY-----`;
 
 // Central runtime files/dirs an update bundle may replace. data/ and

@@ -1,15 +1,21 @@
 {
-  "version": "2.4.0",
-  "released": "2026-06-22T00:47:30.859Z",
+  "version": "2.6.1",
+  "released": "2026-08-31T05:31:16.693Z",
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.4.0/opspoint-2.4.0.tar.gz",
-  "sha256": "de53a977a541d4346b988d28752993ba10a9fad83ee2656d0aee8140f407f117",
-  "size": 921390,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.6.1/opspoint-2.6.1.tar.gz",
+  "sha256": "f99517adef6209a156fb92e1d6a940d1c7cc6ee7727bfc77b72141f917729511",
+  "size": 983256,
   "sig_alg": "ed25519",
-  "signature": "XsbBkdi/DDQX+9lowSDJgphj9y6NfB+nvMI4LJ+wBz+2RWVoSOUl1ManSAe2kaGfYqOw6m0juPLszR8XoJwcBQ==",
+  "signature": "06F4iqLIVgF3WEbHDx8ev8iCZJrpmuiLAZl5FBPFj5oLn/4lDEYZCuU9lMRY19NzREUr10Y6JmnWRoJKgEEyBA==",
   "changelog": [
-    "HQ: remove a facility (deletes record, API key, and all backed-up data from HQ)"
+    "Facility colour themes — pick your brand colour in Admin → Facility → Appearance (six, including Salvation Army). Applies across the whole interface for every user.",
+    "Weekend passes reworked — Approved / Active / Returned, with Mark Departed (unlocks 10 minutes before departure), Mark Returned, and Extend, which records who moved the return and from what.",
+    "Editable resident statuses — rename, recolour, add or retire them in Admin → Facility → Statuses.",
+    "Modals restyled to match the rest of the app and follow the selected theme.",
+    "Fixed: the Clinical sidebar stayed light-coloured in dark mode.",
+    "Fixed: form fields in dark-mode dialogs had no contrast against the panel behind them.",
+    "Security: the release signing key was rotated. Installing this build is required before any later update will verify."
   ]
 }

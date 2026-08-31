@@ -1,15 +1,15 @@
 {
-  "version": "0.1.4",
-  "released": "2026-06-22T00:47:31.121Z",
+  "version": "0.1.5",
+  "released": "2026-08-31T05:31:16.875Z",
   "min_node": "20.0.0",
   "min_from": "0.1.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.4.0/central-0.1.4.tar.gz",
-  "sha256": "0cdc75f1d41c647ec4870bb585aaa6cbd2e494e35f47ea0d453433100404a84a",
-  "size": 36338,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.6.1/central-0.1.5.tar.gz",
+  "sha256": "cefa97dda16f92c254fa417b8637af2196e29682bb43e787a29af702bde12a57",
+  "size": 36531,
   "sig_alg": "ed25519",
-  "signature": "bZgTr7XkyY+mjcJXQg8XqsEkyif8x1OffAHLfVVIN3WYR/gIloqed/PjzeaWH/5JfchBiES/xQmVsREK82wTCg==",
+  "signature": "1Z30etSnhj3KZEpdfFf42MIdMJiU3jre7U+O7hytPacLMfFttc+dOTYuHJr/nHSZNksFsgyw2mzmS4vzdCR0DA==",
   "changelog": [
-    "Remove facility: permanently deletes facility record, API key, and all backed-up data from HQ"
+    "Security: the release signing key was rotated. Installing this build is required before any later update will verify."
   ]
 }

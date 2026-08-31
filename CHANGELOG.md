@@ -2,6 +2,55 @@
 
 ---
 
+## v2.6.0 — Facility colour themes, themed modals, pass lifecycle (2026-08-30)
+
+A facility can now pick its brand colour, and that choice reaches every surface rather than
+just the sidebar. Plus a reworked weekend-pass flow.
+
+### Added
+
+- **Facility colour themes.** Six: Indigo (default), Blue, Teal, Emerald, Rose and Salvation
+  Army. Chosen in **Admin → Facility → Appearance**, stored on the facility record, and applied
+  to every signed-in session without a reload — the existing `settings_updated` broadcast
+  already refreshes the data the theme rides on. Light/dark stays a separate per-user choice;
+  the two are independent.
+- **Themes reach the neutral surfaces, not only the brand ones.** The page behind the cards, the
+  cards themselves, the top bar, hover fills, hairlines and the Admin panels all follow the
+  selected theme. Card headers and the top bar carry the primary *and* accent colour.
+- **Salvation Army theme** built from their published palette: SA Red `#ef3e42` (PMS 185),
+  SA Blue `#002056`, SA Navy `#132230`. Their red is the accent rather than the primary — it
+  sits 4.4° of CIELab hue from the red this app uses for destructive actions, so a Save button
+  in it would be indistinguishable from Delete, and it reaches only 3.86:1 behind white text.
+- **Three-stage weekend passes.** Approved → Active → Returned, with **Mark Departed** and
+  **Mark Returned** replacing the old status dropdown. Mark Departed unlocks ten minutes before
+  the scheduled departure. **Extend** opens a modal asking for the new return date and time, and
+  the server appends a line to the pass notes recording who moved it and from what, so repeat
+  extensions accumulate as history. Extending counts as a status action, so a user with
+  `status.edit` but not `passes.edit` can extend without being able to edit pass details.
+
+### Changed
+
+- **Modals match the rest of the app.** Headers carry the same tinted band and display face as
+  card headers, and follow the facility theme. Applied through a flowbite `ThemeProvider`
+  override, so modals added later inherit it.
+- Colour choices are generated and checked rather than hand-picked. `scripts/gen-themes.cjs`
+  asserts every theme against seven rules — contrast for buttons, brand text, on-rail text and
+  card headers, plus a minimum 25° CIELab hue separation from the destructive reds. Teal and
+  emerald carry their ramp one step darker because `teal-600` and `emerald-600` are 3.1:1 and
+  3.3:1 behind white button text, under the 4.5 AA floor.
+
+### Fixed
+
+- **The Clinical rail never darkened.** It used `dark:bg-gray-800`, which sets `background-color`
+  and so never covered the gradient's `background-image` — it stayed purple in dark mode while
+  the app and Admin rails correctly went grey.
+- **Leftover v2.1 palette.** Ten sites still carried the old teal `#0a4655` and gold `#c9780c` as
+  literal hex. Three were written `text-[#0a4655] dark:text-primary-400`, so light mode rendered
+  the old teal while dark rendered the current brand colour.
+- **Form controls in dark modals had no contrast against their own panel.** Flowbite's modal
+  surface and its text inputs were both `gray-700`, the same value.
+
+---
 ## v2.5.0 — Encryption at rest, six-year audit retention, scheduled backups, dark rail (2026-08-28)
 
 Security and compliance work from a code-level review of the clinical and records layer,

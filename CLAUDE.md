@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Product:** OpsPoint v2.5.0
+**Product:** OpsPoint v2.6.0
 
 ---
 
@@ -98,7 +98,7 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | `log_entries` | `id`, `report_id`, `time`, `text`, `ua_photo`, `created_at` |
 | `users` | `id`, `username`, `display_name`, `role`, `hash`, `salt`, `must_change_pw`, `permissions` (JSON), `created_at` |
 | `staff` | `id`, `category`, `name`, `phone`, `phone2`, `notes`, `sort_order`, `created_at` |
-| `passes` | `id`, `client_id`, `room`, `name`, `departure`, `return_date`, `ua_notes`, `notes`, `status` (`Out`/`Extended`/`Returned`), `created_at` |
+| `passes` | `id`, `client_id`, `room`, `name`, `departure`, `return_date`, `ua_notes`, `notes`, `status` (`Approved`/`Out`/`Extended`/`Returned`), `created_at` |
 | `chore_log` | `id`, `client_id`, `log_date`, `initials` — unique per `(client_id, log_date)` |
 | `ua_requests` | `id`, `client_id`, `client_name`, `room`, `requested_by`, `requested_at`, `acknowledged`, `acknowledged_by`, `acknowledged_at` |
 | `mail_log` | `id`, `client_id`, `client_name`, `room`, `logged_by`, `logged_at`, `report_id`, `notes`, `status` (`pending`/`approved`/`delivered`), `approved_by`, `approved_at`, `delivered_at` |
@@ -175,6 +175,10 @@ client/
         ViolationsTab.jsx
     utils/
       printLog.js        ← openPrintWindow() — opens a styled print-ready tab; shared by tabs
+      themes.js          ← facility colour themes: the list, and the only writer of data-theme
+      flowbiteTheme.js   ← app-wide flowbite overrides (modal chrome), applied in main.jsx
+      ui.js              ← shared class strings: CARD_HEAD*, RAIL_* (used by all three rails)
+      statuses.js        ← resident statuses: single source of truth for labels/tones
   index.css              ← Global styles (includes body { overflow: hidden })
 ```
 
@@ -276,6 +280,35 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 ---
 
 
+## Theming
+
+Six facility themes, chosen in Admin → Facility → Appearance and stored as the
+`facility_theme` setting. The colours live in `client/src/index.css` as
+`:root[data-theme="..."]` blocks — **generated, do not hand-edit them**. Tailwind v4
+compiles its utilities to `var(--color-*)`, so switching a theme is one attribute on
+`<html>`: no rebuild, no reload.
+
+**Adding or changing a theme means editing three places:**
+
+1. `scripts/gen-themes.cjs` — the ramp and accent, then re-run it
+2. `client/src/utils/themes.js` — label, hint and swatch for the picker
+3. `VALID_THEMES` in `server/modules/facility/service.js` — the allowlist
+
+The generator asserts every theme against seven rules (contrast for buttons, brand text,
+on-rail text and card headers; and a minimum 25° CIELab hue separation from the reds used
+for destructive actions). It refuses nothing, but prints FAIL — check its output.
+
+What follows a theme: brand tokens (`primary`, `accent`, `rail`), the neutral surface
+tokens (`--surface-*`, and the legacy `--card-bg`/`--page-bg` set) and the `--gray-*`
+ramp. What deliberately does **not**: semantic red/amber/green, and the configurable
+status tones in `utils/statuses.js` — a facility on the emerald theme still shows a
+positive UA in red.
+
+Light/dark is orthogonal: a class on the same element, a different storage key
+(`opspoint-theme` vs `opspoint-facility-theme`).
+
+---
+
 ## Key files
 
 | File | Purpose |
@@ -293,4 +326,7 @@ If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/W
 | `client/src/pages/ReportTab.jsx` | Active shift report tab (lives at pages/ level, not pages/tabs/) |
 | `client/src/pages/tabs/*.jsx` | Individual tab components |
 | `client/src/utils/printLog.js` | `openPrintWindow()` — shared print helper used by multiple tabs |
+| `client/src/utils/themes.js` | Facility theme list + `applyTheme`/`setTheme`; nothing else writes `data-theme` |
+| `client/src/utils/ui.js` | Shared class strings — `CARD_HEAD*`, `RAIL_*`; edit here, not at call sites |
+| `scripts/gen-themes.cjs` | Generates the `:root[data-theme]` blocks in `index.css` and asserts their contrast + hue rules |
 | `data/opspoint.db` | The only file that needs backing up |

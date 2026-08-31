@@ -134,11 +134,14 @@ function sha256File(p) {
 // Verify the manifest's Ed25519 signature over "version\nsize\nsha256" against the
 // pinned public key. Returns true only on a valid signature. Because the signed
 // payload includes the bundle sha256, a valid signature authenticates the bundle.
-function verifyManifestSignature(m) {
+// `pubkeyPem` exists only so the verification logic can be exercised against an
+// ephemeral key in tests. Production callers must never pass it — they take the
+// pinned release key above, which is the whole point of pinning it.
+function verifyManifestSignature(m, pubkeyPem = RELEASE_PUBKEY_PEM) {
   if (!m || !m.signature || !m.sha256 || !m.version) return false;
   try {
     const payload = Buffer.from(`${m.version}\n${m.size || 0}\n${String(m.sha256).toLowerCase()}`, 'utf8');
-    const key = crypto.createPublicKey(RELEASE_PUBKEY_PEM);
+    const key = crypto.createPublicKey(pubkeyPem);
     return crypto.verify(null, payload, key, Buffer.from(String(m.signature), 'base64'));
   } catch (e) { return false; }
 }

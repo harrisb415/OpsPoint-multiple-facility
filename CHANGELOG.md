@@ -19,6 +19,12 @@
   build by other means (git pull and rebuild, or a fresh install) before the updater will
   accept releases again. Installs updated to v2.6.1 need no further action.
 
+- **Central HQ bumped to 0.1.5** with no feature change. The rotation edited
+  `central/updater.js`, so the bundle differs from the 0.1.4 already published; the updater
+  only offers a release when its version is strictly greater, so republishing changed content
+  under 0.1.4 would have left every HQ node reporting "up to date" while still pinning the
+  retired key.
+
 ### Fixed
 
 - **`tests/updater.signing.test.js` had been failing since the previous rotation.** Its

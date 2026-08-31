@@ -5,7 +5,9 @@ import {
   TextInput, Select, Textarea, Checkbox, Label, Alert,
 } from 'flowbite-react'
 import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
-import { useData } from '../contexts/DataContext.jsx'
+import { useData } from '../contexts/DataContext.jsx'
+import { statusList, allStatuses, TONE_BADGE, TONE_DOT } from '../utils/statuses.js'
+import { CARD_HEAD, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
@@ -17,8 +19,8 @@ function Panel({ title, right, flush, children }) {
   if (flush) {
     return (
       <div className={`${CARD} mb-4 !p-0 overflow-hidden`}>
-        <div className="flex flex-col gap-2 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+        <div className={CARD_HEAD}>
+          <h3 className={CARD_HEAD_TITLE}>{title}</h3>
           {right}
         </div>
         {children}
@@ -26,16 +28,19 @@ function Panel({ title, right, flush, children }) {
     )
   }
   return (
-    <div className={`${CARD} mb-4`}>
-      <div className="flex flex-col gap-2 mb-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+    <div className={`${CARD} mb-4 !p-0 overflow-hidden`}>
+      <div className={CARD_HEAD}>
+        <h3 className={CARD_HEAD_TITLE}>{title}</h3>
         {right}
       </div>
-      {children}
+      <div className="p-4">{children}</div>
     </div>
   )
 }
 
+// Fallback only — the live list is editable in Admin -> Facility -> Statuses
+// and arrives on the data payload. Kept so a first paint (or a payload that
+// predates the setting) still renders real labels instead of raw slugs.
 const STATUS_OPTS = [
   { v: 'building', l: 'In Building', c: 's-building' },
   { v: 'work',     l: 'Work',        c: 's-work' },
@@ -109,7 +114,18 @@ function parseLogTimeToDate(timeStr) {
   if (d.getTime() > Date.now() + 30 * 60000) d.setDate(d.getDate() - 1)
   return d
 }
-function stOpt(v) { return STATUS_OPTS.find(o => o.v === v) || { v, l: v, c: '' } }
+function stOpt(v, opts) { return (opts || STATUS_OPTS).find(o => o.v === v) || { v, l: v, c: '' } }
+
+// Map the configured statuses onto the shape this file already uses.
+function optsFrom(data) {
+  return statusList(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
+}
+
+// Picker vs render: a row already sitting on a retired status must still
+// show its label, so lookups fall back to the full list (archived included).
+function lookupFrom(data) {
+  return allStatuses(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
+}
 
 function dateStamp() {
   return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -271,11 +287,18 @@ export default function ReportTab() {
   }, [passes])
   // Census
   const census = useMemo(() => {
-    const cnt = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
+    // Seed from the configured statuses so a newly added one shows 0 rather
+    // than blank, and count whatever a resident actually holds — including a
+    // retired status — so the total always equals the resident count.
+    const cnt = {}
+    for (const st of statusList(data)) cnt[st.key] = 0
     clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT')
-      .forEach(c => { const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'; if (Object.hasOwn(cnt, st)) cnt[st]++ })
+      .forEach(c => {
+        const st = passOverride[c.id] ?? statuses[c.id] ?? 'building'
+        cnt[st] = (cnt[st] || 0) + 1
+      })
     return cnt
-  }, [clients, statuses, passOverride])
+  }, [clients, statuses, passOverride, data])
   const censusTotal = Object.values(census).reduce((a, b) => a + b, 0)
 
   // Log entries — sortable by time or type
@@ -513,6 +536,15 @@ export default function ReportTab() {
   // Sorted + filtered roster
   const lastUa = activeReport?.last_ua || {}
   const lastRs = activeReport?.last_room_search || {}
+  // Statuses configured in Admin -> Facility -> Statuses, memoised so the
+  // list identity is stable across renders.
+  const statusOptions = useMemo(() => optsFrom(data), [data])
+  const statusLookup  = useMemo(() => lookupFrom(data), [data])
+  // Census cells follow the configured statuses (order included). TONE_DOT
+  // keeps the pip in step with the colour chosen in Admin.
+  const censusCells = useMemo(
+    () => statusList(data).map(s => ({ key: s.key, label: s.label, dot: TONE_DOT[s.tone] || TONE_DOT.gray })),
+    [data])
   const sortedClients = useMemo(() => {
     return clients.filter(c => c.is_active)
       .filter(c => showAllRooms || (!c.is_special && c.name !== 'VACANT'))
@@ -558,7 +590,7 @@ export default function ReportTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Shift Report</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Shift Report</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Shift Report</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">No active report for this shift</p>
         </div>
         <div className={`${CARD} flex flex-col items-center justify-center py-16 text-center`}>
@@ -592,7 +624,7 @@ export default function ReportTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Shift Report</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{shift} Report</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">{shift} Report</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {reportDate} · {shiftRange}{facilityName ? ' · ' + facilityName : ''}{activeId ? ' · #' + activeId : ''}{isClosed ? ' · Closed' : ''}
           </p>
@@ -627,16 +659,10 @@ export default function ReportTab() {
 
       {/* Census */}
       <Panel title="Census" right={<span className="text-xs text-gray-400">{censusTotal} Residents</span>}>
-        <div className="grid grid-cols-4 gap-2 xl:grid-cols-8">
-          {[
-            { key: 'building', label: 'In Building', dot: 'bg-green-500' },
-            { key: 'work',     label: 'Work',         dot: 'bg-blue-500' },
-            { key: 'pass',     label: 'Pass',          dot: 'bg-yellow-400' },
-            { key: 'bhc',      label: 'BHC',           dot: 'bg-purple-500' },
-            { key: 'efc',      label: 'EFC',           dot: 'bg-purple-400' },
-            { key: 'hospital', label: 'Hospital',      dot: 'bg-red-500' },
-            { key: 'out',      label: 'Out / Other',   dot: 'bg-gray-400' },
-          ].map(({ key, label, dot }) => (
+        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(7rem,1fr))]">
+          {/* Driven by the configured statuses, so a rename or recolour in
+              Admin shows up here without a code change. */}
+          {censusCells.map(({ key, label, dot }) => (
             <div key={key} className="flex flex-col items-center p-3 bg-white border border-gray-200 rounded-xl dark:bg-gray-700 dark:border-gray-600">
               <div className={`w-2 h-2 rounded-full mb-2 shrink-0 ${dot}`} />
               <div className="text-xl font-bold text-gray-900 dark:text-white">{census[key]}</div>
@@ -894,6 +920,7 @@ export default function ReportTab() {
                     hasInPass={inPass.has(c.id)}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
+                    statusOptions={statusOptions} statusLookup={statusLookup}
                     onStatusChange={handleStatusChange}
                     onCommentChange={handleCommentChange}
                     onUARequest={handleUARequest}
@@ -1557,11 +1584,14 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
   )
 }
 
-function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, onStatusChange, onCommentChange, onUARequest }) {
+function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, statusOptions, statusLookup, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
-  const opt = stOpt(cur)
-  const statusOpts = hasInPass ? STATUS_OPTS.filter(o => o.v !== 'pass') : STATUS_OPTS
-  const badgeCls = STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
+  const allOpts = statusOptions && statusOptions.length ? statusOptions : STATUS_OPTS
+  const opt = stOpt(cur, (statusLookup && statusLookup.length ? statusLookup : allOpts))
+  const statusOpts = hasInPass ? allOpts.filter(o => o.v !== 'pass') : allOpts
+  // Prefer the configured tone; fall back to the legacy per-key map so any
+  // key predating the setting still renders with its original colour.
+  const badgeCls = (opt.tone && TONE_BADGE[opt.tone]) || STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
 
   const ResidentCell = () => {
     if (c.is_special) return (

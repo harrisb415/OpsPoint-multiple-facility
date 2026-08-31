@@ -187,6 +187,25 @@ function setPermissionProfiles(profiles) {
 function _seedDefaults() {
   const defs = {
     facility_name:          'OpsPoint',
+    // Brand colour theme. Keys are defined in client/src/utils/themes.js and
+    // realised as :root[data-theme] blocks in client/src/index.css; the server
+    // only stores and allowlists the key.
+    facility_theme:         'indigo',
+    // Selectable resident statuses, editable in Admin -> Facility -> Statuses.
+    // `key` is what gets stored in reports.statuses, so renaming a label is
+    // safe but changing a key would orphan historical data — the API blocks
+    // removing a key that any report still references. `building` is the
+    // default state and cannot be removed. 'vacant' is NOT here: it is
+    // derived from name='VACANT', not chosen by staff.
+    client_statuses:        JSON.stringify([
+      { key: 'building', label: 'In Building',  tone: 'green',  system: true },
+      { key: 'work',     label: 'At Work',      tone: 'blue'   },
+      { key: 'pass',     label: 'Weekend Pass', tone: 'amber',  system: true },
+      { key: 'bhc',      label: 'BHC',          tone: 'purple' },
+      { key: 'efc',      label: 'EFC',          tone: 'pink'   },
+      { key: 'hospital', label: 'Hospital',     tone: 'red',    system: true },
+      { key: 'out',      label: 'Out / Other',  tone: 'orange', system: true },
+    ]),
     audit_retention_days:   String(AUDIT_RETENTION_MIN_DAYS),  // 6 years — statutory floor
     wellness_interval_mins: '120',
     walk_interval_mins:     '240',
@@ -580,6 +599,8 @@ function getAllData(perms) {
     incident_notifications: getSetting('incident_notifications', { low:[], medium:['supervisor'], high:['supervisor','case_manager'], critical:['supervisor','case_manager','licensing','guardian'] }),
     session_idle_mins:      parseInt(getSetting('session_idle_mins', 30)) || 30,
     ui_visibility:          getSetting('ui_visibility',          {}),
+    client_statuses:        getSetting('client_statuses',      []),
+    facility_theme:         getSetting('facility_theme',       'indigo'),
   };
 }
 
@@ -1025,6 +1046,24 @@ function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} 
 // Statutory floor — HIPAA §164.316(b)(2)(i) requires six years retention of
 // documentation, which includes the audit trail. 6 x 365 = 2190.
 const AUDIT_RETENTION_MIN_DAYS = 2190;
+
+// Status keys referenced by reports. `openOnly` narrows to reports still
+// open (is_closed = 0) — a closed report is an immutable record, so a status
+// it references can be retired from the picker; one an open shift is actively
+// using cannot, or staff would lose the value mid-shift.
+function statusKeysInUse({ openOnly = false } = {}) {
+  const keys = new Set();
+  try {
+    const sql = openOnly
+      ? 'SELECT statuses FROM reports WHERE is_closed = 0'
+      : 'SELECT statuses FROM reports';
+    for (const r of _q(sql)) {
+      let m; try { m = JSON.parse(r.statuses || '{}'); } catch (e) { continue; }
+      for (const k of Object.values(m || {})) if (k) keys.add(String(k));
+    }
+  } catch (e) { /* table may not exist yet */ }
+  return [...keys];
+}
 
 function pruneAuditLog(days) {
   // Floor at the statutory minimum. A bad setting, a stale value, or a caller
@@ -1494,6 +1533,7 @@ module.exports = {
   // Broadcasts
   createBroadcast, getBroadcast, getBroadcasts,
   auditLog, getAuditLog, pruneAuditLog,
+  statusKeysInUse,
   // Scheduled backup (backup.js) — VACUUM INTO snapshot + the live DB path.
   backupTo: (dest) => connection.backupTo(dest),
   getDbPath: () => connection.getPath(),

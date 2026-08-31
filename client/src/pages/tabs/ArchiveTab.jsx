@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import { CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { useOutletContext } from 'react-router-dom'
 import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
 import {
@@ -107,7 +108,7 @@ export default function ArchiveTab() {
           <BreadcrumbItem>Records</BreadcrumbItem>
           <BreadcrumbItem>Archive</BreadcrumbItem>
         </Breadcrumb>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Archive</h1>
+        <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Archive</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Past shift reports — read-only snapshots</p>
       </div>
 
@@ -319,7 +320,7 @@ function Panel({ title, count, children }) {
   return (
     <div className={`${CARD} mb-4`}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">{title}</h3>
+        <h3 className={CARD_HEAD_TITLE}>{title}</h3>
         {count != null && <span className="font-mono text-xs text-gray-400">{count}</span>}
       </div>
       {children}
@@ -342,7 +343,7 @@ function ReportDetail({ report: r, data, onBack }) {
             <BreadcrumbItem>Records</BreadcrumbItem>
             <BreadcrumbItem>Archive</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Report #{r.id}</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Report #{r.id}</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{fmtDate(r.report_date)} · {r.shift || '—'}{r.mod_name ? ' · MOD: ' + r.mod_name : ''}</p>
         </div>
         <div className="flex items-center gap-2">

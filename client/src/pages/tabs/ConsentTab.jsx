@@ -7,7 +7,7 @@ import {
   TextInput, Textarea, Modal, ModalHeader, ModalBody, ModalFooter, Alert,
 } from 'flowbite-react'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
-import { initials } from '../../utils/ui.js'
+import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
@@ -134,7 +134,7 @@ export default function ConsentTab() {
             <BreadcrumbItem>Records</BreadcrumbItem>
             <BreadcrumbItem>Consents</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Consents</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Consents</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">42 CFR Part 2 — consent &amp; disclosure tracking</p>
         </div>
         {canManage && selectedClient && (
@@ -180,7 +180,9 @@ export default function ConsentTab() {
             ))}
           </div>
 
-          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-200">Active &amp; historical consents</h3>
+          <div className={CARD_HEAD_BAND}>
+          <h3 className={CARD_HEAD_TITLE}>Active &amp; historical consents</h3>
+        </div>
           {consents.length === 0
             ? <div className={`${CARD} text-sm text-center text-gray-400`}>No consent records on file.</div>
             : (

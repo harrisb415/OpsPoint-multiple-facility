@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { Plus, MoreHorizontal, Ticket, AlertTriangle, LogIn } from 'lucide-react'
+import { Plus, MoreHorizontal, Ticket, CalendarCheck, LogIn, LogOut, Clock } from 'lucide-react'
 import {
   Breadcrumb, BreadcrumbItem, Button, Card, Dropdown, DropdownItem,
   Pagination,
@@ -9,11 +9,11 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { initials } from '../../utils/ui.js'
-import { Field, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
+import { CARD_HEAD_TITLE, CARD_HEAD_INSET_LG, CARD_HEAD_BAND } from '../../utils/ui.js'
+import { Field, ErrLine, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 const PAGE_SIZE = 25
-const PASS_BADGE = { Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
+const PASS_BADGE = { Approved: 'info', Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
 
 function fmtDT(s) {
   if (!s) return '—'
@@ -25,7 +25,10 @@ function fmtDT(s) {
 }
 function localDT(s) { if (!s) return ''; try { return new Date(s).toISOString().slice(0, 16) } catch { return '' } }
 
-const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'In' }
+// How early a resident may be marked departed, relative to the scheduled time.
+const EARLY_DEPART_MS = 10 * 60 * 1000
+
+const BLANK_PASS = { client_id: '', room: '', name: '', departure: '', return_date: '', ua_notes: '', notes: '', status: 'Approved' }
 
 export default function PassesTab() {
   const { data, openProfile, loadData } = useData()
@@ -46,9 +49,34 @@ export default function PassesTab() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Mark Departed stays disabled until shortly before the scheduled departure.
+  // Residents routinely leave a few minutes early, so a hard gate on the exact
+  // time just means staff can't log what actually happened; the grace window
+  // keeps the log honest without letting a pass be opened hours ahead.
+  // Ticking every 30s so a page left open enables the button on its own.
+  // A pass with no departure time is unconstrained.
+  const [nowTs, setNowTs] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNowTs(Date.now()), 30000)
+    return () => clearInterval(t)
+  }, [])
+  const departureAt = (p) => {
+    if (!p.departure) return null
+    const t = new Date(p.departure).getTime()
+    return Number.isNaN(t) ? null : t
+  }
+  const canDepart = (p) => { const t = departureAt(p); return t === null || nowTs >= t - EARLY_DEPART_MS }
+  // Earliest the button unlocks — used for the tooltip so the reason is exact.
+  const departUnlockAt = (p) => { const t = departureAt(p); return t === null ? null : new Date(t - EARLY_DEPART_MS) }
+
   const gq = globalSearch.toLowerCase().trim()
   const pmatch = p => !gq || (p.name || '').toLowerCase().includes(gq) || String(p.room || '').includes(gq)
-  const active = useMemo(() => passes.filter(p => p.status !== 'Returned' && pmatch(p)), [passes, gq])  // eslint-disable-line react-hooks/exhaustive-deps
+  // Three stages of the pass lifecycle. Approved passes are granted but the
+  // resident is still on site, so they stay In Building; only Out/Extended
+  // map onto the 'pass' status via passOverride.
+  const approved = useMemo(() => passes.filter(p => p.status === 'Approved' && pmatch(p))
+    .slice().sort((a, b) => (a.departure || '').localeCompare(b.departure || '')), [passes, gq])  // eslint-disable-line react-hooks/exhaustive-deps
+  const active = useMemo(() => passes.filter(p => (p.status === 'Out' || p.status === 'Extended') && pmatch(p)), [passes, gq])  // eslint-disable-line react-hooks/exhaustive-deps
   const returned = useMemo(() => passes.filter(p => p.status === 'Returned' && pmatch(p))
     .slice().sort((a, b) => (b.return_date || '').localeCompare(a.return_date || '')), [passes, gq])  // eslint-disable-line react-hooks/exhaustive-deps
   const retPages = Math.ceil(returned.length / PAGE_SIZE)
@@ -67,7 +95,7 @@ export default function PassesTab() {
   }
   function openAdd() { setForm({ ...BLANK_PASS }); setError(''); setModal('add') }
   function openEdit(p) {
-    setForm({ client_id: String(p.client_id || ''), room: p.room || '', name: p.name || '', departure: localDT(p.departure), return_date: localDT(p.return_date), ua_notes: p.ua_notes || '', notes: p.notes || '', status: p.status || 'Out' })
+    setForm({ client_id: String(p.client_id || ''), room: p.room || '', name: p.name || '', departure: localDT(p.departure), return_date: localDT(p.return_date), ua_notes: p.ua_notes || '', notes: p.notes || '', status: p.status || 'Approved' })
     setError(''); setModal(p)
   }
   function handleClientSelect(clientId) {
@@ -88,9 +116,36 @@ export default function PassesTab() {
     } catch { setError('Network error') }
     finally { setSaving(false) }
   }
+  // Send only the status. Spreading the whole pass also sent departure,
+  // notes and so on, which the server counts as a details edit and rejects
+  // for a user who has passes.status but not passes.edit.
   async function quickStatus(p, newStatus) {
-    const r = await fetch(`/api/passes/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ ...p, status: newStatus }) })
+    const r = await fetch(`/api/passes/${p.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify({ status: newStatus }) })
     if (r.ok) loadData()
+  }
+
+  // Extend bundles the status with a new return date — the server treats that
+  // pair as a status-level action and appends a note recording the change.
+  const [extendFor, setExtendFor]   = useState(null)
+  const [extendDate, setExtendDate] = useState('')
+  const [extendErr, setExtendErr]   = useState('')
+  function openExtend(p) {
+    setExtendFor(p)
+    setExtendDate(localDT(p.return_date))
+    setExtendErr('')
+  }
+  async function submitExtend() {
+    if (!extendDate) { setExtendErr('Pick a new return date and time.'); return }
+    const prev = extendFor.return_date ? new Date(extendFor.return_date).getTime() : null
+    if (prev !== null && new Date(extendDate).getTime() <= prev) {
+      setExtendErr('The new return must be later than the current one.'); return
+    }
+    const r = await fetch(`/api/passes/${extendFor.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ status: 'Extended', return_date: extendDate }),
+    })
+    if (r.ok) { setExtendFor(null); loadData() }
+    else { const d = await r.json().catch(() => ({})); setExtendErr(d.error || 'Could not extend this pass.') }
   }
   async function del(p) {
     if (!await confirm({ title: `Delete pass for ${p.name}?`, confirmText: 'Delete', color: 'red' })) return
@@ -119,16 +174,19 @@ export default function PassesTab() {
     return (
       <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
         {canEdit && <DropdownItem onClick={() => openEdit(p)}>Edit</DropdownItem>}
-        {canStatus && p.status !== 'Returned' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => quickStatus(p, 'Returned')}>Mark Returned</DropdownItem>}
-        {canStatus && p.status === 'Out' && <DropdownItem onClick={() => quickStatus(p, 'Extended')}>Mark Extended</DropdownItem>}
+        {canStatus && p.status === 'Approved' && <DropdownItem disabled={!canDepart(p)} onClick={() => quickStatus(p, 'Out')}>Mark Departed</DropdownItem>}
+        {canStatus && p.status !== 'Returned' && p.status !== 'Approved' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => quickStatus(p, 'Returned')}>Mark Returned</DropdownItem>}
+        {canStatus && (p.status === 'Out' || p.status === 'Extended') && <DropdownItem onClick={() => openExtend(p)}>Extend…</DropdownItem>}
+        {canStatus && p.status === 'Returned' && <DropdownItem onClick={() => quickStatus(p, 'Out')}>Reopen as departed</DropdownItem>}
         {canEdit && <DropdownItem className="text-red-600" onClick={() => del(p)}>Delete</DropdownItem>}
       </Dropdown>
     )
   }
 
   const kpis = [
-    { label: 'Currently Out', value: active.length, sub: 'on pass', Icon: Ticket, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
-    { label: 'Extended', value: active.filter(p => p.status === 'Extended').length, sub: 'needs follow-up', Icon: AlertTriangle, tint: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' },
+    { label: 'Approved', value: approved.length, sub: 'not departed yet', Icon: CalendarCheck, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+    { label: 'Active', value: active.length, sub: 'out on pass', Icon: Ticket, tint: 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300' },
+
     { label: 'Returned', value: returned.length, sub: 'total', Icon: LogIn, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
   ]
 
@@ -141,7 +199,7 @@ export default function PassesTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Passes</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Passes</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Passes</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Active and recent resident passes</p>
         </div>
         {canEdit && <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> New Pass</Button>}
@@ -166,16 +224,62 @@ export default function PassesTab() {
 
       {/* Pass notice board */}
       <Card className="mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-base font-semibold text-gray-900 dark:text-white">Pass Notice Board</h3>
+        <div className={CARD_HEAD_INSET_LG}>
+          <h3 className={CARD_HEAD_TITLE}>Pass Notice Board</h3>
           {canEdit && <Button size="xs" onClick={saveNotice} isProcessing={noticeSaving} disabled={noticeSaving}>Save Notice</Button>}
         </div>
         <Textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} rows={2} disabled={!canEdit}
           placeholder="Enter any pass-related notices for this weekend…" />
       </Card>
 
+      {/* Approved — granted but still on site, so the resident stays In Building */}
+      <div className={CARD_HEAD_BAND}>
+        <h3 className={CARD_HEAD_TITLE}>Approved &mdash; not departed</h3>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{approved.length} waiting to leave</span>
+      </div>
+      <div className="mb-6">
+        <Table hoverable>
+          <TableHead>
+            <TableRow>
+              <TableHeadCell>Resident</TableHeadCell>
+              <TableHeadCell>Status</TableHeadCell>
+              <TableHeadCell>Departure</TableHeadCell>
+              <TableHeadCell>Return</TableHeadCell>
+              <TableHeadCell>Notes</TableHeadCell>
+              <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
+            </TableRow>
+          </TableHead>
+          <TableBody className="divide-y">
+            {approved.length === 0 ? (
+              <TableRow><TableCell colSpan={6} className="text-sm text-center text-gray-400">No approved passes waiting.</TableCell></TableRow>
+            ) : approved.map(p => (
+              <TableRow key={p.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
+                <NameCell p={p} />
+                <TableCell><StatusBadge color={PASS_BADGE[p.status] || 'gray'}>{p.status}</StatusBadge></TableCell>
+                <TableCell className="font-mono">{fmtDT(p.departure)}</TableCell>
+                <TableCell className="font-mono">{fmtDT(p.return_date)}</TableCell>
+                <TableCell className="text-gray-500 dark:text-gray-400">{notesOf(p)}</TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    {canStatus && (
+                      <Button size="xs" disabled={!canDepart(p)} onClick={() => quickStatus(p, 'Out')}
+                        title={canDepart(p) ? 'Mark this resident as departed' : `Available from ${fmtDT(departUnlockAt(p))} (10 min before departure)`}>
+                        <LogOut className="w-3.5 h-3.5 mr-1.5" /> Mark Departed
+                      </Button>
+                    )}
+                    <RowMenu p={p} />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
       {/* Active passes */}
-      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Active passes</h3>
+      <div className={CARD_HEAD_BAND}>
+          <h3 className={CARD_HEAD_TITLE}>Active passes</h3>
+        </div>
       <div className="mb-6">
         <Table hoverable>
           <TableHead>
@@ -198,7 +302,22 @@ export default function PassesTab() {
                 <TableCell className="font-mono">{fmtDT(p.departure)}</TableCell>
                 <TableCell className="font-mono">{fmtDT(p.return_date)}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{notesOf(p)}</TableCell>
-                <TableCell className="text-right"><RowMenu p={p} /></TableCell>
+                <TableCell className="text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    {canStatus && (
+                      <Button size="xs" color="light" onClick={() => openExtend(p)}
+                        title="Push the expected return back; the change is noted on the pass">
+                        <Clock className="w-3.5 h-3.5 mr-1.5" /> Extend
+                      </Button>
+                    )}
+                    {canStatus && (
+                      <Button size="xs" color="light" onClick={() => quickStatus(p, 'Returned')}>
+                        <LogIn className="w-3.5 h-3.5 mr-1.5" /> Mark Returned
+                      </Button>
+                    )}
+                    <RowMenu p={p} />
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -208,7 +327,9 @@ export default function PassesTab() {
       {/* Returned passes */}
       {returned.length > 0 && (
         <>
-          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Returned passes</h3>
+          <div className={CARD_HEAD_BAND}>
+          <h3 className={CARD_HEAD_TITLE}>Returned passes</h3>
+        </div>
           <Table hoverable>
             <TableHead>
               <TableRow>
@@ -241,8 +362,31 @@ export default function PassesTab() {
         </>
       )}
 
+      {/* Extend — asks for the new return, server records the change on the pass */}
+      {extendFor && (
+        <Modal show size="md" onClose={() => setExtendFor(null)}>
+          <ModalHeader>Extend Pass &mdash; {extendFor.name}</ModalHeader>
+          <ModalBody>
+            <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+              Current return <span className="font-mono text-gray-700 dark:text-gray-200">{fmtDT(extendFor.return_date)}</span>.
+              {' '}The pass is marked Extended and a note is added so the change is visible on the record.
+            </p>
+            <Field label="New expected return">
+              <TextInput type="datetime-local" value={extendDate}
+                onChange={e => { setExtendDate(e.target.value); setExtendErr('') }} />
+            </Field>
+            {extendErr && <ErrLine>{extendErr}</ErrLine>}
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setExtendFor(null)}>Cancel</Button>
+            <Button onClick={submitExtend}>Extend Pass</Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
       {/* Add/Edit Modal */}
       {modal && (
+
         <Modal show size="lg" onClose={() => setModal(null)}>
           <ModalHeader>{modal === 'add' ? 'Add Weekend Pass' : `Edit Pass — ${modal.name}`}</ModalHeader>
           <ModalBody>
@@ -262,13 +406,9 @@ export default function PassesTab() {
                 <Field label="Departure"><TextInput type="datetime-local" value={form.departure} onChange={e => setForm(f => ({ ...f, departure: e.target.value }))} /></Field>
                 <Field label="Expected Return"><TextInput type="datetime-local" value={form.return_date} onChange={e => setForm(f => ({ ...f, return_date: e.target.value }))} /></Field>
               </div>
-              <Field label="Status">
-                <Select value={form.status} disabled={!canStatus} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  <option value="Out">Out</option>
-                  <option value="Extended">Extended</option>
-                  <option value="In">In</option>
-                </Select>
-              </Field>
+              {/* Status is driven by the row actions (Mark Departed / Extend /
+                  Mark Returned), so the dropdown is gone. It also offered "In",
+                  which was never a valid status and was silently dropped on save. */}
               <Field label="UA Requirements / Notes"><TextInput value={form.ua_notes} onChange={e => setForm(f => ({ ...f, ua_notes: e.target.value }))} placeholder="e.g. UA required on return" /></Field>
               <Field label="Notes"><Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></Field>
             </div>

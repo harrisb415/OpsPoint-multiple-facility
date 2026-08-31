@@ -34,7 +34,7 @@ export function Table({ children, hoverable = false, striped = false, flush = fa
 
 export function TableHead({ children, className, ...rest }) {
   return (
-    <thead className={cx('bg-gray-50 dark:bg-gray-700', className)} {...rest}>
+    <thead className={cx('bg-gradient-to-r from-primary-50 to-primary-100/60 dark:from-gray-700/50 dark:to-gray-700/30', className)} {...rest}>
       <HeadCtx.Provider value={true}>{children}</HeadCtx.Provider>
     </thead>
   )
@@ -69,7 +69,7 @@ export function TableRow({ children, className, ...rest }) {
 
 export function TableHeadCell({ children, className, ...rest }) {
   return (
-    <th className={cx('p-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase dark:text-gray-300', className)} {...rest}>
+    <th className={cx('px-4 py-3 text-[11px] font-semibold tracking-wider text-left text-primary-800 uppercase dark:text-gray-300', className)} {...rest}>
       {children}
     </th>
   )

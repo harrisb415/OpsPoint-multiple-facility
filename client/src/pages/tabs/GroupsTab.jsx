@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import { CARD_HEAD, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { Users, CalendarCheck, ListChecks, Plus, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import {
   Breadcrumb, BreadcrumbItem, Button, TextInput, Select, Checkbox, Label,
@@ -100,7 +101,7 @@ export default function GroupsTab() {
             <BreadcrumbItem>Daily Ops</BreadcrumbItem>
             <BreadcrumbItem>Groups</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Groups</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Groups</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Group attendance — clinicians add and sign session notes under Clinical</p>
         </div>
         {canLog && <Button onClick={() => setModal({})}><Plus className="w-4 h-4 mr-2" /> Log Attendance</Button>}
@@ -128,7 +129,9 @@ export default function GroupsTab() {
 
       {/* Master Group List */}
       <div className={`${CARD} mb-4`}>
-        <h3 className="mb-3 text-sm font-semibold text-gray-700 dark:text-gray-200">Master Group List</h3>
+        <div className={CARD_HEAD_INSET}>
+          <h3 className={CARD_HEAD_TITLE}>Master Group List</h3>
+        </div>
         <div className="flex flex-wrap gap-2">
           {masterGroups.map((g, i) => (
             <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-gray-700 bg-gray-100 rounded-full dark:bg-gray-700 dark:text-gray-200">
@@ -149,8 +152,8 @@ export default function GroupsTab() {
 
       {/* Session Log */}
       <div className={`${CARD} !p-0 overflow-hidden`}>
-        <div className="flex flex-col gap-3 p-4 border-b border-gray-200 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
-          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">Group Attendance</h3>
+        <div className={CARD_HEAD}>
+          <h3 className={CARD_HEAD_TITLE}>Group Attendance</h3>
           <div className="flex items-center gap-2">
             <Button size="xs" color="light" onClick={() => setViewDate(d => offsetDate(d, -1))}><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
             <Button size="xs" color={isToday ? 'default' : 'light'} onClick={() => setViewDate(todayStr())}>Today</Button>

@@ -10,7 +10,6 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { initials } from '../../utils/ui.js'
 import { ColoredAvatar, FilterChip, DeltaRow, useConfirm } from '../../components/ui.jsx'
 
 function formatPhone(raw) {
@@ -93,7 +92,7 @@ export default function StaffTab() {
             <BreadcrumbItem>People</BreadcrumbItem>
             <BreadcrumbItem>Staff</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Staff</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Staff</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {staff.length} team member{staff.length === 1 ? '' : 's'}
           </p>

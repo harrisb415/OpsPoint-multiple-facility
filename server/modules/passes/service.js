@@ -5,7 +5,13 @@
  */
 const repo = require('./repository');
 
-const VALID_STATUS = ['Out', 'Extended', 'Returned'];
+// Pass lifecycle: Approved (granted, resident still on site) -> Out (departed)
+// -> Returned. Extended is Out that has run past its return date.
+//
+// The resident's shift-report status is derived from this, not stored twice:
+// ReportTab/DashboardHome map Out and Extended onto the 'pass' status, so an
+// Approved pass correctly leaves them In Building until they actually leave.
+const VALID_STATUS = ['Approved', 'Out', 'Extended', 'Returned'];
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -33,19 +39,42 @@ function create(input = {}) {
     return_date: return_date || '',
     ua_notes: ua_notes || '',
     notes: notes || '',
-    status: status || 'Out',
+    status: VALID_STATUS.includes(status) ? status : 'Approved',
   });
+}
+
+// One line per extension: when, by whom, and what the return date moved from
+// and to. Kept human-readable because it is shown verbatim in the Notes column.
+function appendExtensionNote(before, newReturn, actor) {
+  const fmt = (v) => {
+    if (!v) return 'unset';
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? String(v)
+      : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+  const stamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const who   = actor ? ` by ${actor}` : '';
+  const line  = `[Extended ${stamp}${who}: return ${fmt(before.return_date)} -> ${fmt(newReturn)}]`;
+  const prev  = (before.notes || '').trim();
+  return prev ? [prev, line].join(String.fromCharCode(10)) : line;
 }
 
 // Update a pass. `canEditDetails` reflects the caller's passes.edit permission;
 // status-only callers may change only the status field. Returns the pass name
 // (for the audit label).
-function update(id, patch = {}, { canEditDetails } = {}) {
-  if (!repo.exists(id)) throw httpError(404, 'Not found');
+function update(id, patch = {}, { canEditDetails, actor } = {}) {
+  const before = repo.getById(id);
+  if (!before) throw httpError(404, 'Not found');
   const { departure, return_date, ua_notes, notes, status } = patch;
 
+  // Extending bundles a status change with a new return date. It is a
+  // status-level action — the staff member marking a pass extended is the one
+  // on shift — so it does not require passes.edit even though it writes
+  // return_date. Any other detail change still does.
+  const isExtend = status === 'Extended' && return_date !== undefined;
+
   const touchingNonStatusField =
-    departure !== undefined || return_date !== undefined ||
+    departure !== undefined || (return_date !== undefined && !isExtend) ||
     ua_notes !== undefined || notes !== undefined;
   if (!canEditDetails && touchingNonStatusField) {
     throw httpError(403, 'Permission denied (passes.edit required to change pass details)');
@@ -57,6 +86,14 @@ function update(id, patch = {}, { canEditDetails } = {}) {
   if (ua_notes !== undefined)    fields.ua_notes = ua_notes;
   if (notes !== undefined)       fields.notes = notes;
   if (status !== undefined && VALID_STATUS.includes(status)) fields.status = status;
+
+  // Leave a trail on the pass itself so an extension is visible to whoever
+  // reads it next, not only in the audit log. Appended rather than replacing,
+  // so repeated extensions read as a history.
+  if (isExtend) {
+    fields.notes = appendExtensionNote(before, return_date, actor);
+  }
+
   repo.update(id, fields);
 
   const row = repo.getById(id);

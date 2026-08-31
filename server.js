@@ -1,5 +1,5 @@
 /**
- * OpsPoint — Server v2.5.0
+ * OpsPoint — Server v2.6.0
  * SQLite + HTTPS + Session Auth + Role-based access
  */
 'use strict';
@@ -575,10 +575,10 @@ if (require.main === module) (()=>{
   }, 60 * 60 * 1000);
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
-  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.5.0',tls:useTLS});
+  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.6.0',tls:useTLS});
   server.listen(PORT,'0.0.0.0',()=>{
     console.log('\n══════════════════════════════════════════════');
-    console.log('  OpsPoint v2.5.0');
+    console.log('  OpsPoint v2.6.0');
     console.log('══════════════════════════════════════════════');
     console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
     console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);

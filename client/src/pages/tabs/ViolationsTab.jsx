@@ -10,7 +10,6 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
-import { initials } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
@@ -226,7 +225,7 @@ export default function ViolationsTab() {
             <BreadcrumbItem>Records</BreadcrumbItem>
             <BreadcrumbItem>Infractions</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Infractions</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Infractions</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">House rule infractions and actions taken</p>
         </div>
         <div className="flex items-center gap-2">

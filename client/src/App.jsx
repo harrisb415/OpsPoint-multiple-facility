@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext.jsx'
 import { AuthGuard, ChangePasswordGuard, PermGuard } from './components/ProtectedRoute.jsx'
@@ -9,6 +9,7 @@ import ChangePassword from './pages/ChangePassword.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import ClinicalLayout, { ClinicalIndexRedirect } from './pages/clinical/ClinicalLayout.jsx'
 import { CLINICAL_SECTION_PERMS } from './pages/clinical/clinicalShared.jsx'
+import { applyTheme, readStoredTheme } from './utils/themes.js'
 
 // Heavy / less-frequent routes are code-split so they don't bloat the main
 // bundle — each becomes its own async chunk loaded on navigation.
@@ -34,11 +35,16 @@ function LoadingScreen() {
   )
 }
 
-// Apply saved theme on startup — OpsPoint is fixed navy/amber
+// Apply the cached facility theme before the app renders. Runs above the
+// router so it also covers /login, which has no session and therefore no
+// facility settings to read. useState's initialiser runs during the first
+// render rather than after commit, so the attribute is set before paint —
+// an effect here would show one frame of the default theme.
+//
+// Previously this hook deleted the attribute outright (a leftover from an
+// older fixed palette), which would now wipe the theme on every mount.
 function useThemeInit() {
-  useEffect(() => {
-    delete document.documentElement.dataset.theme
-  }, [])
+  useState(() => applyTheme(readStoredTheme()))
 }
 
 // Detect mobile user agents

@@ -11,7 +11,7 @@ import {
   Badge, Drawer, DrawerHeader, DrawerItems,
 } from 'flowbite-react'
 import JSZip from 'jszip'
-import {
+import {
   Users, UserCheck, ClipboardList,
   FileText, CheckSquare, Ticket, Mail, CalendarCheck,
   FlaskConical,
@@ -19,6 +19,7 @@ import {
   Dice5, Bell, Megaphone, Settings, Info, Shield, LogOut, Footprints, HeartPulse, Stethoscope,
   Moon, Sun, MoreHorizontal, LayoutDashboard, Search,
 } from 'lucide-react'
+import { RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF } from '../utils/ui.js'
 
 // ── Sidebar group config ──────────────────────────────────────────────
 const SIDEBAR_GROUPS = [
@@ -411,8 +412,8 @@ function UADrawModal({ open, onClose, clients, statuses }) {
 
 // ── Operational sidebar (Console) ─────────────────────────────────────
 const navRowBase = 'flex items-center gap-3 w-full px-3 py-2 text-sm font-medium rounded-lg transition-colors text-left group'
-const navRowOn   = 'bg-primary-600 text-white dark:bg-gray-700 dark:text-white'
-const navRowOff  = 'text-slate-300 hover:bg-slate-700 hover:text-white dark:text-gray-300 dark:hover:bg-gray-700'
+const navRowOn   = RAIL_ITEM_ON
+const navRowOff  = RAIL_ITEM_OFF
 
 function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis, onDrawOpen, onClinical, onHome, onSignOut }) {
   function isTabVisible(id) {
@@ -425,20 +426,20 @@ function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis
     .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
 
   return (
-    <aside className="fixed top-0 left-0 z-40 flex flex-col w-64 h-full bg-slate-800 border-r border-slate-900 dark:bg-gray-800 dark:border-gray-700">
+    <aside className={`fixed top-0 left-0 z-40 flex flex-col w-64 h-full ${RAIL_SHELL}`}>
       {/* Brand → Dashboard (brand-click landing, not a nav item) */}
-      <button onClick={onHome} className="flex items-center w-full gap-2.5 h-16 px-4 text-left border-b shrink-0 border-slate-700 dark:border-gray-700">
+      <button onClick={onHome} className="flex items-center w-full gap-2.5 h-16 px-4 text-left border-b shrink-0 border-white/10 dark:border-gray-700">
         <img src="/static/icons/icon-192.png" alt="" className="w-8 h-8 rounded-lg shadow-sm" />
         <div className="leading-tight min-w-0">
-          <p className="text-base font-bold text-white">OpsPoint</p>
-          <p className="text-[11px] text-slate-400 truncate">{facilityName}</p>
+          <p className="font-display text-lg font-semibold tracking-tight text-white">OpsPoint</p>
+          <p className="text-[11px] text-rail-fg/60 truncate">{facilityName}</p>
         </div>
       </button>
 
       <nav className="flex-1 px-3 py-3 overflow-y-auto [scrollbar-color:theme(colors.slate.600)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
         <div className="space-y-1">
           <button onClick={() => onTabChange('dashboard')} className={`${navRowBase} ${activeTab === 'dashboard' ? navRowOn : navRowOff}`}>
-            <LayoutDashboard className={`w-5 h-5 shrink-0 ${activeTab === 'dashboard' ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+            <LayoutDashboard className={`w-5 h-5 shrink-0 ${activeTab === 'dashboard' ? 'text-white' : 'text-rail-fg-dim/70 group-hover:text-white'}`} />
             <span className="flex-1">Dashboard</span>
           </button>
         </div>
@@ -457,26 +458,26 @@ function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis
           if (visItems.length === 0 && !showDraw && !showClinical) return null
           return (
             <div key={group.label}>
-              <p className="px-3 pt-5 pb-1 text-[11px] font-semibold tracking-wider uppercase text-slate-500 dark:text-gray-500">{group.label}</p>
+              <p className="px-3 pt-5 pb-1 text-[11px] font-semibold tracking-wider uppercase text-rail-fg-dim/70 dark:text-gray-500">{group.label}</p>
               <div className="space-y-1">
                 {visItems.map(({ id, label, Icon }) => {
                   const on = activeTab === id
                   return (
                     <button key={id} onClick={() => onTabChange(id)} className={`${navRowBase} ${on ? navRowOn : navRowOff}`}>
-                      <Icon className={`w-5 h-5 shrink-0 ${on ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
+                      <Icon className={`w-5 h-5 shrink-0 ${on ? 'text-white' : 'text-rail-fg-dim/70 group-hover:text-white'}`} />
                       <span className="flex-1">{label}</span>
                     </button>
                   )
                 })}
                 {showDraw && (
                   <button onClick={onDrawOpen} className={`${navRowBase} ${navRowOff}`}>
-                    <Dice5 className="w-5 h-5 shrink-0 text-slate-400 group-hover:text-white" />
+                    <Dice5 className="w-5 h-5 shrink-0 text-rail-fg-dim/70 group-hover:text-white" />
                     <span className="flex-1">UA Draw</span>
                   </button>
                 )}
                 {showClinical && (
                   <button onClick={onClinical} className={`${navRowBase} ${navRowOff}`}>
-                    <Stethoscope className="w-5 h-5 shrink-0 text-slate-400 group-hover:text-white" />
+                    <Stethoscope className="w-5 h-5 shrink-0 text-rail-fg-dim/70 group-hover:text-white" />
                     <span className="flex-1">Clinical</span>
                   </button>
                 )}
@@ -486,13 +487,13 @@ function Sidebar({ activeTab, onTabChange, session, facilityName, hasPerm, uiVis
         })}
       </nav>
 
-      <div className="flex items-center gap-3 p-3 border-t shrink-0 border-slate-700 dark:border-gray-700">
-        <span className="flex items-center justify-center text-sm font-semibold rounded-full w-9 h-9 bg-primary-600 text-white dark:bg-primary-900/50 dark:text-primary-300">{initials}</span>
+      <div className="flex items-center gap-3 p-3 border-t shrink-0 border-white/10 dark:border-gray-700">
+        <span className="flex items-center justify-center text-sm font-semibold rounded-full w-9 h-9 bg-gradient-to-br from-primary-400 to-accent-500 text-white dark:from-primary-600 dark:to-accent-600">{initials}</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate text-white">{session?.displayName || session?.username}</p>
-          <p className="text-xs truncate text-slate-400">{session?.role || 'Staff'}</p>
+          <p className="text-xs truncate text-rail-fg/60">{session?.role || 'Staff'}</p>
         </div>
-        <button onClick={onSignOut} title="Sign out" className="p-1 text-slate-400 rounded hover:text-white hover:bg-slate-700 dark:hover:text-white dark:hover:bg-gray-700">
+        <button onClick={onSignOut} title="Sign out" className="p-1 text-rail-fg-dim/70 rounded hover:text-white hover:bg-white/10 dark:hover:text-white dark:hover:bg-gray-700">
           <LogOut className="w-4 h-4" />
         </button>
       </div>
@@ -840,7 +841,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
           Server is restarting — page will reload in a moment…
         </div>
       )}
-      <nav className={`fixed top-0 ${leftClass} right-0 z-30 h-16 bg-gray-50 border-b border-gray-200 dark:bg-gray-800 dark:border-gray-700`}>
+      <nav className={`fixed top-0 ${leftClass} right-0 z-30 h-16 bg-gradient-to-r from-primary-100 via-primary-50 to-accent-100 border-b border-primary-200 dark:bg-gray-800 dark:from-gray-800 dark:via-gray-800 dark:to-gray-800 dark:border-gray-700`}>
         <div className="flex items-center justify-between h-full px-5">
           {/* Left: global search */}
           {showSearch ? (

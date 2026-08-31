@@ -494,7 +494,7 @@ export default function ClientReportModal({ data, onClose }) {
             <label className="block text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">Sections to Include</label>
             <div className="grid grid-cols-2 gap-x-2.5 gap-y-1.5 mt-1.5">
               {SECTION_OPTS.map(s => (
-                <label key={s.key} className={`flex items-start gap-2 text-[.81rem] cursor-pointer px-2 py-1.5 rounded border transition-colors duration-100 ${sections[s.key] ? 'border-[#c9780c] bg-[#fff8ed] dark:bg-amber-900/20 dark:border-amber-600' : 'border-gray-200 dark:border-gray-600 bg-transparent'}`}>
+                <label key={s.key} className={`flex items-start gap-2 text-[.81rem] cursor-pointer px-2 py-1.5 rounded border transition-colors duration-100 ${sections[s.key] ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 dark:border-primary-600' : 'border-gray-200 dark:border-gray-600 bg-transparent'}`}>
                   <input type="checkbox" checked={sections[s.key]}
                     onChange={() => toggleSection(s.key)} className="mt-0.5 shrink-0" />
                   <div>

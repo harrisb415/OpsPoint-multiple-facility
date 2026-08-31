@@ -1,4 +1,4 @@
-# OpsPoint · v2.5.0
+# OpsPoint · v2.6.0
 
 Shift management platform for residential facilities. React 19 + Vite SPA frontend, Node.js + Express + SQLite backend, real-time WebSocket sync. Runs on-premise at the facility or self-hosted on a cloud server — no SaaS dependency.
 
@@ -57,10 +57,18 @@ breach-notification procedures, and a contingency plan. Those remain the operato
 - **UA module** — random draw, request/acknowledge workflow, result records with photo
 - **Staff directory** — categorized staff contacts with phone numbers and notes
 - **Chore tracking** — assign daily chores; log completions with initials; print chore sheet
-- **Weekend passes** — passes with departure/return dates; pass notice board; print pass sheet
+- **Weekend passes** — Approved / Active / Returned lifecycle with Mark Departed (unlocks ten minutes
+  before the scheduled departure) and Mark Returned; Extend records who moved the return and from what,
+  on the pass; pass notice board; print pass sheet
 - **Caseloads** — per-case-manager resident list; printable caseload sheet
 - **Mail log** — track incoming mail with approval and delivery workflow
 - **Feature visibility** — switch off any module your facility does not use, including the whole Clinical section, in Admin → Features
+- **Resident statuses** — rename, recolour, add or retire the statuses staff can select, in Admin → Statuses;
+  four are permanent and a status in use on an open shift cannot be removed
+- **Facility theme** — pick the brand colour in Admin → Appearance (Indigo, Blue, Teal, Emerald, Rose,
+  Salvation Army). Applies to every signed-in session without a reload, across the whole interface rather
+  than the sidebar alone. Light and dark mode remain a separate per-user choice.
+  Status colours and the red/amber/green used to signal state are deliberately unaffected.
 
 ### Security
 - **Encryption at rest** — SQLCipher (`better-sqlite3-multiple-ciphers`); the database and every backup are unreadable without `data/.dbkey`

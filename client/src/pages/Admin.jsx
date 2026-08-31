@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Settings, ArrowLeft, Users, UserPlus, KeyRound, ShieldCheck,
   Tag, DoorOpen, MonitorCog, Map, FlaskConical, ClipboardList,
-  AlertTriangle, ScrollText,
-} from 'lucide-react'
+  AlertTriangle, ScrollText, Tags, Palette} from 'lucide-react'
 import {
   Alert, Badge, Button, Checkbox, Label, Modal, ModalHeader, ModalBody, ModalFooter,
   Select, Textarea, TextInput,
@@ -14,19 +13,22 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
+import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
+import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
+import { THEMES, DEFAULT_THEME, applyTheme } from '../utils/themes.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
   return (
-    <div className={`mb-5 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden dark:bg-gray-800 dark:border-gray-700 ${className}`}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-white">
-          <span className="w-2 h-2 rounded-full bg-primary-500 shrink-0" />
+    <div className={`mb-5 bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden transition-shadow duration-200 hover:shadow-lg dark:bg-gray-800 dark:border-gray-700 ${className}`}>
+      <div className={CARD_HEAD}>
+        <div className={`flex items-center gap-2.5 ${CARD_HEAD_TITLE}`}>
+          <span className="w-2 h-2 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 shrink-0" />
           {title}
         </div>
         {right && <div className="flex items-center gap-2">{right}</div>}
       </div>
-      <div className={noPad ? '' : 'p-4'}>
+      <div className={noPad ? '' : 'p-5'}>
         {children}
       </div>
     </div>
@@ -81,6 +83,8 @@ const ADMIN_NAV = [
   { group: 'Facility', items: [
     { key: 'fac:general',   label: 'General',          icon: Tag,           perm: 'admin.settings' },
     { key: 'fac:rooms',     label: 'Rooms',            icon: DoorOpen,      perm: 'facility.manage' },
+    { key: 'fac:statuses',  label: 'Statuses',         icon: Tags,          perm: 'admin.settings' },
+    { key: 'fac:theme',     label: 'Appearance',       icon: Palette,       perm: 'admin.settings' },
     { key: 'fac:display',   label: 'Features',         icon: MonitorCog,    perm: 'admin.settings' },
     { key: 'fac:walk',      label: 'Walk Areas',       icon: Map,           perm: 'admin.settings' },
     { key: 'fac:ua',        label: 'UA Panel',         icon: FlaskConical,  perm: 'admin.settings' },
@@ -115,32 +119,32 @@ export default function Admin() {
   return (
     <div className="h-full min-h-0 overflow-hidden">
       {/* Rail */}
-      <aside className="fixed top-0 left-0 z-40 flex flex-col h-screen w-60 bg-slate-800 border-r border-slate-900 dark:bg-gray-800 dark:border-gray-700">
-        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-slate-700 dark:border-gray-700">
-          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-primary-600 text-white dark:bg-primary-900/50 dark:text-primary-300">
+      <aside className={`fixed top-0 left-0 z-40 flex flex-col h-screen w-60 ${RAIL_SHELL}`}>
+        <div className="flex items-center gap-2.5 h-16 px-4 border-b shrink-0 border-white/10 dark:border-gray-700">
+          <span className="flex items-center justify-center rounded-lg w-9 h-9 bg-gradient-to-br from-primary-400 to-accent-500 text-white dark:from-primary-600 dark:to-accent-600">
             <Settings className="w-5 h-5" />
           </span>
           <div className="leading-tight">
-            <p className="text-base font-bold text-white">Administration</p>
-            <p className="text-[11px] text-slate-400">System configuration</p>
+            <p className="font-display text-lg font-semibold tracking-tight text-white">Administration</p>
+            <p className="text-[11px] text-rail-fg/60">System configuration</p>
           </div>
         </div>
         <nav className="flex-1 px-3 py-3 overflow-y-auto [scrollbar-color:theme(colors.slate.600)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 hover:[&::-webkit-scrollbar-thumb]:bg-slate-500">
           {groups.map(g => (
             <div key={g.group} className="mb-1">
-              <p className="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-slate-500 uppercase dark:text-gray-500">{g.group}</p>
+              <p className="px-3 pt-4 pb-1 text-[11px] font-semibold tracking-wider text-rail-fg-dim/70 uppercase dark:text-gray-500">{g.group}</p>
               <div className="space-y-1">
                 {g.items.map(it => {
                   const isActive = active === it.key
                   const Icon = it.icon
                   const cls = isActive
-                    ? 'bg-primary-600 text-white dark:bg-gray-700 dark:text-white'
+                    ? RAIL_ITEM_ON
                     : it.danger
                       ? 'text-red-400 hover:bg-red-900/40 dark:text-red-400 dark:hover:bg-red-900/30'
-                      : 'text-slate-300 hover:bg-slate-700 hover:text-white dark:text-gray-300 dark:hover:bg-gray-700'
+                      : RAIL_ITEM_OFF
                   const iconCls = isActive
                     ? 'text-white'
-                    : it.danger ? 'text-red-400' : 'text-slate-400 group-hover:text-white'
+                    : it.danger ? 'text-red-400' : RAIL_ICON_OFF
                   return (
                     <button key={it.key} onClick={() => setActive(it.key)}
                       className={`flex items-center w-full gap-3 px-3 py-2 text-sm font-medium text-left rounded-lg group ${cls}`}>
@@ -153,8 +157,8 @@ export default function Admin() {
             </div>
           ))}
         </nav>
-        <div className="p-3 border-t shrink-0 border-slate-700 dark:border-gray-700">
-          <Link to="/" className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-slate-200 bg-slate-700 border border-slate-600 rounded-lg hover:bg-slate-600 hover:text-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700">
+        <div className="p-3 border-t shrink-0 border-white/10 dark:border-gray-700">
+          <Link to="/" className="flex items-center justify-center w-full gap-2 px-3 py-2 text-sm font-semibold text-rail-fg bg-white/10 border border-white/20 rounded-lg hover:bg-white/20 hover:text-white dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-700">
             <ArrowLeft className="w-4 h-4" /> Return to shift
           </Link>
         </div>
@@ -800,11 +804,82 @@ function GroupsManager({ groups, reload }) {
 // FACILITY SETUP TAB
 // ══════════════════════════════════════════════════════════════════
 
+function ThemeSettings({ settings, onSave, saving }) {
+  // Derived from the prop, not a ref: the parent re-renders with the new
+  // settings after a successful save, so this follows without extra state.
+  const savedTheme = settings.facility_theme || DEFAULT_THEME
+  const [pick, setPick] = useState(savedTheme)
+  const [saved, setSaved] = useState(false)
+
+  // Live preview, with the cleanup reverting to what is actually stored, so
+  // leaving the panel on an unsaved pick puts the theme back. applyTheme only
+  // sets the attribute — it never touches the cache — so an abandoned preview
+  // leaves nothing behind. Both values are deps: on any change the cleanup
+  // restores savedTheme and the body re-applies pick, so the net result is
+  // always pick while mounted and savedTheme once unmounted.
+  useEffect(() => {
+    applyTheme(pick)
+    return () => { applyTheme(savedTheme) }
+  }, [pick, savedTheme])
+
+  async function save() {
+    const ok = await onSave({ facility_theme: pick })
+    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  }
+
+  const dirty = pick !== savedTheme
+
+  return (
+    <div>
+      <Section
+        title="Appearance"
+        right={<><SaveMsg ok={saved} />
+          <Button size="xs" onClick={save} isProcessing={saving} disabled={saving || !dirty}>
+            {saving ? 'Saving…' : 'Save Theme'}
+          </Button></>}
+      >
+        <div className="grid gap-3 mb-4 sm:grid-cols-2 lg:grid-cols-3">
+          {THEMES.map(t => {
+            const on = pick === t.key
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setPick(t.key)}
+                aria-pressed={on}
+                className={`flex items-center gap-3 p-3 text-left border-2 rounded-xl transition-colors ${
+                  on ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                     : 'border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600'}`}
+              >
+                <span className="flex rounded-lg shrink-0 overflow-hidden w-11 h-11 shadow-sm">
+                  <span className="w-1/2 h-full" style={{ background: t.swatch[0] }} />
+                  <span className="w-1/2 h-full" style={{ background: t.swatch[1] }} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-gray-900 truncate dark:text-white">{t.label}</span>
+                  <span className="block text-xs text-gray-500 truncate dark:text-gray-400">{t.hint}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          Sets the brand colour for the whole facility — sidebar, buttons and headings —
+          for every user, on their next data refresh. Status colours, and the red/amber/green
+          used to signal state, are deliberately unaffected. Light and dark mode stay a
+          per-user choice.
+        </p>
+      </Section>
+    </div>
+  )
+}
+
 function FacilitySetupTab({ panel }) {
   const { hasPerm } = usePermission()
   const sub = panel || 'general'   // driven by the Admin rail
   const [settings, setSettings] = useState(null)
   const [settingSaving, setSettingSaving] = useState(false)
+  const [settingError, setSettingError] = useState('')
 
   const loadSettings = useCallback(async () => {
     const r = await apiFetch('/api/facility/settings')
@@ -820,7 +895,11 @@ function FacilitySetupTab({ panel }) {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
     setSettingSaving(false)
-    if (r.ok) { setSettings(body) }
+    if (r.ok) { setSettings(body); setSettingError('') }
+    else {
+      const d = await r.json().catch(() => ({}))
+      setSettingError(d.error || 'Save failed')
+    }
     return r.ok
   }
 
@@ -834,12 +913,139 @@ function FacilitySetupTab({ panel }) {
         <RemindersSettings settings={settings} onSave={saveSettings} saving={settingSaving} />
       </>}
       {sub === 'rooms'    && hasPerm('facility.manage') && <RoomsManager />}
+      {sub === 'statuses' && hasPerm('admin.settings')  && <StatusSettings settings={settings} onSave={saveSettings} saving={settingSaving} error={settingError} />}
+      {sub === 'theme'    && hasPerm('admin.settings')  && <ThemeSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'display'  && hasPerm('admin.settings')  && <DisplaySettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'walk'     && hasPerm('admin.settings')  && <WalkAreas settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ua'       && hasPerm('admin.settings')  && <UAPanelSettings settings={settings} onSave={saveSettings} saving={settingSaving} />}
       {sub === 'ehr'      && hasPerm('admin.settings')  && <EHRConfigSettings />}
       {sub === 'resetfac' && hasPerm('facility.manage') && <FacilityReset />}
     </div>
+  )
+}
+
+
+// ── Resident Statuses ─────────────────────────────────────────────────
+// `key` is what lives in reports.statuses, so it is fixed once a status
+// exists — renaming the label is safe, changing the key would orphan every
+// saved shift that references it. New rows derive their key from the label.
+// The server independently re-validates and refuses to drop a key still in
+// use, so a stale browser tab can't corrupt historical data.
+function slugifyKey(label) {
+  return String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '').replace(/^([0-9])/, 's$1').slice(0, 24)
+}
+
+function StatusSettings({ settings, onSave, saving, error }) {
+  const initial = (Array.isArray(settings.client_statuses) && settings.client_statuses.length
+    ? settings.client_statuses : DEFAULT_STATUSES)
+  const [rows, setRows] = useState(() => initial.filter(r => !r.archived).map(r => ({ ...r, _existing: true })))
+  // Retired statuses: hidden from the shift-report picker, but their labels
+  // are kept so closed reports still render 'Weekend Pass', not a raw slug.
+  const [archived, setArchived] = useState(() => initial.filter(r => r.archived))
+
+  const restore = (key) => {
+    const row = archived.find(a => a.key === key)
+    if (!row) return
+    setArchived(as => as.filter(a => a.key !== key))
+    setRows(rs => [...rs, { ...row, archived: undefined, _existing: true }])
+  }
+  const [saved, setSaved] = useState(false)
+
+  const set = (i, patch) => setRows(rs => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const move = (i, d) => setRows(rs => {
+    const j = i + d
+    if (j < 0 || j >= rs.length) return rs
+    const n = [...rs]; [n[i], n[j]] = [n[j], n[i]]; return n
+  })
+  const add = () => setRows(rs => [...rs, { key: '', label: '', tone: 'gray', _existing: false }])
+  const remove = (i) => setRows(rs => rs.filter((_, j) => j !== i))
+
+  async function save() {
+    const payload = rows.map(r => ({
+      key: r._existing ? r.key : (r.key || slugifyKey(r.label)),
+      label: r.label, tone: r.tone,
+    }))
+    const ok = await onSave({ client_statuses: payload })
+    if (ok) { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  }
+
+  return (
+    <Section
+      title="Resident Statuses"
+      right={<><SaveMsg ok={saved} /><Button size="xs" onClick={save} isProcessing={saving} disabled={saving}>{saving ? 'Saving…' : 'Save Statuses'}</Button></>}
+    >
+      <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+        These are the statuses staff can assign on the shift report. Renaming a label updates it
+        everywhere, including on past shifts. Removing one retires it — it disappears from the
+        picker, but past shifts keep showing its label. A status in use on the currently open
+        shift can't be removed until that shift is closed.
+      </p>
+
+      {error && (
+        <div className="p-3 mb-4 text-sm text-red-700 border border-red-200 rounded-lg bg-red-50 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800">
+          {error}
+        </div>
+      )}
+
+      <div className="space-y-2.5">
+        {rows.map((r, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2.5 p-2.5 border border-gray-200 rounded-xl bg-gray-50/60 dark:bg-gray-700/30 dark:border-gray-700">
+            <div className="flex flex-col shrink-0">
+              <button type="button" aria-label="Move up" onClick={() => move(i, -1)} disabled={i === 0}
+                className="px-1 text-gray-400 hover:text-primary-600 disabled:opacity-30">▲</button>
+              <button type="button" aria-label="Move down" onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+                className="px-1 text-gray-400 hover:text-primary-600 disabled:opacity-30">▼</button>
+            </div>
+
+            <TextInput sizing="sm" className="flex-1 min-w-[10rem]" value={r.label} placeholder="Status name"
+              onChange={e => set(i, { label: e.target.value })} />
+
+            <div className="flex items-center gap-1">
+              {STATUS_TONES.map(t => (
+                <button key={t} type="button" onClick={() => set(i, { tone: t })}
+                  aria-label={`Colour ${t}`} title={t}
+                  className={`w-6 h-6 rounded-full ${TONE_DOT[t]} transition-transform ${r.tone === t ? 'ring-2 ring-offset-2 ring-primary-500 scale-110 dark:ring-offset-gray-800' : 'opacity-60 hover:opacity-100'}`} />
+              ))}
+            </div>
+
+            <span className={`px-2.5 py-1 text-xs font-semibold rounded-md whitespace-nowrap ${TONE_BADGE[r.tone] || TONE_BADGE.gray}`}>
+              {r.label || 'Preview'}
+            </span>
+
+            <code className="px-2 py-1 font-mono text-[11px] text-gray-500 bg-gray-100 rounded dark:bg-gray-700 dark:text-gray-400">
+              {r._existing ? r.key : (slugifyKey(r.label) || '…')}
+            </code>
+
+            {(r.system || isSystemStatus(r.key))
+              ? <span className="text-[11px] text-gray-400 px-1">required</span>
+              : <button type="button" onClick={() => remove(i)}
+                  className="px-2 py-1 text-xs font-medium text-red-600 rounded hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/30">Remove</button>}
+          </div>
+        ))}
+      </div>
+
+      <Button size="xs" color="light" className="mt-3" onClick={add}>+ Add status</Button>
+
+      {archived.length > 0 && (
+        <div className="pt-4 mt-5 border-t border-gray-200 dark:border-gray-700">
+          <p className="mb-1 text-[11px] font-semibold tracking-wider text-gray-500 uppercase dark:text-gray-400">Retired</p>
+          <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+            No longer offered on the shift report. Kept so past shifts still show the right label.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {archived.map(a => (
+              <span key={a.key} className="inline-flex items-center gap-2 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-700/40 dark:border-gray-700">
+                <span className={`px-2 py-0.5 rounded-md font-semibold ${TONE_BADGE[a.tone] || TONE_BADGE.gray}`}>{a.label}</span>
+                <code className="font-mono text-[11px] text-gray-400">{a.key}</code>
+                <button type="button" onClick={() => restore(a.key)}
+                  className="font-medium text-primary-600 hover:underline dark:text-primary-400">Restore</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </Section>
   )
 }
 

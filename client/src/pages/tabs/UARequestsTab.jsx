@@ -10,7 +10,7 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
-import { initials } from '../../utils/ui.js'
+import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, DeltaRow, FilterChip, useConfirm } from '../../components/ui.jsx'
 
 function fmtDT(s) {
@@ -219,7 +219,7 @@ export default function UARequestsTab() {
             <BreadcrumbItem>Health &amp; Compliance</BreadcrumbItem>
             <BreadcrumbItem>UA</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Urinalysis</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Urinalysis</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">UA requests, results, and chain-of-custody records</p>
         </div>
         <div className="flex items-center gap-2">
@@ -246,7 +246,9 @@ export default function UARequestsTab() {
       </div>
 
       {/* Pending requests */}
-      <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Pending requests</h3>
+      <div className={CARD_HEAD_BAND}>
+          <h3 className={CARD_HEAD_TITLE}>Pending requests</h3>
+        </div>
       <div className="mb-6">
         <Table hoverable>
           <TableHead>
@@ -282,7 +284,9 @@ export default function UARequestsTab() {
 
       {acknowledged.length > 0 && (
         <div className="mb-6">
-          <h3 className="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Acknowledged</h3>
+          <div className={CARD_HEAD_BAND}>
+          <h3 className={CARD_HEAD_TITLE}>Acknowledged</h3>
+        </div>
           <Table hoverable>
             <TableHead>
               <TableRow>
@@ -312,7 +316,7 @@ export default function UARequestsTab() {
 
       {/* UA records */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">UA records</h3>
+        <h3 className={CARD_HEAD_TITLE}>UA records</h3>
         <div className="flex flex-wrap items-center gap-2">
           <Select sizing="sm" className="w-44" value={filterClient} onChange={e => setFilterClient(e.target.value)}>
             <option value="">All residents</option>

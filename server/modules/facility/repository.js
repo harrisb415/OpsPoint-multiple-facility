@@ -25,6 +25,11 @@ function getFacilitySettings() {
     shift_swing_start:      db.getSetting('shift_swing_start',      '15:00'),
     shift_grave_start:      db.getSetting('shift_grave_start',      '23:00'),
     ui_visibility:          db.getSetting('ui_visibility',          { tabs: { staff: true, chores: true, passes: true, caseloads: true, mail: true, reports: true, violations: true }, buttons: { wellness: true, walkthrough: true } }),
+    // Must be returned here, not just from saveFacilitySettings — the Admin
+    // panel reads this endpoint, and an absent value made it fall back to the
+    // built-in defaults, so removed statuses reappeared on every refresh.
+    client_statuses:        db.getSetting('client_statuses',        []),
+    facility_theme:         db.getSetting('facility_theme',         'indigo'),
   };
 }
 
@@ -41,8 +46,12 @@ function saveFacilitySettings(b) {
   if (b.shift_swing_start && typeof b.shift_swing_start === 'string') db.setSetting('shift_swing_start', b.shift_swing_start.trim());
   if (b.shift_grave_start && typeof b.shift_grave_start === 'string') db.setSetting('shift_grave_start', b.shift_grave_start.trim());
   if (b.ui_visibility && typeof b.ui_visibility === 'object') db.setSetting('ui_visibility', b.ui_visibility);
+  if (Array.isArray(b.client_statuses)) db.setSetting('client_statuses', b.client_statuses);
+  if (b.facility_theme) db.setSetting('facility_theme', b.facility_theme);
   return {
     facility_name:          db.getSetting('facility_name'),
+    client_statuses:        db.getSetting('client_statuses'),
+    facility_theme:         db.getSetting('facility_theme'),
     wellness_interval_mins: db.getSetting('wellness_interval_mins'),
     walk_interval_mins:     db.getSetting('walk_interval_mins'),
     walk_areas:             db.getSetting('walk_areas'),
@@ -121,8 +130,14 @@ function saveEhrConfig(b) {
   }
 }
 
+// Status keys referenced by saved reports — lets the service refuse a status
+// removal that would orphan historical data. Delegates to db.js, which owns
+// the reports.statuses JSON shape.
+function statusKeysInUse(opts) { return db.statusKeysInUse(opts); }
+function currentStatuses() { return db.getSetting('client_statuses', []) || []; }
+
 module.exports = {
-  getFacilitySettings, saveFacilitySettings,
+  getFacilitySettings, saveFacilitySettings, statusKeysInUse, currentStatuses,
   roomsActive, vacantRooms, getClientId, getClientRoom, getClientFull,
   dupActiveRoom, dupActiveRoomExcept, maxSortOrder, updateRoomFields, insertRoom,
   deleteRoom, setSortOrder, deleteAllClients, insertResetRoom,

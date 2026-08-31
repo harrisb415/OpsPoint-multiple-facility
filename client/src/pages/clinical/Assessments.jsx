@@ -191,7 +191,7 @@ function AssessModal({ clients, record, onClose, onSaved, busy, setBusy }) {
 
       {Object.entries(content).map(([section, fields]) => (
         <fieldset key={section} className="border border-gray-200 dark:border-gray-600 rounded-lg px-3 pb-3 pt-1 mb-3">
-          <legend className="text-[.74rem] font-extrabold text-[#0a4655] dark:text-teal-300 px-1.5">{section}</legend>
+          <legend className="text-[.74rem] font-extrabold text-primary-700 dark:text-primary-300 px-1.5">{section}</legend>
           {Object.entries(fields).map(([f, v]) => (
             <div key={f} className="mb-2">
               <label className={`${lbl} normal-case text-[.74rem]`}>{f}</label>
@@ -222,7 +222,7 @@ function ViewModal({ record, clients, onClose, typeLabel }) {
       </div>
       {Object.entries(content).map(([section, fields]) => (
         <div key={section} className="mb-3">
-          <div className="text-[.74rem] font-extrabold text-[#0a4655] dark:text-teal-300 border-b-2 border-gray-200 dark:border-gray-600 pb-0.5 mb-1.5">{section}</div>
+          <div className="text-[.74rem] font-extrabold text-primary-700 dark:text-primary-300 border-b-2 border-gray-200 dark:border-gray-600 pb-0.5 mb-1.5">{section}</div>
           {Object.entries(fields || {}).map(([f, v]) => (
             <div key={f} className="mb-1.5">
               <span className="text-[.78rem] font-bold text-gray-500 dark:text-gray-400">{f}: </span>

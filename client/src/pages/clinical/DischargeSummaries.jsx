@@ -183,7 +183,7 @@ function ViewModal({ record, clients, onClose }) {
       </div>
       {SECTIONS.map(([k, label]) => (
         <div key={k} className="mb-3">
-          <div className="text-[.74rem] font-extrabold text-[#0a4655] dark:text-teal-300 border-b-2 border-gray-200 dark:border-gray-600 pb-0.5 mb-1.5">{label}</div>
+          <div className="text-[.74rem] font-extrabold text-primary-700 dark:text-primary-300 border-b-2 border-gray-200 dark:border-gray-600 pb-0.5 mb-1.5">{label}</div>
           <div className="text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap leading-relaxed">{record[k] || <em className="text-gray-300 dark:text-gray-600">—</em>}</div>
         </div>
       ))}

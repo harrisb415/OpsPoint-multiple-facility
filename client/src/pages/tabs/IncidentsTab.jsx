@@ -7,7 +7,6 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { initials } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
@@ -176,7 +175,7 @@ export default function IncidentsTab() {
             <BreadcrumbItem>Clinical</BreadcrumbItem>
             <BreadcrumbItem>Incident Reports</BreadcrumbItem>
           </Breadcrumb>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Incident Reports</h1>
+          <h1 className="font-display text-[1.75rem] font-semibold tracking-tight text-gray-900 dark:text-white">Incident Reports</h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Behavioral incidents are formal regulatory documents — distinct from program-rule infractions; severity drives mandatory notifications</p>
         </div>
         {canLog && <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> New Report</Button>}

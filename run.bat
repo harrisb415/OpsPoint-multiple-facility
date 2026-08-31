@@ -1,5 +1,5 @@
 @echo off
-title OpsPoint v2.5.0
+title OpsPoint v2.6.0
 cd /d "%~dp0"
 
 echo.
@@ -48,7 +48,7 @@ for /f %%a in ('powershell -NoProfile -Command "([DateTimeOffset]::UtcNow.ToUnix
 
 echo.
 echo  ================================================
-echo   OpsPoint v2.5.0
+echo   OpsPoint v2.6.0
 echo  ================================================
 echo   Desktop : %_proto%://localhost:3000
 echo   Mobile  : %_proto%://%_ip%:3000
@@ -62,7 +62,7 @@ echo.
 :: ── Live uptime ticker in the window title bar ────────────────────
 set "_ticker=%TEMP%\sp_ticker_%RANDOM%.stop"
 del "%_ticker%" 2>nul
-start /b powershell -NoProfile -Command "& { $s=Get-Date; $f='%_ticker%'; while (-not (Test-Path $f)) { $e=(Get-Date)-$s; [Console]::Title='OpsPoint v2.5.0   Up: '+$e.ToString('hh\:mm\:ss'); Start-Sleep 1 } }"
+start /b powershell -NoProfile -Command "& { $s=Get-Date; $f='%_ticker%'; while (-not (Test-Path $f)) { $e=(Get-Date)-$s; [Console]::Title='OpsPoint v2.6.0   Up: '+$e.ToString('hh\:mm\:ss'); Start-Sleep 1 } }"
 
 :: bootstrap.js supervises server.js — health-checks updates and auto-rolls-back
 :: a failed boot. It stays running across in-app restarts/updates.
@@ -80,7 +80,7 @@ set /a "_upH=%_sec% / 3600"
 set /a "_upM=%_sec% / 60 - %_upH% * 60"
 set /a "_upS=%_sec% - %_upH% * 3600 - %_upM% * 60"
 del "%_ticker%" 2>nul
-title OpsPoint v2.5.0  ^|  Stopped
+title OpsPoint v2.6.0  ^|  Stopped
 echo.
 echo  ================================================
 echo   Server offline.

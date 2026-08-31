@@ -182,10 +182,10 @@ function OverviewTab({ client, data }) {
       <div className="bg-slate-50 rounded-lg p-3.5 border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
         <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
           <Field label="Room">
-            <span className="font-bold font-mono text-[#0a4655] dark:text-primary-400">Rm. {client.room}</span>
+            <span className="font-bold font-mono text-primary-700 dark:text-primary-400">Rm. {client.room}</span>
           </Field>
           <Field label="Days in Program">
-            <span className="font-bold text-[#0a4655] dark:text-primary-400">{days != null ? days : '—'}</span>
+            <span className="font-bold text-primary-700 dark:text-primary-400">{days != null ? days : '—'}</span>
           </Field>
           <Field label="Case Manager">
             <span className="font-semibold">{client.case_manager || '—'}</span>
@@ -277,7 +277,7 @@ function TimelineTab({ client, data }) {
         return (
           <div key={e.id || i} className={`flex gap-3 px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 ${isPos ? 'bg-red-50 border-l-2 border-l-red-500 dark:bg-red-900/10' : ''}`}>
             <div className="shrink-0 w-14 text-right">
-              <div className="font-mono text-[11px] font-bold text-[#0a4655] dark:text-primary-400">{e.time}</div>
+              <div className="font-mono text-[11px] font-bold text-primary-700 dark:text-primary-400">{e.time}</div>
               <div className="text-[10px] text-gray-400 mt-0.5">{fmtDate(e.report_date)}</div>
             </div>
             <div className="flex-1 min-w-0">
@@ -929,13 +929,13 @@ export default function ClientProfile({ onNavigateTab }) {
       <div className="fixed top-0 right-0 bottom-0 w-[490px] bg-white dark:bg-gray-900 z-[1201] flex flex-col shadow-[-6px_0_32px_rgba(0,0,0,0.2)] overflow-hidden">
 
         {/* ── Header ── */}
-        <div className="bg-[#0a4655] text-white px-4 pt-3 pb-2.5 shrink-0">
+        <div className="bg-rail-top dark:bg-gray-800 text-white px-4 pt-3 pb-2.5 shrink-0">
           {/* Caseload nav row */}
           <div className="flex justify-between items-center mb-2.5">
             <div className="flex gap-1.5 items-center">
               <NavBtn onClick={() => openProfile(prevClient.id)} disabled={!prevClient}>← Prev</NavBtn>
               {rosterIdx >= 0 && (
-                <span className="text-[10px] text-blue-200">{rosterIdx + 1} / {roster.length}</span>
+                <span className="text-[10px] text-rail-fg">{rosterIdx + 1} / {roster.length}</span>
               )}
               <NavBtn onClick={() => openProfile(nextClient.id)} disabled={!nextClient}>Next →</NavBtn>
             </div>
@@ -953,7 +953,7 @@ export default function ClientProfile({ onNavigateTab }) {
             }
             <div className="flex-1 min-w-0">
               <div className="font-extrabold text-base text-white truncate">{client.name}</div>
-              <div className="text-[11px] text-blue-200 mt-0.5">
+              <div className="text-[11px] text-rail-fg mt-0.5">
                 Rm. {client.room}
                 {days != null ? ` · Day ${days}` : ''}
                 {!client.is_active && ' · Discharged'}
@@ -969,7 +969,7 @@ export default function ClientProfile({ onNavigateTab }) {
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className={`px-3 py-2 border-none whitespace-nowrap text-xs -mb-0.5 border-b-2 cursor-pointer bg-transparent transition-colors
                 ${activeTab === t.id
-                  ? 'border-b-[#c9780c] text-[#c9780c] font-bold'
+                  ? 'border-b-primary-600 text-primary-600 dark:border-b-primary-400 dark:text-primary-400 font-bold'
                   : 'border-b-transparent text-gray-500 font-medium hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                 }`}>
               {t.label}

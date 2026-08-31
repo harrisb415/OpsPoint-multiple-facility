@@ -16,9 +16,86 @@ function getSettings() {
 }
 
 // Validate + save facility settings. Returns { settings, facilityName }.
+// Tones map to a fixed badge palette on the client. Restricting to a set
+// (rather than free hex) keeps every status legible and dark-mode safe.
+const STATUS_TONES = ['green','blue','amber','purple','pink','red','orange','gray'];
+const KEY_RE = /^[a-z][a-z0-9_]{0,23}$/;
+
+// Statuses the app itself depends on. Every shift report and the census
+// assume these exist: 'building' is the default state, and the other three
+// are the off-site buckets the dashboard totals against. Labels and colours
+// stay editable — only removal is blocked.
+const SYSTEM_STATUS_KEYS = ['building', 'pass', 'hospital', 'out'];
+
+// Validate the editable status list. Keys are what live in reports.statuses,
+// so this is stricter than a normal settings field: a bad key silently
+// corrupts how historical shifts render.
+function validateStatuses(list) {
+  if (!Array.isArray(list)) throw httpError(400, 'Statuses must be a list');
+  if (list.length < 1 || list.length > 20) throw httpError(400, 'Between 1 and 20 statuses required');
+  const seen = new Set();
+  const clean = list.map((raw, i) => {
+    const key   = String(raw?.key   || '').trim().toLowerCase();
+    const label = String(raw?.label || '').trim();
+    const tone  = String(raw?.tone  || 'gray').trim();
+    if (!KEY_RE.test(key)) throw httpError(400, `Status ${i + 1}: id must start with a letter and use only lowercase letters, numbers or underscores`);
+    if (seen.has(key))     throw httpError(400, `Duplicate status id "${key}"`);
+    if (!label)            throw httpError(400, `Status "${key}" needs a label`);
+    if (label.length > 40) throw httpError(400, `Status "${key}": label too long (max 40)`);
+    if (!STATUS_TONES.includes(tone)) throw httpError(400, `Status "${key}": unknown colour`);
+    seen.add(key);
+    return { key, label, tone, ...(SYSTEM_STATUS_KEYS.includes(key) ? { system: true } : {}) };
+  });
+
+  // The system set must survive every edit.
+  const missing = SYSTEM_STATUS_KEYS.filter(k => !seen.has(k));
+  if (missing.length) {
+    const labels = { building: 'In Building', pass: 'Weekend Pass', hospital: 'Hospital', out: 'Out / Other' };
+    throw httpError(400, `These statuses are built in and cannot be removed: ${missing.map(k => labels[k] || k).join(', ')}. Rename or recolour them instead.`);
+  }
+
+  // A closed report is an immutable record — retiring a status it references
+  // is fine. An OPEN shift is different: staff are using the value right now,
+  // and pulling it would strand residents on a status that no longer exists.
+  const inOpen  = repo.statusKeysInUse({ openOnly: true });
+  const blocked = inOpen.filter(k => k !== 'vacant' && !seen.has(k));
+  if (blocked.length) {
+    throw httpError(409,
+      `Cannot remove ${blocked.map(k => `"${k}"`).join(', ')} — in use on the open shift report. ` +
+      `Close that shift first, or rename the status instead.`);
+  }
+
+  // Anything dropped that closed reports still reference is archived rather
+  // than deleted: hidden from the picker, but its label is kept so historical
+  // shifts keep rendering 'Weekend Pass' instead of a raw 'pass' slug.
+  const inAny    = new Set(repo.statusKeysInUse());
+  const previous = repo.currentStatuses();
+  for (const p of previous) {
+    if (seen.has(p.key)) continue;         // still present, nothing to do
+    if (!inAny.has(p.key)) continue;       // never used anywhere — really delete
+    clean.push({ ...p, archived: true });  // used by history — retire it
+  }
+
+  // A system key promoted after it had already been retired must come back.
+  for (const row of clean) if (row.system) delete row.archived;
+
+  return clean;
+}
+
+// Allowlist for the brand theme. Mirrors THEME_KEYS in
+// client/src/utils/themes.js — the colours live in client/src/index.css as
+// :root[data-theme] blocks, so an unknown key here would store fine and then
+// silently render as the default. Kept as a literal because the client list
+// is an ESM module in a separate build; add a theme in both places.
+const VALID_THEMES = ['indigo', 'blue', 'teal', 'emerald', 'rose', 'salvation'];
+
 function saveSettings(b = {}) {
   if (!b.facility_name || !b.facility_name.trim()) throw httpError(400, 'Facility name required');
   if (b.facility_name.trim().length > 200) throw httpError(400, 'Facility name too long (max 200 chars)');
+  if (b.client_statuses !== undefined) b.client_statuses = validateStatuses(b.client_statuses);
+  if (b.facility_theme !== undefined) {
+    if (!VALID_THEMES.includes(b.facility_theme)) throw httpError(400, 'Unknown theme');
+  }
   const settings = repo.saveFacilitySettings(b);
   return { settings, facilityName: b.facility_name.trim() };
 }

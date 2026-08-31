@@ -1,6 +1,8 @@
 import { useMemo, lazy, Suspense } from 'react'
 import { Button } from 'flowbite-react'
-import { useData } from '../contexts/DataContext.jsx'
+import { useData } from '../contexts/DataContext.jsx'
+import { allStatuses, statusList, offSiteStatuses, TONE_HEX, TONE_BADGE } from '../utils/statuses.js'
+import { CARD_HEAD, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
 import { classifyLogEntry } from '../utils/printLog.js'
@@ -17,14 +19,14 @@ const FEED_TONE = {
   Intake: 'green', Discharge: 'gray', Note: 'gray',
 }
 const FEED_DOT = {
-  green: 'bg-green-500', blue: 'bg-blue-500', yellow: 'bg-yellow-400',
-  red: 'bg-red-500', sky: 'bg-sky-500', gray: 'bg-gray-400',
+  green: 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md', blue: 'bg-blue-500', yellow: 'bg-yellow-400',
+  red: 'bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-md', sky: 'bg-sky-500', gray: 'bg-gray-400',
 }
 const FEED_BADGE = {
-  green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  blue:   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+  green:  'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md',
+  blue:   'bg-gradient-to-br from-primary-400 to-accent-500 text-white shadow-md',
   yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  red:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  red:    'bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-md',
   sky:    'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
   gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
 }
@@ -46,6 +48,27 @@ const STATUS_META = {
 }
 const STATUS_ORDER = ['building', 'work', 'pass', 'bhc', 'efc', 'hospital', 'out']
 
+// Live status metadata, derived from the configured list so a renamed or
+// recoloured status flows through to the census donut and the roster badges.
+// Falls back to STATUS_META for any key not in the list (e.g. a status
+// retired before archiving existed).
+function metaFrom(data) {
+  const m = {}
+  for (const st of allStatuses(data)) {
+    m[st.key] = {
+      label: st.label,
+      color: TONE_HEX[st.tone] || TONE_HEX.gray,
+      badge: TONE_BADGE[st.tone] || TONE_BADGE.gray,
+    }
+  }
+  return { ...STATUS_META, ...m }
+}
+// Census order follows the admin's ordering, with any legacy key appended.
+function orderFrom(data) {
+  const live = statusList(data).map(s => s.key)
+  return [...live, ...STATUS_ORDER.filter(k => !live.includes(k))]
+}
+
 // Parse an hour (0–23) from a log time like "14:30" or "2:30 PM"
 function parseHour(t) {
   if (!t) return null
@@ -61,20 +84,20 @@ const fmtHour = h => { const ap = h < 12 ? 'a' : 'p'; const hr = h % 12 || 12; r
 
 // Literal class strings (Tailwind JIT can't see dynamically-built names)
 const KPI_TONE = {
-  green:  'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400',
-  orange: 'bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400',
-  blue:   'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400',
-  red:    'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400',
+  green:  'bg-gradient-to-br from-emerald-400 to-teal-500 text-white shadow-md',
+  orange: 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md',
+  blue:   'bg-gradient-to-br from-primary-400 to-accent-500 text-white shadow-md',
+  red:    'bg-gradient-to-br from-rose-400 to-pink-500 text-white shadow-md',
 }
 function Kpi({ label, value, sub, Icon, tone }) {
   return (
-    <div className="p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:bg-gray-800 dark:border-gray-700 sm:p-5">
+    <div className="p-5 bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700 sm:p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:border-primary-200 dark:hover:border-primary-800">
       <div className="flex items-start justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-          <p className="mt-1 text-3xl font-bold text-gray-900 dark:text-white font-mono tabular-nums">{value}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-gray-500 dark:text-gray-400">{label}</p>
+          <p className="mt-2 font-display text-[2.6rem] leading-none font-semibold tracking-tight tabular-nums bg-gradient-to-br from-gray-900 to-primary-700 bg-clip-text text-transparent dark:from-white dark:to-primary-300">{value}</p>
         </div>
-        <span className={`flex items-center justify-center w-11 h-11 rounded-lg shrink-0 ${KPI_TONE[tone] || KPI_TONE.blue}`}>
+        <span className={`flex items-center justify-center w-12 h-12 rounded-xl shrink-0 ${KPI_TONE[tone] || KPI_TONE.blue}`}>
           <Icon className="w-5 h-5" />
         </span>
       </div>
@@ -121,10 +144,14 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
   const total = allResidents.length
 
   const census = useMemo(() => {
-    const c = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
-    allResidents.forEach(r => { const s = resolveStatus(r.id); if (c[s] != null) c[s]++ })
+    // Seeded from the configured statuses, and counts any key a resident
+    // actually holds — a status added in Admin was previously dropped on the
+    // floor here, so its residents vanished from the donut and from offSite.
+    const c = {}
+    for (const st of statusList(data)) c[st.key] = 0
+    allResidents.forEach(r => { const s = resolveStatus(r.id); c[s] = (c[s] || 0) + 1 })
     return c
-  }, [allResidents, statuses, passOverride])
+  }, [allResidents, statuses, passOverride, data])
 
   const onSite       = census.building
   const offSite      = total - onSite
@@ -145,25 +172,41 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
     return { cats, series }
   }, [logs])
 
+  // Status metadata/order from the configured list, so renames and colour
+  // changes in Admin flow straight through to the donut and roster badges.
+  // Declared before `donut` — its callback runs during render, so a later
+  // const would be in the temporal dead zone.
+  const statusMeta  = useMemo(() => metaFrom(data), [data])
+  const statusOrder = useMemo(() => orderFrom(data), [data])
+  const offSiteLbl  = useMemo(() => {
+    const names = offSiteStatuses(data).map(s => s.label)
+    if (!names.length) return 'no off-site statuses'
+    // Other KPI subs read lowercase ('residents in building'), so match
+    // that rather than inheriting the capitalised status labels.
+    const txt = names.length > 3
+      ? `${names.slice(0, 3).join(' · ')} +${names.length - 3}`
+      : names.join(' · ')
+    return txt.toLowerCase()
+  }, [data])
+
   const donut = useMemo(() => {
     const labels = [], series = [], colors = []
-    STATUS_ORDER.forEach(s => { if (census[s] > 0) { labels.push(STATUS_META[s].label); series.push(census[s]); colors.push(STATUS_META[s].color) } })
+    statusOrder.forEach(k => { const mt = statusMeta[k]; if (mt && census[k] > 0) { labels.push(mt.label); series.push(census[k]); colors.push(mt.color) } })
     return { labels, series, colors }
-  }, [census])
+  }, [census, statusMeta, statusOrder])
 
   const recentAll = logs.slice(-8).reverse()
   const recent = !gq ? recentAll : recentAll.filter(l => (l.text || '').toLowerCase().includes(gq))
   const lastWellness = [...logs].reverse().find(l => (l.text || '').toLowerCase().startsWith('wellness check'))
   const lastWalk     = [...logs].reverse().find(l => (l.text || '').toLowerCase().includes('walkthrough'))
-
-  const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-xl dark:bg-gray-800 dark:border-gray-700'
+const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-gray-800 dark:border-gray-700 transition-shadow duration-200 hover:shadow-lg'
 
   return (
     <div className="flex-1 min-h-0 p-5 space-y-4 overflow-y-auto">
       {/* Page header */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+          <h1 className="font-display text-[2rem] font-semibold tracking-tight text-gray-900 dark:text-white">Dashboard</h1>
           <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
             {report?.shift ? `${report.shift} · ` : ''}{facility}
             {report?.report_date ? <span className="font-mono"> · {report.report_date}</span> : ''}
@@ -178,7 +221,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi label="On Site" value={`${onSite}/${total}`} sub="residents in building" Icon={MapPin} tone="green" />
-        <Kpi label="Off Site" value={offSite} sub="pass · work · appointment" Icon={DoorOpen} tone="orange" />
+        <Kpi label="Off Site" value={offSite} sub={offSiteLbl} Icon={DoorOpen} tone="orange" />
         <Kpi label="Wellness Checks" value={wellnessCnt} sub={`${walkCnt} walkthrough${walkCnt === 1 ? '' : 's'} logged`} Icon={HeartPulse} tone="blue" />
         <Kpi label="Open Items" value={openItems} sub={`${pendingUA} UA · ${issues.length} issue${issues.length === 1 ? '' : 's'}`} Icon={AlertTriangle} tone="red" />
       </div>
@@ -186,8 +229,12 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
       {/* Charts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className={`${cardCls} p-4 sm:p-5 lg:col-span-2`}>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Activity over the shift</h2>
-          <p className="text-xs text-gray-400">Log entries per hour</p>
+          <div className={CARD_HEAD_INSET}>
+            <div>
+              <h2 className={CARD_HEAD_TITLE}>Activity over the shift</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Log entries per hour</p>
+            </div>
+          </div>
           {activity.series.length > 0 ? (
             <Suspense fallback={<ChartFallback />}>
             <Chart
@@ -213,8 +260,12 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
         </div>
 
         <div className={`${cardCls} p-4 sm:p-5`}>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">Census by status</h2>
-          <p className="text-xs text-gray-400">{total} active residents</p>
+          <div className={CARD_HEAD_INSET}>
+            <div>
+              <h2 className={CARD_HEAD_TITLE}>Census by status</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{total} active residents</p>
+            </div>
+          </div>
           {donut.series.length > 0 ? (
             <Suspense fallback={<ChartFallback />}>
             <Chart
@@ -242,8 +293,8 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Roster */}
         <div className={`${cardCls} lg:col-span-2 overflow-hidden flex flex-col`}>
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Roster</h2>
+          <div className={`${CARD_HEAD} shrink-0`}>
+            <h2 className={CARD_HEAD_TITLE}>Roster</h2>
             <button onClick={() => onNavigate?.('clients')} className="text-xs font-medium text-primary-600 hover:text-primary-700">View all</button>
           </div>
           <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto">
@@ -257,7 +308,7 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {residents.map(r => {
-                  const meta = STATUS_META[resolveStatus(r.id)] || STATUS_META.building
+                  const meta = statusMeta[resolveStatus(r.id)] || statusMeta.building || STATUS_META.building
                   return (
                     <tr key={r.id} className="hover:bg-primary-50/60 dark:hover:bg-gray-700/40">
                       <td className="px-4 py-2.5">
@@ -288,7 +339,9 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
         <div className="space-y-4 lg:min-h-[460px]">
           {hasPerm('reminders.view') && (
             <div className={`${cardCls} p-4 sm:p-5`}>
-              <h2 className="text-base font-semibold text-gray-900 dark:text-white">Reminders</h2>
+              <div className={CARD_HEAD_INSET}>
+              <h2 className={CARD_HEAD_TITLE}>Reminders</h2>
+            </div>
               <div className="mt-3 space-y-2.5 text-sm">
                 <div className="flex items-center gap-2.5">
                   <HeartPulse className="w-4 h-4 text-blue-500 shrink-0" />
@@ -305,7 +358,9 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
           )}
 
           <div className={`${cardCls} p-4 sm:p-5`}>
-            <h2 className="text-base font-semibold text-gray-900 dark:text-white">Recent activity</h2>
+            <div className={CARD_HEAD_INSET}>
+              <h2 className={CARD_HEAD_TITLE}>Recent activity</h2>
+            </div>
             {recent.length === 0
               ? <p className="mt-3 text-sm text-gray-400">No entries yet.</p>
               : (

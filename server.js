@@ -30,9 +30,17 @@ const { requireUnlocked, requireConsent } = require('./server/middleware/recordL
 const { userPerms: _userPerms, requireAuth, requirePermission, requireAnyPermission } = require('./server/middleware/auth');
 const { idleSessionCheck, requireForceChangePw } = require('./server/middleware/session');
 const { loginRateCheck, loginRateClear, apiRateCheck } = require('./server/middleware/rateLimit');
+const { createSessionStore }           = require('./server/lib/sessionStore');
+const dbConn                           = require('./server/db/connection');
 
 const app  = express();
 app.disable('x-powered-by');
+// Honour X-Forwarded-For / X-Forwarded-Proto from a same-box reverse proxy.
+// Without this, every request behind nginx reads as 127.0.0.1: audit rows
+// record the proxy instead of the client (45 CFR §164.312(b)), the per-IP
+// rate limiters collapse into one shared bucket, and cookie.secure:'auto'
+// cannot see that the client leg is HTTPS. See config.TRUST_PROXY.
+app.set('trust proxy', config.TRUST_PROXY);
 const PORT = config.PORT;
 const BASE = config.BASE;
 
@@ -92,14 +100,22 @@ app.use(cors);
 const SESSION_SECRET = config.loadSessionSecret();
 
 // Force-change middleware applied after session
-var _sessionMiddleware = null;
-function buildSession(secure) {
-  return session({
-    secret:SESSION_SECRET, resave:false, saveUninitialized:false,
-    cookie:{ secure:!!secure, httpOnly:true, sameSite:'lax', maxAge:config.SESSION_MAX_AGE_MS }
-  });
-}
-_sessionMiddleware = buildSession(false);
+//
+// cookie.secure is 'auto', not a boolean fixed at boot: it follows req.secure,
+// which is true for a direct HTTPS listener AND (via trust proxy above) for a
+// TLS-terminating reverse proxy in front of a plain-HTTP listener. The previous
+// code derived it from whether this process itself held a certificate, so the
+// hosted deployment — where nginx owns the certificate — shipped its session
+// cookie without the Secure flag and leaked it over any plaintext request.
+//
+// Sessions persist in the database (server/lib/sessionStore.js) instead of
+// express-session's MemoryStore, which leaks and empties on every restart.
+const _sessionStore = createSessionStore(dbConn, config.SESSION_MAX_AGE_MS);
+const _sessionMiddleware = session({
+  secret:SESSION_SECRET, resave:false, saveUninitialized:false,
+  store:_sessionStore,
+  cookie:{ secure:'auto', httpOnly:true, sameSite:'lax', maxAge:config.SESSION_MAX_AGE_MS }
+});
 app.use((req,res,next) => _sessionMiddleware(req,res,next));
 
 app.use(idleSessionCheck);  // HIPAA idle timeout — server/middleware/session.js
@@ -546,8 +562,9 @@ if (require.main === module) (()=>{
   if(useTLS){ server=https.createServer({cert:fs.readFileSync(CERT),key:fs.readFileSync(KEY)},app); console.log('  TLS: HTTPS enabled'); }
   else { server=http.createServer(app); }
 
-  // Now we know TLS status — update session cookie secure flag
-  _sessionMiddleware = buildSession(useTLS);
+  // No session rebuild here any more: cookie.secure is 'auto', so it resolves
+  // per-request from req.secure and covers the direct-TLS and behind-proxy
+  // cases alike without needing to know the listener's TLS status at boot.
   wss=new WebSocket.Server({server,verifyClient:(info,cb)=>{
     // Authenticate WebSocket handshake using the same session middleware
     const req=info.req; req.res={setHeader:()=>{},getHeader:()=>null};

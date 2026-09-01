@@ -191,6 +191,16 @@ function createSchema(db) {
     detail       TEXT    DEFAULT ''
   )`);
 
+  // Persistent session store — see server/lib/sessionStore.js. Sessions live
+  // here rather than in process memory so that a restart (notably the one the
+  // auto-updater performs) does not sign every staff member out mid-shift.
+  db.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    sid        TEXT    PRIMARY KEY,
+    data       TEXT    NOT NULL,
+    expires_at INTEGER NOT NULL
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
+
   // ── EHR expansion tables ────────────────────────────────────────────
 
   // Phase 2: formal UA records (replaces ad-hoc ua_photo on log entries)

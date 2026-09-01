@@ -28,6 +28,17 @@ const config = {
   SESSION_IDLE_DEFAULT_MINS: parseInt(process.env.OPSPOINT_IDLE_MINS, 10) || 30,
   SESSION_MAX_AGE_MS:        12 * 60 * 60 * 1000,
   JSON_LIMIT:                process.env.OPSPOINT_JSON_LIMIT || '50mb',
+  // Which upstream hops may set X-Forwarded-For / X-Forwarded-Proto.
+  //
+  // 'loopback' is correct for BOTH shipping modes without configuration:
+  //   - behind a same-box reverse proxy (nginx terminating TLS, as in the
+  //     hosted deployment) the peer IS loopback, so the forwarded client IP
+  //     and scheme are honoured — req.ip becomes the real client and
+  //     cookie.secure:'auto' resolves to true;
+  //   - installed on a facility LAN with no proxy, peers are never loopback,
+  //     so a client cannot forge its own address by sending the header.
+  // Override only if a proxy ever sits on a different host.
+  TRUST_PROXY:               process.env.OPSPOINT_TRUST_PROXY || 'loopback',
 };
 
 /**

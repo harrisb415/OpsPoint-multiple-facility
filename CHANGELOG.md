@@ -2,6 +2,54 @@
 
 ---
 
+## Unreleased — Session-security hardening for the hosted deployment (2026-09-01)
+
+### Security
+
+- **Session cookie now carries `Secure` behind a TLS-terminating proxy.** `cookie.secure`
+  was derived at boot from whether *this process* held a certificate. In the hosted
+  deployment nginx owns the certificate and Node listens on plain HTTP, so the flag was
+  never set and the session cookie was attached to any `http://` request in cleartext.
+  It is now `'auto'`, which resolves per-request from `req.secure` and is correct for the
+  direct-HTTPS (LAN install) and behind-proxy (hosted) cases alike. The boot-time session
+  rebuild that existed only to patch this flag is gone.
+
+- **`trust proxy` is now set (`config.TRUST_PROXY`, default `'loopback'`).** Behind nginx
+  every request previously read as `127.0.0.1`, which meant:
+  - audit rows recorded the proxy rather than the client, leaving the trail unable to
+    attribute access to an origin (45 CFR §164.312(b));
+  - the per-IP login limiter degenerated into one shared bucket, so ten failed logins from
+    anywhere locked out every staff member for 15 minutes;
+  - the 300/min API limiter was likewise global rather than per-client.
+
+  `'loopback'` is self-configuring: forwarded headers are honoured only when the peer is
+  loopback (a same-box proxy), so a LAN client with no proxy in front cannot forge its own
+  address. nginx must send `X-Forwarded-For` / `X-Forwarded-Proto` for this to take effect.
+
+- **Dependencies patched** — `ws` 8.20.0 → 8.21.3 (GHSA-58qx-3vcg-4xpx uninitialized memory
+  disclosure, plus a fragment-based memory-exhaustion DoS), `express` 4.21 → 4.22.2, and the
+  `body-parser` / `qs` advisories that came with it. `npm audit` is clean.
+
+- **HSTS** is now sent by nginx (`max-age=31536000; includeSubDomains`), closing the
+  plaintext first request that the cookie fix alone would still have allowed.
+
+### Changed
+
+- **Sessions persist in the database** (`server/lib/sessionStore.js`, new `sessions` table)
+  instead of express-session's `MemoryStore`, which leaks and empties on every restart —
+  including the restart the auto-updater performs to apply an update, which would sign every
+  staff member out mid-shift. The store implements the express-session contract over the
+  existing connection primitives, so it adds no dependency, and sessions inherit the
+  database's SQLCipher encryption at rest. Expired rows are reaped every 15 minutes.
+
+### Tests
+
+- `tests/session.security.test.js` — 9 tests covering the `Secure` flag in both deployment
+  modes, forwarded-IP attribution in the audit log, and store round-trip / restart-survival /
+  expiry / prune behaviour. Suite is 59/59.
+
+---
+
 ## v2.6.1 — Release signing key rotated (2026-08-31)
 
 ### Security

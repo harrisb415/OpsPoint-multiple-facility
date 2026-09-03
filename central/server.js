@@ -542,6 +542,10 @@ if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
   scheme = 'http';
   console.log('  ⚠  No TLS certs in', DATA_DIR, '— running plain HTTP (dev only).');
 }
-server.listen(PORT, () => {
+// Same reasoning as the facility server: default to every interface so an
+// on-premise HQ is reachable on its LAN, but let a hosted box behind nginx set
+// CENTRAL_BIND=127.0.0.1 so a firewall mistake cannot expose it directly.
+const BIND_ADDR = process.env.CENTRAL_BIND || '0.0.0.0';
+server.listen(PORT, BIND_ADDR, () => {
   console.log(`  OpsPoint Central listening on ${scheme}://localhost:${PORT}`);
 });

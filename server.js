@@ -593,7 +593,7 @@ if (require.main === module) (()=>{
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
   db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.6.1',tls:useTLS});
-  server.listen(PORT,'0.0.0.0',()=>{
+  server.listen(PORT,config.BIND_ADDR,()=>{
     console.log('\n══════════════════════════════════════════════');
     console.log('  OpsPoint v2.6.1');
     console.log('══════════════════════════════════════════════');

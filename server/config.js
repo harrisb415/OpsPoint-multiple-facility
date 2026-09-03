@@ -39,6 +39,16 @@ const config = {
   //     so a client cannot forge its own address by sending the header.
   // Override only if a proxy ever sits on a different host.
   TRUST_PROXY:               process.env.OPSPOINT_TRUST_PROXY || 'loopback',
+
+  // Interface to listen on. Defaults to every interface, which is required for
+  // the on-premise case: staff phones reach the mobile UI across the facility
+  // LAN, and binding loopback there would take that away.
+  //
+  // A hosted deployment sitting behind a same-box nginx should set
+  // OPSPOINT_BIND=127.0.0.1, so the app is unreachable except through the proxy
+  // even if a firewall rule is later added by mistake. Defence in depth: the
+  // firewall is the control, this makes a firewall error non-fatal.
+  BIND_ADDR:                 process.env.OPSPOINT_BIND || '0.0.0.0',
 };
 
 /**

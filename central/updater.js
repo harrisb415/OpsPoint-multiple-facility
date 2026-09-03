@@ -125,19 +125,47 @@ function verifyManifestSignature(m, pubkeyPem = RELEASE_PUBKEY_PEM) {
 }
 
 // Cross-platform extract: tar -xf handles .tar.gz everywhere; per-OS fallback.
+// On Windows the extractor is resolved by ABSOLUTE path. Trusting PATH is not
+// safe there: where Git for Windows / MSYS is installed, `tar` resolves to GNU
+// tar, which reads a `C:\...` argument as a remote `host:path` spec and dies with
+// "Cannot connect to C: resolve failed". Windows ships bsdtar at
+// System32\tar.exe, which handles .tar.gz and drive letters correctly.
+//
+// Fallbacks are format-aware. Expand-Archive understands ONLY .zip while releases
+// are .tar.gz, so offering it for a tarball just produced a second, more confusing
+// error — it is now tried only for an actual .zip.
 function extractZip(archivePath, destDir) {
+  const isWin  = process.platform === 'win32';
+  const sysTar = isWin ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : null;
+  const isZip  = /\.zip$/i.test(archivePath);
+
   return new Promise((resolve, reject) => {
     fs.mkdirSync(destDir, { recursive: true });
-    execFile('tar', ['-xf', archivePath, '-C', destDir], (err) => {
-      if (!err) return resolve();
-      if (process.platform === 'win32') {
-        const ps = `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`;
-        return execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], (e2) =>
-          e2 ? reject(new Error('Extraction failed: ' + (e2.message || err.message))) : resolve());
+
+    const runTar = (bin, onFail) =>
+      execFile(bin, ['-xf', archivePath, '-C', destDir], (err) => (err ? onFail(err) : resolve()));
+
+    function winFallback(err) {
+      const why = (err && err.message) || 'tar failed';
+      if (!isZip) {
+        return reject(new Error(
+          'Extraction failed: ' + why + '. No fallback applies — PowerShell Expand-Archive ' +
+          'reads .zip only, and this bundle is ' + (path.extname(archivePath) || 'not a zip') + '.'));
       }
+      const q = (s) => s.replace(/'/g, "''");
+      const ps = `Expand-Archive -LiteralPath '${q(archivePath)}' -DestinationPath '${q(destDir)}' -Force`;
+      execFile('powershell', ['-NoProfile', '-NonInteractive', '-Command', ps], (e2) =>
+        e2 ? reject(new Error('Extraction failed: ' + (e2.message || why))) : resolve());
+    }
+
+    if (isWin) {
+      // System32 first; fall back to PATH only if that binary is absent.
+      return runTar(sysTar, (err) =>
+        fs.existsSync(sysTar) ? winFallback(err) : runTar('tar', winFallback));
+    }
+    runTar('tar', (err) =>
       execFile('unzip', ['-o', '-q', archivePath, '-d', destDir], (e2) =>
-        e2 ? reject(new Error('Extraction failed (tar: ' + (err.message || '') + '; unzip: ' + (e2.message || '') + ')')) : resolve());
-    });
+        e2 ? reject(new Error('Extraction failed (tar: ' + (err.message || '') + '; unzip: ' + (e2.message || '') + ')')) : resolve()));
   });
 }
 

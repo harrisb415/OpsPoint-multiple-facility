@@ -29,15 +29,34 @@ app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '25mb' }));
 
+// Session signing key. There is deliberately no constant fallback: a build that
+// quietly signs with a string published in this source would hand anyone able to
+// read the repo the ability to forge an HQ session. Generate and persist on first
+// run instead, the way the facility server already does.
+function loadSessionSecret() {
+  let s = db.getSetting('session_secret');
+  if (!s || String(s).length < 32) {
+    s = require('crypto').randomBytes(32).toString('hex');
+    db.setSetting('session_secret', s);
+    console.log('  Central: generated a new session signing secret');
+  }
+  return s;
+}
+
 app.use(session({
   name: 'opscentral.sid',
-  secret: db.getSetting('session_secret') || 'insecure-dev-secret',
+  secret: loadSessionSecret(),
   resave: false,
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: fs.existsSync(path.join(DATA_DIR, 'cert.pem')),
+    // 'auto' follows the request scheme (via trust proxy + X-Forwarded-Proto from
+    // nginx). The previous test was whether a cert file existed on disk, which is
+    // unrelated to how the request actually arrived: HQ is served over TLS by
+    // nginx and has no local cert, so the flag was never set and the cookie went
+    // out unprotected.
+    secure: 'auto',
     maxAge: 1000 * 60 * 60 * 8, // 8h
   },
 }));

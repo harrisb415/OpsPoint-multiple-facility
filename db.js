@@ -136,27 +136,38 @@ const ROLE_PRESETS = {
 };
 
 // ── Init (synchronous) ───────────────────────────────────────────────
-function init(dbPath) {
+async function init(dbPath) {
   _dbPath = dbPath;
   const isNew = !fs.existsSync(dbPath);
   _db = connection.open(dbPath);   // owns new Database() + WAL/FK pragmas
   console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
 
-  migrate.createSchema(_db);
-  _applyClinicalLiteMigration();   // Structured Clinical Lite — idempotent (CREATE IF NOT EXISTS)
-  migrate.runColumnMigrations(_db); // additive ALTER-TABLE column migrations (see server/db/migrate.js)
-  _seedDefaults();
-  _seedExistingUserPermissions();
-  _migratePermissions();
-  const _bootNewPerms = _migrateProfiles();
-  _seedGroups();
-  _migrateUserGroups();
-  _migrateGroups(_bootNewPerms);
-  _createSyncLayer();              // sync_outbox + triggers (multi-facility Phase 1)
+  // Schema bootstrap is SQLite-only. All three steps emit SQLite-dialect DDL —
+  // AUTOINCREMENT, SQLite CREATE TRIGGER, and ALTER TABLE probes that rely on a
+  // duplicate-column error — so they would fail on the first statement against
+  // Postgres. Under pg the schema is applied out of band from migrations/pg/
+  // before the process starts, which also keeps migrate.js as the single SQLite
+  // schema definition rather than growing a second dialect inside it.
+  if (!connection.isPg) {
+    migrate.createSchema(_db);
+    _applyClinicalLiteMigration();   // Structured Clinical Lite — idempotent (CREATE IF NOT EXISTS)
+    migrate.runColumnMigrations(_db); // additive ALTER-TABLE column migrations (see server/db/migrate.js)
+  }
+  await _seedDefaults();
+  await _seedExistingUserPermissions();
+  await _migratePermissions();
+  const _bootNewPerms = await _migrateProfiles();
+  await _seedGroups();
+  await _migrateUserGroups();
+  await _migrateGroups(_bootNewPerms);
+  // Also SQLite-only: it calls _db.pragma() (a better-sqlite3 method that does
+  // not exist on the pg driver) and installs SQLite CREATE TRIGGER statements.
+  // The Postgres schema ships sync_outbox and its triggers in migrations/pg/.
+  if (!connection.isPg) await _createSyncLayer();  // sync_outbox + triggers (multi-facility Phase 1)
   // HIPAA §164.316(b)(2)(i): six-year retention. Setting exists so a facility
   // under a stricter state rule can raise it; pruneAuditLog() floors it so it
   // can never be configured below the statutory minimum.
-  pruneAuditLog(getSetting('audit_retention_days', AUDIT_RETENTION_MIN_DAYS));
+  await pruneAuditLog(await getSetting('audit_retention_days', AUDIT_RETENTION_MIN_DAYS));
   // Lock any clinical records past their 24h grace window (boot-time sweep)
   try { runLockSweep(); } catch(e) {}
 }
@@ -176,15 +187,15 @@ function _defaultProfiles() {
   ];
 }
 
-function getPermissionProfiles() {
-  return getSetting('permission_profiles', _defaultProfiles());
+async function getPermissionProfiles() {
+  return await getSetting('permission_profiles', _defaultProfiles());
 }
 
-function setPermissionProfiles(profiles) {
-  setSetting('permission_profiles', profiles);
+async function setPermissionProfiles(profiles) {
+  await setSetting('permission_profiles', profiles);
 }
 
-function _seedDefaults() {
+async function _seedDefaults() {
   const defs = {
     facility_name:          'OpsPoint',
     // Brand colour theme. Keys are defined in client/src/utils/themes.js and
@@ -254,21 +265,21 @@ function _seedDefaults() {
     central_update_window:  '',      // 'HH:MM-HH:MM' local; empty = anytime (Phase 5)
   };
   for (const [k, v] of Object.entries(defs)) {
-    if (!_q1('SELECT key FROM settings WHERE key=?', [k]))
-      _run('INSERT INTO settings (key,value) VALUES (?,?)', [k, v]);
+    if (!await _q1('SELECT key FROM settings WHERE key=?', [k]))
+      await _run('INSERT INTO settings (key,value) VALUES (?,?)', [k, v]);
   }
   // Self-correct an early default that pointed at the PRIVATE source repo — the
   // updater fetches with no token, so the manifest must live on the public
   // releases repo. Safe/idempotent; only rewrites the known-bad value.
   {
-    const _mu = _q1('SELECT value FROM settings WHERE key=?', ['update_manifest_url']);
+    const _mu = await _q1('SELECT value FROM settings WHERE key=?', ['update_manifest_url']);
     if (_mu && /OpsPoint-FULL-HIPAA/.test(_mu.value))
-      _run('UPDATE settings SET value=? WHERE key=?', [defs.update_manifest_url, 'update_manifest_url']);
+      await _run('UPDATE settings SET value=? WHERE key=?', [defs.update_manifest_url, 'update_manifest_url']);
   }
   // Seed permission profiles if not yet stored
-  if (!_q1('SELECT key FROM settings WHERE key=?', ['permission_profiles']))
-    _run('INSERT INTO settings (key,value) VALUES (?,?)', ['permission_profiles', JSON.stringify(_defaultProfiles())]);
-  const cnt = _q1('SELECT COUNT(*) as c FROM users');
+  if (!await _q1('SELECT key FROM settings WHERE key=?', ['permission_profiles']))
+    await _run('INSERT INTO settings (key,value) VALUES (?,?)', ['permission_profiles', JSON.stringify(_defaultProfiles())]);
+  const cnt = await _q1('SELECT COUNT(*) as c FROM users');
   if (!cnt || cnt.c === 0) {
     function _randPw() {
       const upper='ABCDEFGHJKLMNPQRSTUVWXYZ', lower='abcdefghjkmnpqrstuvwxyz';
@@ -288,48 +299,48 @@ function _seedDefaults() {
     console.log('  ║  supervisor / ' + supPw.padEnd(32) + '║');
     console.log('  ║  pa         / ' + paPw.padEnd(32) + '║');
     console.log('  ╚══════════════════════════════════════════════╝\n');
-    _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected) VALUES ('admin','Administrator','admin',?,?,1,?,1)`,[a.hash,a.salt,JSON.stringify(ROLE_PRESETS.admin)]);
-    _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('supervisor','Supervisor','supervisor',?,?,1,?)`,[s.hash,s.salt,JSON.stringify(ROLE_PRESETS.supervisor)]);
-    _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('pa','Program Assistant','pa',?,?,1,?)`,[p.hash,p.salt,JSON.stringify(ROLE_PRESETS.pa)]);
+    await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected) VALUES ('admin','Administrator','admin',?,?,1,?,1)`,[a.hash,a.salt,JSON.stringify(ROLE_PRESETS.admin)]);
+    await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('supervisor','Supervisor','supervisor',?,?,1,?)`,[s.hash,s.salt,JSON.stringify(ROLE_PRESETS.supervisor)]);
+    await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('pa','Program Assistant','pa',?,?,1,?)`,[p.hash,p.salt,JSON.stringify(ROLE_PRESETS.pa)]);
   }
 }
 
 // Seed permissions for existing users that predate the permission system
-function _seedExistingUserPermissions() {
-  const users = _q('SELECT id, role FROM users WHERE permissions IS NULL');
-  users.forEach(u => {
+async function _seedExistingUserPermissions() {
+  const users = await _q('SELECT id, role FROM users WHERE permissions IS NULL');
+  users.forEach(async u => {
     const perms = ROLE_PRESETS[u.role] || ROLE_PRESETS.pa;
-    _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
+    await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
   });
 }
 
 // Strip any retired permissions (no longer in PERMISSIONS) from user rows.
 // New permissions propagate via _migrateGroups — no need to enumerate them here.
-function _migratePermissions() {
-  _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL').forEach(u => {
+async function _migratePermissions() {
+  (await _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL')).forEach(async u => {
     try {
       const perms   = JSON.parse(u.permissions || '[]');
       const cleaned = perms.filter(p => PERMISSIONS.includes(p));
       if (cleaned.length !== perms.length)
-        _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(cleaned), u.id]);
+        await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(cleaned), u.id]);
     } catch(e) {}
   });
 }
 
 // Migrate stored permission profiles when new permissions are added to ROLE_PRESETS.
-function _migrateProfiles() {
-  const knownRaw = _q1('SELECT value FROM settings WHERE key=?', ['known_permissions']);
+async function _migrateProfiles() {
+  const knownRaw = await _q1('SELECT value FROM settings WHERE key=?', ['known_permissions']);
   const knownPerms = knownRaw ? JSON.parse(knownRaw.value || '[]') : null;
   const newPerms = knownPerms
     ? PERMISSIONS.filter(p => !knownPerms.includes(p))
     : [];
   const knownJson = JSON.stringify(PERMISSIONS);
   if (knownRaw) {
-    _run('UPDATE settings SET value=? WHERE key=?', [knownJson, 'known_permissions']);
+    await _run('UPDATE settings SET value=? WHERE key=?', [knownJson, 'known_permissions']);
   } else {
-    _run('INSERT INTO settings (key,value) VALUES (?,?)', ['known_permissions', knownJson]);
+    await _run('INSERT INTO settings (key,value) VALUES (?,?)', ['known_permissions', knownJson]);
   }
-  const profiles = getPermissionProfiles();
+  const profiles = await getPermissionProfiles();
   let changed = false;
   profiles.forEach(p => {
     // Strip retired permissions
@@ -346,13 +357,13 @@ function _migrateProfiles() {
       });
     }
   });
-  if (changed) setSetting('permission_profiles', profiles);
+  if (changed) await setSetting('permission_profiles', profiles);
   return newPerms; // pass to _migrateGroups so it uses the same delta
 }
 
 // ── Groups ────────────────────────────────────────────────────────────
-function _seedGroups() {
-  const existing = _q1('SELECT COUNT(*) as c FROM groups');
+async function _seedGroups() {
+  const existing = await _q1('SELECT COUNT(*) as c FROM groups');
   if (existing && existing.c > 0) return;
   const seeds = [
     { key: 'pa',           label: 'Program Assistant', permissions: ROLE_PRESETS.pa,           is_protected: 0 },
@@ -360,30 +371,30 @@ function _seedGroups() {
     { key: 'admin',        label: 'Administrator',      permissions: ROLE_PRESETS.admin,         is_protected: 1 },
     { key: 'case_manager', label: 'Case Manager',       permissions: ROLE_PRESETS.case_manager,  is_protected: 0 },
   ];
-  seeds.forEach(s => {
-    _run('INSERT INTO groups (key,label,permissions,is_protected) VALUES (?,?,?,?)',
+  seeds.forEach(async s => {
+    await _run('INSERT INTO groups (key,label,permissions,is_protected) VALUES (?,?,?,?)',
       [s.key, s.label, JSON.stringify(s.permissions), s.is_protected]);
   });
 }
 
-function _migrateUserGroups() {
+async function _migrateUserGroups() {
   // Assign each user to their matching role group if not already in any group
-  const usersNoGroups = _q(`
+  const usersNoGroups = await _q(`
     SELECT u.id, u.role FROM users u
     WHERE NOT EXISTS (SELECT 1 FROM user_groups ug WHERE ug.user_id=u.id)
   `);
-  usersNoGroups.forEach(u => {
-    const g = _q1('SELECT id FROM groups WHERE key=?', [u.role]);
-    if (g) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [u.id, g.id]);
+  usersNoGroups.forEach(async u => {
+    const g = await _q1('SELECT id FROM groups WHERE key=?', [u.role]);
+    if (g) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [u.id, g.id]);
   });
 }
 
 // Ensure every built-in group contains all permissions its ROLE_PRESET says it should have,
 // and strip any retired permissions (no longer in PERMISSIONS) from every group.
 // Runs on every boot — idempotent.
-function _migrateGroups(newPerms = []) {
-  const groups = _q('SELECT * FROM groups');
-  groups.forEach(g => {
+async function _migrateGroups(newPerms = []) {
+  const groups = await _q('SELECT * FROM groups');
+  groups.forEach(async g => {
     const perms   = _j(g.permissions, []);
     const preset  = ROLE_PRESETS[g.key];
     // Only add permissions that are NEWLY introduced in this boot (not previously known).
@@ -393,13 +404,13 @@ function _migrateGroups(newPerms = []) {
     const stripped = cleaned.length !== perms.length;
     if (!toAdd.length && !stripped) return;
     const updated = cleaned.concat(toAdd);
-    _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(updated), g.id]);
-    recomputeGroupMemberPermissions(g.id);
+    await _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(updated), g.id]);
+    await recomputeGroupMemberPermissions(g.id);
   });
 }
 
-function getGroups() {
-  return _q('SELECT * FROM groups ORDER BY id').map(g => ({
+async function getGroups() {
+  return (await _q('SELECT * FROM groups ORDER BY id')).map(g => ({
     id: g.id, key: g.key, label: g.label,
     permissions: _j(g.permissions, []),
     is_protected: !!g.is_protected,
@@ -407,97 +418,97 @@ function getGroups() {
   }));
 }
 
-function getUserGroups(userId) {
-  return _q(
+async function getUserGroups(userId) {
+  return (await _q(
     'SELECT g.id,g.key,g.label,g.permissions,g.is_protected FROM groups g JOIN user_groups ug ON ug.group_id=g.id WHERE ug.user_id=? ORDER BY g.id',
     [userId]
-  ).map(g => ({ id: g.id, key: g.key, label: g.label, permissions: _j(g.permissions, []), is_protected: !!g.is_protected }));
+  )).map(g => ({ id: g.id, key: g.key, label: g.label, permissions: _j(g.permissions, []), is_protected: !!g.is_protected }));
 }
 
-function computeGroupsPermissions(groupIds) {
+async function computeGroupsPermissions(groupIds) {
   if (!groupIds || !groupIds.length) return [];
   const set = new Set();
   for (const gid of groupIds) {
-    const g = _q1('SELECT permissions FROM groups WHERE id=?', [gid]);
+    const g = await _q1('SELECT permissions FROM groups WHERE id=?', [gid]);
     if (g) _j(g.permissions, []).forEach(p => set.add(p));
   }
   return [...set].filter(p => PERMISSIONS.includes(p));
 }
 
-function getUserEffectivePermissions(userId) {
-  const groups = getUserGroups(userId);
+async function getUserEffectivePermissions(userId) {
+  const groups = await getUserGroups(userId);
   const set = new Set();
   groups.forEach(g => g.permissions.forEach(p => set.add(p)));
   return [...set].filter(p => PERMISSIONS.includes(p));
 }
 
-function recomputeUserPermissions(userId) {
-  const perms = getUserEffectivePermissions(userId);
-  _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), userId]);
+async function recomputeUserPermissions(userId) {
+  const perms = await getUserEffectivePermissions(userId);
+  await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), userId]);
   return perms;
 }
 
-function recomputeGroupMemberPermissions(groupId) {
-  _q('SELECT user_id FROM user_groups WHERE group_id=?', [groupId])
-    .forEach(m => recomputeUserPermissions(m.user_id));
+async function recomputeGroupMemberPermissions(groupId) {
+  (await _q('SELECT user_id FROM user_groups WHERE group_id=?', [groupId]))
+    .forEach(async m => await recomputeUserPermissions(m.user_id));
 }
 
 function setUserGroups(userId, groupIds) {
-  _db.transaction(() => {
-    _run('DELETE FROM user_groups WHERE user_id=?', [userId]);
+  _db.transaction(async () => {
+    await _run('DELETE FROM user_groups WHERE user_id=?', [userId]);
     for (const gid of groupIds) {
-      _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [userId, gid]);
+      await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [userId, gid]);
     }
-    recomputeUserPermissions(userId);
+    await recomputeUserPermissions(userId);
   })();
 }
 
-function createGroup(key, label, permissions) {
+async function createGroup(key, label, permissions) {
   permissions = (permissions || []).filter(p => PERMISSIONS.includes(p));
-  _run('INSERT INTO groups (key,label,permissions) VALUES (?,?,?)', [key, label, JSON.stringify(permissions)]);
-  return _q1('SELECT * FROM groups WHERE key=?', [key]);
+  await _run('INSERT INTO groups (key,label,permissions) VALUES (?,?,?)', [key, label, JSON.stringify(permissions)]);
+  return await _q1('SELECT * FROM groups WHERE key=?', [key]);
 }
 
-function updateGroup(id, label, permissions) {
+async function updateGroup(id, label, permissions) {
   permissions = (permissions || []).filter(p => PERMISSIONS.includes(p));
-  _run('UPDATE groups SET label=?,permissions=? WHERE id=?', [label, JSON.stringify(permissions), id]);
-  recomputeGroupMemberPermissions(id);
+  await _run('UPDATE groups SET label=?,permissions=? WHERE id=?', [label, JSON.stringify(permissions), id]);
+  await recomputeGroupMemberPermissions(id);
 }
 
-function deleteGroup(id) {
-  const members = _q('SELECT user_id FROM user_groups WHERE group_id=?', [id]);
-  _run('DELETE FROM user_groups WHERE group_id=?', [id]);
-  _run('DELETE FROM groups WHERE id=?', [id]);
-  members.forEach(m => recomputeUserPermissions(m.user_id));
+async function deleteGroup(id) {
+  const members = await _q('SELECT user_id FROM user_groups WHERE group_id=?', [id]);
+  await _run('DELETE FROM user_groups WHERE group_id=?', [id]);
+  await _run('DELETE FROM groups WHERE id=?', [id]);
+  members.forEach(async m => await recomputeUserPermissions(m.user_id));
   return members.map(m => m.user_id);
 }
 
 // ── Core helpers ──────────────────────────────────────────────────────
 // Primitives delegate to server/db/connection.js (single source of SQL truth).
-function _run(sql, params = []) { return connection.run(sql, params); }
-function _q(sql, params = [])   { return connection.query(sql, params); }
-function _q1(sql, params = [])  { return connection.query1(sql, params); }
+async function _run(sql, params = []) { return await connection.run(sql, params); }
+async function _q(sql, params = [])   { return await connection.query(sql, params); }
+async function _q1(sql, params = [])  { return await connection.query1(sql, params); }
 // No-op: better-sqlite3 writes directly to disk on every statement
 function _save() {}
 function _j(str, def) { try { return JSON.parse(str); } catch(e) { return def; } }
 
 // ── Public API ────────────────────────────────────────────────────────
-function query(sql, p=[])  { return _q(sql, p); }
-function query1(sql, p=[]) { return _q1(sql, p); }
-function run(sql, p=[])    { return _run(sql, p); }
+async function query(sql, p=[])  { return await _q(sql, p); }
+async function query1(sql, p=[]) { return await _q1(sql, p); }
+async function run(sql, p=[])    { return await _run(sql, p); }
 function save()             { /* no-op */ }
-function runAndSave(sql, p) { _run(sql, p); }
+async function runAndSave(sql, p) { await _run(sql, p); }
 
-function getSetting(key, def=null) {
-  const row = _q1('SELECT value FROM settings WHERE key=?', [key]);
+async function getSetting(key, def=null) {
+  const row = await _q1('SELECT value FROM settings WHERE key=?', [key]);
   if (!row) return def;
   return _j(row.value, row.value);
 }
-function setSetting(key, val) {
+async function setSetting(key, val) {
   const v = typeof val === 'string' ? val : JSON.stringify(val);
-  _run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', [key, v]);
+  await _run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', [key, v]);
 }
-function setSettingAndSave(key, val) { setSetting(key, val); }
+async function setSettingAndSave(key, val) { await setSetting(key, val); }
 
 // ── Photo helpers ─────────────────────────────────────────────────────
 function savePhoto(b64, fname) {
@@ -538,10 +549,10 @@ function _hasClinical(perms) {
   return CLINICAL_PERMS.some(p => perms.includes(p));
 }
 
-function getAllData(perms) {
+async function getAllData(perms) {
   const isClinical = _hasClinical(perms);
 
-  const clients = _q('SELECT * FROM clients ORDER BY sort_order, CAST(room AS INTEGER), room');
+  const clients = await _q('SELECT * FROM clients ORDER BY sort_order, CAST(room AS INTEGER), room');
   clients.forEach(c => {
     c.is_special = !!c.is_special; c.is_active = !!c.is_active;
     c.photo = resolveClientPhoto(c.photo);
@@ -554,8 +565,8 @@ function getAllData(perms) {
     }
   });
 
-  const reports = _q('SELECT * FROM reports ORDER BY created_at');
-  reports.forEach(r => {
+  const reports = await _q('SELECT * FROM reports ORDER BY created_at');
+  reports.forEach(async r => {
     r.is_closed        = !!r.is_closed;
     r.statuses         = _j(r.statuses, {});
     r.comments         = _j(r.comments, {});
@@ -564,7 +575,7 @@ function getAllData(perms) {
     r.issues           = _j(r.issues, []);
     r.med_notes        = isClinical ? _j(r.med_notes, []) : [];
     r.roster_snapshot  = _j(r.roster_snapshot, null);
-    r.log_entries = _q('SELECT * FROM log_entries WHERE report_id=? ORDER BY rowid', [r.id]);
+    r.log_entries = await _q('SELECT * FROM log_entries WHERE report_id=? ORDER BY rowid', [r.id]);
     r.log_entries.forEach(function(e) {
       if (e.ua_photo && (typeof e.ua_photo !== 'string' || !e.ua_photo.startsWith('data:'))) {
         e.ua_photo = true;
@@ -573,66 +584,66 @@ function getAllData(perms) {
   });
 
   const today = new Date().toISOString().slice(0, 10);
-  const staffRows = _q('SELECT * FROM staff ORDER BY sort_order, id');
-  const passRows  = _q("SELECT * FROM passes ORDER BY CASE status WHEN 'Out' THEN 0 WHEN 'Extended' THEN 1 ELSE 2 END, return_date ASC");
-  const choreLog  = _q('SELECT * FROM chore_log WHERE log_date=?', [today]);
+  const staffRows = await _q('SELECT * FROM staff ORDER BY sort_order, id');
+  const passRows  = await _q("SELECT * FROM passes ORDER BY CASE status WHEN 'Out' THEN 0 WHEN 'Extended' THEN 1 ELSE 2 END, return_date ASC");
+  const choreLog  = await _q('SELECT * FROM chore_log WHERE log_date=?', [today]);
 
   return {
     clients, reports,
-    facility_name:          getSetting('facility_name',          'OpsPoint'),
-    wellness_interval_mins: getSetting('wellness_interval_mins', 120),
-    walk_interval_mins:     getSetting('walk_interval_mins',     240),
-    walk_areas:             getSetting('walk_areas',             DEFAULT_WALK_AREAS),
-    ua_panel:               getSetting('ua_panel',               DEFAULT_UA_PANEL),
-    wellness_schedule:      getSetting('wellness_schedule',      []),
-    walk_schedule:          getSetting('walk_schedule',          []),
-    active_report_id:       getSetting('active_report_id',       null),
+    facility_name:          await getSetting('facility_name',          'OpsPoint'),
+    wellness_interval_mins: await getSetting('wellness_interval_mins', 120),
+    walk_interval_mins:     await getSetting('walk_interval_mins',     240),
+    walk_areas:             await getSetting('walk_areas',             DEFAULT_WALK_AREAS),
+    ua_panel:               await getSetting('ua_panel',               DEFAULT_UA_PANEL),
+    wellness_schedule:      await getSetting('wellness_schedule',      []),
+    walk_schedule:          await getSetting('walk_schedule',          []),
+    active_report_id:       await getSetting('active_report_id',       null),
     staff:                  staffRows,
     passes:                 passRows,
     chore_log:              choreLog,
-    master_chores:          getSetting('master_chores',          []),
-    master_groups:          getSetting('master_groups',          []),
-    pass_notice:            getSetting('pass_notice',            ''),
-    staff_categories:       getSetting('staff_categories',       ['Director','Case Manager','Program Assistant','Other']),
-    program_tracks:         getSetting('program_tracks',         ['SUD Residential','Re-entry','Transitional','Sober Living']),
-    program_phases:         getSetting('program_phases',         []),
-    incident_notifications: getSetting('incident_notifications', { low:[], medium:['supervisor'], high:['supervisor','case_manager'], critical:['supervisor','case_manager','licensing','guardian'] }),
-    session_idle_mins:      parseInt(getSetting('session_idle_mins', 30)) || 30,
-    ui_visibility:          getSetting('ui_visibility',          {}),
-    client_statuses:        getSetting('client_statuses',      []),
-    facility_theme:         getSetting('facility_theme',       'indigo'),
+    master_chores:          await getSetting('master_chores',          []),
+    master_groups:          await getSetting('master_groups',          []),
+    pass_notice:            await getSetting('pass_notice',            ''),
+    staff_categories:       await getSetting('staff_categories',       ['Director','Case Manager','Program Assistant','Other']),
+    program_tracks:         await getSetting('program_tracks',         ['SUD Residential','Re-entry','Transitional','Sober Living']),
+    program_phases:         await getSetting('program_phases',         []),
+    incident_notifications: await getSetting('incident_notifications', { low:[], medium:['supervisor'], high:['supervisor','case_manager'], critical:['supervisor','case_manager','licensing','guardian'] }),
+    session_idle_mins:      parseInt(await getSetting('session_idle_mins', 30)) || 30,
+    ui_visibility:          await getSetting('ui_visibility',          {}),
+    client_statuses:        await getSetting('client_statuses',      []),
+    facility_theme:         await getSetting('facility_theme',       'indigo'),
   };
 }
 
 // ── Group sessions + attendance ───────────────────────────────────────
-function getGroupSessions({ date, from, to }) {
+async function getGroupSessions({ date, from, to }) {
   if (from && to) {
-    return _q('SELECT * FROM group_sessions WHERE session_date>=? AND session_date<=? ORDER BY session_date, id', [from, to]);
+    return await _q('SELECT * FROM group_sessions WHERE session_date>=? AND session_date<=? ORDER BY session_date, id', [from, to]);
   }
   const d = date || new Date().toISOString().slice(0, 10);
-  return _q('SELECT * FROM group_sessions WHERE session_date=? ORDER BY id', [d]);
+  return await _q('SELECT * FROM group_sessions WHERE session_date=? ORDER BY id', [d]);
 }
 
-function createGroupSession({ session_date, group_name, time_of_day, facilitator, notes, created_by_id, created_by_name }) {
-  _run(`INSERT INTO group_sessions (session_date,group_name,time_of_day,facilitator,notes,created_by_id,created_by_name,created_at)
+async function createGroupSession({ session_date, group_name, time_of_day, facilitator, notes, created_by_id, created_by_name }) {
+  await _run(`INSERT INTO group_sessions (session_date,group_name,time_of_day,facilitator,notes,created_by_id,created_by_name,created_at)
         VALUES (?,?,?,?,?,?,?,?)`,
     [session_date, group_name, time_of_day||'', facilitator||'', notes||'', created_by_id||null, created_by_name||'', nowLocal()]);
-  const row = _q1('SELECT last_insert_rowid() AS id');
-  return row ? _q1('SELECT * FROM group_sessions WHERE id=?', [row.id]) : null;
+  const row = await _q1('SELECT last_insert_rowid() AS id');
+  return row ? await _q1('SELECT * FROM group_sessions WHERE id=?', [row.id]) : null;
 }
 
-function deleteGroupSession(id) {
-  _run('DELETE FROM group_sessions WHERE id=?', [id]);
+async function deleteGroupSession(id) {
+  await _run('DELETE FROM group_sessions WHERE id=?', [id]);
 }
 
-function getGroupAttendance(session_id) {
-  return _q('SELECT * FROM group_attendance WHERE session_id=? ORDER BY room, client_name', [session_id]);
+async function getGroupAttendance(session_id) {
+  return await _q('SELECT * FROM group_attendance WHERE session_id=? ORDER BY room, client_name', [session_id]);
 }
 
 function saveGroupAttendance(session_id, attendees) {
   // attendees: [{client_id, client_name, room, present, notes}]
-  attendees.forEach(a => {
-    _run(`INSERT INTO group_attendance (session_id,client_id,client_name,room,present,notes)
+  attendees.forEach(async a => {
+    await _run(`INSERT INTO group_attendance (session_id,client_id,client_name,room,present,notes)
           VALUES (?,?,?,?,?,?)
           ON CONFLICT(session_id,client_id) DO UPDATE SET
             present=excluded.present, notes=excluded.notes,
@@ -651,15 +662,15 @@ function _parseJsonFields(row, fields) {
   return row;
 }
 
-function isRecordLocked(table, id) {
+async function isRecordLocked(table, id) {
   if (!CLINICAL_TABLES.includes(table)) return false;
-  const row = _q1(`SELECT locked_at FROM ${table} WHERE id=?`, [id]);
+  const row = await _q1(`SELECT locked_at FROM ${table} WHERE id=?`, [id]);
   return !!(row && row.locked_at);
 }
 
-function unlockRecord(table, id, by, reason) {
+async function unlockRecord(table, id, by, reason) {
   if (!CLINICAL_TABLES.includes(table)) throw new Error('Invalid table');
-  _run(`UPDATE ${table} SET locked_at=NULL, unlocked_by=?, unlocked_at=?, unlock_reason=? WHERE id=?`,
+  await _run(`UPDATE ${table} SET locked_at=NULL, unlocked_by=?, unlocked_at=?, unlock_reason=? WHERE id=?`,
     [String(by||''), nowLocal(), String(reason||''), id]);
 }
 
@@ -667,9 +678,9 @@ function unlockRecord(table, id, by, reason) {
 // Called at boot and every hour.
 function runLockSweep() {
   let total = 0;
-  CLINICAL_TABLES.forEach(t => {
+  CLINICAL_TABLES.forEach(async t => {
     try {
-      const r = _run(
+      const r = await _run(
         `UPDATE ${t} SET locked_at=?
          WHERE locked_at IS NULL AND created_at < datetime('now','-24 hours')`,
         [nowLocal()]
@@ -681,8 +692,8 @@ function runLockSweep() {
 }
 
 // ── UA Records ────────────────────────────────────────────────────────
-function createUARecord(rec) {
-  const r = _run(
+async function createUARecord(rec) {
+  const r = await _run(
     `INSERT INTO ua_records
      (client_id,client_name,room,ua_request_id,report_id,log_entry_id,tested_at,
       witnessed_by_id,witnessed_by_name,collection_method,reason,result,panel_results,
@@ -703,7 +714,7 @@ function createUARecord(rec) {
       rec.is_interview ? 1 : 0,
     ]
   );
-  return getUARecord(r.lastInsertRowid);
+  return await getUARecord(r.lastInsertRowid);
 }
 // Join log_entries so callers can tell whether the linked log entry has a photo
 const _UA_SELECT = `
@@ -711,10 +722,10 @@ const _UA_SELECT = `
     CASE WHEN le.ua_photo IS NOT NULL THEN 1 ELSE 0 END AS has_log_photo
   FROM ua_records ur
   LEFT JOIN log_entries le ON le.id = ur.log_entry_id`;
-function getUARecord(id) {
-  return _parseJsonFields(_q1(_UA_SELECT + ' WHERE ur.id=?', [id]), ['panel_results']);
+async function getUARecord(id) {
+  return _parseJsonFields(await _q1(_UA_SELECT + ' WHERE ur.id=?', [id]), ['panel_results']);
 }
-function getUARecords(filter) {
+async function getUARecords(filter) {
   filter = filter || {};
   let sql = _UA_SELECT + ' WHERE 1=1';
   const p = [];
@@ -723,23 +734,23 @@ function getUARecords(filter) {
   if (filter.from)      { sql += ' AND ur.tested_at >= ?'; p.push(filter.from); }
   if (filter.to)        { sql += ' AND ur.tested_at <= ?'; p.push(filter.to); }
   sql += ' ORDER BY ur.tested_at DESC, ur.id DESC LIMIT 500';
-  return _q(sql, p).map(r => _parseJsonFields(r, ['panel_results']));
+  return (await _q(sql, p)).map(r => _parseJsonFields(r, ['panel_results']));
 }
-function updateUARecord(id, patch) {
+async function updateUARecord(id, patch) {
   const fields = [], vals = [];
   ['tested_at','collection_method','result','chain_of_custody','notes','photo']
     .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
   if (patch.panel_results !== undefined) { fields.push('panel_results=?'); vals.push(JSON.stringify(patch.panel_results||{})); }
-  if (!fields.length) return getUARecord(id);
+  if (!fields.length) return await getUARecord(id);
   vals.push(id);
-  _run(`UPDATE ua_records SET ${fields.join(',')} WHERE id=?`, vals);
-  return getUARecord(id);
+  await _run(`UPDATE ua_records SET ${fields.join(',')} WHERE id=?`, vals);
+  return await getUARecord(id);
 }
-function deleteUARecord(id) { _run('DELETE FROM ua_records WHERE id=?', [id]); }
+async function deleteUARecord(id) { await _run('DELETE FROM ua_records WHERE id=?', [id]); }
 
 // ── Milestones ────────────────────────────────────────────────────────
-function createMilestone(rec) {
-  const r = _run(
+async function createMilestone(rec) {
+  const r = await _run(
     `INSERT INTO milestones
      (client_id,client_name,phase,objective,target_date,status,notes,treatment_plan_id,goal_id,created_by_name)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
@@ -747,39 +758,39 @@ function createMilestone(rec) {
      rec.target_date||null, rec.status||'in_progress', rec.notes||'',
      rec.treatment_plan_id||null, rec.goal_id||null, rec.created_by_name||'']
   );
-  return _q1('SELECT * FROM milestones WHERE id=?', [r.lastInsertRowid]);
+  return await _q1('SELECT * FROM milestones WHERE id=?', [r.lastInsertRowid]);
 }
-function getMilestones(filter) {
+async function getMilestones(filter) {
   filter = filter || {};
   let sql = 'SELECT * FROM milestones WHERE 1=1';
   const p = [];
   if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
   if (filter.status)    { sql += ' AND status=?';    p.push(filter.status); }
   sql += ' ORDER BY client_id, phase, id DESC';
-  return _q(sql, p);
+  return await _q(sql, p);
 }
-function updateMilestone(id, patch) {
+async function updateMilestone(id, patch) {
   const fields = [], vals = [];
   ['phase','objective','target_date','completion_date','status','notes','treatment_plan_id','goal_id']
     .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
   if (!fields.length) return null;
   vals.push(id);
-  _run(`UPDATE milestones SET ${fields.join(',')} WHERE id=?`, vals);
-  return _q1('SELECT * FROM milestones WHERE id=?', [id]);
+  await _run(`UPDATE milestones SET ${fields.join(',')} WHERE id=?`, vals);
+  return await _q1('SELECT * FROM milestones WHERE id=?', [id]);
 }
-function signoffMilestone(id, counselorId, counselorName) {
-  _run(`UPDATE milestones SET counselor_id=?, counselor_name=?,
+async function signoffMilestone(id, counselorId, counselorName) {
+  await _run(`UPDATE milestones SET counselor_id=?, counselor_name=?,
         signed_off_at=?, status='completed',
         completion_date=COALESCE(completion_date, date('now'))
         WHERE id=?`,
        [counselorId, counselorName||'', nowLocal(), id]);
-  return _q1('SELECT * FROM milestones WHERE id=?', [id]);
+  return await _q1('SELECT * FROM milestones WHERE id=?', [id]);
 }
-function deleteMilestone(id) { _run('DELETE FROM milestones WHERE id=?', [id]); }
+async function deleteMilestone(id) { await _run('DELETE FROM milestones WHERE id=?', [id]); }
 
 // ── Incidents ─────────────────────────────────────────────────────────
-function createIncident(rec) {
-  const r = _run(
+async function createIncident(rec) {
+  const r = await _run(
     `INSERT INTO incidents
      (client_id,client_name,room,incident_date,incident_time,narrative,
       severity,corrective_action,notifications_required,notifications_sent,
@@ -793,13 +804,13 @@ function createIncident(rec) {
      rec.logged_by_id, rec.logged_by_name||'',
      'open']
   );
-  return getIncident(r.lastInsertRowid);
+  return await getIncident(r.lastInsertRowid);
 }
-function getIncident(id) {
-  return _parseJsonFields(_q1('SELECT * FROM incidents WHERE id=?', [id]),
+async function getIncident(id) {
+  return _parseJsonFields(await _q1('SELECT * FROM incidents WHERE id=?', [id]),
     ['notifications_required','notifications_sent']);
 }
-function getIncidents(filter) {
+async function getIncidents(filter) {
   filter = filter || {};
   let sql = 'SELECT * FROM incidents WHERE 1=1';
   const p = [];
@@ -807,9 +818,9 @@ function getIncidents(filter) {
   if (filter.severity)  { sql += ' AND severity=?';  p.push(filter.severity); }
   if (filter.status)    { sql += ' AND status=?';    p.push(filter.status); }
   sql += ' ORDER BY incident_date DESC, id DESC LIMIT 500';
-  return _q(sql, p).map(r => _parseJsonFields(r, ['notifications_required','notifications_sent']));
+  return (await _q(sql, p)).map(r => _parseJsonFields(r, ['notifications_required','notifications_sent']));
 }
-function updateIncident(id, patch) {
+async function updateIncident(id, patch) {
   const fields = [], vals = [];
   ['incident_date','incident_time','narrative','severity','corrective_action']
     .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
@@ -819,22 +830,22 @@ function updateIncident(id, patch) {
   if (patch.notifications_sent !== undefined) {
     fields.push('notifications_sent=?'); vals.push(JSON.stringify(patch.notifications_sent||[]));
   }
-  if (!fields.length) return getIncident(id);
+  if (!fields.length) return await getIncident(id);
   vals.push(id);
-  _run(`UPDATE incidents SET ${fields.join(',')} WHERE id=?`, vals);
-  return getIncident(id);
+  await _run(`UPDATE incidents SET ${fields.join(',')} WHERE id=?`, vals);
+  return await getIncident(id);
 }
-function reviewIncident(id, supervisorId, supervisorName, reviewNotes, newStatus) {
-  _run(`UPDATE incidents SET supervisor_id=?, supervisor_name=?,
+async function reviewIncident(id, supervisorId, supervisorName, reviewNotes, newStatus) {
+  await _run(`UPDATE incidents SET supervisor_id=?, supervisor_name=?,
         reviewed_at=?, review_notes=?, status=? WHERE id=?`,
        [supervisorId, supervisorName||'', nowLocal(), reviewNotes||'', newStatus||'reviewed', id]);
-  return getIncident(id);
+  return await getIncident(id);
 }
-function deleteIncident(id) { _run('DELETE FROM incidents WHERE id=?', [id]); }
+async function deleteIncident(id) { await _run('DELETE FROM incidents WHERE id=?', [id]); }
 
 // ── Discharge Records ─────────────────────────────────────────────────
-function createDischargeRecord(rec) {
-  const r = _run(
+async function createDischargeRecord(rec) {
+  const r = await _run(
     `INSERT INTO discharge_records
      (client_id,client_name,room,program_track,intake_date,discharge_date,
       days_in_program,reason,narrative,aftercare_plan,referrals_made,
@@ -847,25 +858,25 @@ function createDischargeRecord(rec) {
      JSON.stringify(rec.referrals_made||[]),
      rec.created_by_id, rec.created_by_name||'']
   );
-  return getDischargeRecord(r.lastInsertRowid);
+  return await getDischargeRecord(r.lastInsertRowid);
 }
-function getDischargeRecord(id) {
-  const row = _q1('SELECT * FROM discharge_records WHERE id=?', [id]);
+async function getDischargeRecord(id) {
+  const row = await _q1('SELECT * FROM discharge_records WHERE id=?', [id]);
   if (row) row.referrals_made = _j(row.referrals_made, []);
   return row;
 }
-function getDischargeRecords(filter) {
+async function getDischargeRecords(filter) {
   filter = filter || {};
   let sql = 'SELECT * FROM discharge_records WHERE 1=1';
   const p = [];
   if (filter.client_id) { sql += ' AND client_id=?'; p.push(filter.client_id); }
   sql += ' ORDER BY discharge_date DESC, id DESC';
-  return _q(sql, p).map(r => ({ ...r, referrals_made: _j(r.referrals_made, []) }));
+  return (await _q(sql, p)).map(r => ({ ...r, referrals_made: _j(r.referrals_made, []) }));
 }
 
 // ── 42 CFR Part 2 Consent Records ─────────────────────────────────────
-function createConsentRecord(rec) {
-  const r = _run(
+async function createConsentRecord(rec) {
+  const r = await _run(
     `INSERT INTO consent_records
      (client_id,program_name,recipient_name,recipient_org,purpose,information_type,
       effective_date,expiration_date,signature_on_file,created_by_id,created_by_name)
@@ -876,21 +887,21 @@ function createConsentRecord(rec) {
      rec.signature_on_file?1:0,
      rec.created_by_id, rec.created_by_name||'']
   );
-  return _q1('SELECT * FROM consent_records WHERE id=?', [r.lastInsertRowid]);
+  return await _q1('SELECT * FROM consent_records WHERE id=?', [r.lastInsertRowid]);
 }
-function getConsentRecord(id) { return _q1('SELECT * FROM consent_records WHERE id=?', [id]); }
-function getConsentRecords(clientId) {
-  return _q('SELECT * FROM consent_records WHERE client_id=? ORDER BY effective_date DESC, id DESC', [clientId]);
+async function getConsentRecord(id) { return await _q1('SELECT * FROM consent_records WHERE id=?', [id]); }
+async function getConsentRecords(clientId) {
+  return await _q('SELECT * FROM consent_records WHERE client_id=? ORDER BY effective_date DESC, id DESC', [clientId]);
 }
-function revokeConsent(id, by) {
-  _run(`UPDATE consent_records SET revoked=1, revoked_at=?, revoked_by=? WHERE id=?`,
+async function revokeConsent(id, by) {
+  await _run(`UPDATE consent_records SET revoked=1, revoked_at=?, revoked_by=? WHERE id=?`,
        [nowLocal(), String(by||''), id]);
-  return _q1('SELECT * FROM consent_records WHERE id=?', [id]);
+  return await _q1('SELECT * FROM consent_records WHERE id=?', [id]);
 }
 // Returns the active consent that covers a (client, informationType) pair, or null if blocked.
-function findActiveConsent(clientId, informationType) {
+async function findActiveConsent(clientId, informationType) {
   const now = new Date().toISOString().slice(0,10);
-  const rows = _q(
+  const rows = await _q(
     `SELECT * FROM consent_records
      WHERE client_id=? AND revoked=0
        AND effective_date <= ?
@@ -903,8 +914,8 @@ function findActiveConsent(clientId, informationType) {
 }
 
 // ── Disclosures ───────────────────────────────────────────────────────
-function logDisclosure(rec) {
-  const r = _run(
+async function logDisclosure(rec) {
+  const r = await _run(
     `INSERT INTO disclosures
      (client_id,consent_id,recipient,information_type,disclosed_by_id,disclosed_by_name,method,notes)
      VALUES (?,?,?,?,?,?,?,?)`,
@@ -913,58 +924,58 @@ function logDisclosure(rec) {
      rec.disclosed_by_id, rec.disclosed_by_name||'',
      rec.method||'', rec.notes||'']
   );
-  return _q1('SELECT * FROM disclosures WHERE id=?', [r.lastInsertRowid]);
+  return await _q1('SELECT * FROM disclosures WHERE id=?', [r.lastInsertRowid]);
 }
-function getDisclosures(clientId) {
-  return _q('SELECT * FROM disclosures WHERE client_id=? ORDER BY disclosed_at DESC, id DESC', [clientId]);
+async function getDisclosures(clientId) {
+  return await _q('SELECT * FROM disclosures WHERE client_id=? ORDER BY disclosed_at DESC, id DESC', [clientId]);
 }
 
 
 // ── Report upsert (wrapped in a transaction) ──────────────────────────
 function upsertReport(r) {
-  const _do = _db.transaction(() => {
+  const _do = _db.transaction(async () => {
     const now = new Date().toISOString();
-    const exists = _q1('SELECT id FROM reports WHERE id=?', [r.id]);
+    const exists = await _q1('SELECT id FROM reports WHERE id=?', [r.id]);
     if (exists) {
       if (r.is_closed && r.roster_snapshot) {
-        const existing = _q1('SELECT roster_snapshot FROM reports WHERE id=?', [r.id]);
+        const existing = await _q1('SELECT roster_snapshot FROM reports WHERE id=?', [r.id]);
         if (!existing || !existing.roster_snapshot) {
-          _run('UPDATE reports SET roster_snapshot=? WHERE id=?',
+          await _run('UPDATE reports SET roster_snapshot=? WHERE id=?',
             [JSON.stringify(r.roster_snapshot), r.id]);
         }
       }
-      _run(`UPDATE reports SET report_date=?,shift=?,mod_name=?,is_closed=?,statuses=?,
+      await _run(`UPDATE reports SET report_date=?,shift=?,mod_name=?,is_closed=?,statuses=?,
         comments=?,last_ua=?,last_room_search=?,issues=?,med_notes=?,updated_at=? WHERE id=?`,
         [r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
          JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
          JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
          JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, r.id]);
-      const existingEntries = _q('SELECT id,time,text FROM log_entries WHERE report_id=?', [r.id]);
+      const existingEntries = await _q('SELECT id,time,text FROM log_entries WHERE report_id=?', [r.id]);
       const existingIds = existingEntries.map(e => e.id);
       const incomingIds = (r.log_entries||[]).filter(e => e.id).map(e => parseInt(e.id));
       const noIdEntries = (r.log_entries||[]).filter(e => !e.id);
-      existingIds.filter(id => !incomingIds.includes(id)).forEach(id => {
+      existingIds.filter(id => !incomingIds.includes(id)).forEach(async id => {
         const dbEntry = existingEntries.find(ex => ex.id === id);
         if (!dbEntry) return;
         const matchedByText = noIdEntries.some(e =>
           (e.time||'') === (dbEntry.time||'') && (e.text||'') === (dbEntry.text||'')
         );
-        if (!matchedByText) _run('DELETE FROM log_entries WHERE id=?', [id]);
+        if (!matchedByText) await _run('DELETE FROM log_entries WHERE id=?', [id]);
       });
-      (r.log_entries||[]).forEach(e => {
+      (r.log_entries||[]).forEach(async e => {
         if (e.id && existingIds.includes(parseInt(e.id))) {
           const isSentinel = e.ua_photo === true || e.ua_photo === 1;
           if (isSentinel) {
-            _run('UPDATE log_entries SET time=?,text=? WHERE id=?',
+            await _run('UPDATE log_entries SET time=?,text=? WHERE id=?',
               [e.time||'', e.text||'', e.id]);
           } else {
-            _run('UPDATE log_entries SET time=?,text=?,ua_photo=? WHERE id=?',
+            await _run('UPDATE log_entries SET time=?,text=?,ua_photo=? WHERE id=?',
               [e.time||'', e.text||'', e.ua_photo||null, e.id]);
           }
         } else if (!e.id) {
           const dup = existingEntries.find(ex => ex.time===(e.time||'') && ex.text===(e.text||''));
           if (!dup) {
-            _run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
+            await _run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
               [r.id, e.time||'', e.text||'', e.ua_photo||null]);
           }
         }
@@ -972,7 +983,7 @@ function upsertReport(r) {
     } else {
       let info;
       if (r.id) {
-        info = _run(`INSERT INTO reports (id,report_date,shift,mod_name,is_closed,statuses,comments,
+        info = await _run(`INSERT INTO reports (id,report_date,shift,mod_name,is_closed,statuses,comments,
           last_ua,last_room_search,issues,med_notes,created_at,updated_at)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [r.id, r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
@@ -980,7 +991,7 @@ function upsertReport(r) {
            JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
       } else {
-        info = _run(`INSERT INTO reports (report_date,shift,mod_name,is_closed,statuses,comments,
+        info = await _run(`INSERT INTO reports (report_date,shift,mod_name,is_closed,statuses,comments,
           last_ua,last_room_search,issues,med_notes,created_at,updated_at)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
           [r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
@@ -989,8 +1000,8 @@ function upsertReport(r) {
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
       }
       const useId = r.id || info.lastInsertRowid;
-      (r.log_entries||[]).forEach(e => {
-        _run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
+      (r.log_entries||[]).forEach(async e => {
+        await _run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
           [useId, e.time||'', e.text||'', e.ua_photo||null]);
       });
     }
@@ -999,9 +1010,9 @@ function upsertReport(r) {
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────
-function auditLog(actorId, actorName, ip, action, targetType, targetId, targetLabel, detail) {
+async function auditLog(actorId, actorName, ip, action, targetType, targetId, targetLabel, detail) {
   try {
-    _run(
+    await _run(
       `INSERT INTO audit_log (ts,actor_id,actor_name,ip,action,target_type,target_id,target_label,detail) VALUES (?,?,?,?,?,?,?,?,?)`,
       [
         nowLocal(),                 // local time, not UTC datetime('now')
@@ -1020,7 +1031,7 @@ function auditLog(actorId, actorName, ip, action, targetType, targetId, targetLa
   } catch(e) { /* never let audit failure crash the caller */ }
 }
 
-function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} = {}) {
+async function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} = {}) {
   const where = [], params = [];
   if (actionPrefixes && actionPrefixes.length > 0) {
     const conditions = actionPrefixes.map(() => 'action LIKE ?').join(' OR ');
@@ -1038,8 +1049,8 @@ function getAuditLog({actionPrefixes, actorId, from, to, search, limit, offset} 
   const wc  = where.length ? 'WHERE ' + where.join(' AND ') : '';
   const lim = Math.min(parseInt(limit) || 100, 500);
   const off = parseInt(offset) || 0;
-  const countRow = _q1('SELECT COUNT(*) as c FROM audit_log ' + wc, params);
-  const rows = _q('SELECT * FROM audit_log ' + wc + ' ORDER BY id DESC LIMIT ? OFFSET ?', [...params, lim, off]);
+  const countRow = await _q1('SELECT COUNT(*) as c FROM audit_log ' + wc, params);
+  const rows = await _q('SELECT * FROM audit_log ' + wc + ' ORDER BY id DESC LIMIT ? OFFSET ?', [...params, lim, off]);
   return { rows, total: countRow ? countRow.c : 0 };
 }
 
@@ -1051,13 +1062,13 @@ const AUDIT_RETENTION_MIN_DAYS = 2190;
 // open (is_closed = 0) — a closed report is an immutable record, so a status
 // it references can be retired from the picker; one an open shift is actively
 // using cannot, or staff would lose the value mid-shift.
-function statusKeysInUse({ openOnly = false } = {}) {
+async function statusKeysInUse({ openOnly = false } = {}) {
   const keys = new Set();
   try {
     const sql = openOnly
       ? 'SELECT statuses FROM reports WHERE is_closed = 0'
       : 'SELECT statuses FROM reports';
-    for (const r of _q(sql)) {
+    for (const r of await _q(sql)) {
       let m; try { m = JSON.parse(r.statuses || '{}'); } catch (e) { continue; }
       for (const k of Object.values(m || {})) if (k) keys.add(String(k));
     }
@@ -1065,7 +1076,7 @@ function statusKeysInUse({ openOnly = false } = {}) {
   return [...keys];
 }
 
-function pruneAuditLog(days) {
+async function pruneAuditLog(days) {
   // Floor at the statutory minimum. A bad setting, a stale value, or a caller
   // passing 0/null must never shorten retention below what the law requires.
   days = Math.max(parseInt(days, 10) || AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MIN_DAYS);
@@ -1073,26 +1084,26 @@ function pruneAuditLog(days) {
     // Local-time cutoff to match the local-time ts written by auditLog().
     const d = new Date(Date.now() - days * 24 * 60 * 60 * 1000), p = n => String(n).padStart(2, '0');
     const cutoff = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-    _run('DELETE FROM audit_log WHERE ts < ?', [cutoff]);
+    await _run('DELETE FROM audit_log WHERE ts < ?', [cutoff]);
   } catch(e) {}
 }
 
 // ── UA Draws ──────────────────────────────────────────────────────────
-function createUADraw(drawnById, drawnByName, residents) {
-  const r = _run(
+async function createUADraw(drawnById, drawnByName, residents) {
+  const r = await _run(
     `INSERT INTO ua_draws (drawn_by, drawn_by_name, method, residents) VALUES (?,?,?,?)`,
     [drawnById, drawnByName, 'random', JSON.stringify(residents || [])]
   );
-  return getUADraw(r.lastInsertRowid);
+  return await getUADraw(r.lastInsertRowid);
 }
-function getUADraw(id) {
-  const row = _q1('SELECT * FROM ua_draws WHERE id=?', [id]);
+async function getUADraw(id) {
+  const row = await _q1('SELECT * FROM ua_draws WHERE id=?', [id]);
   if (!row) return null;
   try { row.residents = JSON.parse(row.residents); } catch(e) { row.residents = []; }
   return row;
 }
-function getUADraws(sinceDate) {
-  const rows = _q(
+async function getUADraws(sinceDate) {
+  const rows = await _q(
     `SELECT * FROM ua_draws WHERE date(created_at) >= date(?) ORDER BY created_at DESC`,
     [sinceDate]
   );
@@ -1101,9 +1112,9 @@ function getUADraws(sinceDate) {
     return r;
   });
 }
-function getRecentDrawnClientIds(lookbackDays) {
+async function getRecentDrawnClientIds(lookbackDays) {
   const since = new Date(Date.now() - (lookbackDays || 30) * 86400000).toISOString().slice(0, 10);
-  const rows = _q(`SELECT residents FROM ua_draws WHERE date(created_at) >= date(?)`, [since]);
+  const rows = await _q(`SELECT residents FROM ua_draws WHERE date(created_at) >= date(?)`, [since]);
   const ids = new Set();
   rows.forEach(r => {
     try { JSON.parse(r.residents).forEach(c => { if (c.id) ids.add(c.id); }); } catch(e) {}
@@ -1112,19 +1123,19 @@ function getRecentDrawnClientIds(lookbackDays) {
 }
 
 // ── Broadcasts ────────────────────────────────────────────────────────
-function createBroadcast(senderId, senderName, message) {
-  const r = _run(
+async function createBroadcast(senderId, senderName, message) {
+  const r = await _run(
     `INSERT INTO broadcast_messages (sender_id, sender_name, message) VALUES (?,?,?)`,
     [senderId, senderName, message]
   );
-  return getBroadcast(r.lastInsertRowid);
+  return await getBroadcast(r.lastInsertRowid);
 }
-function getBroadcast(id) {
-  return _q1('SELECT * FROM broadcast_messages WHERE id=?', [id]);
+async function getBroadcast(id) {
+  return await _q1('SELECT * FROM broadcast_messages WHERE id=?', [id]);
 }
-function getBroadcasts(limitHours) {
+async function getBroadcasts(limitHours) {
   const hours = limitHours || 24;
-  return _q(
+  return await _q(
     `SELECT * FROM broadcast_messages WHERE created_at >= datetime('now', ? || ' hours') ORDER BY created_at DESC`,
     ['-' + hours]
   );
@@ -1373,7 +1384,7 @@ const SYNC_PHOTO_COLS = { clients:['photo'], ua_records:['photo'], log_entries:[
 // Triggers fire for ALL writes (incl. FK cascade deletes, with recursive_triggers
 // ON), so the outbox can never miss a change. Table names come from the hardcoded
 // whitelist above — never user input — so the string interpolation is safe.
-function _createSyncLayer() {
+async function _createSyncLayer() {
   _db.pragma('recursive_triggers = ON');  // so ON DELETE CASCADE fires delete triggers
   _db.exec(`CREATE TABLE IF NOT EXISTS sync_outbox (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1385,7 +1396,7 @@ function _createSyncLayer() {
   )`);
   _db.exec('CREATE INDEX IF NOT EXISTS idx_outbox_unsynced ON sync_outbox(synced_at, id)');
   for (const t of SYNC_TABLES) {
-    if (!_q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
+    if (!await _q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
     _db.exec(`
       CREATE TRIGGER IF NOT EXISTS trg_sync_${t}_ai AFTER INSERT ON ${t}
         BEGIN INSERT INTO sync_outbox(table_name,row_id,op) VALUES('${t}',NEW.id,'upsert'); END;
@@ -1399,35 +1410,35 @@ function _createSyncLayer() {
 
 // Enqueue every existing row of every synced table — the new sync baseline.
 // Run on enrollment so HQ receives a full snapshot, then live triggers take over.
-function enqueueSyncBackfill() {
-  _db.transaction(() => {
-    _run('DELETE FROM sync_outbox');
+async function enqueueSyncBackfill() {
+  _db.transaction(async () => {
+    await _run('DELETE FROM sync_outbox');
     for (const t of SYNC_TABLES) {
-      if (!_q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
-      _run(`INSERT INTO sync_outbox(table_name,row_id,op) SELECT '${t}', id, 'upsert' FROM ${t}`);
+      if (!await _q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
+      await _run(`INSERT INTO sync_outbox(table_name,row_id,op) SELECT '${t}', id, 'upsert' FROM ${t}`);
     }
   })();
-  return outboxPending();
+  return await outboxPending();
 }
 
-function outboxPending() {
-  const r = _q1('SELECT COUNT(*) AS c FROM sync_outbox WHERE synced_at IS NULL');
+async function outboxPending() {
+  const r = await _q1('SELECT COUNT(*) AS c FROM sync_outbox WHERE synced_at IS NULL');
   return r ? r.c : 0;
 }
 
 // Oldest-first batch of unsynced changes, with row data resolved + photos inlined.
-function getSyncBatch(limit = 50) {
-  const rows = _q('SELECT id, table_name, row_id, op FROM sync_outbox WHERE synced_at IS NULL ORDER BY id LIMIT ?', [limit]);
-  return rows.map(o => {
+async function getSyncBatch(limit = 50) {
+  const rows = await _q('SELECT id, table_name, row_id, op FROM sync_outbox WHERE synced_at IS NULL ORDER BY id LIMIT ?', [limit]);
+  return Promise.all(rows.map(async o => {
     if (o.op !== 'upsert') return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'delete', data: null };
-    const row = _q1(`SELECT * FROM ${o.table_name} WHERE id=?`, [o.row_id]);
+    const row = await _q1(`SELECT * FROM ${o.table_name} WHERE id=?`, [o.row_id]);
     if (!row) return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'delete', data: null }; // gone → delete
     const cols = SYNC_PHOTO_COLS[o.table_name];
     if (cols) cols.forEach(c => {
       if (row[c] && typeof row[c] === 'string' && !row[c].startsWith('data:')) { const b = getPhotoB64(row[c]); if (b) row[c] = b; }
     });
     return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'upsert', data: row };
-  });
+  }));
 }
 
 function markSynced(ids) {
@@ -1439,19 +1450,19 @@ function markSynced(ids) {
   })();
 }
 
-function pruneOutbox() { _run('DELETE FROM sync_outbox WHERE synced_at IS NOT NULL'); }
-function clearOutbox() { _run('DELETE FROM sync_outbox'); }  // standalone: keep bounded
+async function pruneOutbox() { await _run('DELETE FROM sync_outbox WHERE synced_at IS NOT NULL'); }
+async function clearOutbox() { await _run('DELETE FROM sync_outbox'); }  // standalone: keep bounded
 
 // ── Central-managed users (Phase 2b) ───────────────────────────────────
 // Apply HQ-mastered users to the local users table. Caller checks the opt-in
 // flag first. Safety rails: NEVER modifies/deletes a local (central_managed=0)
 // account, and never removes the last admin. HQ is master for identity + role;
 // the facility owns the password after the user's first local change.
-function applyManagedUsers(list) {
+async function applyManagedUsers(list) {
   list = Array.isArray(list) ? list : [];
   let created = 0, updated = 0, removed = 0, skipped = 0;
   const incomingUids = new Set();
-  _db.transaction(() => {
+  _db.transaction(async () => {
     for (const m of list) {
       const uid = String(m.uid || '');
       const uname = String(m.username || '').toLowerCase().trim();
@@ -1461,35 +1472,35 @@ function applyManagedUsers(list) {
         ? m.permissions.filter(p => PERMISSIONS.includes(p))
         : (ROLE_PRESETS[m.role] || ROLE_PRESETS.pa).slice();
       const permsJson = JSON.stringify(perms);
-      const row = _q1('SELECT * FROM users WHERE central_uid=?', [uid])
-               || _q1('SELECT * FROM users WHERE LOWER(username)=?', [uname]);
+      const row = await _q1('SELECT * FROM users WHERE central_uid=?', [uid])
+               || await _q1('SELECT * FROM users WHERE LOWER(username)=?', [uname]);
       if (!row) {
-        _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,central_managed,central_uid)
+        await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,central_managed,central_uid)
               VALUES (?,?,?,?,?,?,?,1,?)`,
           [uname, String(m.display_name || ''), String(m.role || 'pa'), m.hash || '', m.salt || '', m.must_change_pw ? 1 : 0, permsJson, uid]);
-        const newU = _q1('SELECT id FROM users WHERE central_uid=?', [uid]);
+        const newU = await _q1('SELECT id FROM users WHERE central_uid=?', [uid]);
         if (newU) {
-          const g = _q1('SELECT id FROM groups WHERE key=?', [String(m.role || 'pa')]);
-          if (g) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [newU.id, g.id]);
+          const g = await _q1('SELECT id FROM groups WHERE key=?', [String(m.role || 'pa')]);
+          if (g) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [newU.id, g.id]);
         }
         created++;
       } else if (row.central_managed) {
         const newRole = String(m.role || 'pa');
         // HQ master for identity/permissions; do NOT touch the password.
-        _run('UPDATE users SET display_name=?, role=?, permissions=?, central_uid=? WHERE id=?',
+        await _run('UPDATE users SET display_name=?, role=?, permissions=?, central_uid=? WHERE id=?',
           [String(m.display_name || ''), newRole, permsJson, uid, row.id]);
         if (row.role !== newRole) {
           // Role changed — swap group assignment
-          const oldG = _q1('SELECT id FROM groups WHERE key=?', [row.role]);
-          const newG = _q1('SELECT id FROM groups WHERE key=?', [newRole]);
-          if (oldG) _run('DELETE FROM user_groups WHERE user_id=? AND group_id=?', [row.id, oldG.id]);
-          if (newG) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, newG.id]);
+          const oldG = await _q1('SELECT id FROM groups WHERE key=?', [row.role]);
+          const newG = await _q1('SELECT id FROM groups WHERE key=?', [newRole]);
+          if (oldG) await _run('DELETE FROM user_groups WHERE user_id=? AND group_id=?', [row.id, oldG.id]);
+          if (newG) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, newG.id]);
         } else {
           // Same role — ensure group is assigned (backfills users created before this fix)
-          const noGroup = !_q1('SELECT 1 FROM user_groups WHERE user_id=?', [row.id]);
+          const noGroup = !await _q1('SELECT 1 FROM user_groups WHERE user_id=?', [row.id]);
           if (noGroup) {
-            const g = _q1('SELECT id FROM groups WHERE key=?', [newRole]);
-            if (g) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, g.id]);
+            const g = await _q1('SELECT id FROM groups WHERE key=?', [newRole]);
+            if (g) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, g.id]);
           }
         }
         updated++;
@@ -1498,17 +1509,17 @@ function applyManagedUsers(list) {
       }
     }
     // Remove managed users HQ no longer assigns (guard: never drop below 1 admin)
-    _q('SELECT id, central_uid FROM users WHERE central_managed=1').forEach(u => {
+    (await _q('SELECT id, central_uid FROM users WHERE central_managed=1')).forEach(async u => {
       if (incomingUids.has(u.central_uid)) return;
-      const otherAdmins = _q('SELECT id,permissions FROM users WHERE id<>?', [u.id])
+      const otherAdmins = (await _q('SELECT id,permissions FROM users WHERE id<>?', [u.id]))
         .filter(x => { try { return JSON.parse(x.permissions || '[]').includes('admin.users'); } catch (e) { return false; } }).length;
       if (otherAdmins < 1) { skipped++; return; }
-      _run('DELETE FROM users WHERE id=?', [u.id]);
+      await _run('DELETE FROM users WHERE id=?', [u.id]);
       removed++;
     });
   })();
-  const total = _q1('SELECT COUNT(*) AS c FROM users WHERE central_managed=1');
-  setSetting('central_users_count', String(total ? total.c : 0));
+  const total = await _q1('SELECT COUNT(*) AS c FROM users WHERE central_managed=1');
+  await setSetting('central_users_count', String(total ? total.c : 0));
   return { created, updated, removed, skipped, total: total ? total.c : 0 };
 }
 

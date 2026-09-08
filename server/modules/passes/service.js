@@ -19,19 +19,19 @@ function httpError(status, message) {
   return e;
 }
 
-function list() {
-  return repo.list();
+async function list() {
+  return await repo.list();
 }
 
 // Create a pass. Returns the created row (for the response + audit label).
-function create(input = {}) {
+async function create(input = {}) {
   const { client_id, room, name, departure, return_date, ua_notes, notes, status } = input;
   if (!client_id || !name) throw httpError(400, 'client_id and name required');
-  const client = repo.getClientBrief(parseInt(client_id));
+  const client = await repo.getClientBrief(parseInt(client_id));
   if (!client) throw httpError(404, 'Client not found');
   if (ua_notes && ua_notes.length > 500) throw httpError(400, 'UA notes too long (max 500 chars)');
   if (notes && notes.length > 1000) throw httpError(400, 'Notes too long (max 1000 chars)');
-  return repo.insert({
+  return await repo.insert({
     client_id: parseInt(client_id),
     room: room || client.room,
     name: name || client.name,
@@ -62,8 +62,8 @@ function appendExtensionNote(before, newReturn, actor) {
 // Update a pass. `canEditDetails` reflects the caller's passes.edit permission;
 // status-only callers may change only the status field. Returns the pass name
 // (for the audit label).
-function update(id, patch = {}, { canEditDetails, actor } = {}) {
-  const before = repo.getById(id);
+async function update(id, patch = {}, { canEditDetails, actor } = {}) {
+  const before = await repo.getById(id);
   if (!before) throw httpError(404, 'Not found');
   const { departure, return_date, ua_notes, notes, status } = patch;
 
@@ -94,30 +94,30 @@ function update(id, patch = {}, { canEditDetails, actor } = {}) {
     fields.notes = appendExtensionNote(before, return_date, actor);
   }
 
-  repo.update(id, fields);
+  await repo.update(id, fields);
 
-  const row = repo.getById(id);
+  const row = await repo.getById(id);
   return row ? row.name : String(id);
 }
 
 // Delete a pass. Returns { name } captured before deletion.
-function remove(id) {
-  const row = repo.getById(id);
+async function remove(id) {
+  const row = await repo.getById(id);
   if (!row) throw httpError(404, 'Not found');
-  repo.remove(id);
+  await repo.remove(id);
   return { name: row.name };
 }
 
-function getNotice() {
-  const v = repo.getNotice();
+async function getNotice() {
+  const v = await repo.getNotice();
   return v == null ? '' : v;
 }
 
 // Persist the pass-notice board text. Returns the stored string (for audit).
-function setNotice(notice) {
+async function setNotice(notice) {
   const str = String(notice || '');
   if (str.length > 1000) throw httpError(400, 'Notice too long (max 1000 chars)');
-  repo.setNotice(str);
+  await repo.setNotice(str);
   return str;
 }
 

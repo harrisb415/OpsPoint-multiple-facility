@@ -13,7 +13,7 @@ function httpError(status, message) {
 
 // Validate an inbound data-URI photo by magic bytes; returns the stored path,
 // or null if absent/invalid (matching the original "clear photo on bad input").
-function processPhoto(photo, id) {
+async function processPhoto(photo, id) {
   let pval = null;
   if (photo && typeof photo === 'string' && photo.startsWith('data:image/')) {
     const b64Part = photo.split(',')[1] || '';
@@ -26,7 +26,7 @@ function processPhoto(photo, id) {
         const isWebp = bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
         if (isJpeg || isPng || isGif || isWebp) {
           const ext = isGif ? 'gif' : isPng ? 'png' : isWebp ? 'webp' : 'jpg';
-          pval = repo.savePhoto(photo, `client_${id}.${ext}`);
+          pval = await repo.savePhoto(photo, `client_${id}.${ext}`);
         }
       } catch (e) { /* ignore — leaves pval null */ }
     }
@@ -36,12 +36,12 @@ function processPhoto(photo, id) {
 
 // Create a resident (re-occupying a VACANT row when one exists for the room).
 // Returns { id, client, label }.
-function create(body = {}) {
+async function create(body = {}) {
   const { room, name, case_manager, phone, intake_date,
     referral_source, program_track, emergency_contacts, intake_notes } = body;
   if (!name || !String(name).trim()) throw httpError(400, 'Name is required');
   if (!room || !String(room).trim()) throw httpError(400, 'Room is required');
-  const occ = repo.activeResidentInRoom(String(room));
+  const occ = await repo.activeResidentInRoom(String(room));
   if (occ) throw httpError(409, 'Room ' + room + ' is already occupied by ' + occ.name);
 
   const common = {
@@ -56,17 +56,17 @@ function create(body = {}) {
   };
 
   let resultId;
-  const vacant = repo.vacantInRoom(String(room));
+  const vacant = await repo.vacantInRoom(String(room));
   if (vacant) {
-    repo.reactivateVacant(vacant.id, common);
+    await repo.reactivateVacant(vacant.id, common);
     resultId = vacant.id;
   } else {
-    const max = repo.maxSortOrder();
-    resultId = repo.insertClient({ room: String(room), ...common, sort_order: (max != null ? max : 0) + 1 });
+    const max = await repo.maxSortOrder();
+    resultId = await repo.insertClient({ room: String(room), ...common, sort_order: (max != null ? max : 0) + 1 });
   }
 
   // intake log entry on the active shift report
-  const activeId = repo.getActiveReportId();
+  const activeId = await repo.getActiveReportId();
   if (activeId) {
     const n = new Date(), h = n.getHours(), m = String(n.getMinutes()).padStart(2, '0');
     const ts = `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
@@ -77,32 +77,32 @@ function create(body = {}) {
         intakeStr = ' Intake: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + '.';
       } catch (e) { /* ignore */ }
     }
-    repo.insertLogEntry(activeId, ts, `Resident admitted: ${String(name).trim()}, Rm. ${String(room)}.${intakeStr}`);
-    repo.touchReport(activeId, new Date().toISOString());
+    await repo.insertLogEntry(activeId, ts, `Resident admitted: ${String(name).trim()}, Rm. ${String(room)}.${intakeStr}`);
+    await repo.touchReport(activeId, new Date().toISOString());
   }
 
-  const client = resultId ? repo.getById(resultId) : null;
+  const client = resultId ? await repo.getById(resultId) : null;
   return { id: resultId, client, label: String(name).trim() + ' Rm.' + String(room) };
 }
 
 // Update a resident. Returns { client, label }.
-function update(idRaw, body = {}) {
+async function update(idRaw, body = {}) {
   const id = parseInt(idRaw, 10);
-  if (!repo.exists(id)) throw httpError(404, 'Not found');
+  if (!await repo.exists(id)) throw httpError(404, 'Not found');
   const { room, name, case_manager, phone, intake_date, discharge_date, photo, is_active,
     referral_source, program_track, emergency_contacts, intake_notes } = body;
   if (name !== undefined && !name.trim()) throw httpError(400, 'Name cannot be empty');
 
   // Room change: conflict check + clear the target room's VACANT placeholder.
   if (room !== undefined) {
-    const cur = repo.getRoomActive(id);
+    const cur = await repo.getRoomActive(id);
     if (cur && String(room) !== String(cur.room)) {
-      const occ = repo.activeResidentInRoomExcept(String(room), id);
+      const occ = await repo.activeResidentInRoomExcept(String(room), id);
       if (occ) throw httpError(409, 'Room ' + room + ' is already occupied by ' + occ.name);
     }
     const becomingActive = is_active !== undefined ? !!is_active : !!(cur && cur.is_active);
-    if (becomingActive) repo.deleteVacantForRoomExcept(String(room), id);
-    repo.setRoom(id, String(room));
+    if (becomingActive) await repo.deleteVacantForRoomExcept(String(room), id);
+    await repo.setRoom(id, String(room));
   }
 
   const fields = {};
@@ -116,18 +116,18 @@ function update(idRaw, body = {}) {
   if (program_track !== undefined)   fields.program_track = String(program_track || '');
   if (emergency_contacts !== undefined) fields.emergency_contacts = JSON.stringify(Array.isArray(emergency_contacts) ? emergency_contacts : []);
   if (intake_notes !== undefined)    fields.intake_notes = String(intake_notes || '');
-  if (photo !== undefined)           fields.photo = processPhoto(photo, id);
-  repo.applyUpdates(id, fields);
+  if (photo !== undefined)           fields.photo = await processPhoto(photo, id);
+  await repo.applyUpdates(id, fields);
 
-  const client = repo.getById(id);
+  const client = await repo.getById(id);
   return { client, label: client ? (client.name + ' Rm.' + client.room) : String(id) };
 }
 
 // Resolve a client for the profile-view audit gate. Returns { id, name, room }.
-function getProfileTarget(idRaw) {
+async function getProfileTarget(idRaw) {
   const id = parseInt(idRaw, 10);
   if (isNaN(id)) throw httpError(400, 'Invalid id');
-  const cl = repo.getBrief(id);
+  const cl = await repo.getBrief(id);
   if (!cl) throw httpError(404, 'Not found');
   return cl;
 }

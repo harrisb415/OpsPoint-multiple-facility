@@ -34,6 +34,10 @@ const { createSessionStore }           = require('./server/lib/sessionStore');
 const dbConn                           = require('./server/db/connection');
 
 const app  = express();
+// Every route handler below is async now (the db layer awaits). Express 4
+// ignores a returned promise, so without this an async handler that rejects
+// would hang the request instead of producing a 500. Must precede all routes.
+require('./server/lib/asyncRoutes').patchApp(app);
 app.disable('x-powered-by');
 // Honour X-Forwarded-For / X-Forwarded-Proto from a same-box reverse proxy.
 // Without this, every request behind nginx reads as 127.0.0.1: audit rows
@@ -122,9 +126,9 @@ app.use(idleSessionCheck);  // HIPAA idle timeout — server/middleware/session.
 
 // Lightweight passive endpoint — client can poll this to check session validity
 // without bumping last_activity. (POST /api/heartbeat bumps activity.)
-app.get('/api/heartbeat', (req,res) => {
+app.get('/api/heartbeat', async (req,res) => {
   if (!req.session || !req.session.userId) return res.status(401).json({ok:false});
-  res.json({ok:true, idleMins:parseInt(db.getSetting('session_idle_mins',config.SESSION_IDLE_DEFAULT_MINS))||config.SESSION_IDLE_DEFAULT_MINS});
+  res.json({ok:true, idleMins:parseInt(await db.getSetting('session_idle_mins',config.SESSION_IDLE_DEFAULT_MINS))||config.SESSION_IDLE_DEFAULT_MINS});
 });
 
 app.use(requireForceChangePw);  // forced-password-change gate — server/middleware/session.js
@@ -228,18 +232,18 @@ const updater = createUpdater({
   broadcast, restart: restartServer, log: (...a) => console.log('[updater]', ...a),
   // When the manifest/bundle is served by our HQ relay, authenticate with the
   // facility API key so HQ can serve on-prem (facilities never touch the internet).
-  authFor: (urlStr) => {
+  authFor: async (urlStr) => {
     try {
-      const cu = db.getSetting('central_url', '') || '';
-      const key = db.getSetting('central_api_key', '') || '';
+      const cu = await db.getSetting('central_url', '') || '';
+      const key = await db.getSetting('central_api_key', '') || '';
       if (cu && key && new URL(urlStr).host === new URL(cu).host) return { 'x-facility-key': key };
     } catch (e) {}
     return {};
   },
-  insecureFor: (urlStr) => {
+  insecureFor: async (urlStr) => {
     try {
-      const cu = db.getSetting('central_url', '') || '';
-      if (cu && db.getSetting('central_insecure_tls', false) && new URL(urlStr).host === new URL(cu).host) return true;
+      const cu = await db.getSetting('central_url', '') || '';
+      if (cu && await db.getSetting('central_insecure_tls', false) && new URL(urlStr).host === new URL(cu).host) return true;
     } catch (e) {}
     return false;
   },
@@ -252,11 +256,11 @@ app.post('/api/update/check', requireAuth, csrfCheck, requirePermission('admin.s
   try { const r = await updater.check(); res.json(r); }
   catch(e){ res.status(502).json({error:(e&&e.message)||'Check failed'}); }
 });
-app.post('/api/update/apply', requireAuth, csrfCheck, requirePermission('admin.system'), (req,res)=>{
+app.post('/api/update/apply', requireAuth, csrfCheck, requirePermission('admin.system'), async (req,res)=>{
   const st = updater.status();
   if (st.progress && st.progress.applying) return res.status(409).json({error:'An update is already in progress'});
   const actor = req.session.displayName || req.session.username || 'admin';
-  audit(req,'update.apply.start','system',null,'Software update started',{by:actor});
+  await audit(req,'update.apply.start','system',null,'Software update started',{by:actor});
   updater.apply(actor).catch(()=>{}); // runs in background; client polls /status
   res.json({ ok:true, started:true });
 });
@@ -303,42 +307,42 @@ function _centralRequest(method, urlStr, { headers = {}, body = null, insecure =
 function _centralTs() { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
 const _appVersion = (() => { try { return require('./package.json').version; } catch (e) { return ''; } })();
 
-app.get('/api/central/status', requireAuth, requirePermission('admin.system'), (req, res) => {
-  const url = db.getSetting('central_url', '');
-  const facility_id = db.getSetting('central_facility_id', '');
-  const api_key = db.getSetting('central_api_key', '');
+app.get('/api/central/status', requireAuth, requirePermission('admin.system'), async (req, res) => {
+  const url = await db.getSetting('central_url', '');
+  const facility_id = await db.getSetting('central_facility_id', '');
+  const api_key = await db.getSetting('central_api_key', '');
   res.json({
     connected: !!(url && facility_id && api_key),
     url, facility_id,
     key_prefix: api_key ? String(api_key).slice(0, 8) : '', // never return the full key
-    insecure: !!db.getSetting('central_insecure_tls', false),
-    last_checkin: db.getSetting('central_last_checkin', ''),
-    last_status: db.getSetting('central_last_status', ''),
-    pending: db.outboxPending(),
-    last_sync: db.getSetting('central_last_sync', ''),
-    sync_error: db.getSetting('central_sync_error', ''),
-    manages_users: !!db.getSetting('central_manages_users', false),
-    users_last_pull: db.getSetting('central_users_last_pull', ''),
-    users_count: parseInt(db.getSetting('central_users_count', '0')) || 0,
-    target_version: db.getSetting('central_target_version', ''),
+    insecure: !!await db.getSetting('central_insecure_tls', false),
+    last_checkin: await db.getSetting('central_last_checkin', ''),
+    last_status: await db.getSetting('central_last_status', ''),
+    pending: await db.outboxPending(),
+    last_sync: await db.getSetting('central_last_sync', ''),
+    sync_error: await db.getSetting('central_sync_error', ''),
+    manages_users: !!await db.getSetting('central_manages_users', false),
+    users_last_pull: await db.getSetting('central_users_last_pull', ''),
+    users_count: parseInt(await db.getSetting('central_users_count', '0')) || 0,
+    target_version: await db.getSetting('central_target_version', ''),
     current_version: _appVersion,
-    update_available: !!(db.getSetting('central_target_version', '') && db.getSetting('central_target_version', '') !== _appVersion),
-    auto_update: !!db.getSetting('central_auto_update', false),
-    update_window: db.getSetting('central_update_window', ''),
+    update_available: !!(await db.getSetting('central_target_version', '') && await db.getSetting('central_target_version', '') !== _appVersion),
+    auto_update: !!await db.getSetting('central_auto_update', false),
+    update_window: await db.getSetting('central_update_window', ''),
   });
 });
 
 // Opt-in to HQ-driven rollouts (auto-apply within an optional maintenance window).
-app.post('/api/central/auto-update', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
+app.post('/api/central/auto-update', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
   const b = req.body || {};
-  db.setSetting('central_auto_update', !!b.auto_update);
+  await db.setSetting('central_auto_update', !!b.auto_update);
   if (b.window !== undefined) {
     const w = String(b.window || '').trim();
     if (w && !/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/.test(w)) return res.status(400).json({ error: 'window must be "HH:MM-HH:MM" or empty' });
-    db.setSetting('central_update_window', w);
+    await db.setSetting('central_update_window', w);
   }
-  audit(req, 'central.auto_update', 'system', null, 'Auto-update ' + (b.auto_update ? 'enabled' : 'disabled'), { window: db.getSetting('central_update_window', '') });
-  res.json({ ok: true, auto_update: !!db.getSetting('central_auto_update', false), update_window: db.getSetting('central_update_window', '') });
+  await audit(req, 'central.auto_update', 'system', null, 'Auto-update ' + (b.auto_update ? 'enabled' : 'disabled'), { window: await db.getSetting('central_update_window', '') });
+  res.json({ ok: true, auto_update: !!await db.getSetting('central_auto_update', false), update_window: await db.getSetting('central_update_window', '') });
 });
 
 app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
@@ -355,54 +359,54 @@ app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admi
     return res.status(r.status === 401 || r.status === 403 ? r.status : 502).json({ error: (r.body && r.body.error) || ('HQ rejected check-in (HTTP ' + r.status + ')') });
   if (r.body.facility && r.body.facility.id && r.body.facility.id !== facility_id)
     return res.status(400).json({ error: 'This key belongs to a different facility — check the Facility ID' });
-  db.setSetting('central_url', url);
-  db.setSetting('central_facility_id', facility_id);
-  db.setSetting('central_api_key', api_key);
-  db.setSetting('central_insecure_tls', insecure);
-  db.setSetting('central_last_checkin', _centralTs());
-  db.setSetting('central_last_status', 'connected');
-  db.setSetting('central_sync_error', '');
-  db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
+  await db.setSetting('central_url', url);
+  await db.setSetting('central_facility_id', facility_id);
+  await db.setSetting('central_api_key', api_key);
+  await db.setSetting('central_insecure_tls', insecure);
+  await db.setSetting('central_last_checkin', _centralTs());
+  await db.setSetting('central_last_status', 'connected');
+  await db.setSetting('central_sync_error', '');
+  await db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
   // Phase 5: pull updates from HQ on the LAN. Preserve the original (GitHub)
   // manifest URL so disconnect can restore it.
-  if (!db.getSetting('update_manifest_url_origin', '')) db.setSetting('update_manifest_url_origin', db.getSetting('update_manifest_url', ''));
-  db.setSetting('update_manifest_url', url + '/fleet/manifest');
-  try { db.enqueueSyncBackfill(); } catch (e) {}        // queue a full snapshot for HQ
-  setImmediate(() => { syncTick().catch(() => {}); });   // start draining in the background
-  audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
+  if (!await db.getSetting('update_manifest_url_origin', '')) await db.setSetting('update_manifest_url_origin', await db.getSetting('update_manifest_url', ''));
+  await db.setSetting('update_manifest_url', url + '/fleet/manifest');
+  try { await db.enqueueSyncBackfill(); } catch (e) {}        // queue a full snapshot for HQ
+  setImmediate(async () => { (await syncTick()).catch(() => {}); });   // start draining in the background
+  await audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
   res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
 });
 
 app.post('/api/central/checkin', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
-  const url = db.getSetting('central_url', ''), api_key = db.getSetting('central_api_key', '');
-  const insecure = !!db.getSetting('central_insecure_tls', false);
+  const url = await db.getSetting('central_url', ''), api_key = await db.getSetting('central_api_key', '');
+  const insecure = !!await db.getSetting('central_insecure_tls', false);
   if (!url || !api_key) return res.status(400).json({ error: 'Not connected to HQ' });
   let r;
   try { r = await _centralRequest('POST', url + '/enroll/checkin', { headers: { 'x-facility-key': api_key }, body: { app_version: _appVersion }, insecure }); }
-  catch (e) { db.setSetting('central_last_status', 'unreachable'); return res.status(502).json({ error: 'Could not reach HQ: ' + ((e && e.message) || 'network error') }); }
+  catch (e) { await db.setSetting('central_last_status', 'unreachable'); return res.status(502).json({ error: 'Could not reach HQ: ' + ((e && e.message) || 'network error') }); }
   if (r.status !== 200 || !r.body || !r.body.ok) {
-    db.setSetting('central_last_status', 'rejected');
+    await db.setSetting('central_last_status', 'rejected');
     return res.status(502).json({ error: (r.body && r.body.error) || ('HQ rejected check-in (HTTP ' + r.status + ')') });
   }
-  db.setSetting('central_last_checkin', _centralTs());
-  db.setSetting('central_last_status', 'connected');
-  db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
+  await db.setSetting('central_last_checkin', _centralTs());
+  await db.setSetting('central_last_status', 'connected');
+  await db.setSetting('central_target_version', (r.body && r.body.target_version) || '');
   res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
 });
 
-app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), (req, res) => {
+app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
   // Restore the original (GitHub) update source before clearing central settings.
-  const origin = db.getSetting('update_manifest_url_origin', '');
-  if (origin) { db.setSetting('update_manifest_url', origin); db.setSetting('update_manifest_url_origin', ''); }
+  const origin = await db.getSetting('update_manifest_url_origin', '');
+  if (origin) { await db.setSetting('update_manifest_url', origin); await db.setSetting('update_manifest_url_origin', ''); }
   ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
    'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error',
    'central_manages_users', 'central_users_last_pull', 'central_users_count', 'central_target_version',
    'central_auto_update', 'central_update_window']
-    .forEach(k => db.setSetting(k, ''));
+    .forEach(async k => await db.setSetting(k, ''));
   // Previously-provisioned managed users are LEFT in place (real accounts with
   // their own passwords) so disconnecting never locks staff out.
-  audit(req, 'central.disconnect', 'system', null, 'Disconnected from HQ', {});
-  try { db.clearOutbox(); } catch (e) {}   // clear LAST so the audit row above doesn't linger in the outbox
+  await audit(req, 'central.disconnect', 'system', null, 'Disconnected from HQ', {});
+  try { await db.clearOutbox(); } catch (e) {}   // clear LAST so the audit row above doesn't linger in the outbox
   res.json({ ok: true });
 });
 
@@ -414,29 +418,29 @@ async function syncTick() {
   if (_syncing) return;
   _syncing = true;
   try {
-    const url = db.getSetting('central_url', ''), key = db.getSetting('central_api_key', '');
-    const insecure = !!db.getSetting('central_insecure_tls', false);
-    if (!url || !key) { db.clearOutbox(); return; }   // standalone: nothing to send
+    const url = await db.getSetting('central_url', ''), key = await db.getSetting('central_api_key', '');
+    const insecure = !!await db.getSetting('central_insecure_tls', false);
+    if (!url || !key) { await db.clearOutbox(); return; }   // standalone: nothing to send
     let batches = 0, lastUpdate = null;
     do {
-      const batch = db.getSyncBatch(50);   // may be empty → still send as a heartbeat (refreshes liveness + target)
+      const batch = await db.getSyncBatch(50);   // may be empty → still send as a heartbeat (refreshes liveness + target)
       let r;
       try { r = await _centralRequest('POST', url + '/sync/ingest', { headers: { 'x-facility-key': key }, body: { rows: batch, app_version: _appVersion, update_status: _localUpdateStatus() }, insecure, timeout: 30000 }); }
-      catch (e) { db.setSetting('central_sync_error', (e && e.message) || 'network error'); db.setSetting('central_last_status', 'unreachable'); return; }
+      catch (e) { await db.setSetting('central_sync_error', (e && e.message) || 'network error'); await db.setSetting('central_last_status', 'unreachable'); return; }
       if (r.status !== 200 || !r.body || !r.body.ok) {
-        db.setSetting('central_sync_error', (r.body && r.body.error) || ('HTTP ' + r.status));
-        db.setSetting('central_last_status', r.status === 401 || r.status === 403 ? 'rejected' : 'error');
+        await db.setSetting('central_sync_error', (r.body && r.body.error) || ('HTTP ' + r.status));
+        await db.setSetting('central_last_status', r.status === 401 || r.status === 403 ? 'rejected' : 'error');
         return;
       }
-      if (batch.length) db.markSynced(batch.map(b => b.id));
-      db.setSetting('central_last_status', 'connected');
-      db.setSetting('central_sync_error', '');
-      if (r.body.target_version !== undefined) db.setSetting('central_target_version', r.body.target_version || '');
+      if (batch.length) await db.markSynced(batch.map(b => b.id));
+      await db.setSetting('central_last_status', 'connected');
+      await db.setSetting('central_sync_error', '');
+      if (r.body.target_version !== undefined) await db.setSetting('central_target_version', r.body.target_version || '');
       lastUpdate = r.body.update || null;
       batches++;
-    } while (db.outboxPending() > 0 && batches < 20);
-    db.pruneOutbox();
-    db.setSetting('central_last_sync', _centralTs());
+    } while (await db.outboxPending() > 0 && batches < 20);
+    await db.pruneOutbox();
+    await db.setSetting('central_last_sync', _centralTs());
     await pullManagedUsers();
     await _maybeAutoUpdate(lastUpdate);   // Phase 5: act on a rollout directive (opt-in + window-gated)
   } finally { _syncing = false; }
@@ -458,8 +462,8 @@ function _localUpdateStatus() {
   } catch (e) { return { state: 'idle', version: _appVersion }; }
 }
 // "HH:MM-HH:MM" local window; empty = anytime. Handles windows crossing midnight.
-function _inUpdateWindow() {
-  const w = String(db.getSetting('central_update_window', '') || '').trim();
+async function _inUpdateWindow() {
+  const w = String(await db.getSetting('central_update_window', '') || '').trim();
   if (!w) return true;
   const m = w.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})$/);
   if (!m) return true;
@@ -470,57 +474,57 @@ function _inUpdateWindow() {
 const _autoTried = new Set();   // versions attempted this process (avoid tight retry loops)
 async function _maybeAutoUpdate(d) {
   if (!d || !d.version || d.apply !== 'auto') return;
-  if (!db.getSetting('central_auto_update', false)) return;       // opt-in per facility
+  if (!await db.getSetting('central_auto_update', false)) return;       // opt-in per facility
   if (d.version === _appVersion || _autoTried.has(d.version)) return;
-  if (!_inUpdateWindow()) return;                                 // outside maintenance window
+  if (!await _inUpdateWindow()) return;                                 // outside maintenance window
   const st = updater.status();
   if (st && st.progress && st.progress.applying) return;          // already applying
   _autoTried.add(d.version);
   try {
-    db.auditLog(null, 'central-rollout', '127.0.0.1', 'update.auto', 'system', null, _appVersion + ' -> ' + d.version, {});
+    await db.auditLog(null, 'central-rollout', '127.0.0.1', 'update.auto', 'system', null, _appVersion + ' -> ' + d.version, {});
     await updater.apply('central-rollout');   // pulls HQ fleet manifest (update_manifest_url), verifies signature, applies, restarts
-  } catch (e) { db.setSetting('central_sync_error', 'auto-update: ' + ((e && e.message) || 'error')); }
+  } catch (e) { await db.setSetting('central_sync_error', 'auto-update: ' + ((e && e.message) || 'error')); }
 }
 
 // Pull HQ-managed users down and apply locally (Phase 2b; opt-in). No-op unless
 // connected AND central_manages_users is enabled for this facility.
 async function pullManagedUsers() {
-  const url = db.getSetting('central_url', ''), key = db.getSetting('central_api_key', '');
-  const insecure = !!db.getSetting('central_insecure_tls', false);
-  if (!url || !key || !db.getSetting('central_manages_users', false)) return;
+  const url = await db.getSetting('central_url', ''), key = await db.getSetting('central_api_key', '');
+  const insecure = !!await db.getSetting('central_insecure_tls', false);
+  if (!url || !key || !await db.getSetting('central_manages_users', false)) return;
   let r;
   try { r = await _centralRequest('GET', url + '/sync/users', { headers: { 'x-facility-key': key }, insecure, timeout: 20000 }); }
-  catch (e) { db.setSetting('central_sync_error', 'users: ' + ((e && e.message) || 'network error')); return; }
-  if (r.status !== 200 || !r.body || !r.body.ok) { db.setSetting('central_sync_error', 'users: ' + ((r.body && r.body.error) || ('HTTP ' + r.status))); return; }
-  try { db.applyManagedUsers(r.body.users || []); db.setSetting('central_users_last_pull', _centralTs()); }
-  catch (e) { db.setSetting('central_sync_error', 'users-apply: ' + ((e && e.message) || 'error')); }
+  catch (e) { await db.setSetting('central_sync_error', 'users: ' + ((e && e.message) || 'network error')); return; }
+  if (r.status !== 200 || !r.body || !r.body.ok) { await db.setSetting('central_sync_error', 'users: ' + ((r.body && r.body.error) || ('HTTP ' + r.status))); return; }
+  try { await db.applyManagedUsers(r.body.users || []); await db.setSetting('central_users_last_pull', _centralTs()); }
+  catch (e) { await db.setSetting('central_sync_error', 'users-apply: ' + ((e && e.message) || 'error')); }
 }
 
 app.post('/api/central/sync-now', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
-  if (!db.getSetting('central_url', '') || !db.getSetting('central_api_key', ''))
+  if (!await db.getSetting('central_url', '') || !await db.getSetting('central_api_key', ''))
     return res.status(400).json({ error: 'Not connected to HQ' });
   await syncTick();
-  res.json({ ok: true, pending: db.outboxPending(), last_sync: db.getSetting('central_last_sync', ''), last_status: db.getSetting('central_last_status', ''), error: db.getSetting('central_sync_error', '') });
+  res.json({ ok: true, pending: await db.outboxPending(), last_sync: await db.getSetting('central_last_sync', ''), last_status: await db.getSetting('central_last_status', ''), error: await db.getSetting('central_sync_error', '') });
 });
 
 // Toggle opt-in HQ user management for this facility (default off → no change to
 // current behavior). Enabling triggers an immediate pull.
 app.post('/api/central/manage-users', requireAuth, csrfCheck, requirePermission('admin.users'), async (req, res) => {
-  if (!db.getSetting('central_url', '') || !db.getSetting('central_api_key', ''))
+  if (!await db.getSetting('central_url', '') || !await db.getSetting('central_api_key', ''))
     return res.status(400).json({ error: 'Not connected to HQ' });
   const enabled = !!(req.body && req.body.enabled);
-  db.setSetting('central_manages_users', enabled);
-  audit(req, 'central.manage_users', 'system', null, enabled ? 'Enabled HQ user management' : 'Disabled HQ user management', {});
+  await db.setSetting('central_manages_users', enabled);
+  await audit(req, 'central.manage_users', 'system', null, enabled ? 'Enabled HQ user management' : 'Disabled HQ user management', {});
   if (enabled) await pullManagedUsers();
-  res.json({ ok: true, enabled, count: parseInt(db.getSetting('central_users_count', '0')) || 0, last_pull: db.getSetting('central_users_last_pull', '') });
+  res.json({ ok: true, enabled, count: parseInt(await db.getSetting('central_users_count', '0')) || 0, last_pull: await db.getSetting('central_users_last_pull', '') });
 });
 
 app.post('/api/central/pull-users', requireAuth, csrfCheck, requirePermission('admin.users'), async (req, res) => {
-  if (!db.getSetting('central_url', '') || !db.getSetting('central_api_key', ''))
+  if (!await db.getSetting('central_url', '') || !await db.getSetting('central_api_key', ''))
     return res.status(400).json({ error: 'Not connected to HQ' });
-  if (!db.getSetting('central_manages_users', false)) return res.status(400).json({ error: 'HQ user management is off' });
+  if (!await db.getSetting('central_manages_users', false)) return res.status(400).json({ error: 'HQ user management is off' });
   await pullManagedUsers();
-  res.json({ ok: true, count: parseInt(db.getSetting('central_users_count', '0')) || 0, last_pull: db.getSetting('central_users_last_pull', ''), error: db.getSetting('central_sync_error', '') });
+  res.json({ ok: true, count: parseInt(await db.getSetting('central_users_count', '0')) || 0, last_pull: await db.getSetting('central_users_last_pull', ''), error: await db.getSetting('central_sync_error', '') });
 });
 
 // ── React SPA catch-all (MUST be last — after all API routes) ────
@@ -537,21 +541,29 @@ app.get('*',(req,res)=>{
 });
 
 // ── Start ─────────────────────────────────────────────────────────
-db.init(DB_PATH);
+// init() is async under both drivers — the pg driver awaits real I/O, and the
+// sqlite driver still returns a promise because the function is async. Either
+// way it has NOT finished when require() returns, so nothing may touch the
+// database until this settles. Awaiting it at module scope is not an option:
+// a top-level await turns this file into an ESM graph that require() refuses
+// to load. So the promise is exported and every entry point awaits it.
+const ready = db.init(DB_PATH);
 
 // Export app + db so integration tests (supertest) can import the configured
 // Express app without binding a port. The listener, TLS detection, WebSocket
 // server, and browser launch only run when server.js is executed directly.
-module.exports = { app, db };
+// Tests must `await ready` before their first request.
+module.exports = { app, db, ready };
 
-if (require.main === module) (()=>{
+if (require.main === module) (async ()=>{
+  await ready;
   // Clean up mojibake middle-dot in facility name (Â· = double-encoded ·)
   {
-    const fn = db.getSetting('facility_name','');
+    const fn = await db.getSetting('facility_name','');
     if (fn && fn.includes('Â·')) {
       const fixed = fn.replace(/Â·/g, '·');
-      db.setSetting('facility_name', fixed);
-      db.save();
+      await db.setSetting('facility_name', fixed);
+      await db.save();
       console.log('  Fixed facility name encoding:', fixed);
     }
   }
@@ -584,15 +596,15 @@ if (require.main === module) (()=>{
   backup.start(db);
 
   // Hourly lock sweep — auto-locks clinical records past their 24h grace window
-  setInterval(() => {
+  setInterval(async () => {
     try {
-      const n = db.runLockSweep();
+      const n = await db.runLockSweep();
       if (n > 0) console.log(`  [lock-sweep] locked ${n} clinical records past 24h grace`);
     } catch(e) {}
   }, 60 * 60 * 1000);
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
-  db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.6.1',tls:useTLS});
+  await db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.6.1',tls:useTLS});
   server.listen(PORT,config.BIND_ADDR,()=>{
     console.log('\n══════════════════════════════════════════════');
     console.log('  OpsPoint v2.6.1');
@@ -608,6 +620,6 @@ if (require.main === module) (()=>{
 
   // Multi-facility sync agent — drain the outbox to HQ shortly after boot, then
   // every 20s. No-op (and keeps the outbox bounded) when no central is configured.
-  setTimeout(() => { syncTick().catch(() => {}); }, 5000);
-  setInterval(() => { syncTick().catch(() => {}); }, 20000);
+  setTimeout(async () => { (await syncTick()).catch(() => {}); }, 5000);
+  setInterval(async () => { (await syncTick()).catch(() => {}); }, 20000);
 })();

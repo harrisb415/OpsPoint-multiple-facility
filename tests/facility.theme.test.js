@@ -12,14 +12,14 @@ const TMP_DB = path.join(os.tmpdir(), `opspoint_theme_${Date.now()}.db`);
 process.env.OPSPOINT_DB = TMP_DB;
 
 const request = require('supertest');
-const { app, db } = require('../server');
+const { app, db, ready } = require('../server');
 
 const PW = 'Passw0rd!';
 
-function makeUser(username, perms) {
+async function makeUser(username, perms) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(PW, salt, 600000, 64, 'sha512').toString('hex');
-  db.run(
+  await db.run(
     `INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected)
      VALUES (?,?,?,?,?,0,?,0)`,
     [username, username, 'admin', hash, salt, JSON.stringify(perms)]
@@ -39,8 +39,9 @@ const put = (agent, body) =>
 let admin, plain;
 
 beforeAll(async () => {
-  makeUser('themeadmin', ['admin.settings', 'facility.manage']);
-  makeUser('themeplain', ['mobile.access']);
+  await ready;                                     // the schema is applied asynchronously now
+  await makeUser('themeadmin', ['admin.settings', 'facility.manage']);
+  await makeUser('themeplain', ['mobile.access']);
   admin = await agentFor('themeadmin');
   plain = await agentFor('themeplain');
 });
@@ -50,8 +51,8 @@ afterAll(() => {
 });
 
 describe('facility theme', () => {
-  test('seeds to indigo', () => {
-    expect(db.getSetting('facility_theme')).toBe('indigo');
+  test('seeds to indigo', async () => {
+    expect(await db.getSetting('facility_theme')).toBe('indigo');
   });
 
   test('is exposed on /api/data so the client can apply it', async () => {
@@ -70,19 +71,19 @@ describe('facility theme', () => {
     const r = await put(admin, { facility_theme: 'emerald' });
     expect(r.status).toBe(200);
     expect(r.body.ok).toBe(true);   // the route returns {ok}, not the settings
-    expect(db.getSetting('facility_theme')).toBe('emerald');
+    expect(await db.getSetting('facility_theme')).toBe('emerald');
   });
 
   // saveFacilitySettings must return facility_theme because that object is the
   // settings_updated broadcast payload; getFacilitySettings must return it so
   // the Admin panel GET sees the stored value instead of falling back to the
   // default — the bug client_statuses already hit.
-  test('the save path returns the theme for the settings_updated broadcast', () => {
+  test('the save path returns the theme for the settings_updated broadcast', async () => {
     const repo = require('../server/modules/facility/repository');
-    const out = repo.saveFacilitySettings({ facility_name: 'Test Facility', facility_theme: 'rose' });
+    const out = await repo.saveFacilitySettings({ facility_name: 'Test Facility', facility_theme: 'rose' });
     expect(out.facility_theme).toBe('rose');
-    expect(repo.getFacilitySettings().facility_theme).toBe('rose');
-    repo.saveFacilitySettings({ facility_name: 'Test Facility', facility_theme: 'emerald' });
+    expect((await repo.getFacilitySettings()).facility_theme).toBe('rose');
+    await repo.saveFacilitySettings({ facility_name: 'Test Facility', facility_theme: 'emerald' });
   });
 
   test('the stored theme survives a re-read on both endpoints', async () => {
@@ -93,33 +94,33 @@ describe('facility theme', () => {
   test('an unknown theme is rejected and does not overwrite the stored one', async () => {
     const r = await put(admin, { facility_theme: 'chartreuse' });
     expect(r.status).toBe(400);
-    expect(db.getSetting('facility_theme')).toBe('emerald');
+    expect(await db.getSetting('facility_theme')).toBe('emerald');
   });
 
   test('a non-string theme is rejected', async () => {
     const r = await put(admin, { facility_theme: { key: 'blue' } });
     expect(r.status).toBe(400);
-    expect(db.getSetting('facility_theme')).toBe('emerald');
+    expect(await db.getSetting('facility_theme')).toBe('emerald');
   });
 
   test('omitting the field leaves the theme alone', async () => {
     const r = await put(admin, { wellness_interval_mins: 90 });
     expect(r.status).toBe(200);
-    expect(db.getSetting('facility_theme')).toBe('emerald');
+    expect(await db.getSetting('facility_theme')).toBe('emerald');
   });
 
   test('every advertised theme key is accepted', async () => {
     for (const k of ['indigo', 'blue', 'teal', 'emerald', 'rose', 'salvation']) {
       const r = await put(admin, { facility_theme: k });
       expect(r.status).toBe(200);
-      expect(db.getSetting('facility_theme')).toBe(k);
+      expect(await db.getSetting('facility_theme')).toBe(k);
     }
   });
 
   test('a user without admin.settings cannot change the theme', async () => {
-    const before = db.getSetting('facility_theme');
+    const before = await db.getSetting('facility_theme');
     const r = await put(plain, { facility_theme: 'blue' });
     expect(r.status).toBe(403);
-    expect(db.getSetting('facility_theme')).toBe(before);
+    expect(await db.getSetting('facility_theme')).toBe(before);
   });
 });

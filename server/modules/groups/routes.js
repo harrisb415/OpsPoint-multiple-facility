@@ -11,40 +11,40 @@ const service = require('./service');
 
 function register(app) {
   // ── Group Sessions ────────────────────────────────────────────────
-  app.get('/api/master-groups', requireAuth, (req, res) => {
-    res.json(service.getMaster());
+  app.get('/api/master-groups', requireAuth, async (req, res) => {
+    res.json(await service.getMaster());
   });
 
-  app.put('/api/master-groups', requireAuth, csrfCheck, requirePermission('groups.log'), (req, res) => {
+  app.put('/api/master-groups', requireAuth, csrfCheck, requirePermission('groups.log'), async (req, res) => {
     try {
-      const { count } = service.setMaster(req.body.groups);
-      audit(req, 'groups.master_edit', 'settings', null, 'Master Groups', { count });
+      const { count } = await service.setMaster(req.body.groups);
+      await audit(req, 'groups.master_edit', 'settings', null, 'Master Groups', { count });
       broadcast({ type: 'data_saved', user: req.session.displayName || req.session.username });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.get('/api/group-sessions', requireAuth, requirePermission('groups.view'), (req, res) => {
-    const sessions = service.listSessions(req.query);
-    auditRead(req, 'group_sessions', null, `Group sessions (${sessions.length})`);
+  app.get('/api/group-sessions', requireAuth, requirePermission('groups.view'), async (req, res) => {
+    const sessions = await service.listSessions(req.query);
+    await auditRead(req, 'group_sessions', null, `Group sessions (${sessions.length})`);
     res.json(sessions);
   });
 
-  app.post('/api/group-sessions', requireAuth, csrfCheck, requirePermission('groups.log'), (req, res) => {
+  app.post('/api/group-sessions', requireAuth, csrfCheck, requirePermission('groups.log'), async (req, res) => {
     try {
       const me = req.session;
-      const { session } = service.createSession(req.body, { actorId: me.userId, actorName: me.displayName || me.username || '' });
-      audit(req, 'groups.session_create', 'group_sessions', session.id, req.body.group_name, { date: req.body.session_date });
+      const { session } = await service.createSession(req.body, { actorId: me.userId, actorName: me.displayName || me.username || '' });
+      await audit(req, 'groups.session_create', 'group_sessions', session.id, req.body.group_name, { date: req.body.session_date });
       broadcast({ type: 'data_saved', user: me.displayName || me.username });
       res.json({ ok: true, session });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.delete('/api/group-sessions/:id', requireAuth, csrfCheck, requirePermission('groups.log'), (req, res) => {
+  app.delete('/api/group-sessions/:id', requireAuth, csrfCheck, requirePermission('groups.log'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { groupName } = service.deleteSession(id);
-      audit(req, 'groups.session_delete', 'group_sessions', id, groupName);
+      const { groupName } = await service.deleteSession(id);
+      await audit(req, 'groups.session_delete', 'group_sessions', id, groupName);
       broadcast({ type: 'data_saved', user: req.session.displayName || req.session.username });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

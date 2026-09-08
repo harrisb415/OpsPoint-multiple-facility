@@ -12,14 +12,14 @@
 const c = require('./connection');
 const db = require('../../db');
 
-function getActiveReportId() {
-  return db.getSetting('active_report_id', null);
+async function getActiveReportId() {
+  return await db.getSetting('active_report_id', null);
 }
-function insertLogEntry(reportId, time, text) {
-  return c.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
+async function insertLogEntry(reportId, time, text) {
+  return await c.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
 }
-function touchReport(reportId, iso) {
-  c.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]);
+async function touchReport(reportId, iso) {
+  await c.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]);
 }
 
 module.exports = { getActiveReportId, insertLogEntry, touchReport };

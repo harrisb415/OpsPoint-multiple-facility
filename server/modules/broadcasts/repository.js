@@ -6,7 +6,7 @@
  */
 const db = require('../../../db');
 
-function recent(hours) { return db.getBroadcasts(hours); }
-function create(senderId, senderName, message) { return db.createBroadcast(senderId, senderName, message); }
+async function recent(hours) { return await db.getBroadcasts(hours); }
+async function create(senderId, senderName, message) { return await db.createBroadcast(senderId, senderName, message); }
 
 module.exports = { recent, create };

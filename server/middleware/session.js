@@ -11,15 +11,15 @@ const config = require('../config');
 // default config.SESSION_IDLE_DEFAULT_MINS). Only mutations — or an explicit
 // X-User-Activity header — count as activity; passive GETs do NOT bump the
 // clock, per HIPAA §164.312(a)(2)(iii).
-function idleSessionCheck(req, res, next) {
+async function idleSessionCheck(req, res, next) {
   if (!req.session || !req.session.userId) return next();
-  const idleMins = parseInt(db.getSetting('session_idle_mins', config.SESSION_IDLE_DEFAULT_MINS)) || config.SESSION_IDLE_DEFAULT_MINS;
+  const idleMins = parseInt(await db.getSetting('session_idle_mins', config.SESSION_IDLE_DEFAULT_MINS)) || config.SESSION_IDLE_DEFAULT_MINS;
   const maxIdleMs = idleMins * 60 * 1000;
   const now = Date.now();
   if (req.session.last_activity && (now - req.session.last_activity) > maxIdleMs) {
     const uid = req.session.userId;
     const name = req.session.displayName || req.session.username || '';
-    try { db.auditLog(uid, name, req.ip || '', 'auth.idle_timeout', 'user', String(uid), name, { idleMins }); } catch (e) {}
+    try { await db.auditLog(uid, name, req.ip || '', 'auth.idle_timeout', 'user', String(uid), name, { idleMins }); } catch (e) {}
     return req.session.destroy(() => {
       if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired (idle)', code: 'IDLE_TIMEOUT' });
       return res.redirect('/login');

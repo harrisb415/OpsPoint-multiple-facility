@@ -12,18 +12,18 @@ function httpError(status, message) {
   return e;
 }
 
-function listPending() {
-  return repo.listPending();
+async function listPending() {
+  return await repo.listPending();
 }
 
 // Create a UA request (resident or interview). Returns audit fields.
-function createRequest(body = {}, { actor } = {}) {
+async function createRequest(body = {}, { actor } = {}) {
   const { client_id, client_name, room, is_interview, interview_name } = body;
   const isIntv = is_interview ? 1 : 0;
   const intvName = String(interview_name || '').slice(0, 200);
   if (!isIntv && !client_id) throw httpError(400, 'client_id required');
   if (isIntv && !intvName) throw httpError(400, 'interview_name required');
-  repo.insertRequest({
+  await repo.insertRequest({
     client_id: client_id || 0,
     client_name: client_name || '',
     room: room || '',
@@ -41,39 +41,39 @@ function createRequest(body = {}, { actor } = {}) {
 }
 
 // Delete a still-pending request. Returns { label }.
-function deleteRequest(idRaw) {
+async function deleteRequest(idRaw) {
   const id = parseInt(idRaw, 10);
   if (isNaN(id)) throw httpError(400, 'Invalid id');
-  const r = repo.getRequestBrief(id);
+  const r = await repo.getRequestBrief(id);
   if (!r) throw httpError(404, 'Not found');
   if (r.acknowledged) throw httpError(409, 'Request already acknowledged — cannot delete');
-  repo.deleteRequest(id);
+  await repo.deleteRequest(id);
   return { label: r.client_name + (r.room ? ' Rm.' + r.room : '') };
 }
 
 // Acknowledge a request. Returns { label }.
-function acknowledgeRequest(idRaw, { actor } = {}) {
+async function acknowledgeRequest(idRaw, { actor } = {}) {
   const id = parseInt(idRaw, 10);
-  const r = repo.getRequestNameRoom(id);
-  repo.acknowledgeRequest(id, actor, nowLocal());
+  const r = await repo.getRequestNameRoom(id);
+  await repo.acknowledgeRequest(id, actor, nowLocal());
   return { label: r ? (r.client_name + (r.room ? ' Rm.' + r.room : '')) : String(id) };
 }
 
-function getDraws(since) {
-  return repo.getDraws(since);
+async function getDraws(since) {
+  return await repo.getDraws(since);
 }
 
-function getRecentDrawn(days) {
-  return repo.getRecentDrawnClientIds(days);
+async function getRecentDrawn(days) {
+  return await repo.getRecentDrawnClientIds(days);
 }
 
 // Create a UA draw and queue a pending request per drawn resident.
 // Returns { draw, count }.
-function createDraw(residents, { actor, actorId } = {}) {
+async function createDraw(residents, { actor, actorId } = {}) {
   if (!Array.isArray(residents) || residents.length === 0) throw httpError(400, 'residents required');
-  const draw = repo.createDraw(actorId, actor, residents);
-  residents.forEach(cl => {
-    repo.insertRequest({
+  const draw = await repo.createDraw(actorId, actor, residents);
+  residents.forEach(async cl => {
+    await repo.insertRequest({
       client_id: cl.id || 0,
       client_name: cl.name || '',
       room: cl.room || '',
@@ -87,10 +87,10 @@ function createDraw(residents, { actor, actorId } = {}) {
 }
 
 // UA log — log entries tagged with a UA result (bounded limit/offset).
-function getUALog(query = {}) {
+async function getUALog(query = {}) {
   const limit = Math.min(parseInt(query.limit) || 200, 500);
   const offset = parseInt(query.offset) || 0;
-  return repo.getUALog(limit, offset);
+  return await repo.getUALog(limit, offset);
 }
 
 module.exports = { listPending, createRequest, deleteRequest, acknowledgeRequest, getDraws, getRecentDrawn, createDraw, getUALog };

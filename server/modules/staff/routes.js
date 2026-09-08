@@ -17,48 +17,48 @@ const service = require('./service');
 
 function register(app) {
   // ── Staff Directory ───────────────────────────────────────────────
-  app.get('/api/staff', requireAuth, (req, res) => {
-    res.json(service.list());
+  app.get('/api/staff', requireAuth, async (req, res) => {
+    res.json(await service.list());
   });
 
-  app.post('/api/staff', requireAuth, csrfCheck, requirePermission('staff.edit'), (req, res) => {
+  app.post('/api/staff', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
     try {
-      const row = service.create(req.body);
-      audit(req, 'staff.add', 'staff', null, row.name, { category: row.category || '' });
+      const row = await service.create(req.body);
+      await audit(req, 'staff.add', 'staff', null, row.name, { category: row.category || '' });
       broadcast({ type: 'staff_updated', user: req.session.displayName });
       res.json({ ok: true, staff: row });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.put('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'), (req, res) => {
+  app.put('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const name = service.update(id, req.body);
-      audit(req, 'staff.edit', 'staff', id, name);
+      const name = await service.update(id, req.body);
+      await audit(req, 'staff.edit', 'staff', id, name);
       broadcast({ type: 'staff_updated', user: req.session.displayName });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.delete('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'), (req, res) => {
+  app.delete('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const info = service.remove(id);
-      audit(req, 'staff.delete', 'staff', id, info.name, { category: info.category });
+      const info = await service.remove(id);
+      await audit(req, 'staff.delete', 'staff', id, info.name, { category: info.category });
       broadcast({ type: 'staff_updated', user: req.session.displayName });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
   // Staff categories setting
-  app.get('/api/staff/categories', requireAuth, (req, res) => {
-    res.json(service.getCategories());
+  app.get('/api/staff/categories', requireAuth, async (req, res) => {
+    res.json(await service.getCategories());
   });
 
-  app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staff.edit'), (req, res) => {
+  app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
     try {
-      const clean = service.setCategories(req.body.categories);
-      audit(req, 'staff.categories', 'settings', null, 'Staff Categories', { categories: clean });
+      const clean = await service.setCategories(req.body.categories);
+      await audit(req, 'staff.categories', 'settings', null, 'Staff Categories', { categories: clean });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

@@ -15,17 +15,18 @@ const TMP_DB = path.join(os.tmpdir(), `opspoint_sess_${Date.now()}.db`);
 process.env.OPSPOINT_DB = TMP_DB;
 
 const request = require('supertest');
-const { app, db } = require('../server');
+const { app, db, ready } = require('../server');
 const { createSessionStore, expiryOf } = require('../server/lib/sessionStore');
 const dbConn = require('../server/db/connection');
 
 const PW = 'Passw0rd!';
 const USER = 'sessuser';
 
-beforeAll(() => {
+beforeAll(async () => {
+  await ready;
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(PW, salt, 600000, 64, 'sha512').toString('hex');
-  db.run(
+  await db.run(
     `INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected)
      VALUES (?,?,?,?,?,0,?,0)`,
     [USER, USER, 'admin', hash, salt, JSON.stringify(['admin.system'])]
@@ -63,7 +64,7 @@ describe('client IP attribution (45 CFR 164.312(b))', () => {
       .set('X-Forwarded-Proto', 'https')
       .send({ username: USER, password: PW });
 
-    const row = db.query1(
+    const row = await db.query1(
       `SELECT ip FROM audit_log WHERE action='auth.login' ORDER BY id DESC LIMIT 1`, []
     );
     expect(row).toBeTruthy();
@@ -101,9 +102,9 @@ describe('SQLite session store', () => {
   test('an expired session reads as absent and is reaped', (done) => {
     const s = store();
     s.set('sid-old', sess(-1000), () => {
-      s.get('sid-old', (e, got) => {
+      s.get('sid-old', async (e, got) => {
         expect(got).toBeNull();
-        expect(dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-old'])).toBeNull();
+        expect(await dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-old'])).toBeNull();
         done();
       });
     });
@@ -111,18 +112,18 @@ describe('SQLite session store', () => {
 
   test('destroy removes the row', (done) => {
     const s = store();
-    s.set('sid-del', sess(60_000), () => s.destroy('sid-del', () => {
-      expect(dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-del'])).toBeNull();
+    s.set('sid-del', sess(60_000), () => s.destroy('sid-del', async () => {
+      expect(await dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-del'])).toBeNull();
       done();
     }));
   });
 
   test('prune clears only expired rows', (done) => {
     const s = store();
-    s.set('sid-live', sess(60_000), () => s.set('sid-dead', sess(-5000), () => {
+    s.set('sid-live', sess(60_000), () => s.set('sid-dead', sess(-5000), async () => {
       s.prune();
-      expect(dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-dead'])).toBeNull();
-      expect(dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-live'])).toBeTruthy();
+      expect(await dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-dead'])).toBeNull();
+      expect(await dbConn.query1('SELECT sid FROM sessions WHERE sid=?', ['sid-live'])).toBeTruthy();
       done();
     }));
   });

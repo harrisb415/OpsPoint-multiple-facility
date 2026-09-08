@@ -11,31 +11,31 @@ function httpError(status, message) {
   return e;
 }
 
-function getMaster() {
-  return repo.getMasterGroups();
+async function getMaster() {
+  return await repo.getMasterGroups();
 }
 
 // Persist the filtered master group list. Returns { count } = raw input length
 // (the original audited the pre-filter count).
-function setMaster(groups) {
+async function setMaster(groups) {
   if (!Array.isArray(groups)) throw httpError(400, 'groups must be array');
-  repo.setMasterGroups(groups.filter(g => g && g.trim()));
+  await repo.setMasterGroups(groups.filter(g => g && g.trim()));
   return { count: groups.length };
 }
 
 // List sessions (date or range) with attendance embedded.
-function listSessions({ date, from, to } = {}) {
-  const sessions = repo.getSessions({ date, from, to });
-  sessions.forEach(s => { s.attendance = repo.getAttendance(s.id); });
+async function listSessions({ date, from, to } = {}) {
+  const sessions = await repo.getSessions({ date, from, to });
+  sessions.forEach(async s => { s.attendance = await repo.getAttendance(s.id); });
   return sessions;
 }
 
 // Create a session, save attendance, and log a line to the active shift report.
 // Returns { session }.
-function createSession(body = {}, { actorId, actorName } = {}) {
+async function createSession(body = {}, { actorId, actorName } = {}) {
   if (!body.group_name) throw httpError(400, 'group_name required');
   if (!body.session_date) throw httpError(400, 'session_date required');
-  const sess = repo.createSession({
+  const sess = await repo.createSession({
     session_date: body.session_date,
     group_name: body.group_name,
     time_of_day: body.time_of_day || '',
@@ -45,9 +45,9 @@ function createSession(body = {}, { actorId, actorName } = {}) {
     created_by_name: actorName || '',
   });
   if (Array.isArray(body.attendance) && body.attendance.length > 0) {
-    repo.saveAttendance(sess.id, body.attendance);
+    await repo.saveAttendance(sess.id, body.attendance);
   }
-  const activeId = repo.getActiveReportId();
+  const activeId = await repo.getActiveReportId();
   if (activeId) {
     const n = new Date(), h = n.getHours(), m = String(n.getMinutes()).padStart(2, '0');
     const ts = `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
@@ -57,17 +57,17 @@ function createSession(body = {}, { actorId, actorName } = {}) {
     const timePart = body.time_of_day ? ` (${body.time_of_day})` : '';
     const facPart = body.facilitator ? `. Facilitator: ${body.facilitator}.` : '';
     const cntPart = total > 0 ? ` — ${present}/${total} attended` : '';
-    repo.insertLogEntry(activeId, ts, `Group: ${body.group_name}${timePart}${cntPart}${facPart}`);
-    repo.touchReport(activeId, new Date().toISOString());
+    await repo.insertLogEntry(activeId, ts, `Group: ${body.group_name}${timePart}${cntPart}${facPart}`);
+    await repo.touchReport(activeId, new Date().toISOString());
   }
   return { session: sess };
 }
 
 // Delete a session. Returns { groupName } for the audit.
-function deleteSession(id) {
-  const s = repo.getSessionBrief(id);
+async function deleteSession(id) {
+  const s = await repo.getSessionBrief(id);
   if (!s) throw httpError(404, 'Not found');
-  repo.deleteSession(id);
+  await repo.deleteSession(id);
   return { groupName: s.group_name };
 }
 

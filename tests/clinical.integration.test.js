@@ -13,22 +13,22 @@ const TMP_DB = path.join(os.tmpdir(), `opspoint_itest_${Date.now()}.db`);
 process.env.OPSPOINT_DB = TMP_DB;
 
 const request = require('supertest');
-const { app, db } = require('../server');
+const { app, db, ready } = require('../server');
 
 const CLINICAL_PERMS = ['clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge'];
 const PW = 'Passw0rd!';
 
-function makeUser(username, perms) {
+async function makeUser(username, perms) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(PW, salt, 600000, 64, 'sha512').toString('hex');
-  db.run(
+  await db.run(
     `INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected)
      VALUES (?,?,?,?,?,0,?,0)`,
     [username, username, 'admin', hash, salt, JSON.stringify(perms)]
   );
 }
-function makeClient(name, room) {
-  const info = db.run('INSERT INTO clients (room,name,is_active,is_special) VALUES (?,?,1,0)', [room, name]);
+async function makeClient(name, room) {
+  const info = await db.run('INSERT INTO clients (room,name,is_active,is_special) VALUES (?,?,1,0)', [room, name]);
   return info.lastInsertRowid;
 }
 async function agentFor(username) {
@@ -41,17 +41,18 @@ async function agentFor(username) {
 let clinician, noPerms, attendance, clientId;
 
 beforeAll(async () => {
-  makeUser('clinician', CLINICAL_PERMS);
-  makeUser('noperms', ['mobile.access']);          // authenticated but no clinical access
-  makeUser('attendance', ['groups.log', 'groups.view']); // PA: attendance entry only
-  clientId = makeClient('Test Resident', '201');
+  await ready;                                     // the schema is applied asynchronously now
+  await makeUser('clinician', CLINICAL_PERMS);
+  await makeUser('noperms', ['mobile.access']);          // authenticated but no clinical access
+  await makeUser('attendance', ['groups.log', 'groups.view']); // PA: attendance entry only
+  clientId = await makeClient('Test Resident', '201');
   clinician  = await agentFor('clinician');
   noPerms    = await agentFor('noperms');
   attendance = await agentFor('attendance');
 });
 
-afterAll(() => {
-  try { db.run('DELETE FROM clinical_notes'); } catch (e) { /* ignore */ }
+afterAll(async () => {
+  try { await db.run('DELETE FROM clinical_notes'); } catch (e) { /* ignore */ }
   ['', '-shm', '-wal'].forEach(s => { try { fs.unlinkSync(TMP_DB + s); } catch (e) { /* ignore */ } });
 });
 

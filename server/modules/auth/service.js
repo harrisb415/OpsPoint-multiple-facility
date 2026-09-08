@@ -19,8 +19,8 @@ function httpError(status, message) {
 //   { status: 'bad_password', user }
 //   { status: 'error' }            (verify threw)
 //   { status: 'ok', user }
-function authenticate(username, password) {
-  const u = repo.getUserByUsername(username || '');
+async function authenticate(username, password) {
+  const u = await repo.getUserByUsername(username || '');
   if (!u) {
     const dummy = crypto.randomBytes(16).toString('hex');
     crypto.pbkdf2Sync('dummy', dummy, 600000, 64, 'sha512'); // constant-time-ish: don't leak user existence
@@ -33,15 +33,15 @@ function authenticate(username, password) {
 }
 
 // Live permissions for a just-authenticated user (from DB, role-preset fallback).
-function loginPermissions(userId, role) {
-  const pu = repo.getPermissions(userId);
-  return (pu && pu.permissions) ? JSON.parse(pu.permissions) : repo.rolePreset(role);
+async function loginPermissions(userId, role) {
+  const pu = await repo.getPermissions(userId);
+  return (pu && pu.permissions) ? JSON.parse(pu.permissions) : await repo.rolePreset(role);
 }
 
 // Build the /api/me response from the session (+ live perms from DB).
-function getMe(session) {
-  const u = repo.getMePermsRole(session.userId);
-  const perms = (u && u.permissions) ? JSON.parse(u.permissions) : repo.rolePreset(session.role);
+async function getMe(session) {
+  const u = await repo.getMePermsRole(session.userId);
+  const perms = (u && u.permissions) ? JSON.parse(u.permissions) : await repo.rolePreset(session.role);
   return {
     id: session.userId, username: session.username,
     displayName: session.displayName, role: session.role,
@@ -50,11 +50,11 @@ function getMe(session) {
 }
 
 // Forced password change (caller has already verified must_change_pw state).
-function forceChangePassword(userId, newPassword) {
+async function forceChangePassword(userId, newPassword) {
   if (!newPassword) throw httpError(400, 'Password required');
   const err = validatePw(newPassword); if (err) throw httpError(400, err);
   const { hash, salt } = hashPw(newPassword);
-  repo.setForcedPassword(userId, hash, salt);
+  await repo.setForcedPassword(userId, hash, salt);
 }
 
 module.exports = { authenticate, loginPermissions, getMe, forceChangePassword };

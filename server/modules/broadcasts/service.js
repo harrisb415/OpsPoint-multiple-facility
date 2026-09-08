@@ -11,15 +11,15 @@ function httpError(status, message) {
   return e;
 }
 
-function list(hours) {
-  return repo.recent(parseInt(hours) || 24);
+async function list(hours) {
+  return await repo.recent(parseInt(hours) || 24);
 }
 
 // Create an announcement. Returns the created message.
-function create(rawMessage, { actorId, actorName } = {}) {
+async function create(rawMessage, { actorId, actorName } = {}) {
   const text = String(rawMessage || '').trim().slice(0, 500);
   if (!text) throw httpError(400, 'message required');
-  return repo.create(actorId, actorName, text);
+  return await repo.create(actorId, actorName, text);
 }
 
 module.exports = { list, create };

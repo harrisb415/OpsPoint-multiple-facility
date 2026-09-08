@@ -12,15 +12,15 @@ function httpError(status, message) {
   return e;
 }
 
-function list() {
-  return repo.list();
+async function list() {
+  return await repo.list();
 }
 
 // Log incoming mail for one or more residents. Accepts a bulk `clients` array or
 // a legacy single client_id. `actor` is the resolved display name of the caller.
 // Returns { logged: [{client_name,room,notes,mail_type}], wroteActiveLog }.
 // `logged` drives the per-record audit; the caller fires the broadcasts.
-function logMail(body = {}, { actor } = {}) {
+async function logMail(body = {}, { actor } = {}) {
   let list = [];
   if (Array.isArray(body.clients) && body.clients.length) list = body.clients;
   else if (body.client_id) list = [{ client_id: body.client_id, client_name: body.client_name, room: body.room, notes: body.notes }];
@@ -34,7 +34,7 @@ function logMail(body = {}, { actor } = {}) {
   for (const item of list) {
     const cid = parseInt(item.client_id);
     if (!cid) continue;
-    const client = repo.getClientBrief(cid);
+    const client = await repo.getClientBrief(cid);
     if (!client) continue;
     resolved.push({
       client_id: client.id,
@@ -47,12 +47,12 @@ function logMail(body = {}, { actor } = {}) {
   if (!resolved.length) throw httpError(404, 'No valid clients found');
 
   for (const r of resolved) {
-    repo.insert({ ...r, logged_by: by, logged_at: atTime });
+    await repo.insert({ ...r, logged_by: by, logged_at: atTime });
   }
 
   // One consolidated log entry for the active shift report, if there is one.
   let wroteActiveLog = false;
-  const activeId = repo.getActiveReportId();
+  const activeId = await repo.getActiveReportId();
   if (activeId) {
     const fmt = (r) => {
       const types = (r.mail_type || '').split(',').filter(Boolean)
@@ -67,8 +67,8 @@ function logMail(body = {}, { actor } = {}) {
     const h = now.getHours(), mi = String(now.getMinutes()).padStart(2, '0');
     const autoTime = `${h % 12 || 12}:${mi} ${h >= 12 ? 'PM' : 'AM'}`;
     const timeStr = log_time && /^\d{1,2}:\d{2} [AP]M$/.test(String(log_time)) ? String(log_time) : autoTime;
-    repo.insertLogEntry(activeId, timeStr, logText);
-    repo.touchReport(activeId, new Date().toISOString());
+    await repo.insertLogEntry(activeId, timeStr, logText);
+    await repo.touchReport(activeId, new Date().toISOString());
     wroteActiveLog = true;
   }
 
@@ -76,26 +76,26 @@ function logMail(body = {}, { actor } = {}) {
 }
 
 // Approve a logged mail record. Returns its label for the audit.
-function approve(id, by) {
-  if (!repo.exists(id)) throw httpError(404, 'Not found');
-  const m = repo.getNameRoom(id);
-  repo.approve(id, by, nowLocal());
+async function approve(id, by) {
+  if (!await repo.exists(id)) throw httpError(404, 'Not found');
+  const m = await repo.getNameRoom(id);
+  await repo.approve(id, by, nowLocal());
   return m ? (m.client_name + ' Rm.' + m.room) : String(id);
 }
 
 // Mark an approved mail record as delivered. Returns its label for the audit.
-function deliver(id) {
-  const m = repo.getNameRoom(id);
+async function deliver(id) {
+  const m = await repo.getNameRoom(id);
   if (!m) throw httpError(404, 'Not found');
-  repo.deliver(id, nowLocal());
+  await repo.deliver(id, nowLocal());
   return m.client_name + ' Rm.' + m.room;
 }
 
 // Delete a mail record. Returns its label for the audit.
-function remove(id) {
-  const m = repo.getNameRoom(id);
+async function remove(id) {
+  const m = await repo.getNameRoom(id);
   if (!m) throw httpError(404, 'Not found');
-  repo.remove(id);
+  await repo.remove(id);
   return m.client_name + ' Rm.' + m.room;
 }
 

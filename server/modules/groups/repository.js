@@ -15,26 +15,26 @@ const reportLog = require('../../db/reportLog'); // shared active-report log hel
 function _j(str, def) { try { return JSON.parse(str); } catch (e) { return def; } }
 
 // master_groups k/v (mirrors db.getSetting: JSON-parse w/ raw fallback, [] default).
-function getMasterGroups() {
-  const row = c.query1('SELECT value FROM settings WHERE key=?', ['master_groups']);
+async function getMasterGroups() {
+  const row = await c.query1('SELECT value FROM settings WHERE key=?', ['master_groups']);
   if (!row) return [];
   return _j(row.value, row.value);
 }
 
-function setMasterGroups(arr) {
-  c.run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', ['master_groups', JSON.stringify(arr)]);
+async function setMasterGroups(arr) {
+  await c.run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', ['master_groups', JSON.stringify(arr)]);
 }
 
-function getSessionBrief(id) {
-  return c.query1('SELECT id,group_name FROM group_sessions WHERE id=?', [id]);
+async function getSessionBrief(id) {
+  return await c.query1('SELECT id,group_name FROM group_sessions WHERE id=?', [id]);
 }
 
 // ── delegated to db.js (transitional) ───────────────────────────────
-function getSessions(filter) { return db.getGroupSessions(filter); }
-function getAttendance(sessionId) { return db.getGroupAttendance(sessionId); }
-function createSession(fields) { return db.createGroupSession(fields); }
-function saveAttendance(sessionId, attendees) { return db.saveGroupAttendance(sessionId, attendees); }
-function deleteSession(id) { return db.deleteGroupSession(id); }
+async function getSessions(filter) { return await db.getGroupSessions(filter); }
+async function getAttendance(sessionId) { return await db.getGroupAttendance(sessionId); }
+async function createSession(fields) { return await db.createGroupSession(fields); }
+async function saveAttendance(sessionId, attendees) { return await db.saveGroupAttendance(sessionId, attendees); }
+async function deleteSession(id) { return await db.deleteGroupSession(id); }
 
 // ── active-report log helpers — shared (server/db/reportLog) ────────
 const getActiveReportId = reportLog.getActiveReportId;

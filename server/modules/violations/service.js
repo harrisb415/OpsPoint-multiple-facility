@@ -13,19 +13,19 @@ function httpError(status, message) {
   return e;
 }
 
-function counts() {
-  return repo.counts();
+async function counts() {
+  return await repo.counts();
 }
 
-function list(query = {}) {
-  return repo.listFiltered(query);
+async function list(query = {}) {
+  return await repo.listFiltered(query);
 }
 
 // Log a new violation. Returns { id, label, description } for the audit.
-function create(body = {}, { actor } = {}) {
+async function create(body = {}, { actor } = {}) {
   const { client_id, client_name, room, violation_date, description, notes } = body;
   if (!client_id || !description) throw httpError(400, 'client_id and description required');
-  const v = repo.insert({
+  const v = await repo.insert({
     client_id,
     client_name: client_name || '',
     room: room || '',
@@ -39,35 +39,35 @@ function create(body = {}, { actor } = {}) {
 
 // Review a pending violation: assign a consequence or waive it.
 // Returns { clientName, action, consequence } for the audit.
-function review(id, body = {}, { actor } = {}) {
-  const v = repo.getById(id);
+async function review(id, body = {}, { actor } = {}) {
+  const v = await repo.getById(id);
   if (!v) throw httpError(404, 'Not found');
   if (v.status !== 'pending') throw httpError(400, 'Violation is not pending review');
   const { action, consequence } = body;
   const now = nowLocal();
   if (action === 'waive') {
-    repo.waive(id, actor, now);
+    await repo.waive(id, actor, now);
   } else {
     if (!consequence) throw httpError(400, 'consequence required');
-    repo.assign(id, consequence, actor, now);
+    await repo.assign(id, consequence, actor, now);
   }
   return { clientName: v.client_name, action, consequence };
 }
 
 // Mark an assigned consequence complete. Returns { clientName } for the audit.
-function complete(id, { actor } = {}) {
-  const v = repo.getById(id);
+async function complete(id, { actor } = {}) {
+  const v = await repo.getById(id);
   if (!v) throw httpError(404, 'Not found');
   if (v.status !== 'assigned') throw httpError(400, 'Violation must have an assigned consequence');
-  repo.complete(id, actor, nowLocal());
+  await repo.complete(id, actor, nowLocal());
   return { clientName: v.client_name };
 }
 
 // Delete a violation. Returns { clientName } for the audit.
-function remove(id) {
-  const v = repo.getClientName(id);
+async function remove(id) {
+  const v = await repo.getClientName(id);
   if (!v) throw httpError(404, 'Not found');
-  repo.remove(id);
+  await repo.remove(id);
   return { clientName: v.client_name };
 }
 

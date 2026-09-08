@@ -11,8 +11,8 @@ function httpError(status, message) {
   return e;
 }
 
-function getSettings() {
-  return repo.getFacilitySettings();
+async function getSettings() {
+  return await repo.getFacilitySettings();
 }
 
 // Validate + save facility settings. Returns { settings, facilityName }.
@@ -30,7 +30,7 @@ const SYSTEM_STATUS_KEYS = ['building', 'pass', 'hospital', 'out'];
 // Validate the editable status list. Keys are what live in reports.statuses,
 // so this is stricter than a normal settings field: a bad key silently
 // corrupts how historical shifts render.
-function validateStatuses(list) {
+async function validateStatuses(list) {
   if (!Array.isArray(list)) throw httpError(400, 'Statuses must be a list');
   if (list.length < 1 || list.length > 20) throw httpError(400, 'Between 1 and 20 statuses required');
   const seen = new Set();
@@ -57,7 +57,7 @@ function validateStatuses(list) {
   // A closed report is an immutable record — retiring a status it references
   // is fine. An OPEN shift is different: staff are using the value right now,
   // and pulling it would strand residents on a status that no longer exists.
-  const inOpen  = repo.statusKeysInUse({ openOnly: true });
+  const inOpen  = await repo.statusKeysInUse({ openOnly: true });
   const blocked = inOpen.filter(k => k !== 'vacant' && !seen.has(k));
   if (blocked.length) {
     throw httpError(409,
@@ -68,8 +68,8 @@ function validateStatuses(list) {
   // Anything dropped that closed reports still reference is archived rather
   // than deleted: hidden from the picker, but its label is kept so historical
   // shifts keep rendering 'Weekend Pass' instead of a raw 'pass' slug.
-  const inAny    = new Set(repo.statusKeysInUse());
-  const previous = repo.currentStatuses();
+  const inAny    = new Set(await repo.statusKeysInUse());
+  const previous = await repo.currentStatuses();
   for (const p of previous) {
     if (seen.has(p.key)) continue;         // still present, nothing to do
     if (!inAny.has(p.key)) continue;       // never used anywhere — really delete
@@ -89,28 +89,28 @@ function validateStatuses(list) {
 // is an ESM module in a separate build; add a theme in both places.
 const VALID_THEMES = ['indigo', 'blue', 'teal', 'emerald', 'rose', 'salvation'];
 
-function saveSettings(b = {}) {
+async function saveSettings(b = {}) {
   if (!b.facility_name || !b.facility_name.trim()) throw httpError(400, 'Facility name required');
   if (b.facility_name.trim().length > 200) throw httpError(400, 'Facility name too long (max 200 chars)');
-  if (b.client_statuses !== undefined) b.client_statuses = validateStatuses(b.client_statuses);
+  if (b.client_statuses !== undefined) b.client_statuses = await validateStatuses(b.client_statuses);
   if (b.facility_theme !== undefined) {
     if (!VALID_THEMES.includes(b.facility_theme)) throw httpError(400, 'Unknown theme');
   }
-  const settings = repo.saveFacilitySettings(b);
+  const settings = await repo.saveFacilitySettings(b);
   return { settings, facilityName: b.facility_name.trim() };
 }
 
-function listRooms() { return repo.roomsActive(); }
-function listVacantRooms() { return repo.vacantRooms(); }
+async function listRooms() { return await repo.roomsActive(); }
+async function listVacantRooms() { return await repo.vacantRooms(); }
 
 // Edit a room. Returns { room } (current room number) for the audit.
-function updateRoom(id, b = {}) {
-  if (!repo.getClientId(id)) throw httpError(404, 'Not found');
+async function updateRoom(id, b = {}) {
+  if (!await repo.getClientId(id)) throw httpError(404, 'Not found');
   const { room, name, is_special, special_label } = b;
   if (room !== undefined) {
-    const cur = repo.getClientRoom(id);
+    const cur = await repo.getClientRoom(id);
     if (cur && String(room) !== String(cur.room)) {
-      if (repo.dupActiveRoomExcept(String(room), id)) {
+      if (await repo.dupActiveRoomExcept(String(room), id)) {
         throw httpError(409, 'Room ' + room + ' already exists. Each room must have a unique number.');
       }
     }
@@ -120,23 +120,23 @@ function updateRoom(id, b = {}) {
   if (name !== undefined) fields.name = name;
   if (is_special !== undefined) fields.is_special = is_special ? 1 : 0;
   if (special_label !== undefined) fields.special_label = special_label;
-  repo.updateRoomFields(id, fields);
-  const fr = repo.getClientRoom(id);
+  await repo.updateRoomFields(id, fields);
+  const fr = await repo.getClientRoom(id);
   return { room: fr ? fr.room : id };
 }
 
 // Add a room (vacant or named). Returns { client, room, name, is_special }.
-function createRoom(b = {}) {
+async function createRoom(b = {}) {
   const { room, name, is_special, special_label } = b;
   if (!room) throw httpError(400, 'Room number required');
-  if (repo.dupActiveRoom(String(room))) throw httpError(409, 'Room ' + room + ' already exists. Each room must have a unique number.');
-  const max = repo.maxSortOrder();
+  if (await repo.dupActiveRoom(String(room))) throw httpError(409, 'Room ' + room + ' already exists. Each room must have a unique number.');
+  const max = await repo.maxSortOrder();
   const sort_order = (max != null) ? max + 1 : 0;
-  const client = repo.insertRoom({ room: String(room), name: name || 'VACANT', is_special: is_special ? 1 : 0, special_label: special_label || null, sort_order });
+  const client = await repo.insertRoom({ room: String(room), name: name || 'VACANT', is_special: is_special ? 1 : 0, special_label: special_label || null, sort_order });
 
   // intake log entry when a named, non-special resident is added
   if (name && name !== 'VACANT' && !is_special) {
-    const activeId = repo.getActiveReportId();
+    const activeId = await repo.getActiveReportId();
     if (activeId) {
       const n = new Date(), h = n.getHours(), m = String(n.getMinutes()).padStart(2, '0');
       const ts = `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
@@ -147,42 +147,42 @@ function createRoom(b = {}) {
           intakeStr = ' Intake: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + '.';
         } catch (e) { /* ignore */ }
       }
-      repo.insertLogEntry(activeId, ts, `New resident admitted: ${name}, Rm. ${String(room)}.${intakeStr}`);
-      repo.touchReport(activeId, new Date().toISOString());
+      await repo.insertLogEntry(activeId, ts, `New resident admitted: ${name}, Rm. ${String(room)}.${intakeStr}`);
+      await repo.touchReport(activeId, new Date().toISOString());
     }
   }
   return { client, room: String(room), name: name || 'VACANT', is_special: !!is_special };
 }
 
 // Delete a room. Returns { room, name } for the audit.
-function deleteRoom(id) {
-  const c = repo.getClientFull(id);
+async function deleteRoom(id) {
+  const c = await repo.getClientFull(id);
   if (!c) throw httpError(404, 'Not found');
   if (c.is_active && !c.is_special && c.name !== 'VACANT') {
     throw httpError(400, 'Cannot delete active resident. Discharge first.');
   }
-  repo.deleteRoom(id);
+  await repo.deleteRoom(id);
   return { room: c.room, name: c.name };
 }
 
 function reorder(order) {
   if (!Array.isArray(order)) throw httpError(400, 'order must be array');
-  order.forEach((id, i) => repo.setSortOrder(id, i));
+  order.forEach(async (id, i) => await repo.setSortOrder(id, i));
   return { count: order.length };
 }
 
-function reset(rooms) {
+async function reset(rooms) {
   if (!Array.isArray(rooms)) throw httpError(400, 'rooms must be an array');
-  repo.deleteAllClients();
-  rooms.forEach((r, i) => repo.insertResetRoom(r, i));
+  await repo.deleteAllClients();
+  rooms.forEach(async (r, i) => await repo.insertResetRoom(r, i));
   return { count: rooms.length };
 }
 
-function getEhrConfig() { return repo.getEhrConfig(); }
+async function getEhrConfig() { return await repo.getEhrConfig(); }
 
 // Save EHR config. Returns { fields } (the keys touched) for the audit.
-function saveEhrConfig(b = {}) {
-  repo.saveEhrConfig(b);
+async function saveEhrConfig(b = {}) {
+  await repo.saveEhrConfig(b);
   return { fields: Object.keys(b) };
 }
 

@@ -5,10 +5,10 @@
  */
 const repo = require('./repository');
 
-function getAuditLog(query = {}) {
+async function getAuditLog(query = {}) {
   const { action, actorId, from, to, search, limit, offset } = query;
   const prefixes = action ? action.split(',').map(s => s.trim()).filter(Boolean) : [];
-  return repo.getAuditLog({
+  return await repo.getAuditLog({
     actionPrefixes: prefixes,
     actorId: actorId ? parseInt(actorId) : null,
     from: from || null,

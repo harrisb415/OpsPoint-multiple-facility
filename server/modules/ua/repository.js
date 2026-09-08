@@ -12,37 +12,37 @@ const db = require('../../../db');
 
 const PENDING = 'SELECT * FROM ua_requests WHERE acknowledged=0 ORDER BY requested_at DESC';
 
-function listPending() {
-  return c.query(PENDING);
+async function listPending() {
+  return await c.query(PENDING);
 }
 
-function insertRequest({ client_id, client_name, room, requested_by, is_interview, interview_name, requested_at }) {
-  c.run(
+async function insertRequest({ client_id, client_name, room, requested_by, is_interview, interview_name, requested_at }) {
+  await c.run(
     `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name,requested_at) VALUES (?,?,?,?,?,?,?)`,
     [client_id, client_name, room, requested_by, is_interview, interview_name, requested_at]
   );
 }
 
-function getRequestBrief(id) {
-  return c.query1('SELECT client_name,room,acknowledged FROM ua_requests WHERE id=?', [id]);
+async function getRequestBrief(id) {
+  return await c.query1('SELECT client_name,room,acknowledged FROM ua_requests WHERE id=?', [id]);
 }
 
-function getRequestNameRoom(id) {
-  return c.query1('SELECT client_name,room FROM ua_requests WHERE id=?', [id]);
+async function getRequestNameRoom(id) {
+  return await c.query1('SELECT client_name,room FROM ua_requests WHERE id=?', [id]);
 }
 
-function deleteRequest(id) {
-  c.run('DELETE FROM ua_requests WHERE id=?', [id]);
+async function deleteRequest(id) {
+  await c.run('DELETE FROM ua_requests WHERE id=?', [id]);
 }
 
-function acknowledgeRequest(id, by, at) {
-  c.run('UPDATE ua_requests SET acknowledged=1, acknowledged_by=?, acknowledged_at=? WHERE id=?', [by, at, id]);
+async function acknowledgeRequest(id, by, at) {
+  await c.run('UPDATE ua_requests SET acknowledged=1, acknowledged_by=?, acknowledged_at=? WHERE id=?', [by, at, id]);
 }
 
 // ── UA draws — delegated to db.js (transitional) ────────────────────
-function getDraws(since) { return db.getUADraws(since); }
-function getRecentDrawnClientIds(days) { return db.getRecentDrawnClientIds(days); }
-function createDraw(byId, by, residents) { return db.createUADraw(byId, by, residents); }
+async function getDraws(since) { return await db.getUADraws(since); }
+async function getRecentDrawnClientIds(days) { return await db.getRecentDrawnClientIds(days); }
+async function createDraw(byId, by, residents) { return await db.createUADraw(byId, by, residents); }
 
 // ── UA log — log entries tagged with a UA result, newest first ──────
 const UA_LOG_SQL = `
@@ -53,7 +53,7 @@ const UA_LOG_SQL = `
     WHERE le.text LIKE '% — UA:%'
     ORDER BY r.report_date DESC, r.id DESC, le.id DESC
     LIMIT ? OFFSET ?`;
-function getUALog(limit, offset) { return c.query(UA_LOG_SQL, [limit, offset]); }
+async function getUALog(limit, offset) { return await c.query(UA_LOG_SQL, [limit, offset]); }
 
 module.exports = {
   listPending, insertRequest, getRequestBrief, getRequestNameRoom, deleteRequest,

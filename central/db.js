@@ -25,7 +25,7 @@ function nowLocal() {
 }
 
 // ── Init ────────────────────────────────────────────────────────────────
-function init(dbPath) {
+async function init(dbPath) {
   _dbPath = dbPath;
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const isNew = !fs.existsSync(dbPath);
@@ -35,7 +35,7 @@ function init(dbPath) {
   console.log('  Central DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
   _createSchema();
   _migrate();
-  _seedDefaults();
+  await _seedDefaults();
 }
 
 // Additive column migrations (try/catch — harmless if the column already exists).
@@ -176,14 +176,14 @@ function _q1(sql, p = [])  { return _db.prepare(sql).get(...p) || null; }
 function _j(s, def) { try { return JSON.parse(s); } catch (e) { return def; } }
 
 // ── Settings ─────────────────────────────────────────────────────────────
-function getSetting(key, def = null) {
-  const row = _q1('SELECT value FROM settings WHERE key=?', [key]);
+async function getSetting(key, def = null) {
+  const row = await _q1('SELECT value FROM settings WHERE key=?', [key]);
   if (!row) return def;
   return _j(row.value, row.value);
 }
-function setSetting(key, val) {
+async function setSetting(key, val) {
   const v = typeof val === 'string' ? val : JSON.stringify(val);
-  _run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', [key, v]);
+  await _run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', [key, v]);
 }
 
 // ── Crypto ───────────────────────────────────────────────────────────────
@@ -212,32 +212,32 @@ function _randPw() {
 }
 
 // ── Seed ─────────────────────────────────────────────────────────────────
-function _seedDefaults() {
-  if (!getSetting('session_secret'))
-    setSetting('session_secret', crypto.randomBytes(32).toString('hex'));
+async function _seedDefaults() {
+  if (!await getSetting('session_secret'))
+    await setSetting('session_secret', crypto.randomBytes(32).toString('hex'));
 
   // HQ self-update manifest (central tier). Points at the public releases repo's
   // latest central manifest; editable from the console. apply() still requires a
   // valid Ed25519 signature regardless of source.
   // Migrate old key name → update_manifest_url (what the shared updater reads).
-  if (getSetting('central_update_manifest_url') !== null && getSetting('update_manifest_url') === null) {
-    setSetting('update_manifest_url', getSetting('central_update_manifest_url'));
+  if (await getSetting('central_update_manifest_url') !== null && await getSetting('update_manifest_url') === null) {
+    await setSetting('update_manifest_url', await getSetting('central_update_manifest_url'));
   }
-  if (getSetting('update_manifest_url') === null)
-    setSetting('update_manifest_url',
+  if (await getSetting('update_manifest_url') === null)
+    await setSetting('update_manifest_url',
       'https://github.com/harrisb415/opspoint-releases/releases/latest/download/central-manifest.json');
-  if (getSetting('releases_facility_manifest_url') === null)
-    setSetting('releases_facility_manifest_url',
+  if (await getSetting('releases_facility_manifest_url') === null)
+    await setSetting('releases_facility_manifest_url',
       'https://github.com/harrisb415/opspoint-releases/releases/latest/download/update-manifest.json');
-  if (getSetting('releases_central_manifest_url') === null)
-    setSetting('releases_central_manifest_url',
+  if (await getSetting('releases_central_manifest_url') === null)
+    await setSetting('releases_central_manifest_url',
       'https://github.com/harrisb415/opspoint-releases/releases/latest/download/central-manifest.json');
 
-  const cnt = _q1('SELECT COUNT(*) AS c FROM central_users');
+  const cnt = await _q1('SELECT COUNT(*) AS c FROM central_users');
   if (!cnt || cnt.c === 0) {
     const pw = process.env.CENTRAL_ADMIN_PW || _randPw();
     const { hash, salt } = _hashPw(pw);
-    _run(`INSERT INTO central_users (username,display_name,role,hash,salt,must_change_pw)
+    await _run(`INSERT INTO central_users (username,display_name,role,hash,salt,must_change_pw)
           VALUES ('admin','HQ Administrator','admin',?,?,1)`, [hash, salt]);
     if (!process.env.CENTRAL_ADMIN_PW) {
       console.log('\n  ╔══════════════════════════════════════════════╗');
@@ -252,63 +252,63 @@ function _seedDefaults() {
 }
 
 // ── Audit ────────────────────────────────────────────────────────────────
-function audit({ actor = '', action, target = '', detail = '', ip = '' }) {
-  _run('INSERT INTO audit (ts,actor,action,target,detail,ip) VALUES (?,?,?,?,?,?)',
+async function audit({ actor = '', action, target = '', detail = '', ip = '' }) {
+  await _run('INSERT INTO audit (ts,actor,action,target,detail,ip) VALUES (?,?,?,?,?,?)',
     [nowLocal(), actor, action, target, detail, ip]);
 }
-function getAudit(limit = 200) {
-  return _q('SELECT * FROM audit ORDER BY id DESC LIMIT ?', [limit]);
+async function getAudit(limit = 200) {
+  return await _q('SELECT * FROM audit ORDER BY id DESC LIMIT ?', [limit]);
 }
 
 // ── Central users / auth ─────────────────────────────────────────────────
-function authUser(username, password) {
-  const u = _q1('SELECT * FROM central_users WHERE username=?', [String(username || '').toLowerCase().trim()]);
+async function authUser(username, password) {
+  const u = await _q1('SELECT * FROM central_users WHERE username=?', [String(username || '').toLowerCase().trim()]);
   if (!u || !_verifyPw(password, u.hash, u.salt)) return null;
   return { id: u.id, username: u.username, display_name: u.display_name, role: u.role, must_change_pw: !!u.must_change_pw };
 }
-function getUser(id) {
-  const u = _q1('SELECT id,username,display_name,role,must_change_pw FROM central_users WHERE id=?', [id]);
+async function getUser(id) {
+  const u = await _q1('SELECT id,username,display_name,role,must_change_pw FROM central_users WHERE id=?', [id]);
   if (!u) return null;
   return { id: u.id, username: u.username, display_name: u.display_name, role: u.role, must_change_pw: !!u.must_change_pw };
 }
 // Self-service: the signed-in admin sets their OWN password → clears the
 // must-change flag (they've now chosen it).
-function setUserPassword(id, newPw) {
+async function setUserPassword(id, newPw) {
   const { hash, salt } = _hashPw(newPw);
-  _run('UPDATE central_users SET hash=?,salt=?,must_change_pw=0 WHERE id=?', [hash, salt, id]);
+  await _run('UPDATE central_users SET hash=?,salt=?,must_change_pw=0 WHERE id=?', [hash, salt, id]);
 }
 
 // ── HQ admin accounts (central_users) — the fleet operators ───────────────
 // These accounts log into this console only; they never sync down to any
 // facility. Distinct from managed_users (which DO push down to facilities).
-function listCentralUsers() {
-  return _q('SELECT id,username,display_name,role,must_change_pw,created_at FROM central_users ORDER BY username')
+async function listCentralUsers() {
+  return (await _q('SELECT id,username,display_name,role,must_change_pw,created_at FROM central_users ORDER BY username'))
     .map(u => ({ id: u.id, username: u.username, display_name: u.display_name, role: u.role, must_change_pw: !!u.must_change_pw, created_at: u.created_at }));
 }
-function countCentralUsers() {
-  const r = _q1('SELECT COUNT(*) AS c FROM central_users');
+async function countCentralUsers() {
+  const r = await _q1('SELECT COUNT(*) AS c FROM central_users');
   return r ? r.c : 0;
 }
-function createCentralUser({ username, display_name, password }) {
+async function createCentralUser({ username, display_name, password }) {
   username = String(username || '').toLowerCase().trim();
   if (!username) throw new Error('username required');
   if (!/^[a-z0-9._-]+$/.test(username)) throw new Error('username may contain only letters, numbers, dot, dash, underscore');
-  if (_q1('SELECT id FROM central_users WHERE username=?', [username])) throw new Error('username already exists');
+  if (await _q1('SELECT id FROM central_users WHERE username=?', [username])) throw new Error('username already exists');
   if (!password || String(password).length < 10) throw new Error('password must be at least 10 characters');
   const { hash, salt } = _hashPw(String(password));
-  const info = _run(`INSERT INTO central_users (username,display_name,role,hash,salt,must_change_pw,created_at)
+  const info = await _run(`INSERT INTO central_users (username,display_name,role,hash,salt,must_change_pw,created_at)
         VALUES (?,?,'admin',?,?,1,?)`, [username, String(display_name || '').trim(), hash, salt, nowLocal()]);
-  return getUser(info.lastInsertRowid);
+  return await getUser(info.lastInsertRowid);
 }
 // Reset ANOTHER admin's password → sets must-change so they pick a new one
 // on their next sign-in. (Self-service uses setUserPassword above.)
-function resetCentralUserPassword(id, newPw) {
+async function resetCentralUserPassword(id, newPw) {
   if (!newPw || String(newPw).length < 10) throw new Error('password must be at least 10 characters');
   const { hash, salt } = _hashPw(String(newPw));
-  _run('UPDATE central_users SET hash=?,salt=?,must_change_pw=1 WHERE id=?', [hash, salt, id]);
+  await _run('UPDATE central_users SET hash=?,salt=?,must_change_pw=1 WHERE id=?', [hash, salt, id]);
 }
-function deleteCentralUser(id) {
-  _run('DELETE FROM central_users WHERE id=?', [id]);
+async function deleteCentralUser(id) {
+  await _run('DELETE FROM central_users WHERE id=?', [id]);
 }
 
 // ── Release store (Phase 3) — HQ relays signed bundles to the fleet ───────
@@ -319,14 +319,14 @@ function _cmpSemver(a, b) {
   return 0;
 }
 function _pubRelease(r) { if (!r) return null; return Object.assign({}, r, { changelog: _j(r.changelog, []) }); }
-function getRelease(channel, version) {
-  return _pubRelease(_q1('SELECT * FROM releases WHERE channel=? AND version=?', [channel, version]));
+async function getRelease(channel, version) {
+  return _pubRelease(await _q1('SELECT * FROM releases WHERE channel=? AND version=?', [channel, version]));
 }
-function recordRelease(rec) {
+async function recordRelease(rec) {
   // Upsert on the (channel,version) primary key. Re-importing a release
   // overwrites its metadata rather than erroring, which is what the old
   // INSERT OR REPLACE did — but without the delete-and-reinsert underneath.
-  _run(`INSERT INTO releases
+  await _run(`INSERT INTO releases
         (channel,version,filename,size,sha256,signature,sig_alg,min_node,min_from,changelog,released,notes,status,created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT (channel,version) DO UPDATE SET
@@ -338,65 +338,65 @@ function recordRelease(rec) {
     [rec.channel, rec.version, rec.filename, rec.size, rec.sha256, rec.signature || null, rec.sig_alg || 'ed25519',
      rec.min_node || null, rec.min_from || null, JSON.stringify(rec.changelog || []), rec.released || null,
      rec.notes || '', rec.status || 'published', nowLocal()]);
-  return getRelease(rec.channel, rec.version);
+  return await getRelease(rec.channel, rec.version);
 }
-function listReleases(channel) {
+async function listReleases(channel) {
   const rows = channel
-    ? _q('SELECT * FROM releases WHERE channel=? ORDER BY created_at DESC', [channel])
-    : _q('SELECT * FROM releases ORDER BY channel, created_at DESC');
+    ? await _q('SELECT * FROM releases WHERE channel=? ORDER BY created_at DESC', [channel])
+    : await _q('SELECT * FROM releases ORDER BY channel, created_at DESC');
   return rows.map(_pubRelease);
 }
-function getLatestPublishedRelease(channel) {
-  const rows = _q("SELECT * FROM releases WHERE channel=? AND status='published'", [channel]).map(_pubRelease);
+async function getLatestPublishedRelease(channel) {
+  const rows = (await _q("SELECT * FROM releases WHERE channel=? AND status='published'", [channel])).map(_pubRelease);
   if (!rows.length) return null;
   rows.sort((a, b) => _cmpSemver(b.version, a.version));
   return rows[0];
 }
-function setReleaseStatus(channel, version, status) {
-  _run('UPDATE releases SET status=? WHERE channel=? AND version=?', [status === 'yanked' ? 'yanked' : 'published', channel, version]);
-  return getRelease(channel, version);
+async function setReleaseStatus(channel, version, status) {
+  await _run('UPDATE releases SET status=? WHERE channel=? AND version=?', [status === 'yanked' ? 'yanked' : 'published', channel, version]);
+  return await getRelease(channel, version);
 }
 
 // ── Rollout engine (Phase 5) — staged, health-gated fleet rollout ─────────
-function getRollout(channel) {
-  const r = _q1('SELECT * FROM rollouts WHERE channel=?', [channel]);
+async function getRollout(channel) {
+  const r = await _q1('SELECT * FROM rollouts WHERE channel=?', [channel]);
   if (!r) return null;
   return Object.assign({}, r, { canary_ids: _j(r.canary_ids, []) });
 }
-function startRollout(channel, version, canaryIds, notes) {
+async function startRollout(channel, version, canaryIds, notes) {
   const ids = Array.isArray(canaryIds) ? canaryIds.filter(Boolean) : [];
   const state = ids.length ? 'canary' : 'active';
-  _run(`INSERT INTO rollouts (channel,version,state,canary_ids,notes,created_at,updated_at)
+  await _run(`INSERT INTO rollouts (channel,version,state,canary_ids,notes,created_at,updated_at)
         VALUES (?,?,?,?,?,?,?)
         ON CONFLICT(channel) DO UPDATE SET version=excluded.version, state=excluded.state,
           canary_ids=excluded.canary_ids, notes=excluded.notes, updated_at=excluded.updated_at`,
     [channel, version, state, JSON.stringify(ids), notes || '', nowLocal(), nowLocal()]);
-  return getRollout(channel);
+  return await getRollout(channel);
 }
-function setRolloutState(channel, state) {
-  _run('UPDATE rollouts SET state=?, updated_at=? WHERE channel=?', [state, nowLocal(), channel]);
-  return getRollout(channel);
+async function setRolloutState(channel, state) {
+  await _run('UPDATE rollouts SET state=?, updated_at=? WHERE channel=?', [state, nowLocal(), channel]);
+  return await getRollout(channel);
 }
-function recordFacilityUpdateStatus(facilityId, s) {
+async function recordFacilityUpdateStatus(facilityId, s) {
   s = s || {};
-  _run('UPDATE facilities SET upd_state=?, upd_attempted=?, upd_error=?, upd_reported_at=? WHERE id=?',
+  await _run('UPDATE facilities SET upd_state=?, upd_attempted=?, upd_error=?, upd_reported_at=? WHERE id=?',
     [String(s.state || ''), String(s.attempted || ''), String(s.error || '').slice(0, 300), nowLocal(), facilityId]);
 }
 
 // What (if anything) an eligible facility should be told to install right now.
-function rolloutEligible(facility) {
-  const ro = getRollout('facility');
+async function rolloutEligible(facility) {
+  const ro = await getRollout('facility');
   if (!ro || ro.state === 'paused' || ro.state === 'complete') return null;
   if (!facility || facility.status !== 'active') return null;
   if ((facility.app_version || '') === ro.version) return null;               // already on target
   const eligible = ro.state === 'active' || (ro.state === 'canary' && ro.canary_ids.includes(facility.id));
   if (!eligible) return null;
-  const rel = getRelease('facility', ro.version);
+  const rel = await getRelease('facility', ro.version);
   if (!rel || rel.status !== 'published') return null;                        // version not (or no longer) served
   return { version: ro.version, release: rel };
 }
-function updateDirectiveFor(facility, baseUrl) {
-  const e = rolloutEligible(facility);
+async function updateDirectiveFor(facility, baseUrl) {
+  const e = await rolloutEligible(facility);
   if (!e) return null;
   return {
     version: e.version, apply: 'auto', url: baseUrl + '/fleet/bundle/' + e.version,
@@ -409,100 +409,100 @@ function updateDirectiveFor(facility, baseUrl) {
 //   canary/active → the rollout version, but only if this facility is eligible
 //   paused        → nothing (kill switch)
 //   none/complete → latest published (open, Phase-3 behavior)
-function manifestReleaseFor(facility) {
-  const ro = getRollout('facility');
+async function manifestReleaseFor(facility) {
+  const ro = await getRollout('facility');
   if (ro && (ro.state === 'canary' || ro.state === 'active')) {
-    const e = rolloutEligible(facility);
+    const e = await rolloutEligible(facility);
     return e ? e.release : null;
   }
   if (ro && ro.state === 'paused') return null;
-  return getLatestPublishedRelease('facility');
+  return await getLatestPublishedRelease('facility');
 }
 
 // Auto-advance (canary→active→complete) / auto-pause from self-reported health.
-function evaluateRollout(channel) {
-  const ro = getRollout(channel);
+async function evaluateRollout(channel) {
+  const ro = await getRollout(channel);
   if (!ro || ro.state === 'paused' || ro.state === 'complete') return ro;
-  const facs = _q("SELECT id,app_version,upd_state,upd_attempted FROM facilities WHERE status='active'");
+  const facs = await _q("SELECT id,app_version,upd_state,upd_attempted FROM facilities WHERE status='active'");
   const atTarget = f => (f.app_version || '') === ro.version;
   const failed = f => (f.upd_state === 'rolled_back' || f.upd_state === 'failed') && f.upd_attempted === ro.version;
   if (ro.state === 'canary') {
     const canary = facs.filter(f => ro.canary_ids.includes(f.id));
-    if (canary.some(failed)) return setRolloutState(channel, 'paused');       // canary failed → halt
-    if (canary.length && canary.every(atTarget)) return setRolloutState(channel, 'active'); // canary healthy → expand
+    if (canary.some(failed)) return await setRolloutState(channel, 'paused');       // canary failed → halt
+    if (canary.length && canary.every(atTarget)) return await setRolloutState(channel, 'active'); // canary healthy → expand
     return ro;
   }
   // active
-  if (facs.some(failed)) return setRolloutState(channel, 'paused');           // any failure → halt
-  if (facs.length && facs.every(atTarget)) return setRolloutState(channel, 'complete');
+  if (facs.some(failed)) return await setRolloutState(channel, 'paused');           // any failure → halt
+  if (facs.length && facs.every(atTarget)) return await setRolloutState(channel, 'complete');
   return ro;
 }
 
 // ── Facilities ───────────────────────────────────────────────────────────
 const _FAC_COLS = 'id,name,api_key_prefix,status,app_version,last_seen_at,last_seen_ip,created_at,upd_state,upd_attempted,upd_error,upd_reported_at';
-function listFacilities() {
-  return _q('SELECT ' + _FAC_COLS + ' FROM facilities ORDER BY name');
+async function listFacilities() {
+  return await _q('SELECT ' + _FAC_COLS + ' FROM facilities ORDER BY name');
 }
-function getFacility(id) {
-  return _q1('SELECT ' + _FAC_COLS + ' FROM facilities WHERE id=?', [id]);
+async function getFacility(id) {
+  return await _q1('SELECT ' + _FAC_COLS + ' FROM facilities WHERE id=?', [id]);
 }
 
 // Returns { id, name, apiKey } — apiKey is plaintext and shown ONLY here, once.
-function createFacility(name) {
+async function createFacility(name) {
   const id     = crypto.randomUUID();
   const apiKey = crypto.randomBytes(32).toString('hex');
   const hash   = _sha256(apiKey);
   const prefix = apiKey.slice(0, 8);
-  _run(`INSERT INTO facilities (id,name,api_key_hash,api_key_prefix,created_at)
+  await _run(`INSERT INTO facilities (id,name,api_key_hash,api_key_prefix,created_at)
         VALUES (?,?,?,?,?)`, [id, String(name).trim(), hash, prefix, nowLocal()]);
-  _run('INSERT INTO sync_state (facility_id,applied_through) VALUES (?,0) ON CONFLICT (facility_id) DO NOTHING', [id]);
+  await _run('INSERT INTO sync_state (facility_id,applied_through) VALUES (?,0) ON CONFLICT (facility_id) DO NOTHING', [id]);
   return { id, name: String(name).trim(), apiKey };
 }
 
 // Rotate the API key (old key stops working immediately). Returns new plaintext key.
-function rotateFacilityKey(id) {
+async function rotateFacilityKey(id) {
   const apiKey = crypto.randomBytes(32).toString('hex');
-  _run('UPDATE facilities SET api_key_hash=?, api_key_prefix=? WHERE id=?',
+  await _run('UPDATE facilities SET api_key_hash=?, api_key_prefix=? WHERE id=?',
     [_sha256(apiKey), apiKey.slice(0, 8), id]);
   return apiKey;
 }
 
-function setFacilityStatus(id, status) {
-  _run('UPDATE facilities SET status=? WHERE id=?', [status === 'disabled' ? 'disabled' : 'active', id]);
+async function setFacilityStatus(id, status) {
+  await _run('UPDATE facilities SET status=? WHERE id=?', [status === 'disabled' ? 'disabled' : 'active', id]);
 }
 
-function deleteFacility(id) {
+async function deleteFacility(id) {
   // Remove all backed-up rows, managed-user assignments, and the facility record
   // (sync_state has ON DELETE CASCADE so it's handled automatically).
-  _run('DELETE FROM facility_data WHERE facility_id=?', [id]);
-  _run('DELETE FROM managed_user_facilities WHERE facility_id=?', [id]);
-  _run('DELETE FROM facilities WHERE id=?', [id]);
+  await _run('DELETE FROM facility_data WHERE facility_id=?', [id]);
+  await _run('DELETE FROM managed_user_facilities WHERE facility_id=?', [id]);
+  await _run('DELETE FROM facilities WHERE id=?', [id]);
 }
 
 // Look up a facility by its plaintext API key (constant-ish via unique hash index).
-function facilityByKey(apiKey) {
+async function facilityByKey(apiKey) {
   if (!apiKey) return null;
-  return _q1('SELECT * FROM facilities WHERE api_key_hash=?', [_sha256(apiKey)]);
+  return await _q1('SELECT * FROM facilities WHERE api_key_hash=?', [_sha256(apiKey)]);
 }
 
 // Node check-in: record liveness + reported app version.
-function touchFacility(id, { ip = '', app_version = '' } = {}) {
-  _run('UPDATE facilities SET last_seen_at=?, last_seen_ip=?, app_version=? WHERE id=?',
+async function touchFacility(id, { ip = '', app_version = '' } = {}) {
+  await _run('UPDATE facilities SET last_seen_at=?, last_seen_ip=?, app_version=? WHERE id=?',
     [nowLocal(), ip, app_version || '', id]);
 }
 
 // ── Sync ingest (Phase 1) ──────────────────────────────────────────────
-function getAppliedThrough(facilityId) {
-  const r = _q1('SELECT applied_through FROM sync_state WHERE facility_id=?', [facilityId]);
+async function getAppliedThrough(facilityId) {
+  const r = await _q1('SELECT applied_through FROM sync_state WHERE facility_id=?', [facilityId]);
   return r ? r.applied_through : 0;
 }
 
 // Apply a batch of facility rows. Idempotent: upserts and deletes can be safely
 // replayed, so a lost ACK that triggers a resend never corrupts state.
-function ingestRows(facilityId, rows) {
-  let stored = 0, deleted = 0, maxId = getAppliedThrough(facilityId);
+async function ingestRows(facilityId, rows) {
+  let stored = 0, deleted = 0, maxId = await getAppliedThrough(facilityId);
   const ts = nowLocal();
-  _db.transaction(() => {
+  _db.transaction(async () => {
     const up  = _db.prepare('INSERT INTO facility_data (facility_id,table_name,source_id,data,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (facility_id,table_name,source_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at');
     const del = _db.prepare('DELETE FROM facility_data WHERE facility_id=? AND table_name=? AND source_id=?');
     for (const r of rows || []) {
@@ -511,58 +511,58 @@ function ingestRows(facilityId, rows) {
       else { up.run(facilityId, r.table_name, r.row_id, JSON.stringify(r.data || {}), ts); stored++; }
       if (typeof r.id === 'number' && r.id > maxId) maxId = r.id;
     }
-    _run(`INSERT INTO sync_state (facility_id,applied_through,updated_at) VALUES (?,?,?)
+    await _run(`INSERT INTO sync_state (facility_id,applied_through,updated_at) VALUES (?,?,?)
           ON CONFLICT(facility_id) DO UPDATE SET applied_through=excluded.applied_through, updated_at=excluded.updated_at`,
       [facilityId, maxId, ts]);
   })();
   return { stored, deleted, applied_through: maxId };
 }
 
-function facilityTableCounts(facilityId) {
-  const rows = _q('SELECT table_name, COUNT(*) AS c FROM facility_data WHERE facility_id=? GROUP BY table_name ORDER BY table_name', [facilityId]);
+async function facilityTableCounts(facilityId) {
+  const rows = await _q('SELECT table_name, COUNT(*) AS c FROM facility_data WHERE facility_id=? GROUP BY table_name ORDER BY table_name', [facilityId]);
   const tables = {}; let total = 0;
   rows.forEach(r => { tables[r.table_name] = r.c; total += r.c; });
-  return { total, tables, applied_through: getAppliedThrough(facilityId) };
+  return { total, tables, applied_through: await getAppliedThrough(facilityId) };
 }
 
 // Parsed rows for one facility table (feeds Phase 2 reporting + verification).
-function getFacilityRows(facilityId, table, limit = 1000) {
-  const rows = _q('SELECT source_id, data, updated_at FROM facility_data WHERE facility_id=? AND table_name=? ORDER BY source_id LIMIT ?', [facilityId, table, limit]);
+async function getFacilityRows(facilityId, table, limit = 1000) {
+  const rows = await _q('SELECT source_id, data, updated_at FROM facility_data WHERE facility_id=? AND table_name=? ORDER BY source_id LIMIT ?', [facilityId, table, limit]);
   return rows.map(r => { let d = null; try { d = JSON.parse(r.data); } catch (e) {} return { source_id: r.source_id, data: d, updated_at: r.updated_at }; });
 }
 
 // ── Cross-facility reporting (Phase 2a) ────────────────────────────────
 // HIPAA minimum-necessary: aggregate COUNTS only — never names/narratives/PHI.
 // `cond` fragments are constant strings (no user input) → safe to interpolate.
-function _count(facilityId, table, cond) {
-  const r = _q1(`SELECT COUNT(*) AS c FROM facility_data WHERE facility_id=? AND table_name=?${cond ? ' AND ' + cond : ''}`, [facilityId, table]);
+async function _count(facilityId, table, cond) {
+  const r = await _q1(`SELECT COUNT(*) AS c FROM facility_data WHERE facility_id=? AND table_name=?${cond ? ' AND ' + cond : ''}`, [facilityId, table]);
   return r ? r.c : 0;
 }
 
-function reportOverview() {
-  const facs = _q('SELECT id,name,status,last_seen_at,app_version FROM facilities ORDER BY name');
+async function reportOverview() {
+  const facs = await _q('SELECT id,name,status,last_seen_at,app_version FROM facilities ORDER BY name');
   const now = Date.now();
-  const target = getSetting('fleet_target_version', '') || '';
-  const per = facs.map(f => {
+  const target = await getSetting('fleet_target_version', '') || '';
+  const per = await Promise.all(facs.map(async f => {
     let online = false, dark = false;
     if (f.last_seen_at) { const t = new Date(f.last_seen_at.replace(' ', 'T')).getTime(); if (isFinite(t)) { const age = now - t; online = age < 120000; dark = age > 900000; } }
-    const ct = facilityTableCounts(f.id);
+    const ct = await facilityTableCounts(f.id);
     const version = f.app_version || '';
     return {
       id: f.id, name: f.name, status: f.status, app_version: version, version,
       last_seen_at: f.last_seen_at, online, dark,
       behind: !!(target && version && version !== target),
-      residents:       _count(f.id, 'clients', "json_extract(data,'$.is_active')=1 AND json_extract(data,'$.is_special')=0 AND json_extract(data,'$.name')<>'VACANT'"),
-      vacant:          _count(f.id, 'clients', "json_extract(data,'$.name')='VACANT'"),
-      incidents_open:  _count(f.id, 'incidents', "json_extract(data,'$.status')='open'"),
-      incidents_total: _count(f.id, 'incidents'),
-      ua_total:        _count(f.id, 'ua_records'),
+      residents:       await _count(f.id, 'clients', "json_extract(data,'$.is_active')=1 AND json_extract(data,'$.is_special')=0 AND json_extract(data,'$.name')<>'VACANT'"),
+      vacant:          await _count(f.id, 'clients', "json_extract(data,'$.name')='VACANT'"),
+      incidents_open:  await _count(f.id, 'incidents', "json_extract(data,'$.status')='open'"),
+      incidents_total: await _count(f.id, 'incidents'),
+      ua_total:        await _count(f.id, 'ua_records'),
       // Facility stores UA outcome as pass/fail (fail = positive), NOT positive/negative.
-      ua_positive:     _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='fail'"),
+      ua_positive:     await _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='fail'"),
       rows_total:      ct.total,
       applied_through: ct.applied_through,
     };
-  });
+  }));
   const sum = k => per.reduce((a, b) => a + (b[k] || 0), 0);
   return {
     facilities: per,
@@ -583,81 +583,83 @@ function reportOverview() {
 // ── Fleet update coordination (Phase 3) ────────────────────────────────
 // HQ records a recommended target version; nodes display it next to their own
 // (proven) update flow. HQ does NOT push binaries — updater.js is untouched.
-function getFleetTarget() {
-  return { version: getSetting('fleet_target_version', '') || '', notes: getSetting('fleet_target_notes', '') || '' };
+async function getFleetTarget() {
+  return { version: await getSetting('fleet_target_version', '') || '', notes: await getSetting('fleet_target_notes', '') || '' };
 }
-function setFleetTarget(version, notes) {
-  setSetting('fleet_target_version', String(version || '').trim());
-  setSetting('fleet_target_notes', String(notes || ''));
-  return getFleetTarget();
+async function setFleetTarget(version, notes) {
+  await setSetting('fleet_target_version', String(version || '').trim());
+  await setSetting('fleet_target_notes', String(notes || ''));
+  return await getFleetTarget();
 }
 
 // ── Managed users (Phase 2b) — HQ-mastered directory, pushed to facilities ──
-function _publicManagedUser(u) {
+async function _publicManagedUser(u) {
   if (!u) return null;
   return {
     id: u.id, username: u.username, display_name: u.display_name, role: u.role,
     permissions: _j(u.permissions, []), status: u.status, created_at: u.created_at,
-    facilities: _q('SELECT facility_id FROM managed_user_facilities WHERE user_id=?', [u.id]).map(r => r.facility_id),
+    facilities: (await _q('SELECT facility_id FROM managed_user_facilities WHERE user_id=?', [u.id])).map(r => r.facility_id),
   };
 }
 
-function listManagedUsers() {
-  return _q('SELECT * FROM managed_users ORDER BY username').map(_publicManagedUser);
+async function listManagedUsers() {
+  // _publicManagedUser is async (it queries the facility join per user), so a
+  // bare .map() here would hand back an array of pending Promises.
+  return Promise.all((await _q('SELECT * FROM managed_users ORDER BY username')).map(_publicManagedUser));
 }
-function getManagedUser(id) { return _publicManagedUser(_q1('SELECT * FROM managed_users WHERE id=?', [id])); }
+async function getManagedUser(id) { return await _publicManagedUser(await _q1('SELECT * FROM managed_users WHERE id=?', [id])); }
 
-function createManagedUser({ username, display_name, role, password, facilities }) {
+async function createManagedUser({ username, display_name, role, password, facilities }) {
   username = String(username || '').toLowerCase().trim();
   if (!username) throw new Error('username required');
-  if (_q1('SELECT id FROM managed_users WHERE username=?', [username])) throw new Error('username already exists');
+  if (await _q1('SELECT id FROM managed_users WHERE username=?', [username])) throw new Error('username already exists');
   if (!password || String(password).length < 8) throw new Error('initial password must be at least 8 characters');
   const id = crypto.randomUUID();
   const { hash, salt } = _hashPw(String(password));
-  _run(`INSERT INTO managed_users (id,username,display_name,role,hash,salt,must_change_pw,status,created_at)
+  await _run(`INSERT INTO managed_users (id,username,display_name,role,hash,salt,must_change_pw,status,created_at)
         VALUES (?,?,?,?,?,?,1,'active',?)`,
     [id, username, String(display_name || '').trim(), String(role || 'pa'), hash, salt, nowLocal()]);
-  setManagedUserFacilities(id, facilities || []);
-  return getManagedUser(id);
+  await setManagedUserFacilities(id, facilities || []);
+  return await getManagedUser(id);
 }
 
-function updateManagedUser(id, { display_name, role, status }) {
-  const u = _q1('SELECT id FROM managed_users WHERE id=?', [id]);
+async function updateManagedUser(id, { display_name, role, status }) {
+  const u = await _q1('SELECT id FROM managed_users WHERE id=?', [id]);
   if (!u) throw new Error('not found');
-  if (display_name !== undefined) _run('UPDATE managed_users SET display_name=? WHERE id=?', [String(display_name).trim(), id]);
-  if (role !== undefined)         _run('UPDATE managed_users SET role=? WHERE id=?', [String(role), id]);
-  if (status !== undefined)       _run('UPDATE managed_users SET status=? WHERE id=?', [status === 'disabled' ? 'disabled' : 'active', id]);
-  return getManagedUser(id);
+  if (display_name !== undefined) await _run('UPDATE managed_users SET display_name=? WHERE id=?', [String(display_name).trim(), id]);
+  if (role !== undefined)         await _run('UPDATE managed_users SET role=? WHERE id=?', [String(role), id]);
+  if (status !== undefined)       await _run('UPDATE managed_users SET status=? WHERE id=?', [status === 'disabled' ? 'disabled' : 'active', id]);
+  return await getManagedUser(id);
 }
 
-function setManagedUserPassword(id, password) {
+async function setManagedUserPassword(id, password) {
   if (!password || String(password).length < 8) throw new Error('password must be at least 8 characters');
   const { hash, salt } = _hashPw(String(password));
-  _run('UPDATE managed_users SET hash=?,salt=?,must_change_pw=1 WHERE id=?', [hash, salt, id]);
+  await _run('UPDATE managed_users SET hash=?,salt=?,must_change_pw=1 WHERE id=?', [hash, salt, id]);
 }
 
-function setManagedUserFacilities(id, facilityIds) {
-  _db.transaction(() => {
-    _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
+async function setManagedUserFacilities(id, facilityIds) {
+  _db.transaction(async () => {
+    await _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
     for (const fid of facilityIds || []) {
-      if (_q1('SELECT id FROM facilities WHERE id=?', [fid]))
-        _run('INSERT INTO managed_user_facilities (user_id,facility_id) VALUES (?,?) ON CONFLICT (user_id,facility_id) DO NOTHING', [id, fid]);
+      if (await _q1('SELECT id FROM facilities WHERE id=?', [fid]))
+        await _run('INSERT INTO managed_user_facilities (user_id,facility_id) VALUES (?,?) ON CONFLICT (user_id,facility_id) DO NOTHING', [id, fid]);
     }
   })();
-  return getManagedUser(id);
+  return await getManagedUser(id);
 }
 
-function deleteManagedUser(id) {
-  _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
-  _run('DELETE FROM managed_users WHERE id=?', [id]);
+async function deleteManagedUser(id) {
+  await _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
+  await _run('DELETE FROM managed_users WHERE id=?', [id]);
 }
 
 // The pull payload for one facility: active managed users with their INITIAL
 // credential (hash/salt) + role. Travels over TLS to the facility node.
-function getManagedUsersForFacility(facilityId) {
-  return _q(`SELECT mu.* FROM managed_users mu
+async function getManagedUsersForFacility(facilityId) {
+  return (await _q(`SELECT mu.* FROM managed_users mu
              JOIN managed_user_facilities f ON f.user_id=mu.id
-             WHERE f.facility_id=? AND mu.status='active' ORDER BY mu.username`, [facilityId])
+             WHERE f.facility_id=? AND mu.status='active' ORDER BY mu.username`, [facilityId]))
     .map(u => ({
       uid: u.id, username: u.username, display_name: u.display_name, role: u.role,
       permissions: _j(u.permissions, []), hash: u.hash, salt: u.salt, must_change_pw: !!u.must_change_pw,

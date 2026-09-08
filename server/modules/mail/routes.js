@@ -11,16 +11,16 @@ const service = require('./service');
 
 function register(app) {
   // ── Mail Log ──────────────────────────────────────────────────────
-  app.get('/api/mail', requireAuth, (req, res) => {
-    res.json(service.list());
+  app.get('/api/mail', requireAuth, async (req, res) => {
+    res.json(await service.list());
   });
 
-  app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), (req, res) => {
+  app.post('/api/mail', requireAuth, csrfCheck, requirePermission('mail.log'), async (req, res) => {
     try {
       const actor = req.session.displayName || req.session.username || '';
-      const { logged, wroteActiveLog } = service.logMail(req.body, { actor });
+      const { logged, wroteActiveLog } = await service.logMail(req.body, { actor });
       for (const r of logged) {
-        audit(req, 'mail.log', 'mail', null, r.client_name + ' Rm.' + r.room, { notes: r.notes, mail_type: r.mail_type });
+        await audit(req, 'mail.log', 'mail', null, r.client_name + ' Rm.' + r.room, { notes: r.notes, mail_type: r.mail_type });
       }
       if (wroteActiveLog) broadcast({ type: 'data_saved', user: req.session.displayName || req.session.username });
       broadcast({ type: 'mail_updated', user: req.session.displayName || req.session.username });
@@ -28,32 +28,32 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.put('/api/mail/:id/approve', requireAuth, csrfCheck, requirePermission('mail.approve'), (req, res) => {
+  app.put('/api/mail/:id/approve', requireAuth, csrfCheck, requirePermission('mail.approve'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const by = req.session.displayName || req.session.username;
-      const label = service.approve(id, by);
-      audit(req, 'mail.approve', 'mail', id, label);
+      const label = await service.approve(id, by);
+      await audit(req, 'mail.approve', 'mail', id, label);
       broadcast({ type: 'mail_updated', user: by });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, requirePermission('mail.deliver'), (req, res) => {
+  app.put('/api/mail/:id/deliver', requireAuth, csrfCheck, requirePermission('mail.deliver'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const label = service.deliver(id);
-      audit(req, 'mail.deliver', 'mail', id, label);
+      const label = await service.deliver(id);
+      await audit(req, 'mail.deliver', 'mail', id, label);
       broadcast({ type: 'mail_updated', user: req.session.displayName || req.session.username });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('mail.delete'), (req, res) => {
+  app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('mail.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const label = service.remove(id);
-      audit(req, 'mail.delete', 'mail', id, label);
+      const label = await service.remove(id);
+      await audit(req, 'mail.delete', 'mail', id, label);
       broadcast({ type: 'mail_updated', user: req.session.displayName || req.session.username });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

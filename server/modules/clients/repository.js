@@ -11,56 +11,56 @@ const db = require('../../../db');
 const reportLog = require('../../db/reportLog'); // shared active-report log helpers
 
 // ── occupancy / vacancy ─────────────────────────────────────────────
-function activeResidentInRoom(room) {
-  return c.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0`, [room]);
+async function activeResidentInRoom(room) {
+  return await c.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0`, [room]);
 }
-function activeResidentInRoomExcept(room, id) {
-  return c.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0 AND id!=?`, [room, id]);
+async function activeResidentInRoomExcept(room, id) {
+  return await c.query1(`SELECT name FROM clients WHERE room=? AND name!='VACANT' AND is_active=1 AND is_special=0 AND id!=?`, [room, id]);
 }
-function vacantInRoom(room) {
-  return c.query1(`SELECT id FROM clients WHERE room=? AND name='VACANT' AND is_active=1`, [room]);
+async function vacantInRoom(room) {
+  return await c.query1(`SELECT id FROM clients WHERE room=? AND name='VACANT' AND is_active=1`, [room]);
 }
-function deleteVacantForRoomExcept(room, id) {
-  c.run(`DELETE FROM clients WHERE room=? AND name='VACANT' AND id!=?`, [room, id]);
+async function deleteVacantForRoomExcept(room, id) {
+  await c.run(`DELETE FROM clients WHERE room=? AND name='VACANT' AND id!=?`, [room, id]);
 }
-function maxSortOrder() {
-  const r = c.query1('SELECT MAX(sort_order) AS m FROM clients');
+async function maxSortOrder() {
+  const r = await c.query1('SELECT MAX(sort_order) AS m FROM clients');
   return (r && r.m != null) ? r.m : null;
 }
 
 // ── reads ────────────────────────────────────────────────────────────
-function getById(id) { return c.query1('SELECT * FROM clients WHERE id=?', [id]); }
-function exists(id) { return !!c.query1('SELECT id FROM clients WHERE id=?', [id]); }
-function getRoomActive(id) { return c.query1('SELECT room,is_active FROM clients WHERE id=?', [id]); }
-function getBrief(id) { return c.query1('SELECT id,name,room FROM clients WHERE id=?', [id]); }
+async function getById(id) { return await c.query1('SELECT * FROM clients WHERE id=?', [id]); }
+async function exists(id) { return !!await c.query1('SELECT id FROM clients WHERE id=?', [id]); }
+async function getRoomActive(id) { return await c.query1('SELECT room,is_active FROM clients WHERE id=?', [id]); }
+async function getBrief(id) { return await c.query1('SELECT id,name,room FROM clients WHERE id=?', [id]); }
 
 // ── writes ───────────────────────────────────────────────────────────
 // Re-occupy an existing VACANT row as a new resident (avoids duplicate rows).
-function reactivateVacant(id, f) {
-  c.run(`UPDATE clients SET name=?,case_manager=?,phone=?,intake_date=?,is_active=1,
+async function reactivateVacant(id, f) {
+  await c.run(`UPDATE clients SET name=?,case_manager=?,phone=?,intake_date=?,is_active=1,
           referral_source=?,program_track=?,emergency_contacts=?,intake_notes=? WHERE id=?`,
     [f.name, f.case_manager, f.phone, f.intake_date, f.referral_source, f.program_track, f.emergency_contacts, f.intake_notes, id]);
 }
-function insertClient(f) {
-  const info = c.run(`INSERT INTO clients (room,name,case_manager,phone,intake_date,is_active,is_special,sort_order,
+async function insertClient(f) {
+  const info = await c.run(`INSERT INTO clients (room,name,case_manager,phone,intake_date,is_active,is_special,sort_order,
           referral_source,program_track,emergency_contacts,intake_notes)
     VALUES (?,?,?,?,?,1,0,?,?,?,?,?)`,
     [f.room, f.name, f.case_manager, f.phone, f.intake_date, f.sort_order, f.referral_source, f.program_track, f.emergency_contacts, f.intake_notes]);
   return info.lastInsertRowid;
 }
-function setRoom(id, room) { c.run('UPDATE clients SET room=? WHERE id=?', [room, id]); }
+async function setRoom(id, room) { await c.run('UPDATE clients SET room=? WHERE id=?', [room, id]); }
 
 const UPDATE_COLUMNS = ['name', 'case_manager', 'phone', 'intake_date', 'discharge_date',
   'is_active', 'referral_source', 'program_track', 'emergency_contacts', 'intake_notes', 'photo'];
 // Patch only the provided columns (room is handled separately by the service).
-function applyUpdates(id, fields) {
+async function applyUpdates(id, fields) {
   for (const col of UPDATE_COLUMNS) {
-    if (fields[col] !== undefined) c.run(`UPDATE clients SET ${col}=? WHERE id=?`, [fields[col], id]);
+    if (fields[col] !== undefined) await c.run(`UPDATE clients SET ${col}=? WHERE id=?`, [fields[col], id]);
   }
 }
 
 // photo disk write — delegated (transitional -> storage/photoStore)
-function savePhoto(dataUri, fname) { return db.savePhoto(dataUri, fname); }
+async function savePhoto(dataUri, fname) { return await db.savePhoto(dataUri, fname); }
 
 // ── active-report intake log helpers — shared (server/db/reportLog) ──
 const getActiveReportId = reportLog.getActiveReportId;

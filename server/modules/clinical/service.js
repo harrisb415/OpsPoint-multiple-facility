@@ -16,24 +16,24 @@ function httpError(status, message) {
 const actorName = (s) => s.displayName || s.username || '';
 
 // ── UA records ──────────────────────────────────────────────────────
-function listUA(query = {}) {
+async function listUA(query = {}) {
   const filter = {
     client_id: query.client_id ? parseInt(query.client_id) : null,
     result: query.result || null,
     from: query.from || null,
     to: query.to || null,
   };
-  return { rows: repo.getUARecords(filter), filter };
+  return { rows: await repo.getUARecords(filter), filter };
 }
-function getUA(id) {
-  const r = repo.getUARecord(id);
+async function getUA(id) {
+  const r = await repo.getUARecord(id);
   if (!r) throw httpError(404, 'Not found');
   return r;
 }
-function createUA(b = {}, session) {
+async function createUA(b = {}, session) {
   if (!b.client_id && !b.is_interview) throw httpError(400, 'client_id required');
   if (!b.tested_at) throw httpError(400, 'tested_at required');
-  return repo.createUARecord({
+  return await repo.createUARecord({
     ...b,
     witnessed_by_id: b.witnessed_by_id || session.userId,
     witnessed_by_name: b.witnessed_by_name || actorName(session),
@@ -41,86 +41,86 @@ function createUA(b = {}, session) {
     created_by_name: actorName(session),
   });
 }
-function updateUA(id, b = {}) {
-  const cur = repo.getUARecord(id);
+async function updateUA(id, b = {}) {
+  const cur = await repo.getUARecord(id);
   if (!cur) throw httpError(404, 'Not found');
-  const record = repo.updateUARecord(id, b);
+  const record = await repo.updateUARecord(id, b);
   return { record, clientName: cur.client_name, fields: Object.keys(b) };
 }
-function deleteUA(id) {
-  const cur = repo.getUARecord(id);
+async function deleteUA(id) {
+  const cur = await repo.getUARecord(id);
   if (!cur) throw httpError(404, 'Not found');
-  repo.deleteUARecord(id);
+  await repo.deleteUARecord(id);
   return { clientName: cur.client_name };
 }
 
 // ── Milestones ──────────────────────────────────────────────────────
-function listMilestones(query = {}) {
+async function listMilestones(query = {}) {
   const filter = {
     client_id: query.client_id ? parseInt(query.client_id) : null,
     status: query.status || null,
   };
-  return { rows: repo.getMilestones(filter), filter };
+  return { rows: await repo.getMilestones(filter), filter };
 }
-function createMilestone(b = {}, session) {
+async function createMilestone(b = {}, session) {
   if (!b.client_id) throw httpError(400, 'client_id required');
   if (!b.objective || !String(b.objective).trim()) throw httpError(400, 'objective required');
-  return repo.createMilestone({ ...b, created_by_name: actorName(session) });
+  return await repo.createMilestone({ ...b, created_by_name: actorName(session) });
 }
-function updateMilestone(id, b = {}) {
-  const record = repo.updateMilestone(id, b);
+async function updateMilestone(id, b = {}) {
+  const record = await repo.updateMilestone(id, b);
   if (!record) throw httpError(404, 'Not found');
   return { record, clientName: record.client_name };
 }
-function signoffMilestone(id, session) {
-  const record = repo.signoffMilestone(id, session.userId, actorName(session));
+async function signoffMilestone(id, session) {
+  const record = await repo.signoffMilestone(id, session.userId, actorName(session));
   if (!record) throw httpError(404, 'Not found');
   return { record, clientName: record.client_name };
 }
-function deleteMilestone(id) {
-  repo.deleteMilestone(id); // mirrors original: no 404 check
+async function deleteMilestone(id) {
+  await repo.deleteMilestone(id); // mirrors original: no 404 check
 }
 
 // ── Incidents ───────────────────────────────────────────────────────
-function listIncidents(query = {}) {
+async function listIncidents(query = {}) {
   const filter = {
     client_id: query.client_id ? parseInt(query.client_id) : null,
     severity: query.severity || null,
     status: query.status || null,
   };
-  return { rows: repo.getIncidents(filter), filter };
+  return { rows: await repo.getIncidents(filter), filter };
 }
-function createIncident(b = {}, session) {
+async function createIncident(b = {}, session) {
   if (!b.client_id) throw httpError(400, 'client_id required');
   if (!b.incident_date) throw httpError(400, 'incident_date required');
   if (!b.narrative || !String(b.narrative).trim()) throw httpError(400, 'narrative required');
   const sev = String(b.severity || 'low').toLowerCase();
   if (!['low', 'medium', 'high', 'critical'].includes(sev)) throw httpError(400, 'severity must be low|medium|high|critical');
   // Server enforces the minimum required notifications for this severity.
-  const policy = repo.getIncidentNotifications();
+  const policy = await repo.getIncidentNotifications();
   const minReq = Array.isArray(policy[sev]) ? policy[sev] : [];
   const supplied = Array.isArray(b.notifications_required) ? b.notifications_required : [];
   const merged = Array.from(new Set([...minReq, ...supplied]));
-  const record = repo.createIncident({
+  const record = await repo.createIncident({
     ...b, severity: sev, notifications_required: merged,
     logged_by_id: session.userId,
     logged_by_name: actorName(session),
   });
   return { record, severity: sev, merged };
 }
-function updateIncident(id, b = {}) {
-  const record = repo.updateIncident(id, b);
+async function updateIncident(id, b = {}) {
+  const record = await repo.updateIncident(id, b);
   if (!record) throw httpError(404, 'Not found');
   return { record, clientName: record.client_name };
 }
-function reviewIncident(id, b = {}, session) {
+async function reviewIncident(id, b = {}, session) {
   const newStatus = ['reviewed', 'closed'].includes(b.status) ? b.status : 'reviewed';
-  const record = repo.reviewIncident(id, session.userId, actorName(session), b.review_notes || '', newStatus);
+  const record = await repo.reviewIncident(id, session.userId, actorName(session), b.review_notes || '', newStatus);
   if (!record) throw httpError(404, 'Not found');
   return { record, clientName: record.client_name, status: newStatus };
 }
-function deleteIncident(id) {
-  repo.deleteIncident(id); // mirrors original: no 404 check
+async function deleteIncident(id) {
+  await repo.deleteIncident(id); // mirrors original: no 404 check
 }
 
 // ── Discharge records ───────────────────────────────────────────────
@@ -137,19 +137,19 @@ function _daysBetween(a, b) {
 const DISCHARGE_REASONS = ['graduate', 'ama', 'therapeutic', 'administrative'];
 const REASON_LABELS = { graduate: 'Graduate', ama: 'AMA', therapeutic: 'Therapeutic discharge', administrative: 'Administrative discharge' };
 
-function listDischarges() { return repo.getDischargeRecords({}); }
-function listDischargesForClient(cid) { return repo.getDischargeRecords({ client_id: cid }); }
+async function listDischarges() { return await repo.getDischargeRecords({}); }
+async function listDischargesForClient(cid) { return await repo.getDischargeRecords({ client_id: cid }); }
 
 // Create a discharge: record it, flip the client inactive, free the room with a
 // VACANT placeholder, and log it to the active report. Returns { record, client }.
-function createDischarge(b = {}, session) {
+async function createDischarge(b = {}, session) {
   if (!b.client_id) throw httpError(400, 'client_id required');
   if (!b.discharge_date) throw httpError(400, 'discharge_date required');
   if (!b.reason || !DISCHARGE_REASONS.includes(b.reason)) throw httpError(400, 'reason must be graduate|ama|therapeutic|administrative');
-  const client = repo.getClientById(b.client_id);
+  const client = await repo.getClientById(b.client_id);
   if (!client) throw httpError(404, 'Client not found');
 
-  const record = repo.createDischargeRecord({
+  const record = await repo.createDischargeRecord({
     ...b,
     client_name: b.client_name || client.name,
     room: b.room || client.room,
@@ -159,46 +159,46 @@ function createDischarge(b = {}, session) {
     created_by_id: session.userId,
     created_by_name: actorName(session),
   });
-  repo.dischargeClient(b.client_id, b.discharge_date);
-  repo.insertVacantRoom(client.room, client.sort_order || 0);
+  await repo.dischargeClient(b.client_id, b.discharge_date);
+  await repo.insertVacantRoom(client.room, client.sort_order || 0);
 
-  const activeId = repo.getActiveReportId();
+  const activeId = await repo.getActiveReportId();
   if (activeId) {
     const n = new Date(), h = n.getHours(), m = String(n.getMinutes()).padStart(2, '0');
     const ts = `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`;
     const rLabel = REASON_LABELS[b.reason] || b.reason;
-    repo.insertLogEntry(activeId, ts, `Resident discharged: ${client.name}, Rm. ${client.room}. Reason: ${rLabel}.`);
-    repo.touchReport(activeId, new Date().toISOString());
+    await repo.insertLogEntry(activeId, ts, `Resident discharged: ${client.name}, Rm. ${client.room}. Reason: ${rLabel}.`);
+    await repo.touchReport(activeId, new Date().toISOString());
   }
   return { record, client };
 }
 
 // ── Consent records ─────────────────────────────────────────────────
-function listConsents(cid) { return repo.getConsentRecords(cid); }
-function createConsent(b = {}, session) {
+async function listConsents(cid) { return await repo.getConsentRecords(cid); }
+async function createConsent(b = {}, session) {
   if (!b.client_id) throw httpError(400, 'client_id required');
   if (!b.recipient_name) throw httpError(400, 'recipient_name required');
   if (!b.purpose) throw httpError(400, 'purpose required');
   if (!b.effective_date) throw httpError(400, 'effective_date required');
-  return repo.createConsentRecord({
+  return await repo.createConsentRecord({
     ...b,
-    program_name: b.program_name || repo.getFacilityName(),
+    program_name: b.program_name || await repo.getFacilityName(),
     created_by_id: session.userId,
     created_by_name: actorName(session),
   });
 }
-function revokeConsent(id, session) {
-  const cur = repo.getConsentRecord(id);
+async function revokeConsent(id, session) {
+  const cur = await repo.getConsentRecord(id);
   if (!cur) throw httpError(404, 'Not found');
-  const record = repo.revokeConsent(id, actorName(session));
+  const record = await repo.revokeConsent(id, actorName(session));
   return { record, recipientName: cur.recipient_name, clientId: cur.client_id };
 }
 
 // ── Disclosures ─────────────────────────────────────────────────────
-function listDisclosures(cid) { return repo.getDisclosures(cid); }
+async function listDisclosures(cid) { return await repo.getDisclosures(cid); }
 // `consent` is req._consent set by requireConsent middleware.
-function logDisclosure(b = {}, session, consent) {
-  return repo.logDisclosure({
+async function logDisclosure(b = {}, session, consent) {
+  return await repo.logDisclosure({
     ...b,
     consent_id: b.consent_id || (consent && consent.id) || null,
     disclosed_by_id: session.userId,
@@ -207,12 +207,12 @@ function logDisclosure(b = {}, session, consent) {
 }
 
 // ── Supervisor unlock ───────────────────────────────────────────────
-function unlockRecord(table, id, b = {}, session) {
-  if (!repo.clinicalTables().includes(table)) throw httpError(400, 'Invalid table');
+async function unlockRecord(table, id, b = {}, session) {
+  if (!(await repo.clinicalTables()).includes(table)) throw httpError(400, 'Invalid table');
   const reason = (b && b.reason) || '';
   if (!reason || !String(reason).trim()) throw httpError(400, 'Reason required to unlock a sealed record');
-  if (!repo.isRecordLocked(table, id)) throw httpError(400, 'Record is not locked');
-  repo.unlockRecord(table, id, actorName(session), reason);
+  if (!await repo.isRecordLocked(table, id)) throw httpError(400, 'Record is not locked');
+  await repo.unlockRecord(table, id, actorName(session), reason);
   return { reason };
 }
 

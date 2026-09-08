@@ -13,10 +13,10 @@ const db = require('../../db');
 const { audit } = require('./audit');
 
 function requireUnlocked(table) {
-  return function (req, res, next) {
+  return async function (req, res, next) {
     const id = parseInt(req.params.id);
     if (!id) return res.status(400).json({ error: 'Invalid id' });
-    if (db.isRecordLocked(table, id)) {
+    if (await db.isRecordLocked(table, id)) {
       return res.status(403).json({
         error: 'Record is locked (24h immutability window has elapsed). A supervisor must unlock it first.',
         code: 'RECORD_LOCKED',
@@ -27,13 +27,13 @@ function requireUnlocked(table) {
 }
 
 function requireConsent(clientIdFn, informationType) {
-  return function (req, res, next) {
+  return async function (req, res, next) {
     try {
       const cid = parseInt(typeof clientIdFn === 'function' ? clientIdFn(req) : req.params.client_id);
       if (!cid) return res.status(400).json({ error: 'client_id required' });
-      const consent = db.findActiveConsent(cid, informationType);
+      const consent = await db.findActiveConsent(cid, informationType);
       if (!consent) {
-        audit(req, 'consent.blocked', 'consent', cid, 'External disclosure blocked', { informationType });
+        await audit(req, 'consent.blocked', 'consent', cid, 'External disclosure blocked', { informationType });
         return res.status(403).json({
           error: '42 CFR Part 2: No valid consent on file for this disclosure. Obtain written consent first.',
           code: 'CONSENT_REQUIRED',

@@ -15,12 +15,12 @@ function httpError(status, message) {
   return e;
 }
 
-function list() {
-  return repo.list();
+async function list() {
+  return await repo.list();
 }
 
 // Create a staff member. Returns the created row (for the response + audit label).
-function create(input = {}) {
+async function create(input = {}) {
   const { category, name, phone, phone2, notes } = input;
   if (!name || !name.trim())             throw httpError(400, 'Name required');
   if (name.trim().length > 200)          throw httpError(400, 'Name too long (max 200 chars)');
@@ -29,9 +29,9 @@ function create(input = {}) {
   if (notes && notes.length > 2000)      throw httpError(400, 'Notes too long (max 2000 chars)');
   if (category && category.length > 100) throw httpError(400, 'Category too long (max 100 chars)');
 
-  const max = repo.maxSortOrder();
+  const max = await repo.maxSortOrder();
   const sort_order = (max != null) ? max + 1 : 0;
-  return repo.insert({
+  return await repo.insert({
     category: category || '',
     name: name.trim(),
     phone: phone || '',
@@ -42,8 +42,8 @@ function create(input = {}) {
 }
 
 // Update provided fields. Returns the staff member's name (for the audit label).
-function update(id, patch = {}) {
-  if (!repo.exists(id)) throw httpError(404, 'Not found');
+async function update(id, patch = {}) {
+  if (!await repo.exists(id)) throw httpError(404, 'Not found');
   const { category, name, phone, phone2, notes, sort_order } = patch;
   if (name !== undefined && name.trim().length > 200) throw httpError(400, 'Name too long');
   if (phone !== undefined && phone.length > 30)       throw httpError(400, 'Phone too long');
@@ -58,30 +58,30 @@ function update(id, patch = {}) {
   if (phone2 !== undefined)     fields.phone2 = phone2;
   if (notes !== undefined)      fields.notes = notes;
   if (sort_order !== undefined) fields.sort_order = parseInt(sort_order);
-  repo.update(id, fields);
+  await repo.update(id, fields);
 
-  const row = repo.getById(id);
+  const row = await repo.getById(id);
   return row ? row.name : String(id);
 }
 
 // Delete a staff member. Returns { name, category } captured before deletion.
-function remove(id) {
-  const row = repo.getById(id);
+async function remove(id) {
+  const row = await repo.getById(id);
   if (!row) throw httpError(404, 'Not found');
-  repo.remove(id);
+  await repo.remove(id);
   return { name: row.name, category: row.category };
 }
 
-function getCategories() {
-  const v = repo.getCategories();
+async function getCategories() {
+  const v = await repo.getCategories();
   return Array.isArray(v) ? v : DEFAULT_CATEGORIES;
 }
 
 // Persist filtered categories; returns the cleaned array (for the audit detail).
-function setCategories(categories) {
+async function setCategories(categories) {
   if (!Array.isArray(categories)) throw httpError(400, 'categories must be array');
   const clean = categories.filter(c => c && c.trim());
-  repo.setCategories(clean);
+  await repo.setCategories(clean);
   return clean;
 }
 

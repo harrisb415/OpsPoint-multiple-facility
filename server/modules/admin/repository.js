@@ -6,6 +6,6 @@
  */
 const db = require('../../../db');
 
-function getAuditLog(opts) { return db.getAuditLog(opts); }
+async function getAuditLog(opts) { return await db.getAuditLog(opts); }
 
 module.exports = { getAuditLog };

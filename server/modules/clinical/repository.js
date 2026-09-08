@@ -10,56 +10,56 @@
 const db = require('../../../db');
 
 // ── UA records ──────────────────────────────────────────────────────
-const getUARecords = (f) => db.getUARecords(f);
-const getUARecord = (id) => db.getUARecord(id);
-const createUARecord = (rec) => db.createUARecord(rec);
-const updateUARecord = (id, patch) => db.updateUARecord(id, patch);
-const deleteUARecord = (id) => db.deleteUARecord(id);
+const getUARecords = async (f) => await db.getUARecords(f);
+const getUARecord = async (id) => await db.getUARecord(id);
+const createUARecord = async (rec) => await db.createUARecord(rec);
+const updateUARecord = async (id, patch) => await db.updateUARecord(id, patch);
+const deleteUARecord = async (id) => await db.deleteUARecord(id);
 
 // ── Med administration log ──────────────────────────────────────────
 
 // ── Milestones ──────────────────────────────────────────────────────
-const getMilestones = (f) => db.getMilestones(f);
-const createMilestone = (rec) => db.createMilestone(rec);
-const updateMilestone = (id, patch) => db.updateMilestone(id, patch);
-const signoffMilestone = (id, uid, name) => db.signoffMilestone(id, uid, name);
-const deleteMilestone = (id) => db.deleteMilestone(id);
+const getMilestones = async (f) => await db.getMilestones(f);
+const createMilestone = async (rec) => await db.createMilestone(rec);
+const updateMilestone = async (id, patch) => await db.updateMilestone(id, patch);
+const signoffMilestone = async (id, uid, name) => await db.signoffMilestone(id, uid, name);
+const deleteMilestone = async (id) => await db.deleteMilestone(id);
 
 // ── Incidents ───────────────────────────────────────────────────────
-const getIncidents = (f) => db.getIncidents(f);
-const createIncident = (rec) => db.createIncident(rec);
-const updateIncident = (id, patch) => db.updateIncident(id, patch);
-const reviewIncident = (id, uid, name, notes, status) => db.reviewIncident(id, uid, name, notes, status);
-const deleteIncident = (id) => db.deleteIncident(id);
+const getIncidents = async (f) => await db.getIncidents(f);
+const createIncident = async (rec) => await db.createIncident(rec);
+const updateIncident = async (id, patch) => await db.updateIncident(id, patch);
+const reviewIncident = async (id, uid, name, notes, status) => await db.reviewIncident(id, uid, name, notes, status);
+const deleteIncident = async (id) => await db.deleteIncident(id);
 
 // severity-based required-notification policy (settings k/v)
-const getIncidentNotifications = () => db.getSetting('incident_notifications', {});
+const getIncidentNotifications = async () => await db.getSetting('incident_notifications', {});
 
 // ── Discharge records (+ the cross-domain client-vacate / active-report log) ─
-const getDischargeRecords = (f) => db.getDischargeRecords(f);
-const createDischargeRecord = (rec) => db.createDischargeRecord(rec);
-const getClientById = (id) => db.query1('SELECT * FROM clients WHERE id=?', [id]);
-const dischargeClient = (id, date) => db.run('UPDATE clients SET is_active=0, discharge_date=? WHERE id=?', [date, id]);
-const insertVacantRoom = (room, sortOrder) => db.run('INSERT INTO clients (room,name,is_active,is_special,sort_order) VALUES (?,?,1,0,?)', [room, 'VACANT', sortOrder]);
-const getActiveReportId = () => db.getSetting('active_report_id', null);
-const insertLogEntry = (reportId, time, text) => db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
-const touchReport = (reportId, iso) => db.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]);
+const getDischargeRecords = async (f) => await db.getDischargeRecords(f);
+const createDischargeRecord = async (rec) => await db.createDischargeRecord(rec);
+const getClientById = async (id) => await db.query1('SELECT * FROM clients WHERE id=?', [id]);
+const dischargeClient = async (id, date) => await db.run('UPDATE clients SET is_active=0, discharge_date=? WHERE id=?', [date, id]);
+const insertVacantRoom = async (room, sortOrder) => await db.run('INSERT INTO clients (room,name,is_active,is_special,sort_order) VALUES (?,?,1,0,?)', [room, 'VACANT', sortOrder]);
+const getActiveReportId = async () => await db.getSetting('active_report_id', null);
+const insertLogEntry = async (reportId, time, text) => await db.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [reportId, time, text]);
+const touchReport = async (reportId, iso) => await db.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]);
 
 // ── Consent records (42 CFR Part 2) ─────────────────────────────────
-const getConsentRecords = (cid) => db.getConsentRecords(cid);
-const getConsentRecord = (id) => db.getConsentRecord(id);
-const createConsentRecord = (rec) => db.createConsentRecord(rec);
-const revokeConsent = (id, by) => db.revokeConsent(id, by);
-const getFacilityName = () => db.getSetting('facility_name', 'OpsPoint');
+const getConsentRecords = async (cid) => await db.getConsentRecords(cid);
+const getConsentRecord = async (id) => await db.getConsentRecord(id);
+const createConsentRecord = async (rec) => await db.createConsentRecord(rec);
+const revokeConsent = async (id, by) => await db.revokeConsent(id, by);
+const getFacilityName = async () => await db.getSetting('facility_name', 'OpsPoint');
 
 // ── Disclosures ─────────────────────────────────────────────────────
-const getDisclosures = (cid) => db.getDisclosures(cid);
-const logDisclosure = (rec) => db.logDisclosure(rec);
+const getDisclosures = async (cid) => await db.getDisclosures(cid);
+const logDisclosure = async (rec) => await db.logDisclosure(rec);
 
 // ── Supervisor unlock ───────────────────────────────────────────────
 const clinicalTables = () => db.CLINICAL_TABLES;
-const isRecordLocked = (table, id) => db.isRecordLocked(table, id);
-const unlockRecord = (table, id, by, reason) => db.unlockRecord(table, id, by, reason);
+const isRecordLocked = async (table, id) => await db.isRecordLocked(table, id);
+const unlockRecord = async (table, id, by, reason) => await db.unlockRecord(table, id, by, reason);
 
 // ── Structured Clinical Lite entity bundle (notes/treatment-plans/assessments/
 // discharge-summaries/group-notes) — each is a getAll/getById/create/update/

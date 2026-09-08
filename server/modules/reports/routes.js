@@ -14,74 +14,74 @@ const service = require('./service');
 
 function register(app) {
   // ── Data API ──────────────────────────────────────────────────────
-  app.get('/api/data', requireAuth, (req, res) => {
+  app.get('/api/data', requireAuth, async (req, res) => {
     if (apiRateCheck(req)) return res.status(429).json({ error: 'Too many requests' });
-    res.json(service.getData(userPerms(req)));
+    res.json(await service.getData(await userPerms(req)));
   });
 
-  app.post('/api/data', requireAuth, csrfCheck, (req, res) => {
+  app.post('/api/data', requireAuth, csrfCheck, async (req, res) => {
     if (apiRateCheck(req)) return res.status(429).json({ error: 'Too many requests' });
     try {
       const d = req.body;
-      const result = service.saveData(d, { perms: userPerms(req) });
-      if (Array.isArray(d.reports)) d.reports.forEach(r => {
+      const result = await service.saveData(d, { perms: await userPerms(req) });
+      if (Array.isArray(d.reports)) d.reports.forEach(async r => {
         const act = r.is_closed ? 'report.close' : 'report.save';
-        audit(req, act, 'report', r.id, (r.shift || '') + (r.report_date ? ' ' + r.report_date : ''));
+        await audit(req, act, 'report', r.id, (r.shift || '') + (r.report_date ? ' ' + r.report_date : ''));
       });
-      if (Array.isArray(d.clients) && d.clients.length > 0) audit(req, 'client.bulk_edit', 'client', null, d.clients.length + ' clients');
+      if (Array.isArray(d.clients) && d.clients.length > 0) await audit(req, 'client.bulk_edit', 'client', null, d.clients.length + ' clients');
       broadcast({ type: 'data_saved', user: req.session.displayName, active_report_id: result.activeReportId });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.patch('/api/data', requireAuth, csrfCheck, (req, res) => {
+  app.patch('/api/data', requireAuth, csrfCheck, async (req, res) => {
     try {
       const patch = req.body;
-      const result = service.patchData(patch, { perms: userPerms(req) });
-      if (patch.log_entry) audit(req, 'log.add', 'log_entry', null, (patch.log_entry.text || '').slice(0, 80), { reportId: result.rptId });
-      if (patch.statuses) audit(req, 'status.edit', 'report', result.rptId, 'Status update', { count: Object.keys(patch.statuses).length });
-      if (patch.issues !== undefined) audit(req, 'issues.edit', 'report', result.rptId, 'Issues update');
-      if (patch.med_notes !== undefined) audit(req, 'mednote.edit', 'report', result.rptId, 'Med notes update');
+      const result = await service.patchData(patch, { perms: await userPerms(req) });
+      if (patch.log_entry) await audit(req, 'log.add', 'log_entry', null, (patch.log_entry.text || '').slice(0, 80), { reportId: result.rptId });
+      if (patch.statuses) await audit(req, 'status.edit', 'report', result.rptId, 'Status update', { count: Object.keys(patch.statuses).length });
+      if (patch.issues !== undefined) await audit(req, 'issues.edit', 'report', result.rptId, 'Issues update');
+      if (patch.med_notes !== undefined) await audit(req, 'mednote.edit', 'report', result.rptId, 'Med notes update');
       broadcast({ type: 'patched', patch: result.safePatch, user: req.session.displayName, active_report_id: result.activeReportId });
       res.json({ ok: true, log_entry_id: result.logEntryId });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
   // Delete log entry — log.delete or ua.delete both grant access
-  app.delete('/api/log/:id', requireAuth, csrfCheck, requireAnyPermission('log.delete', 'ua.delete'), (req, res) => {
+  app.delete('/api/log/:id', requireAuth, csrfCheck, requireAnyPermission('log.delete', 'ua.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { label } = service.deleteLog(id);
-      audit(req, 'log.delete', 'log_entry', id, label);
+      const { label } = await service.deleteLog(id);
+      await audit(req, 'log.delete', 'log_entry', id, label);
       broadcast({ type: 'data_saved', user: req.session.displayName });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
   // ── Delete report ────────────────────────────────────────────────
-  app.delete('/api/reports/:id', requireAuth, csrfCheck, requirePermission('reports.delete'), (req, res) => {
+  app.delete('/api/reports/:id', requireAuth, csrfCheck, requirePermission('reports.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { label } = service.deleteReport(id);
-      audit(req, 'report.delete', 'report', id, label);
+      const { label } = await service.deleteReport(id);
+      await audit(req, 'report.delete', 'report', id, label);
       broadcast({ type: 'data_saved', user: req.session.displayName });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
   // ── UA Photo ──────────────────────────────────────────────────────
-  app.post('/api/log/:id/photo', requireAuth, csrfCheck, (req, res) => {
+  app.post('/api/log/:id/photo', requireAuth, csrfCheck, async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { photo } = service.saveLogPhoto(id, req.body.photo);
+      const { photo } = await service.saveLogPhoto(id, req.body.photo);
       res.json({ ok: true, photo });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.get('/api/log/:id/photo', requireAuth, (req, res) => { // all roles may view UA photos
+  app.get('/api/log/:id/photo', requireAuth, async (req, res) => { // all roles may view UA photos
     try {
       const id = parseInt(req.params.id);
-      const { photo } = service.getLogPhoto(id);
+      const { photo } = await service.getLogPhoto(id);
       res.json({ ok: true, photo });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

@@ -39,9 +39,51 @@ const impl = DRIVER === 'pg'
   ? require('./drivers/pg')
   : require('./drivers/sqlite');
 
+/**
+ * ORDER BY fragment for sorting a roster by room number.
+ *
+ * The one query shape that genuinely cannot be spelled the same way on both
+ * drivers. `CAST(room AS INTEGER)` is a live landmine on Postgres: SQLite
+ * silently yields 0 for a non-numeric room like '101A', Postgres raises and
+ * takes the whole roster query with it. So the pg schema carries a generated
+ * `room_sort` column (NULL for non-numeric rooms) with a matching index on
+ * (room_sort NULLS LAST, room).
+ *
+ * The two orderings are not identical, deliberately: a non-numeric room sorts
+ * FIRST under SQLite (CAST gives 0) and LAST under Postgres. Every production
+ * room is numeric today, so nothing moves; NULLS LAST is the better behaviour
+ * and matches the index, which is worth more than bug-for-bug parity.
+ *
+ * Pass the column, qualified if needed: roomOrder('c.room') -> 'c.room_sort ...'.
+ */
+function roomOrder(col = 'room') {
+  return DRIVER === 'pg' ? `${col}_sort NULLS LAST` : `CAST(${col} AS INTEGER)`;
+}
+
+/**
+ * Clause required to write an explicit id into a GENERATED ALWAYS AS IDENTITY
+ * column. Postgres refuses such an INSERT outright — "cannot insert a
+ * non-DEFAULT value into column id" — where SQLite simply accepts it. Empty
+ * string on SQLite, so the same statement works on both.
+ *
+ * Goes between the column list and VALUES:
+ *   INSERT INTO reports (id, …) ${c.overriding()}VALUES (?, …)
+ *
+ * Only two statements need it, both restore paths that carry an id supplied by
+ * the caller rather than letting the database assign one. Note that these do
+ * NOT advance the identity sequence: after a bulk restore, the sequence has to
+ * be reset or the next generated id collides. That belongs with the restore
+ * tooling, not here.
+ */
+function overriding() {
+  return DRIVER === 'pg' ? 'OVERRIDING SYSTEM VALUE ' : '';
+}
+
 module.exports = {
   driver: DRIVER,
   isPg:   DRIVER === 'pg',
+  roomOrder,
+  overriding,
 
   open:     (...a) => impl.open(...a),
   getDb:    ()     => impl.getDb(),

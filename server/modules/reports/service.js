@@ -53,8 +53,8 @@ async function saveData(d = {}, { perms = [] } = {}) {
 
   if (Array.isArray(d.clients) && d.clients.length > 0) {
     const incomingIds = d.clients.map(c => c.id).filter(Boolean);
-    (await repo.allClientsBrief()).forEach(async ec => { if (!incomingIds.includes(ec.id)) await repo.deleteClient(ec.id); });
-    d.clients.forEach(async cl => {
+    for (const ec of await repo.allClientsBrief()) { if (!incomingIds.includes(ec.id)) await repo.deleteClient(ec.id); }
+    for (const cl of d.clients) {
       let photo = cl.photo;
       if (photo && photo.startsWith('data:')) {
         if ((photo.split(',')[1] || '').length > 5592406) { photo = null; }
@@ -69,7 +69,7 @@ async function saveData(d = {}, { perms = [] } = {}) {
       };
       if (await repo.clientExists(cl.id)) await repo.updateClientFull(f);
       else await repo.insertClientFull(f);
-    });
+    }
   }
 
   if (Array.isArray(d.reports)) {

@@ -12,11 +12,23 @@ const connection = require('./server/db/connection'); // better-sqlite3 handle +
 let _db     = null;
 let _dbPath = null;
 
-// Returns "YYYY-MM-DD HH:MM:SS" in local time — use instead of datetime('now') (UTC).
-function nowLocal() {
-  const d = new Date(), p = n => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+/**
+ * "YYYY-MM-DD HH:MM:SS" in local time, shifted by `hours` (negative = past).
+ *
+ * Two queries used to express their cutoff as datetime('now','-24 hours').
+ * That is not portable, and it was also wrong: datetime('now') is UTC, while
+ * every created_at in this schema is written by nowLocal(). The comparison was
+ * therefore skewed by the machine's UTC offset — seven hours here, enough to
+ * lock clinical records early or hide recent broadcasts. Computing the cutoff
+ * in the same local format and binding it as a parameter fixes both.
+ */
+function localShift(hours = 0) {
+  const d = new Date(Date.now() + hours * 3600 * 1000), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
+
+// Returns "YYYY-MM-DD HH:MM:SS" in local time — use instead of datetime('now') (UTC).
+function nowLocal() { return localShift(0); }
 
 const DEFAULT_WALK_AREAS = [
   'Supply Room','Basement / Offices','Kitchen','Meeting Room','Dining Room',
@@ -169,7 +181,7 @@ async function init(dbPath) {
   // can never be configured below the statutory minimum.
   await pruneAuditLog(await getSetting('audit_retention_days', AUDIT_RETENTION_MIN_DAYS));
   // Lock any clinical records past their 24h grace window (boot-time sweep)
-  try { runLockSweep(); } catch(e) {}
+  try { await runLockSweep(); } catch(e) {}
 }
 
 function _hashPw(pw) {
@@ -308,23 +320,23 @@ async function _seedDefaults() {
 // Seed permissions for existing users that predate the permission system
 async function _seedExistingUserPermissions() {
   const users = await _q('SELECT id, role FROM users WHERE permissions IS NULL');
-  users.forEach(async u => {
+  for (const u of users) {
     const perms = ROLE_PRESETS[u.role] || ROLE_PRESETS.pa;
     await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), u.id]);
-  });
+  }
 }
 
 // Strip any retired permissions (no longer in PERMISSIONS) from user rows.
 // New permissions propagate via _migrateGroups — no need to enumerate them here.
 async function _migratePermissions() {
-  (await _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL')).forEach(async u => {
+  for (const u of await _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL')) {
     try {
       const perms   = JSON.parse(u.permissions || '[]');
       const cleaned = perms.filter(p => PERMISSIONS.includes(p));
       if (cleaned.length !== perms.length)
         await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(cleaned), u.id]);
     } catch(e) {}
-  });
+  }
 }
 
 // Migrate stored permission profiles when new permissions are added to ROLE_PRESETS.
@@ -371,10 +383,10 @@ async function _seedGroups() {
     { key: 'admin',        label: 'Administrator',      permissions: ROLE_PRESETS.admin,         is_protected: 1 },
     { key: 'case_manager', label: 'Case Manager',       permissions: ROLE_PRESETS.case_manager,  is_protected: 0 },
   ];
-  seeds.forEach(async s => {
+  for (const s of seeds) {
     await _run('INSERT INTO groups (key,label,permissions,is_protected) VALUES (?,?,?,?)',
       [s.key, s.label, JSON.stringify(s.permissions), s.is_protected]);
-  });
+  }
 }
 
 async function _migrateUserGroups() {
@@ -383,10 +395,10 @@ async function _migrateUserGroups() {
     SELECT u.id, u.role FROM users u
     WHERE NOT EXISTS (SELECT 1 FROM user_groups ug WHERE ug.user_id=u.id)
   `);
-  usersNoGroups.forEach(async u => {
+  for (const u of usersNoGroups) {
     const g = await _q1('SELECT id FROM groups WHERE key=?', [u.role]);
     if (g) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [u.id, g.id]);
-  });
+  }
 }
 
 // Ensure every built-in group contains all permissions its ROLE_PRESET says it should have,
@@ -394,7 +406,7 @@ async function _migrateUserGroups() {
 // Runs on every boot — idempotent.
 async function _migrateGroups(newPerms = []) {
   const groups = await _q('SELECT * FROM groups');
-  groups.forEach(async g => {
+  for (const g of groups) {
     const perms   = _j(g.permissions, []);
     const preset  = ROLE_PRESETS[g.key];
     // Only add permissions that are NEWLY introduced in this boot (not previously known).
@@ -402,11 +414,11 @@ async function _migrateGroups(newPerms = []) {
     const toAdd   = preset ? newPerms.filter(p => preset.includes(p) && !perms.includes(p)) : [];
     const cleaned = perms.filter(p => PERMISSIONS.includes(p)); // drop retired perms
     const stripped = cleaned.length !== perms.length;
-    if (!toAdd.length && !stripped) return;
+    if (!toAdd.length && !stripped) continue;
     const updated = cleaned.concat(toAdd);
     await _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(updated), g.id]);
     await recomputeGroupMemberPermissions(g.id);
-  });
+  }
 }
 
 async function getGroups() {
@@ -418,8 +430,13 @@ async function getGroups() {
   }));
 }
 
-async function getUserGroups(userId) {
-  return (await _q(
+// `conn` lets these run INSIDE an open transaction. Under Postgres the scoped
+// primitives are bound to the transaction's checked-out client; going through
+// the module-level _q/_run instead would use a different pooled connection and
+// read pre-transaction state — so setUserGroups would recompute permissions
+// from the group rows as they were BEFORE its own writes.
+async function getUserGroups(userId, conn = connection) {
+  return (await conn.query(
     'SELECT g.id,g.key,g.label,g.permissions,g.is_protected FROM groups g JOIN user_groups ug ON ug.group_id=g.id WHERE ug.user_id=? ORDER BY g.id',
     [userId]
   )).map(g => ({ id: g.id, key: g.key, label: g.label, permissions: _j(g.permissions, []), is_protected: !!g.is_protected }));
@@ -435,32 +452,31 @@ async function computeGroupsPermissions(groupIds) {
   return [...set].filter(p => PERMISSIONS.includes(p));
 }
 
-async function getUserEffectivePermissions(userId) {
-  const groups = await getUserGroups(userId);
+async function getUserEffectivePermissions(userId, conn = connection) {
+  const groups = await getUserGroups(userId, conn);
   const set = new Set();
   groups.forEach(g => g.permissions.forEach(p => set.add(p)));
   return [...set].filter(p => PERMISSIONS.includes(p));
 }
 
-async function recomputeUserPermissions(userId) {
-  const perms = await getUserEffectivePermissions(userId);
-  await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), userId]);
+async function recomputeUserPermissions(userId, conn = connection) {
+  const perms = await getUserEffectivePermissions(userId, conn);
+  await conn.run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(perms), userId]);
   return perms;
 }
 
 async function recomputeGroupMemberPermissions(groupId) {
-  (await _q('SELECT user_id FROM user_groups WHERE group_id=?', [groupId]))
-    .forEach(async m => await recomputeUserPermissions(m.user_id));
+  for (const m of await _q('SELECT user_id FROM user_groups WHERE group_id=?', [groupId])) { await recomputeUserPermissions(m.user_id); }
 }
 
-function setUserGroups(userId, groupIds) {
-  _db.transaction(async () => {
-    await _run('DELETE FROM user_groups WHERE user_id=?', [userId]);
+async function setUserGroups(userId, groupIds) {
+  await connection.transaction(async (c) => {
+    await c.run('DELETE FROM user_groups WHERE user_id=?', [userId]);
     for (const gid of groupIds) {
-      await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [userId, gid]);
+      await c.run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [userId, gid]);
     }
-    await recomputeUserPermissions(userId);
-  })();
+    await recomputeUserPermissions(userId, c);
+  });
 }
 
 async function createGroup(key, label, permissions) {
@@ -479,7 +495,7 @@ async function deleteGroup(id) {
   const members = await _q('SELECT user_id FROM user_groups WHERE group_id=?', [id]);
   await _run('DELETE FROM user_groups WHERE group_id=?', [id]);
   await _run('DELETE FROM groups WHERE id=?', [id]);
-  members.forEach(async m => await recomputeUserPermissions(m.user_id));
+  for (const m of members) { await recomputeUserPermissions(m.user_id); }
   return members.map(m => m.user_id);
 }
 
@@ -488,6 +504,18 @@ async function deleteGroup(id) {
 async function _run(sql, params = []) { return await connection.run(sql, params); }
 async function _q(sql, params = [])   { return await connection.query(sql, params); }
 async function _q1(sql, params = [])  { return await connection.query1(sql, params); }
+
+/**
+ * Does this table exist? There is no portable spelling: sqlite_master does not
+ * exist on Postgres, and SQLite has no information_schema. Takes an optional
+ * scoped connection so it can be asked inside an open transaction.
+ */
+async function tableExists(name, conn = connection) {
+  const sql = connection.isPg
+    ? 'SELECT tablename AS name FROM pg_tables WHERE schemaname = current_schema() AND tablename = ?'
+    : "SELECT name FROM sqlite_master WHERE type='table' AND name=?";
+  return !!(await conn.query1(sql, [name]));
+}
 // No-op: better-sqlite3 writes directly to disk on every statement
 function _save() {}
 function _j(str, def) { try { return JSON.parse(str); } catch(e) { return def; } }
@@ -552,7 +580,7 @@ function _hasClinical(perms) {
 async function getAllData(perms) {
   const isClinical = _hasClinical(perms);
 
-  const clients = await _q('SELECT * FROM clients ORDER BY sort_order, CAST(room AS INTEGER), room');
+  const clients = await _q(`SELECT * FROM clients ORDER BY sort_order, ${connection.roomOrder()}, room`);
   clients.forEach(c => {
     c.is_special = !!c.is_special; c.is_active = !!c.is_active;
     c.photo = resolveClientPhoto(c.photo);
@@ -566,7 +594,7 @@ async function getAllData(perms) {
   });
 
   const reports = await _q('SELECT * FROM reports ORDER BY created_at');
-  reports.forEach(async r => {
+  for (const r of reports) {
     r.is_closed        = !!r.is_closed;
     r.statuses         = _j(r.statuses, {});
     r.comments         = _j(r.comments, {});
@@ -581,7 +609,7 @@ async function getAllData(perms) {
         e.ua_photo = true;
       }
     });
-  });
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const staffRows = await _q('SELECT * FROM staff ORDER BY sort_order, id');
@@ -625,11 +653,13 @@ async function getGroupSessions({ date, from, to }) {
 }
 
 async function createGroupSession({ session_date, group_name, time_of_day, facilitator, notes, created_by_id, created_by_name }) {
-  await _run(`INSERT INTO group_sessions (session_date,group_name,time_of_day,facilitator,notes,created_by_id,created_by_name,created_at)
+  // Was SELECT last_insert_rowid() — SQLite-only, and racy in principle. The
+  // run() result carries the id on both drivers (pg appends RETURNING id).
+  const info = await _run(`INSERT INTO group_sessions (session_date,group_name,time_of_day,facilitator,notes,created_by_id,created_by_name,created_at)
         VALUES (?,?,?,?,?,?,?,?)`,
     [session_date, group_name, time_of_day||'', facilitator||'', notes||'', created_by_id||null, created_by_name||'', nowLocal()]);
-  const row = await _q1('SELECT last_insert_rowid() AS id');
-  return row ? await _q1('SELECT * FROM group_sessions WHERE id=?', [row.id]) : null;
+  const id = info && info.lastInsertRowid;
+  return id ? await _q1('SELECT * FROM group_sessions WHERE id=?', [id]) : null;
 }
 
 async function deleteGroupSession(id) {
@@ -640,16 +670,16 @@ async function getGroupAttendance(session_id) {
   return await _q('SELECT * FROM group_attendance WHERE session_id=? ORDER BY room, client_name', [session_id]);
 }
 
-function saveGroupAttendance(session_id, attendees) {
+async function saveGroupAttendance(session_id, attendees) {
   // attendees: [{client_id, client_name, room, present, notes}]
-  attendees.forEach(async a => {
+  for (const a of attendees) {
     await _run(`INSERT INTO group_attendance (session_id,client_id,client_name,room,present,notes)
           VALUES (?,?,?,?,?,?)
           ON CONFLICT(session_id,client_id) DO UPDATE SET
             present=excluded.present, notes=excluded.notes,
             client_name=excluded.client_name, room=excluded.room`,
       [session_id, a.client_id, a.client_name||'', a.room||'', a.present?1:0, a.notes||'']);
-  });
+  }
 }
 
 // ── Clinical record helpers (Phases 2-7) ──────────────────────────────
@@ -676,18 +706,18 @@ async function unlockRecord(table, id, by, reason) {
 
 // Scheduled job — lock any clinical record whose 24h grace period has elapsed.
 // Called at boot and every hour.
-function runLockSweep() {
+async function runLockSweep() {
   let total = 0;
-  CLINICAL_TABLES.forEach(async t => {
+  for (const t of CLINICAL_TABLES) {
     try {
       const r = await _run(
         `UPDATE ${t} SET locked_at=?
-         WHERE locked_at IS NULL AND created_at < datetime('now','-24 hours')`,
-        [nowLocal()]
+         WHERE locked_at IS NULL AND created_at < ?`,
+        [nowLocal(), localShift(-24)]
       );
       total += r.changes || 0;
     } catch(e) {}
-  });
+  }
   return total;
 }
 
@@ -932,66 +962,66 @@ async function getDisclosures(clientId) {
 
 
 // ── Report upsert (wrapped in a transaction) ──────────────────────────
-function upsertReport(r) {
-  const _do = _db.transaction(async () => {
+async function upsertReport(r) {
+  await connection.transaction(async (c) => {
     const now = new Date().toISOString();
-    const exists = await _q1('SELECT id FROM reports WHERE id=?', [r.id]);
+    const exists = await c.query1('SELECT id FROM reports WHERE id=?', [r.id]);
     if (exists) {
       if (r.is_closed && r.roster_snapshot) {
-        const existing = await _q1('SELECT roster_snapshot FROM reports WHERE id=?', [r.id]);
+        const existing = await c.query1('SELECT roster_snapshot FROM reports WHERE id=?', [r.id]);
         if (!existing || !existing.roster_snapshot) {
-          await _run('UPDATE reports SET roster_snapshot=? WHERE id=?',
+          await c.run('UPDATE reports SET roster_snapshot=? WHERE id=?',
             [JSON.stringify(r.roster_snapshot), r.id]);
         }
       }
-      await _run(`UPDATE reports SET report_date=?,shift=?,mod_name=?,is_closed=?,statuses=?,
+      await c.run(`UPDATE reports SET report_date=?,shift=?,mod_name=?,is_closed=?,statuses=?,
         comments=?,last_ua=?,last_room_search=?,issues=?,med_notes=?,updated_at=? WHERE id=?`,
         [r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
          JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
          JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
          JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, r.id]);
-      const existingEntries = await _q('SELECT id,time,text FROM log_entries WHERE report_id=?', [r.id]);
+      const existingEntries = await c.query('SELECT id,time,text FROM log_entries WHERE report_id=?', [r.id]);
       const existingIds = existingEntries.map(e => e.id);
       const incomingIds = (r.log_entries||[]).filter(e => e.id).map(e => parseInt(e.id));
       const noIdEntries = (r.log_entries||[]).filter(e => !e.id);
-      existingIds.filter(id => !incomingIds.includes(id)).forEach(async id => {
+      for (const id of existingIds.filter(id => !incomingIds.includes(id))) {
         const dbEntry = existingEntries.find(ex => ex.id === id);
-        if (!dbEntry) return;
+        if (!dbEntry) continue;
         const matchedByText = noIdEntries.some(e =>
           (e.time||'') === (dbEntry.time||'') && (e.text||'') === (dbEntry.text||'')
         );
-        if (!matchedByText) await _run('DELETE FROM log_entries WHERE id=?', [id]);
-      });
-      (r.log_entries||[]).forEach(async e => {
+        if (!matchedByText) await c.run('DELETE FROM log_entries WHERE id=?', [id]);
+      }
+      for (const e of r.log_entries||[]) {
         if (e.id && existingIds.includes(parseInt(e.id))) {
           const isSentinel = e.ua_photo === true || e.ua_photo === 1;
           if (isSentinel) {
-            await _run('UPDATE log_entries SET time=?,text=? WHERE id=?',
+            await c.run('UPDATE log_entries SET time=?,text=? WHERE id=?',
               [e.time||'', e.text||'', e.id]);
           } else {
-            await _run('UPDATE log_entries SET time=?,text=?,ua_photo=? WHERE id=?',
+            await c.run('UPDATE log_entries SET time=?,text=?,ua_photo=? WHERE id=?',
               [e.time||'', e.text||'', e.ua_photo||null, e.id]);
           }
         } else if (!e.id) {
           const dup = existingEntries.find(ex => ex.time===(e.time||'') && ex.text===(e.text||''));
           if (!dup) {
-            await _run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
+            await c.run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
               [r.id, e.time||'', e.text||'', e.ua_photo||null]);
           }
         }
-      });
+      }
     } else {
       let info;
       if (r.id) {
-        info = await _run(`INSERT INTO reports (id,report_date,shift,mod_name,is_closed,statuses,comments,
+        info = await c.run(`INSERT INTO reports (id,report_date,shift,mod_name,is_closed,statuses,comments,
           last_ua,last_room_search,issues,med_notes,created_at,updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          ${connection.overriding()}VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [r.id, r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
            JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
            JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
       } else {
-        info = await _run(`INSERT INTO reports (report_date,shift,mod_name,is_closed,statuses,comments,
+        info = await c.run(`INSERT INTO reports (report_date,shift,mod_name,is_closed,statuses,comments,
           last_ua,last_room_search,issues,med_notes,created_at,updated_at)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
           [r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
@@ -1000,13 +1030,12 @@ function upsertReport(r) {
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
       }
       const useId = r.id || info.lastInsertRowid;
-      (r.log_entries||[]).forEach(async e => {
-        await _run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
+      for (const e of r.log_entries||[]) {
+        await c.run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
           [useId, e.time||'', e.text||'', e.ua_photo||null]);
-      });
+      }
     }
   });
-  _do();
 }
 
 // ── Audit Log ─────────────────────────────────────────────────────────
@@ -1136,8 +1165,8 @@ async function getBroadcast(id) {
 async function getBroadcasts(limitHours) {
   const hours = limitHours || 24;
   return await _q(
-    `SELECT * FROM broadcast_messages WHERE created_at >= datetime('now', ? || ' hours') ORDER BY created_at DESC`,
-    ['-' + hours]
+    `SELECT * FROM broadcast_messages WHERE created_at >= ? ORDER BY created_at DESC`,
+    [localShift(-hours)]
   );
 }
 
@@ -1165,23 +1194,55 @@ function _applyClinicalLiteMigration(db = _db) {
   } catch (e) { console.error('  clinical-lite migration failed:', e.message); }
 }
 
+/**
+ * Normalise the clinical helpers' `db` argument to the run/query/query1 shape.
+ *
+ * These helpers all take an explicit connection as their first parameter, and
+ * three different things get passed:
+ *
+ *   • nothing / _db  — the configured driver. Under sqlite _db is a
+ *     better-sqlite3 Database; under pg it is a Pool, which has no .prepare().
+ *     Either way `connection` is the right object to talk to.
+ *   • a raw better-sqlite3 Database — tests/clinical.unit.test.js builds an
+ *     in-memory one and passes it in so the unit tests never touch the real
+ *     database. That seam is worth keeping, so it is adapted rather than
+ *     removed.
+ *   • something already driver-shaped — passed through.
+ *
+ * The sqlite adapter is synchronous, which is fine: awaiting a non-promise is a
+ * no-op, so one set of call sites serves both.
+ */
+function _conn(db) {
+  if (!db || db === _db) return connection;
+  if (typeof db.prepare === 'function') {
+    return {
+      run:    (sql, p = []) => db.prepare(sql).run(...p),
+      query:  (sql, p = []) => db.prepare(sql).all(...p),
+      query1: (sql, p = []) => db.prepare(sql).get(...p) || null,
+    };
+  }
+  return db;
+}
+
 // Write an audit row using the EXISTING audit_log schema so clinical activity
 // shows up in the same audit viewer as everything else. Never throws.
-function _clinicalAudit(db, userId, action, table, recordId, detail) {
+async function _clinicalAudit(db, userId, action, table, recordId, detail) {
+  const c = _conn(db);
   try {
     let name = '';
     try {
-      const u = db.prepare('SELECT display_name, username FROM users WHERE id=?').get(userId);
+      const u = await c.query1('SELECT display_name, username FROM users WHERE id=?', [userId]);
       if (u) name = u.display_name || u.username || '';
     } catch (e) { /* users table may be absent in isolated test dbs */ }
-    db.prepare(
+    await c.run(
       `INSERT INTO audit_log (ts,actor_id,actor_name,ip,action,target_type,target_id,target_label,detail)
-       VALUES (?,?,?,?,?,?,?,?,?)`
-    ).run(
-      nowLocal(), userId || null, String(name).slice(0, 100), '',
-      String(action), String(table).slice(0, 50),
-      recordId != null ? String(recordId) : '', '',
-      (detail && typeof detail === 'object') ? JSON.stringify(detail).slice(0, 2000) : String(detail || '').slice(0, 2000)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [
+        nowLocal(), userId || null, String(name).slice(0, 100), '',
+        String(action), String(table).slice(0, 50),
+        recordId != null ? String(recordId) : '', '',
+        (detail && typeof detail === 'object') ? JSON.stringify(detail).slice(0, 2000) : String(detail || '').slice(0, 2000),
+      ]
     );
   } catch (e) { /* never let an audit failure crash the caller */ }
 }
@@ -1215,18 +1276,19 @@ function _makeClinical(table, opts) {
     });
     return out;
   }
-  function getById(db = _db, id) {
-    return db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id) || null;
+  async function getById(db = _db, id) {
+    return await _conn(db).query1(`SELECT * FROM ${table} WHERE id=?`, [id]) || null;
   }
-  function getAll(db = _db, clientId) {
+  async function getAll(db = _db, clientId) {
+    const c = _conn(db);
     if (clientId != null)
-      return db.prepare(`SELECT * FROM ${table} WHERE client_id=? ${order}`).all(clientId);
-    return db.prepare(`SELECT * FROM ${table} ${order}`).all();
+      return c.query(`SELECT * FROM ${table} WHERE client_id=? ${order}`, [clientId]);
+    return c.query(`SELECT * FROM ${table} ${order}`, []);
   }
-  function getByClient(db = _db, clientId) {
-    return db.prepare(`SELECT * FROM ${table} WHERE client_id=? ${order}`).all(clientId);
+  async function getByClient(db = _db, clientId) {
+    return _conn(db).query(`SELECT * FROM ${table} WHERE client_id=? ${order}`, [clientId]);
   }
-  function create(db = _db, fields = {}) {
+  async function create(db = _db, fields = {}) {
     if (onWrite) fields = onWrite(fields);
     const f    = _ser(fields);
     const cols = createCols.filter(c => f[c] !== undefined);
@@ -1234,36 +1296,36 @@ function _makeClinical(table, opts) {
     const allCols = [...cols, 'created_at', 'updated_at'];
     const vals    = cols.map(c => f[c]); vals.push(now, now);
     const ph      = allCols.map(() => '?').join(',');
-    const info = db.prepare(`INSERT INTO ${table} (${allCols.join(',')}) VALUES (${ph})`).run(...vals);
+    const info = await _conn(db).run(`INSERT INTO ${table} (${allCols.join(',')}) VALUES (${ph})`, vals);
     const id   = info.lastInsertRowid;
-    _clinicalAudit(db, fields.author_id != null ? fields.author_id : fields.facilitator_id, `${table}.create`, table, id);
+    await _clinicalAudit(db, fields.author_id != null ? fields.author_id : fields.facilitator_id, `${table}.create`, table, id);
     save();
-    return getById(db, id);
+    return await getById(db, id);
   }
-  function update(db = _db, id, fields = {}, userId) {
+  async function update(db = _db, id, fields = {}, userId) {
     if (onWrite) fields = onWrite(fields);
     const f    = _ser(fields);
     const cols = updateCols.filter(c => f[c] !== undefined);
     const sets = cols.map(c => `${c}=?`); sets.push('updated_at=?');
     const vals = cols.map(c => f[c]); vals.push(nowLocal(), id);
-    db.prepare(`UPDATE ${table} SET ${sets.join(',')} WHERE id=?`).run(...vals);
-    _clinicalAudit(db, userId, `${table}.update`, table, id);
+    await _conn(db).run(`UPDATE ${table} SET ${sets.join(',')} WHERE id=?`, vals);
+    await _clinicalAudit(db, userId, `${table}.update`, table, id);
     save();
-    return getById(db, id);
+    return await getById(db, id);
   }
-  function sign(db = _db, id, userId) {
+  async function sign(db = _db, id, userId) {
     const now = nowLocal();
     if (signFinal)
-      db.prepare(`UPDATE ${table} SET status='final', signed_at=?, signed_by=?, updated_at=? WHERE id=?`).run(now, userId || null, now, id);
+      await _conn(db).run(`UPDATE ${table} SET status='final', signed_at=?, signed_by=?, updated_at=? WHERE id=?`, [now, userId || null, now, id]);
     else
-      db.prepare(`UPDATE ${table} SET signed_at=?, signed_by=?, updated_at=? WHERE id=?`).run(now, userId || null, now, id);
-    _clinicalAudit(db, userId, `${table}.sign`, table, id);
+      await _conn(db).run(`UPDATE ${table} SET signed_at=?, signed_by=?, updated_at=? WHERE id=?`, [now, userId || null, now, id]);
+    await _clinicalAudit(db, userId, `${table}.sign`, table, id);
     save();
-    return getById(db, id);
+    return await getById(db, id);
   }
-  function del(db = _db, id, userId) {
-    db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
-    _clinicalAudit(db, userId, `${table}.delete`, table, id);
+  async function del(db = _db, id, userId) {
+    await _conn(db).run(`DELETE FROM ${table} WHERE id=?`, [id]);
+    await _clinicalAudit(db, userId, `${table}.delete`, table, id);
     save();
     return true;
   }
@@ -1278,58 +1340,67 @@ const _gnBase = _makeClinical('group_notes', {
   dateCol:    'session_date',
 });
 
-function _gnGetAttendees(db = _db, groupNoteId) {
-  return db.prepare(
+async function _gnGetAttendees(db = _db, groupNoteId) {
+  return _conn(db).query(
     `SELECT a.group_note_id, a.client_id, a.participation, a.individual_note,
             c.name AS client_name, c.room AS room
        FROM group_note_attendees a
        LEFT JOIN clients c ON c.id = a.client_id
       WHERE a.group_note_id = ?
-      ORDER BY CAST(c.room AS INTEGER), c.room, c.name`
-  ).all(groupNoteId);
-}
-function _gnInsertAttendees(db, groupNoteId, attendees) {
-  const stmt = db.prepare(
-    `INSERT INTO group_note_attendees (group_note_id,client_id,participation,individual_note) VALUES (?,?,?,?)`
+      ORDER BY ${connection.roomOrder('c.room')}, c.room, c.name`,
+    [groupNoteId]
   );
-  (attendees || []).forEach(a => {
-    if (!a || a.client_id == null) return;
-    const part = ['present', 'absent', 'excused'].includes(a.participation) ? a.participation : 'present';
-    try { stmt.run(groupNoteId, a.client_id, part, a.individual_note || ''); } catch (e) { /* skip dup/bad */ }
-  });
 }
-function _gnEmbed(db, row) { if (row) row.attendees = _gnGetAttendees(db, row.id); return row; }
+async function _gnInsertAttendees(db, groupNoteId, attendees) {
+  // Was a single prepared statement reused across the loop — a better-sqlite3
+  // optimisation with no portable equivalent. The driver re-parses per call;
+  // attendee lists are one group session, so the cost is not material.
+  const c = _conn(db);
+  for (const a of (attendees || [])) {
+    if (!a || a.client_id == null) continue;
+    const part = ['present', 'absent', 'excused'].includes(a.participation) ? a.participation : 'present';
+    try {
+      await c.run(
+        `INSERT INTO group_note_attendees (group_note_id,client_id,participation,individual_note) VALUES (?,?,?,?)`,
+        [groupNoteId, a.client_id, part, a.individual_note || '']
+      );
+    } catch (e) { /* skip dup/bad */ }
+  }
+}
+async function _gnEmbed(db, row) { if (row) row.attendees = await _gnGetAttendees(db, row.id); return row; }
 
 const _groupNotes = {
-  getAll(db = _db, clientId) {
+  async getAll(db = _db, clientId) {
     const rows = (clientId != null)
-      ? db.prepare(`SELECT gn.* FROM group_notes gn
+      ? await _conn(db).query(`SELECT gn.* FROM group_notes gn
                     JOIN group_note_attendees a ON a.group_note_id = gn.id
-                    WHERE a.client_id = ? ORDER BY gn.session_date DESC, gn.id DESC`).all(clientId)
-      : _gnBase.getAll(db);
-    return rows.map(r => _gnEmbed(db, r));
+                    WHERE a.client_id = ? ORDER BY gn.session_date DESC, gn.id DESC`, [clientId])
+      : await _gnBase.getAll(db);
+    // _gnEmbed queries the attendee list per row, so a bare .map() here would
+    // hand back an array of Promises.
+    return Promise.all(rows.map(async r => await _gnEmbed(db, r)));
   },
-  getByClient(db = _db, clientId) { return _groupNotes.getAll(db, clientId); },
-  getById(db = _db, id) { return _gnEmbed(db, _gnBase.getById(db, id)); },
+  async getByClient(db = _db, clientId) { return _groupNotes.getAll(db, clientId); },
+  async getById(db = _db, id) { return await _gnEmbed(db, await _gnBase.getById(db, id)); },
   getAttendees: _gnGetAttendees,
-  create(db = _db, fields = {}) {
-    const row = _gnBase.create(db, fields);
-    _gnInsertAttendees(db, row.id, fields.attendees);
+  async create(db = _db, fields = {}) {
+    const row = await _gnBase.create(db, fields);
+    await _gnInsertAttendees(db, row.id, fields.attendees);
     save();
-    return _gnEmbed(db, _gnBase.getById(db, row.id));
+    return await _gnEmbed(db, await _gnBase.getById(db, row.id));
   },
-  update(db = _db, id, fields = {}, userId) {
-    _gnBase.update(db, id, fields, userId);
+  async update(db = _db, id, fields = {}, userId) {
+    await _gnBase.update(db, id, fields, userId);
     if (fields.attendees !== undefined) {
-      db.prepare(`DELETE FROM group_note_attendees WHERE group_note_id=?`).run(id);
-      _gnInsertAttendees(db, id, fields.attendees);
+      await _conn(db).run(`DELETE FROM group_note_attendees WHERE group_note_id=?`, [id]);
+      await _gnInsertAttendees(db, id, fields.attendees);
       save();
     }
-    return _gnEmbed(db, _gnBase.getById(db, id));
+    return await _gnEmbed(db, await _gnBase.getById(db, id));
   },
-  sign(db = _db, id, userId) { _gnBase.sign(db, id, userId); return _gnEmbed(db, _gnBase.getById(db, id)); },
-  delete(db = _db, id, userId) {
-    db.prepare(`DELETE FROM group_note_attendees WHERE group_note_id=?`).run(id); // explicit cascade (FK-off test dbs)
+  async sign(db = _db, id, userId) { await _gnBase.sign(db, id, userId); return await _gnEmbed(db, await _gnBase.getById(db, id)); },
+  async delete(db = _db, id, userId) {
+    await _conn(db).run(`DELETE FROM group_note_attendees WHERE group_note_id=?`, [id]); // explicit cascade (FK-off test dbs)
     return _gnBase.delete(db, id, userId);
   },
 };
@@ -1411,13 +1482,13 @@ async function _createSyncLayer() {
 // Enqueue every existing row of every synced table — the new sync baseline.
 // Run on enrollment so HQ receives a full snapshot, then live triggers take over.
 async function enqueueSyncBackfill() {
-  _db.transaction(async () => {
-    await _run('DELETE FROM sync_outbox');
+  await connection.transaction(async (c) => {
+    await c.run('DELETE FROM sync_outbox');
     for (const t of SYNC_TABLES) {
-      if (!await _q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [t])) continue;
-      await _run(`INSERT INTO sync_outbox(table_name,row_id,op) SELECT '${t}', id, 'upsert' FROM ${t}`);
+      if (!await tableExists(t, c)) continue;
+      await c.run(`INSERT INTO sync_outbox(table_name,row_id,op) SELECT '${t}', id, 'upsert' FROM ${t}`);
     }
-  })();
+  });
   return await outboxPending();
 }
 
@@ -1441,13 +1512,12 @@ async function getSyncBatch(limit = 50) {
   }));
 }
 
-function markSynced(ids) {
+async function markSynced(ids) {
   if (!ids || !ids.length) return;
   const ts = nowLocal();
-  _db.transaction(() => {
-    const stmt = _db.prepare('UPDATE sync_outbox SET synced_at=? WHERE id=?');
-    for (const id of ids) stmt.run(ts, id);
-  })();
+  await connection.transaction(async (c) => {
+    for (const id of ids) await c.run('UPDATE sync_outbox SET synced_at=? WHERE id=?', [ts, id]);
+  });
 }
 
 async function pruneOutbox() { await _run('DELETE FROM sync_outbox WHERE synced_at IS NOT NULL'); }
@@ -1462,7 +1532,7 @@ async function applyManagedUsers(list) {
   list = Array.isArray(list) ? list : [];
   let created = 0, updated = 0, removed = 0, skipped = 0;
   const incomingUids = new Set();
-  _db.transaction(async () => {
+  await connection.transaction(async (c) => {
     for (const m of list) {
       const uid = String(m.uid || '');
       const uname = String(m.username || '').toLowerCase().trim();
@@ -1472,35 +1542,35 @@ async function applyManagedUsers(list) {
         ? m.permissions.filter(p => PERMISSIONS.includes(p))
         : (ROLE_PRESETS[m.role] || ROLE_PRESETS.pa).slice();
       const permsJson = JSON.stringify(perms);
-      const row = await _q1('SELECT * FROM users WHERE central_uid=?', [uid])
-               || await _q1('SELECT * FROM users WHERE LOWER(username)=?', [uname]);
+      const row = await c.query1('SELECT * FROM users WHERE central_uid=?', [uid])
+               || await c.query1('SELECT * FROM users WHERE LOWER(username)=?', [uname]);
       if (!row) {
-        await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,central_managed,central_uid)
+        await c.run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,central_managed,central_uid)
               VALUES (?,?,?,?,?,?,?,1,?)`,
           [uname, String(m.display_name || ''), String(m.role || 'pa'), m.hash || '', m.salt || '', m.must_change_pw ? 1 : 0, permsJson, uid]);
-        const newU = await _q1('SELECT id FROM users WHERE central_uid=?', [uid]);
+        const newU = await c.query1('SELECT id FROM users WHERE central_uid=?', [uid]);
         if (newU) {
-          const g = await _q1('SELECT id FROM groups WHERE key=?', [String(m.role || 'pa')]);
-          if (g) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [newU.id, g.id]);
+          const g = await c.query1('SELECT id FROM groups WHERE key=?', [String(m.role || 'pa')]);
+          if (g) await c.run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [newU.id, g.id]);
         }
         created++;
       } else if (row.central_managed) {
         const newRole = String(m.role || 'pa');
         // HQ master for identity/permissions; do NOT touch the password.
-        await _run('UPDATE users SET display_name=?, role=?, permissions=?, central_uid=? WHERE id=?',
+        await c.run('UPDATE users SET display_name=?, role=?, permissions=?, central_uid=? WHERE id=?',
           [String(m.display_name || ''), newRole, permsJson, uid, row.id]);
         if (row.role !== newRole) {
           // Role changed — swap group assignment
-          const oldG = await _q1('SELECT id FROM groups WHERE key=?', [row.role]);
-          const newG = await _q1('SELECT id FROM groups WHERE key=?', [newRole]);
-          if (oldG) await _run('DELETE FROM user_groups WHERE user_id=? AND group_id=?', [row.id, oldG.id]);
-          if (newG) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, newG.id]);
+          const oldG = await c.query1('SELECT id FROM groups WHERE key=?', [row.role]);
+          const newG = await c.query1('SELECT id FROM groups WHERE key=?', [newRole]);
+          if (oldG) await c.run('DELETE FROM user_groups WHERE user_id=? AND group_id=?', [row.id, oldG.id]);
+          if (newG) await c.run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, newG.id]);
         } else {
           // Same role — ensure group is assigned (backfills users created before this fix)
-          const noGroup = !await _q1('SELECT 1 FROM user_groups WHERE user_id=?', [row.id]);
+          const noGroup = !await c.query1('SELECT 1 FROM user_groups WHERE user_id=?', [row.id]);
           if (noGroup) {
-            const g = await _q1('SELECT id FROM groups WHERE key=?', [newRole]);
-            if (g) await _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, g.id]);
+            const g = await c.query1('SELECT id FROM groups WHERE key=?', [newRole]);
+            if (g) await c.run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, g.id]);
           }
         }
         updated++;
@@ -1509,15 +1579,15 @@ async function applyManagedUsers(list) {
       }
     }
     // Remove managed users HQ no longer assigns (guard: never drop below 1 admin)
-    (await _q('SELECT id, central_uid FROM users WHERE central_managed=1')).forEach(async u => {
-      if (incomingUids.has(u.central_uid)) return;
-      const otherAdmins = (await _q('SELECT id,permissions FROM users WHERE id<>?', [u.id]))
+    for (const u of await c.query('SELECT id, central_uid FROM users WHERE central_managed=1')) {
+      if (incomingUids.has(u.central_uid)) continue;
+      const otherAdmins = (await c.query('SELECT id,permissions FROM users WHERE id<>?', [u.id]))
         .filter(x => { try { return JSON.parse(x.permissions || '[]').includes('admin.users'); } catch (e) { return false; } }).length;
-      if (otherAdmins < 1) { skipped++; return; }
-      await _run('DELETE FROM users WHERE id=?', [u.id]);
+      if (otherAdmins < 1) { skipped++; continue; }
+      await c.run('DELETE FROM users WHERE id=?', [u.id]);
       removed++;
-    });
-  })();
+    }
+  });
   const total = await _q1('SELECT COUNT(*) AS c FROM users WHERE central_managed=1');
   await setSetting('central_users_count', String(total ? total.c : 0));
   return { created, updated, removed, skipped, total: total ? total.c : 0 };

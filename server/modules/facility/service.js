@@ -165,16 +165,16 @@ async function deleteRoom(id) {
   return { room: c.room, name: c.name };
 }
 
-function reorder(order) {
+async function reorder(order) {
   if (!Array.isArray(order)) throw httpError(400, 'order must be array');
-  order.forEach(async (id, i) => await repo.setSortOrder(id, i));
+  for (const [i, id] of (order).entries()) { await repo.setSortOrder(id, i); }
   return { count: order.length };
 }
 
 async function reset(rooms) {
   if (!Array.isArray(rooms)) throw httpError(400, 'rooms must be an array');
   await repo.deleteAllClients();
-  rooms.forEach(async (r, i) => await repo.insertResetRoom(r, i));
+  for (const [i, r] of (rooms).entries()) { await repo.insertResetRoom(r, i); }
   return { count: rooms.length };
 }
 

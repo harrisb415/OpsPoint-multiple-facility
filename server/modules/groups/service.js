@@ -26,7 +26,7 @@ async function setMaster(groups) {
 // List sessions (date or range) with attendance embedded.
 async function listSessions({ date, from, to } = {}) {
   const sessions = await repo.getSessions({ date, from, to });
-  sessions.forEach(async s => { s.attendance = await repo.getAttendance(s.id); });
+  for (const s of sessions) { s.attendance = await repo.getAttendance(s.id); }
   return sessions;
 }
 

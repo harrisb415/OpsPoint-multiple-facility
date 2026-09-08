@@ -67,7 +67,7 @@ async function saveFacilitySettings(b) {
 
 // ── rooms (on clients table) ────────────────────────────────────────
 async function roomsActive() {
-  return await c.query(`SELECT * FROM clients WHERE is_active=1 ORDER BY CAST(room AS INTEGER), room`);
+  return await c.query(`SELECT * FROM clients WHERE is_active=1 ORDER BY ${c.roomOrder()}, room`);
 }
 async function vacantRooms() {
   return await c.query(
@@ -76,7 +76,7 @@ async function vacantRooms() {
      AND room NOT IN (
        SELECT room FROM clients WHERE name!='VACANT' AND is_active=1 AND is_special=0
      )
-     ORDER BY CAST(room AS INTEGER), room`);
+     ORDER BY ${c.roomOrder()}, room`);
 }
 async function getClientId(id) { return await c.query1('SELECT id FROM clients WHERE id=?', [id]); }
 async function getClientRoom(id) { return await c.query1('SELECT room FROM clients WHERE id=?', [id]); }

@@ -38,7 +38,7 @@ async function updateClientFull(f) {
 async function insertClientFull(f) {
   await c.run(`INSERT INTO clients (id,room,name,case_manager,phone,photo,intake_date,
     discharge_date,is_special,is_active,special_label,sort_order)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ${c.overriding()}VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [f.id, f.room, f.name, f.case_manager, f.phone, f.photo, f.intake_date,
      f.discharge_date, f.is_special, f.is_active, f.special_label, f.sort_order]);
 }

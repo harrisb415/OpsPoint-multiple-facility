@@ -52,12 +52,28 @@ function query(sql, params = [])  { return _db.prepare(sql).all(...params); }
 function query1(sql, params = []) { return _db.prepare(sql).get(...params) || null; }
 function exec(sql)                { return _db.exec(sql); }
 
-// better-sqlite3 transactions are synchronous and cannot contain awaits. The
-// callback receives the same {run, query, query1} shape the Postgres driver
-// hands out, so a repository written against one works against the other.
+/**
+ * The callback receives the same {run, query, query1, exec} shape the Postgres
+ * driver hands out, so a repository written against one works against the other.
+ *
+ * This deliberately does NOT use better-sqlite3's own db.transaction(). That
+ * helper rejects an async callback outright — "Transaction function cannot
+ * return a promise" — and every caller is async now that the database API is.
+ * Driving BEGIN/COMMIT/ROLLBACK by hand keeps one callback shape across both
+ * drivers instead of forcing callers to know which one they are talking to.
+ *
+ * The primitives here are still synchronous, so a callback that awaits them
+ * yields to the microtask queue but performs no real I/O mid-transaction.
+ */
 function transaction(fn) {
-  const tx = _db.transaction(() => fn({ run, query, query1, exec }));
-  return Promise.resolve(tx());
+  _db.exec('BEGIN');
+  return Promise.resolve()
+    .then(() => fn({ run, query, query1, exec }))
+    .then((out) => { _db.exec('COMMIT'); return out; })
+    .catch((e) => {
+      try { _db.exec('ROLLBACK'); } catch (_) { /* already unwound */ }
+      throw e;
+    });
 }
 
 async function close() { if (_db) { _db.close(); _db = null; } }

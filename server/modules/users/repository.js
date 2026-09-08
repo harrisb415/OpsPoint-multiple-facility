@@ -62,7 +62,7 @@ async function updateGroup(id, l, p) { return await db.updateGroup(id, l, p); }
 async function deleteGroup(id) { return await db.deleteGroup(id); }
 
 // ── permission catalog predicates ───────────────────────────────────
-function isValidPermission(p) { return db.PERMISSIONS.includes(p); }
+async function isValidPermission(p) { return await db.PERMISSIONS.includes(p); }
 function rolePreset(role) { return db.ROLE_PRESETS[role] || []; }
 async function profileKeys() { return (await db.getPermissionProfiles()).map(p => p.key); }
 

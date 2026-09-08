@@ -72,7 +72,7 @@ async function getRecentDrawn(days) {
 async function createDraw(residents, { actor, actorId } = {}) {
   if (!Array.isArray(residents) || residents.length === 0) throw httpError(400, 'residents required');
   const draw = await repo.createDraw(actorId, actor, residents);
-  residents.forEach(async cl => {
+  for (const cl of residents) {
     await repo.insertRequest({
       client_id: cl.id || 0,
       client_name: cl.name || '',
@@ -82,7 +82,7 @@ async function createDraw(residents, { actor, actorId } = {}) {
       interview_name: '',
       requested_at: nowLocal(),
     });
-  });
+  }
   return { draw, count: residents.length };
 }
 

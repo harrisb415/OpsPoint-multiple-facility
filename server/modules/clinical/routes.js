@@ -251,13 +251,13 @@ function register(app) {
 
     app.get(base, requireAuth, requirePermission(perm), async (req, res) => {
       const clientId = req.query.clientId ? parseInt(req.query.clientId) : null;
-      const rows = entity.getAll(undefined, clientId);
+      const rows = await entity.getAll(undefined, clientId);
       rows.forEach(r => _clinicalParse(r, jsonFields));
       await auditRead(req, ttype, null, `Clinical ${seg} list (${rows.length})`, clientId ? { clientId } : undefined);
       res.json(rows);
     });
     app.get(`${base}/:id`, requireAuth, requirePermission(perm), async (req, res) => {
-      const row = entity.getById(undefined, parseInt(req.params.id));
+      const row = await entity.getById(undefined, parseInt(req.params.id));
       if (!row) return res.status(404).json({ error: 'Not found' });
       _clinicalParse(row, jsonFields);
       await auditRead(req, ttype, row.id, `Clinical ${seg} #${row.id}`);
@@ -267,7 +267,7 @@ function register(app) {
       const b = req.body || {};
       for (const f of required) { if (b[f] == null || b[f] === '') return res.status(400).json({ error: `${f} required` }); }
       const fields = { ...b, [authorField]: req.session.userId };
-      const rec = entity.create(undefined, fields);
+      const rec = await entity.create(undefined, fields);
       _clinicalParse(rec, jsonFields);
       await audit(req, `${wsType}.create`, ttype, rec.id, '');
       broadcast({ type: `${wsType}_created`, data: rec });
@@ -275,10 +275,10 @@ function register(app) {
     });
     app.put(`${base}/:id`, requireAuth, csrfCheck, requirePermission(perm), async (req, res) => {
       const id = parseInt(req.params.id);
-      const existing = entity.getById(undefined, id);
+      const existing = await entity.getById(undefined, id);
       if (!existing) return res.status(404).json({ error: 'Not found' });
       if (locked && existing.status === 'final') return res.status(400).json({ error: 'Record is finalised and can no longer be edited.' });
-      const rec = entity.update(undefined, id, req.body || {}, req.session.userId);
+      const rec = await entity.update(undefined, id, req.body || {}, req.session.userId);
       _clinicalParse(rec, jsonFields);
       await audit(req, `${wsType}.update`, ttype, id, '');
       broadcast({ type: `${wsType}_updated`, data: rec });
@@ -286,9 +286,9 @@ function register(app) {
     });
     app.patch(`${base}/:id/sign`, requireAuth, csrfCheck, requirePermission(perm), async (req, res) => {
       const id = parseInt(req.params.id);
-      const existing = entity.getById(undefined, id);
+      const existing = await entity.getById(undefined, id);
       if (!existing) return res.status(404).json({ error: 'Not found' });
-      const rec = entity.sign(undefined, id, req.session.userId);
+      const rec = await entity.sign(undefined, id, req.session.userId);
       _clinicalParse(rec, jsonFields);
       await audit(req, `${wsType}.sign`, ttype, id, '');
       broadcast({ type: `${wsType}_signed`, data: rec });
@@ -296,10 +296,10 @@ function register(app) {
     });
     app.delete(`${base}/:id`, requireAuth, csrfCheck, requirePermission(perm), async (req, res) => {
       const id = parseInt(req.params.id);
-      const existing = entity.getById(undefined, id);
+      const existing = await entity.getById(undefined, id);
       if (!existing) return res.status(404).json({ error: 'Not found' });
       if (locked && existing.status === 'final') return res.status(400).json({ error: 'Record is finalised and cannot be deleted.' });
-      entity.delete(undefined, id, req.session.userId);
+      await entity.delete(undefined, id, req.session.userId);
       await audit(req, `${wsType}.delete`, ttype, id, '');
       broadcast({ type: `${wsType}_deleted`, id });
       res.json({ ok: true });
@@ -320,12 +320,12 @@ function register(app) {
 
   app.get('/api/clinical/group-notes', requireAuth, requireAnyPermission('clinical.groups', 'groups.log', 'groups.view'), async (req, res) => {
     const clientId = req.query.clientId ? parseInt(req.query.clientId) : null;
-    const rows = GN.getAll(undefined, clientId);
+    const rows = await GN.getAll(undefined, clientId);
     await auditRead(req, 'group_notes', null, `Group notes list (${rows.length})`, clientId ? { clientId } : undefined);
     res.json(rows);
   });
   app.get('/api/clinical/group-notes/:id', requireAuth, requireAnyPermission('clinical.groups', 'groups.log', 'groups.view'), async (req, res) => {
-    const row = GN.getById(undefined, parseInt(req.params.id));
+    const row = await GN.getById(undefined, parseInt(req.params.id));
     if (!row) return res.status(404).json({ error: 'Not found' });
     await auditRead(req, 'group_notes', row.id, `Group note #${row.id}`);
     res.json(row);
@@ -335,39 +335,39 @@ function register(app) {
     if (!b.group_name) return res.status(400).json({ error: 'group_name required' });
     const fields = { ...b, facilitator_id: req.session.userId };
     if (!await hasClinicalGroups(req)) { delete fields.content; delete fields.status; } // attendance-only
-    const rec = GN.create(undefined, fields);
+    const rec = await GN.create(undefined, fields);
     await audit(req, 'group_note.create', 'group_notes', rec.id, fields.group_name || '');
     broadcast({ type: 'group_note_created', data: rec });
     res.json({ ok: true, record: rec });
   });
   app.put('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), async (req, res) => {
     const id = parseInt(req.params.id);
-    const existing = GN.getById(undefined, id);
+    const existing = await GN.getById(undefined, id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const clinical = await hasClinicalGroups(req);
     if (!clinical && existing.status === 'final') return res.status(400).json({ error: 'Finalised — only clinical staff can edit.' });
     const b = { ...req.body };
     if (!clinical) { delete b.content; delete b.status; } // attendance-only edit can't touch the note
-    const rec = GN.update(undefined, id, b, req.session.userId);
+    const rec = await GN.update(undefined, id, b, req.session.userId);
     await audit(req, 'group_note.update', 'group_notes', id, '');
     broadcast({ type: 'group_note_updated', data: rec });
     res.json({ ok: true, record: rec });
   });
   app.patch('/api/clinical/group-notes/:id/sign', requireAuth, csrfCheck, requirePermission('clinical.groups'), async (req, res) => {
     const id = parseInt(req.params.id);
-    const existing = GN.getById(undefined, id);
+    const existing = await GN.getById(undefined, id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const rec = GN.sign(undefined, id, req.session.userId);
+    const rec = await GN.sign(undefined, id, req.session.userId);
     await audit(req, 'group_note.sign', 'group_notes', id, '');
     broadcast({ type: 'group_note_signed', data: rec });
     res.json({ ok: true, record: rec });
   });
   app.delete('/api/clinical/group-notes/:id', requireAuth, csrfCheck, requireAnyPermission('clinical.groups', 'groups.log'), async (req, res) => {
     const id = parseInt(req.params.id);
-    const existing = GN.getById(undefined, id);
+    const existing = await GN.getById(undefined, id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (!await hasClinicalGroups(req) && existing.status === 'final') return res.status(400).json({ error: 'Finalised — only clinical staff can delete.' });
-    GN.delete(undefined, id, req.session.userId);
+    await GN.delete(undefined, id, req.session.userId);
     await audit(req, 'group_note.delete', 'group_notes', id, '');
     broadcast({ type: 'group_note_deleted', id });
     res.json({ ok: true });

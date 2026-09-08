@@ -398,11 +398,10 @@ app.post('/api/central/disconnect', requireAuth, csrfCheck, requirePermission('a
   // Restore the original (GitHub) update source before clearing central settings.
   const origin = await db.getSetting('update_manifest_url_origin', '');
   if (origin) { await db.setSetting('update_manifest_url', origin); await db.setSetting('update_manifest_url_origin', ''); }
-  ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
+  for (const k of ['central_url', 'central_facility_id', 'central_api_key', 'central_insecure_tls',
    'central_last_checkin', 'central_last_status', 'central_last_sync', 'central_sync_error',
    'central_manages_users', 'central_users_last_pull', 'central_users_count', 'central_target_version',
-   'central_auto_update', 'central_update_window']
-    .forEach(async k => await db.setSetting(k, ''));
+   'central_auto_update', 'central_update_window']) { await db.setSetting(k, ''); }
   // Previously-provisioned managed users are LEFT in place (real accounts with
   // their own passwords) so disconnecting never locks staff out.
   await audit(req, 'central.disconnect', 'system', null, 'Disconnected from HQ', {});

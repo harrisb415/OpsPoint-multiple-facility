@@ -18,7 +18,7 @@ function getMasterChores() {
 }
 
 function setMasterChores(arr) {
-  c.run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', ['master_chores', JSON.stringify(arr)]);
+  c.run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', ['master_chores', JSON.stringify(arr)]);
 }
 
 function clientExists(id) {
@@ -45,7 +45,7 @@ function getChoreLogRange(from, to) {
 }
 
 function upsertChoreLog(client_id, log_date, initials) {
-  c.run('INSERT OR REPLACE INTO chore_log (client_id,log_date,initials) VALUES (?,?,?)', [client_id, log_date, initials]);
+  c.run('INSERT INTO chore_log (client_id,log_date,initials) VALUES (?,?,?) ON CONFLICT (client_id,log_date) DO UPDATE SET initials=excluded.initials', [client_id, log_date, initials]);
 }
 
 module.exports = {

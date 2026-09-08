@@ -22,7 +22,7 @@ function getMasterGroups() {
 }
 
 function setMasterGroups(arr) {
-  c.run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', ['master_groups', JSON.stringify(arr)]);
+  c.run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', ['master_groups', JSON.stringify(arr)]);
 }
 
 function getSessionBrief(id) {

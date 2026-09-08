@@ -58,7 +58,7 @@ function getCategories() {
 }
 
 function setCategories(arr) {
-  c.run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', ['staff_categories', JSON.stringify(arr)]);
+  c.run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', ['staff_categories', JSON.stringify(arr)]);
 }
 
 module.exports = { list, getById, exists, maxSortOrder, insert, update, remove, getCategories, setCategories };

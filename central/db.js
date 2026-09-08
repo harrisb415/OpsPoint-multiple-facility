@@ -183,7 +183,7 @@ function getSetting(key, def = null) {
 }
 function setSetting(key, val) {
   const v = typeof val === 'string' ? val : JSON.stringify(val);
-  _run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', [key, v]);
+  _run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', [key, v]);
 }
 
 // ── Crypto ───────────────────────────────────────────────────────────────
@@ -323,9 +323,18 @@ function getRelease(channel, version) {
   return _pubRelease(_q1('SELECT * FROM releases WHERE channel=? AND version=?', [channel, version]));
 }
 function recordRelease(rec) {
-  _run(`INSERT OR REPLACE INTO releases
+  // Upsert on the (channel,version) primary key. Re-importing a release
+  // overwrites its metadata rather than erroring, which is what the old
+  // INSERT OR REPLACE did — but without the delete-and-reinsert underneath.
+  _run(`INSERT INTO releases
         (channel,version,filename,size,sha256,signature,sig_alg,min_node,min_from,changelog,released,notes,status,created_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT (channel,version) DO UPDATE SET
+          filename=excluded.filename, size=excluded.size, sha256=excluded.sha256,
+          signature=excluded.signature, sig_alg=excluded.sig_alg,
+          min_node=excluded.min_node, min_from=excluded.min_from,
+          changelog=excluded.changelog, released=excluded.released,
+          notes=excluded.notes, status=excluded.status, created_at=excluded.created_at`,
     [rec.channel, rec.version, rec.filename, rec.size, rec.sha256, rec.signature || null, rec.sig_alg || 'ed25519',
      rec.min_node || null, rec.min_from || null, JSON.stringify(rec.changelog || []), rec.released || null,
      rec.notes || '', rec.status || 'published', nowLocal()]);
@@ -446,7 +455,7 @@ function createFacility(name) {
   const prefix = apiKey.slice(0, 8);
   _run(`INSERT INTO facilities (id,name,api_key_hash,api_key_prefix,created_at)
         VALUES (?,?,?,?,?)`, [id, String(name).trim(), hash, prefix, nowLocal()]);
-  _run('INSERT OR IGNORE INTO sync_state (facility_id,applied_through) VALUES (?,0)', [id]);
+  _run('INSERT INTO sync_state (facility_id,applied_through) VALUES (?,0) ON CONFLICT (facility_id) DO NOTHING', [id]);
   return { id, name: String(name).trim(), apiKey };
 }
 
@@ -494,7 +503,7 @@ function ingestRows(facilityId, rows) {
   let stored = 0, deleted = 0, maxId = getAppliedThrough(facilityId);
   const ts = nowLocal();
   _db.transaction(() => {
-    const up  = _db.prepare('INSERT OR REPLACE INTO facility_data (facility_id,table_name,source_id,data,updated_at) VALUES (?,?,?,?,?)');
+    const up  = _db.prepare('INSERT INTO facility_data (facility_id,table_name,source_id,data,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (facility_id,table_name,source_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at');
     const del = _db.prepare('DELETE FROM facility_data WHERE facility_id=? AND table_name=? AND source_id=?');
     for (const r of rows || []) {
       if (!r || !r.table_name || r.row_id == null) continue;
@@ -632,7 +641,7 @@ function setManagedUserFacilities(id, facilityIds) {
     _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
     for (const fid of facilityIds || []) {
       if (_q1('SELECT id FROM facilities WHERE id=?', [fid]))
-        _run('INSERT OR IGNORE INTO managed_user_facilities (user_id,facility_id) VALUES (?,?)', [id, fid]);
+        _run('INSERT INTO managed_user_facilities (user_id,facility_id) VALUES (?,?) ON CONFLICT (user_id,facility_id) DO NOTHING', [id, fid]);
     }
   })();
   return getManagedUser(id);

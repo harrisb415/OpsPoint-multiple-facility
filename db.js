@@ -374,7 +374,7 @@ function _migrateUserGroups() {
   `);
   usersNoGroups.forEach(u => {
     const g = _q1('SELECT id FROM groups WHERE key=?', [u.role]);
-    if (g) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [u.id, g.id]);
+    if (g) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [u.id, g.id]);
   });
 }
 
@@ -446,7 +446,7 @@ function setUserGroups(userId, groupIds) {
   _db.transaction(() => {
     _run('DELETE FROM user_groups WHERE user_id=?', [userId]);
     for (const gid of groupIds) {
-      _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [userId, gid]);
+      _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [userId, gid]);
     }
     recomputeUserPermissions(userId);
   })();
@@ -495,7 +495,7 @@ function getSetting(key, def=null) {
 }
 function setSetting(key, val) {
   const v = typeof val === 'string' ? val : JSON.stringify(val);
-  _run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', [key, v]);
+  _run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', [key, v]);
 }
 function setSettingAndSave(key, val) { setSetting(key, val); }
 
@@ -1470,7 +1470,7 @@ function applyManagedUsers(list) {
         const newU = _q1('SELECT id FROM users WHERE central_uid=?', [uid]);
         if (newU) {
           const g = _q1('SELECT id FROM groups WHERE key=?', [String(m.role || 'pa')]);
-          if (g) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [newU.id, g.id]);
+          if (g) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [newU.id, g.id]);
         }
         created++;
       } else if (row.central_managed) {
@@ -1483,13 +1483,13 @@ function applyManagedUsers(list) {
           const oldG = _q1('SELECT id FROM groups WHERE key=?', [row.role]);
           const newG = _q1('SELECT id FROM groups WHERE key=?', [newRole]);
           if (oldG) _run('DELETE FROM user_groups WHERE user_id=? AND group_id=?', [row.id, oldG.id]);
-          if (newG) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [row.id, newG.id]);
+          if (newG) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, newG.id]);
         } else {
           // Same role — ensure group is assigned (backfills users created before this fix)
           const noGroup = !_q1('SELECT 1 FROM user_groups WHERE user_id=?', [row.id]);
           if (noGroup) {
             const g = _q1('SELECT id FROM groups WHERE key=?', [newRole]);
-            if (g) _run('INSERT OR IGNORE INTO user_groups (user_id,group_id) VALUES (?,?)', [row.id, g.id]);
+            if (g) _run('INSERT INTO user_groups (user_id,group_id) VALUES (?,?) ON CONFLICT (user_id,group_id) DO NOTHING', [row.id, g.id]);
           }
         }
         updated++;

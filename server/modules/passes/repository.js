@@ -56,7 +56,7 @@ function getNotice() {
 }
 
 function setNotice(str) {
-  c.run('INSERT OR REPLACE INTO settings (key,value) VALUES (?,?)', ['pass_notice', str]);
+  c.run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT (key) DO UPDATE SET value=excluded.value', ['pass_notice', str]);
 }
 
 module.exports = { list, getById, exists, getClientBrief, insert, update, remove, getNotice, setNotice };

@@ -199,3 +199,35 @@ describe('type parsers', () => {
     }
   });
 });
+
+// ── Schema/driver agreement on flag columns ─────────────────────────────────
+// The app stores 0/1 on both drivers and the JSON API returns 0/1. A boolean
+// column in the Postgres schema breaks every write to it — Postgres will not
+// coerce an integer to boolean — and would make the two drivers return
+// different types for the same field. Caught only on a real server, so this
+// guards the schema file itself.
+describe('flag columns are 0/1, not boolean', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const dir = path.join(__dirname, '..', 'migrations', 'pg');
+
+  for (const file of ['001_facility_schema.sql', '002_central_schema.sql']) {
+    test(`${file} declares no boolean columns`, () => {
+      const sql = fs.readFileSync(path.join(dir, file), 'utf8');
+      const cols = sql.split('\n')
+        .filter((l) => /^\s+[a-z_]+\s+boolean\b/.test(l))
+        .map((l) => l.trim());
+      expect(cols).toEqual([]);
+    });
+
+    test(`${file} constrains every flag column to (0,1)`, () => {
+      const sql = fs.readFileSync(path.join(dir, file), 'utf8');
+      const unconstrained = sql.split('\n')
+        .filter((l) => /^\s+(is_|must_|has_|acknowledged|revoked|present|central_managed|signature_on_file)/.test(l))
+        .filter((l) => /\bsmallint\b/.test(l))
+        .filter((l) => !/CHECK \([a-z_]+ IN \(0,1\)\)/.test(l))
+        .map((l) => l.trim());
+      expect(unconstrained).toEqual([]);
+    });
+  }
+});

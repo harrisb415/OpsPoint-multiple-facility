@@ -7,12 +7,28 @@
 --
 -- Conventions, applied without exception:
 --   * every identifier lowercase and unquoted, so folding is a no-op
---   * 0/1 INTEGER flags   -> boolean
+--   * 0/1 INTEGER flags   -> smallint CHECK (col IN (0,1))   (NOT boolean — see below)
 --   * TEXT instants       -> timestamptz   (default now())
 --   * TEXT calendar dates -> date
 --   * TEXT clock times    -> text          (display strings, not instants)
 --   * JSON-in-TEXT stays  -> text          (see NOTE ON JSONB below)
 --   * AUTOINCREMENT       -> generated always as identity (see NOTE ON IDENTITY)
+--
+-- NOTE ON FLAGS —— why smallint and not boolean
+-- These 13 columns were boolean in the first draft of this file, which is the
+-- idiomatic Postgres choice and the wrong one here. The application stores and
+-- returns 0/1 on both drivers: it writes `is_closed ? 1 : 0`, reads back with
+-- `!!c.is_active`, and the JSON API hands 0/1 to the React client. Postgres will
+-- not implicitly coerce an integer to boolean, so every such INSERT failed with
+--   column "must_change_pw" is of type boolean but expression is of type integer
+-- and the first Central bring-up could not seed its admin account.
+--
+-- Converting the app instead would have changed the API's shape AND made the two
+-- drivers return different types for the same column — 0/1 on SQLite, true/false
+-- on Postgres — which is precisely the divergence the driver seam exists to
+-- prevent. SQLite is meant to stay a live rollback, so the storage format has to
+-- match. The CHECK constraint keeps the domain honest now that the type is wider
+-- than the values it holds.
 --
 -- NOTE ON IDENTITY —— GENERATED ALWAYS, with two documented exceptions
 --   Two code paths insert an explicit id, both restore paths:
@@ -74,8 +90,8 @@ CREATE TABLE clients (
   photo              text,
   intake_date        date,
   discharge_date     date,
-  is_special         boolean     NOT NULL DEFAULT false,
-  is_active          boolean     NOT NULL DEFAULT true,
+  is_special         smallint    NOT NULL DEFAULT 0 CHECK (is_special IN (0,1)),
+  is_active          smallint    NOT NULL DEFAULT 1 CHECK (is_active IN (0,1)),
   special_label      text,
   sort_order         integer     NOT NULL DEFAULT 0,
   chore              text        NOT NULL DEFAULT '',
@@ -98,7 +114,7 @@ CREATE TABLE reports (
   report_date      date,
   shift            text,
   mod_name         text        NOT NULL DEFAULT '',
-  is_closed        boolean     NOT NULL DEFAULT false,
+  is_closed        smallint    NOT NULL DEFAULT 0 CHECK (is_closed IN (0,1)),
   statuses         text        NOT NULL DEFAULT '{}',
   comments         text        NOT NULL DEFAULT '{}',
   last_ua          text        NOT NULL DEFAULT '{}',
@@ -131,10 +147,10 @@ CREATE TABLE users (
   role            text        NOT NULL DEFAULT 'pa',
   hash            text,
   salt            text,
-  must_change_pw  boolean     NOT NULL DEFAULT false,
+  must_change_pw  smallint    NOT NULL DEFAULT 0 CHECK (must_change_pw IN (0,1)),
   permissions     text,
-  is_protected    boolean     NOT NULL DEFAULT false,
-  central_managed boolean     NOT NULL DEFAULT false,
+  is_protected    smallint    NOT NULL DEFAULT 0 CHECK (is_protected IN (0,1)),
+  central_managed smallint    NOT NULL DEFAULT 0 CHECK (central_managed IN (0,1)),
   central_uid     text,
   created_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -191,10 +207,10 @@ CREATE TABLE ua_requests (
   room            text        NOT NULL DEFAULT '',
   requested_by    text        NOT NULL DEFAULT '',
   requested_at    timestamptz NOT NULL DEFAULT now(),
-  acknowledged    boolean     NOT NULL DEFAULT false,
+  acknowledged    smallint    NOT NULL DEFAULT 0 CHECK (acknowledged IN (0,1)),
   acknowledged_by text        NOT NULL DEFAULT '',
   acknowledged_at timestamptz,
-  is_interview    boolean     NOT NULL DEFAULT false,
+  is_interview    smallint    NOT NULL DEFAULT 0 CHECK (is_interview IN (0,1)),
   interview_name  text        NOT NULL DEFAULT ''
 );
 CREATE INDEX idx_ua_requests_open ON ua_requests (acknowledged, requested_at DESC);
@@ -248,7 +264,7 @@ CREATE TABLE groups (
   key          text        NOT NULL UNIQUE,
   label        text        NOT NULL,
   permissions  text        NOT NULL DEFAULT '[]',
-  is_protected boolean     NOT NULL DEFAULT false,
+  is_protected smallint    NOT NULL DEFAULT 0 CHECK (is_protected IN (0,1)),
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
@@ -323,7 +339,7 @@ CREATE TABLE ua_records (
   photo             text,
   notes             text        NOT NULL DEFAULT '',
   reason            text        NOT NULL DEFAULT '',
-  is_interview      boolean     NOT NULL DEFAULT false,
+  is_interview      smallint    NOT NULL DEFAULT 0 CHECK (is_interview IN (0,1)),
   log_entry_id      integer     REFERENCES log_entries (id) ON DELETE SET NULL,
   locked_at         timestamptz,
   unlocked_by       text        NOT NULL DEFAULT '',
@@ -421,10 +437,10 @@ CREATE TABLE consent_records (
   information_type  text        NOT NULL DEFAULT '',
   effective_date    date        NOT NULL,
   expiration_date   date,
-  revoked           boolean     NOT NULL DEFAULT false,
+  revoked           smallint    NOT NULL DEFAULT 0 CHECK (revoked IN (0,1)),
   revoked_at        timestamptz,
   revoked_by        text        NOT NULL DEFAULT '',
-  signature_on_file boolean     NOT NULL DEFAULT false,
+  signature_on_file smallint    NOT NULL DEFAULT 0 CHECK (signature_on_file IN (0,1)),
   created_by_id     integer     NOT NULL,
   created_by_name   text        NOT NULL DEFAULT '',
   created_at        timestamptz NOT NULL DEFAULT now()
@@ -464,7 +480,7 @@ CREATE TABLE group_attendance (
   client_id   integer NOT NULL,
   client_name text    NOT NULL DEFAULT '',
   room        text    NOT NULL DEFAULT '',
-  present     boolean NOT NULL DEFAULT true,
+  present     smallint NOT NULL DEFAULT 1 CHECK (present IN (0,1)),
   notes       text    NOT NULL DEFAULT '',
   UNIQUE (session_id, client_id)
 );

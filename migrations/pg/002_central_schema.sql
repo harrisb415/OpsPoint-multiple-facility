@@ -34,7 +34,7 @@ CREATE TABLE central_users (
   role           text        NOT NULL DEFAULT 'admin',
   hash           text,
   salt           text,
-  must_change_pw boolean     NOT NULL DEFAULT false,
+  must_change_pw smallint    NOT NULL DEFAULT 0 CHECK (must_change_pw IN (0,1)),
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 
@@ -107,7 +107,7 @@ CREATE TABLE managed_users (
   permissions    text        NOT NULL DEFAULT '[]',
   hash           text,
   salt           text,
-  must_change_pw boolean     NOT NULL DEFAULT true,
+  must_change_pw smallint    NOT NULL DEFAULT 1 CHECK (must_change_pw IN (0,1)),
   status         text        NOT NULL DEFAULT 'active'
                  CHECK (status IN ('active','disabled')),
   created_at     timestamptz NOT NULL DEFAULT now()

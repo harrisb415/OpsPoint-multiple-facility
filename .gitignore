@@ -46,3 +46,11 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Database credentials (Postgres migration). The DSN carries the password for
+# the `opspoint` role, so this must never be tracked. Loaded explicitly by the
+# service manager — there is no dotenv in this project, nothing reads it
+# automatically.
+.env
+.env.*
+!.env.example

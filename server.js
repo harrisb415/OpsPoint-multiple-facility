@@ -372,7 +372,7 @@ app.post('/api/central/connect', requireAuth, csrfCheck, requirePermission('admi
   if (!await db.getSetting('update_manifest_url_origin', '')) await db.setSetting('update_manifest_url_origin', await db.getSetting('update_manifest_url', ''));
   await db.setSetting('update_manifest_url', url + '/fleet/manifest');
   try { await db.enqueueSyncBackfill(); } catch (e) {}        // queue a full snapshot for HQ
-  setImmediate(async () => { (await syncTick()).catch(() => {}); });   // start draining in the background
+  setImmediate(async () => { await syncTick().catch(() => {}); });   // start draining in the background
   await audit(req, 'central.connect', 'system', null, 'Connected to HQ', { url, facility_id, central_name: (r.body.facility && r.body.facility.name) || '' });
   res.json({ ok: true, central: { name: (r.body.facility && r.body.facility.name) || '', server_time: r.body.server_time || '' } });
 });
@@ -619,6 +619,6 @@ if (require.main === module) (async ()=>{
 
   // Multi-facility sync agent — drain the outbox to HQ shortly after boot, then
   // every 20s. No-op (and keeps the outbox bounded) when no central is configured.
-  setTimeout(async () => { (await syncTick()).catch(() => {}); }, 5000);
-  setInterval(async () => { (await syncTick()).catch(() => {}); }, 20000);
+  setTimeout(async () => { await syncTick().catch(() => {}); }, 5000);
+  setInterval(async () => { await syncTick().catch(() => {}); }, 20000);
 })();

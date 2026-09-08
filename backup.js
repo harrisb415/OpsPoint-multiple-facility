@@ -26,6 +26,7 @@
 
 const fs   = require('fs');
 const path = require('path');
+const connection = require('./server/db/connection');
 
 let _timer   = null;
 let _running = false;
@@ -36,10 +37,10 @@ function _stamp(d = new Date()) {
          `_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function _dir(db) {
-  const configured = db.getSetting('backup_dir', null);
+async function _dir(db) {
+  const configured = await db.getSetting('backup_dir', null);
   if (configured) return configured;
-  return path.join(path.dirname(db.getDbPath()), 'backups', 'scheduled');
+  return path.join(path.dirname(await db.getDbPath()), 'backups', 'scheduled');
 }
 
 // Keep the N most recent backups; delete the rest. Never throws.
@@ -63,13 +64,13 @@ async function runOnce(db, { quiet = false } = {}) {
   _running = true;
   const started = Date.now();
   try {
-    const dir  = _dir(db);
+    const dir  = await _dir(db);
     const dest = path.join(dir, `opspoint-${_stamp()}.db`);
 
     await db.backupTo(dest);
 
     const bytes = fs.statSync(dest).size;
-    const keep  = parseInt(db.getSetting('backup_keep', 28), 10) || 28;
+    const keep  = parseInt(await db.getSetting('backup_keep', 28), 10) || 28;
     const pruned = _prune(dir, keep);
 
     if (!quiet) {
@@ -80,14 +81,14 @@ async function runOnce(db, { quiet = false } = {}) {
 
     // Same-volume warning: a backup beside the database survives mistakes,
     // not hardware failure. Say so rather than implying false safety.
-    if (path.parse(path.resolve(dest)).root === path.parse(path.resolve(db.getDbPath())).root
-        && !db.getSetting('backup_same_volume_ack', false)) {
+    if (path.parse(path.resolve(dest)).root === path.parse(path.resolve(await db.getDbPath())).root
+        && !await db.getSetting('backup_same_volume_ack', false)) {
       console.warn('  [backup] WARNING: backups are on the same volume as the database. ' +
                    'Set backup_dir to another device to survive a drive failure.');
     }
 
     try {
-      db.auditLog(null, 'system', '127.0.0.1', 'backup.create', 'database', null,
+      await db.auditLog(null, 'system', '127.0.0.1', 'backup.create', 'database', null,
                   path.basename(dest), { bytes, ms: Date.now() - started });
     } catch (e) { /* audit must never block a backup */ }
 
@@ -95,7 +96,7 @@ async function runOnce(db, { quiet = false } = {}) {
   } catch (e) {
     console.error('  [backup] FAILED:', e && e.message);
     try {
-      db.auditLog(null, 'system', '127.0.0.1', 'backup.failed', 'database', null, '',
+      await db.auditLog(null, 'system', '127.0.0.1', 'backup.failed', 'database', null, '',
                   { error: String(e && e.message).slice(0, 300) });
     } catch (e2) { /* nothing more we can do */ }
     return null;
@@ -105,24 +106,41 @@ async function runOnce(db, { quiet = false } = {}) {
 }
 
 // Start the scheduler. Safe to call once at boot; a second call is a no-op.
-function start(db) {
+async function start(db) {
   if (_timer) return;
-  if (!db.getSetting('backup_enabled', true)) {
+
+  // SQLite only. backupTo() is VACUUM INTO; Postgres has no in-process
+  // equivalent, and the pg driver rejects the call deliberately rather than
+  // pretending to succeed. Scheduling anyway would mean a failed backup and a
+  // "backup.failed" audit row every six hours, forever.
+  //
+  // The obligation does not go away with the driver, it moves: under Postgres,
+  // §164.308(a)(7)(ii)(A) is satisfied by pg_dump on the database host, outside
+  // this process. Say that plainly at boot — a silent absence of backups is the
+  // failure mode this module exists to prevent.
+  if (connection.isPg) {
+    console.warn('  [backup] NOT scheduled: the Postgres driver cannot back itself up.');
+    console.warn('  [backup] HIPAA §164.308(a)(7)(ii)(A) still applies — schedule pg_dump on');
+    console.warn('  [backup] the database host, off-box, and rehearse a restore.');
+    return;
+  }
+
+  if (!await db.getSetting('backup_enabled', true)) {
     console.log('  [backup] disabled via backup_enabled setting');
     return;
   }
 
-  const hours = Math.max(1, parseInt(db.getSetting('backup_interval_hours', 6), 10) || 6);
+  const hours = Math.max(1, parseInt(await db.getSetting('backup_interval_hours', 6), 10) || 6);
   const ms    = hours * 60 * 60 * 1000;
 
   // First backup shortly after boot rather than immediately — lets startup
   // finish and gives an install that crash-loops a chance to be stopped
   // before it churns through the retained generations.
-  setTimeout(() => { runOnce(db); }, 90 * 1000);
-  _timer = setInterval(() => { runOnce(db); }, ms);
+  setTimeout(async () => { await runOnce(db); }, 90 * 1000);
+  _timer = setInterval(async () => { await runOnce(db); }, ms);
   if (_timer.unref) _timer.unref();
 
-  console.log(`  [backup] scheduled every ${hours}h → ${_dir(db)}`);
+  console.log(`  [backup] scheduled every ${hours}h → ${await _dir(db)}`);
 }
 
 function stop() {

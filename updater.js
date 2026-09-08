@@ -240,14 +240,14 @@ function createUpdater(ctx) {
     try { return require(path.join(baseDir, 'package.json')).version || '0.0.0'; }
     catch (e) { return '0.0.0'; }
   }
-  function manifestUrl() { return (db.getSetting('update_manifest_url', '') || '').trim(); }
-  function manifestHost() { try { return new URL(manifestUrl()).host; } catch (e) { return ''; } }
+  async function manifestUrl() { return ((await db.getSetting('update_manifest_url', '')) || '').trim(); }
+  async function manifestHost() { try { return new URL(await manifestUrl()).host; } catch (e) { return ''; } }
 
   async function fetchManifest() {
-    const url = manifestUrl();
+    const url = await manifestUrl();
     if (!url) throw new Error('No update manifest URL configured');
-    if (!hostAllowed(url, [manifestHost()])) throw new Error('Manifest host is not allow-listed');
-    const buf = await fetchBuffer(url, [manifestHost()], 1024 * 1024, authFor(url), insecureFor(url));
+    if (!hostAllowed(url, [await manifestHost()])) throw new Error('Manifest host is not allow-listed');
+    const buf = await fetchBuffer(url, [await manifestHost()], 1024 * 1024, authFor(url), insecureFor(url));
     let m;
     try { m = JSON.parse(buf.toString('utf8')); } catch (e) { throw new Error('Manifest is not valid JSON'); }
     if (!m || !m.version || !m.url || !m.sha256) throw new Error('Manifest missing version/url/sha256');
@@ -272,7 +272,7 @@ function createUpdater(ctx) {
 
   async function check() {
     const m = await fetchManifest();
-    try { db.auditLog(null, 'system', '127.0.0.1', 'update.check', 'system', null, m.version, { current: currentVersion() }); } catch (e) {}
+    try { await db.auditLog(null, 'system', '127.0.0.1', 'update.check', 'system', null, m.version, { current: currentVersion() }); } catch (e) {}
     return summarize(m);
   }
 
@@ -307,7 +307,7 @@ function createUpdater(ctx) {
         throw new Error('Requires Node ' + m.min_node + ' (this box has ' + process.versions.node + ')');
       if (m.min_from && cmpSemver(cur, m.min_from) < 0)
         throw new Error('Cannot update directly from ' + cur + '; minimum is ' + m.min_from);
-      if (!hostAllowed(m.url, [manifestHost()])) throw new Error('Bundle host is not allow-listed');
+      if (!hostAllowed(m.url, [await manifestHost()])) throw new Error('Bundle host is not allow-listed');
 
       fs.mkdirSync(STAGING, { recursive: true });
       fs.mkdirSync(BACKUP_DIR, { recursive: true });
@@ -317,7 +317,7 @@ function createUpdater(ctx) {
       setState({ phase: 'download', pct: 12, message: 'Downloading v' + ver + '…' });
       const zipPath = path.join(STAGING, 'opspoint-' + ver + '.tgz');
       rmrf(zipPath);
-      await downloadToFile(m.url, zipPath, [manifestHost()], (got, total) => {
+      await downloadToFile(m.url, zipPath, [await manifestHost()], (got, total) => {
         if (total > 0) setState({ phase: 'download', pct: 12 + Math.round((got / total) * 28), message: 'Downloading v' + ver + '… ' + Math.round((got / total) * 100) + '%' });
       }, authFor(m.url), insecureFor(m.url));
 
@@ -350,7 +350,7 @@ function createUpdater(ctx) {
       for (const d of RUNTIME_DIRS) { const s = path.join(baseDir, d); if (fs.existsSync(s)) copyAny(s, path.join(backupPath, d)); }
       fs.writeFileSync(path.join(backupPath, 'BACKUP.json'), JSON.stringify({ from: cur, to: ver, ts: new Date().toISOString() }, null, 2));
       fs.writeFileSync(path.join(UP_DIR, 'last-backup.txt'), backupPath);
-      _backupDatabase(ver);
+      await _backupDatabase(ver);
 
       // 5. Swap runtime files into place
       setState({ phase: 'swap', pct: 82, message: 'Applying files…' });
@@ -369,7 +369,7 @@ function createUpdater(ctx) {
       fs.writeFileSync(path.join(UP_DIR, 'last-applied.json'), JSON.stringify({ from: cur, to: ver, ts: new Date().toISOString(), by: actorName || 'system' }, null, 2));
       // Tell the bootstrap supervisor to health-check this boot and auto-roll-back on failure.
       fs.writeFileSync(path.join(UP_DIR, 'pending-verify.json'), JSON.stringify({ backupPath, from: cur, to: ver, ts: new Date().toISOString() }, null, 2));
-      try { db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.apply', 'system', null, cur + ' -> ' + ver, { backup: backupPath }); db.save && db.save(); } catch (e) {}
+      try { await db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.apply', 'system', null, cur + ' -> ' + ver, { backup: backupPath }); db.save && await db.save(); } catch (e) {}
       setState({ phase: 'done', pct: 100, message: 'Updated to v' + ver + ' — restarting…', applying: false });
       try { broadcast({ type: 'update_done', from: cur, to: ver }); } catch (e) {}
       try { broadcast({ type: 'server_restarting', user: actorName || 'updater' }); } catch (e) {}
@@ -379,7 +379,7 @@ function createUpdater(ctx) {
       log('update apply failed:', e && e.message);
       setState({ phase: 'error', message: 'Update failed', error: (e && e.message) || String(e), applying: false });
       try { broadcast({ type: 'update_error', error: (e && e.message) || String(e) }); } catch (er) {}
-      try { db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.error', 'system', null, (e && e.message) || '', {}); } catch (er) {}
+      try { await db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.error', 'system', null, (e && e.message) || '', {}); } catch (er) {}
       throw e;
     }
   }
@@ -397,7 +397,7 @@ function createUpdater(ctx) {
     for (const d of RUNTIME_DIRS) { const s = path.join(backupPath, d); if (fs.existsSync(s)) { rmrf(path.join(baseDir, d)); copyAny(s, path.join(baseDir, d)); } }
     let meta = {}; try { meta = JSON.parse(fs.readFileSync(path.join(backupPath, 'BACKUP.json'), 'utf8')); } catch (e) {}
     try { fs.rmSync(path.join(UP_DIR, 'pending-verify.json'), { force: true }); } catch (e) {} // manual rollback: don't re-verify
-    try { db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.rollback', 'system', null, (meta.to || '?') + ' -> ' + (meta.from || '?'), {}); db.save && db.save(); } catch (e) {}
+    try { await db.auditLog(null, actorName || 'system', '127.0.0.1', 'update.rollback', 'system', null, (meta.to || '?') + ' -> ' + (meta.from || '?'), {}); db.save && await db.save(); } catch (e) {}
     setState({ phase: 'done', pct: 100, message: 'Rolled back — restarting…', applying: false });
     try { broadcast({ type: 'server_restarting', user: actorName || 'updater' }); } catch (e) {}
     setTimeout(() => { try { restart && restart(); } catch (e) {} }, 800);
@@ -430,9 +430,9 @@ function createUpdater(ctx) {
              crypto.createHash('sha256').update(fs.readFileSync(b)).digest('hex');
     } catch (e) { return true; }
   }
-  function _backupDatabase(ver) {
+  async function _backupDatabase(ver) {
     try {
-      try { db.run && db.run('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) {}
+      try { db.run && await db.run('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) {}
       if (fs.existsSync(dbPath)) {
         const out = path.join(DB_BACKUP_DIR, 'opspoint-' + tsStamp() + '-pre-' + ver + '.db');
         fs.copyFileSync(dbPath, out);

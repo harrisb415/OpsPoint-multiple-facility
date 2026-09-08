@@ -79,10 +79,31 @@ function overriding() {
   return DRIVER === 'pg' ? 'OVERRIDING SYSTEM VALUE ' : '';
 }
 
+/**
+ * Read one field out of a JSON document stored in a text column, AS TEXT.
+ *
+ * Central's facility_data.data holds the row payload a facility synced up.
+ * SQLite reads it with json_extract(); Postgres has no such function and needs
+ * the column cast to jsonb first.
+ *
+ * Both sides are forced to text on purpose. json_extract() returns a native
+ * value, so on SQLite `json_extract(data,'$.is_active') = '1'` is FALSE — the
+ * integer 1 does not equal the string '1' under SQLite's type affinity rules —
+ * while Postgres's ->> always yields text and would need the quoted literal.
+ * Casting on the SQLite side means every caller quotes its literal and the same
+ * condition means the same thing on both drivers.
+ */
+function jsonText(col, key) {
+  return DRIVER === 'pg'
+    ? `(${col}::jsonb->>'${key}')`
+    : `CAST(json_extract(${col},'$.${key}') AS TEXT)`;
+}
+
 module.exports = {
   driver: DRIVER,
   isPg:   DRIVER === 'pg',
   roomOrder,
+  jsonText,
   overriding,
 
   open:     (...a) => impl.open(...a),

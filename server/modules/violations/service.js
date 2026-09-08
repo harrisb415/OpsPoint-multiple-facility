@@ -29,7 +29,7 @@ async function create(body = {}, { actor } = {}) {
     client_id,
     client_name: client_name || '',
     room: room || '',
-    violation_date: violation_date || '',
+    violation_date: violation_date || null,   // date column: '' is not a date
     description,
     notes: notes || '',
     logged_by: actor,

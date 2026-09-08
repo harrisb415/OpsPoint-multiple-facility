@@ -10,7 +10,7 @@
  * Phase 1 will add the facility_id-tagged mirror tables + sync ingest.
  */
 'use strict';
-const Database = require('better-sqlite3');
+const connection = require('../server/db/connection'); // same driver dispatcher as the facility
 const fs       = require('fs');
 const path     = require('path');
 const crypto   = require('crypto');
@@ -27,14 +27,25 @@ function nowLocal() {
 // ── Init ────────────────────────────────────────────────────────────────
 async function init(dbPath) {
   _dbPath = dbPath;
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  const isNew = !fs.existsSync(dbPath);
-  _db = new Database(dbPath);
-  _db.pragma('journal_mode = WAL');
-  _db.pragma('foreign_keys = ON');
-  console.log('  Central DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
-  _createSchema();
-  _migrate();
+  // Under pg the argument is a DSN, not a path, and HQ lives in its OWN
+  // database (opscentral) rather than the facility's — so it takes its own
+  // environment variable. Nothing to mkdir in that case.
+  if (connection.isPg) {
+    _db = connection.open(process.env.CENTRAL_DATABASE_URL || dbPath);
+    console.log('  Central DB: Postgres');
+  } else {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    const isNew = !fs.existsSync(dbPath);
+    _db = connection.open(dbPath);   // owns the WAL / foreign_keys pragmas
+    console.log('  Central DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
+  }
+  // SQLite-dialect DDL — AUTOINCREMENT, datetime() defaults, and ALTER TABLE
+  // probes that rely on a duplicate-column error. Under pg the schema comes
+  // from migrations/pg/002_central_schema.sql, applied before the process runs.
+  if (!connection.isPg) {
+    _createSchema();
+    _migrate();
+  }
   await _seedDefaults();
 }
 
@@ -170,9 +181,14 @@ function _createSchema() {
 }
 
 // ── Low-level helpers (private) ──────────────────────────────────────────
-function _run(sql, p = []) { return _db.prepare(sql).run(...p); }
-function _q(sql, p = [])   { return _db.prepare(sql).all(...p); }
-function _q1(sql, p = [])  { return _db.prepare(sql).get(...p) || null; }
+async function _run(sql, p = []) { return await connection.run(sql, p); }
+async function _q(sql, p = [])   { return await connection.query(sql, p); }
+async function _q1(sql, p = [])  { return await connection.query1(sql, p); }
+
+// Read a field out of facility_data.data (the synced row payload) as text.
+// json_extract() is SQLite-only; see connection.jsonText for why both sides are
+// forced to text and every literal below is therefore quoted.
+const J = (key) => connection.jsonText('data', key);
 function _j(s, def) { try { return JSON.parse(s); } catch (e) { return def; } }
 
 // ── Settings ─────────────────────────────────────────────────────────────
@@ -502,19 +518,19 @@ async function getAppliedThrough(facilityId) {
 async function ingestRows(facilityId, rows) {
   let stored = 0, deleted = 0, maxId = await getAppliedThrough(facilityId);
   const ts = nowLocal();
-  _db.transaction(async () => {
-    const up  = _db.prepare('INSERT INTO facility_data (facility_id,table_name,source_id,data,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (facility_id,table_name,source_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at');
-    const del = _db.prepare('DELETE FROM facility_data WHERE facility_id=? AND table_name=? AND source_id=?');
+  await connection.transaction(async (c) => {
+    const UP  = 'INSERT INTO facility_data (facility_id,table_name,source_id,data,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (facility_id,table_name,source_id) DO UPDATE SET data=excluded.data, updated_at=excluded.updated_at';
+    const DEL = 'DELETE FROM facility_data WHERE facility_id=? AND table_name=? AND source_id=?';
     for (const r of rows || []) {
       if (!r || !r.table_name || r.row_id == null) continue;
-      if (r.op === 'delete') { del.run(facilityId, r.table_name, r.row_id); deleted++; }
-      else { up.run(facilityId, r.table_name, r.row_id, JSON.stringify(r.data || {}), ts); stored++; }
+      if (r.op === 'delete') { await c.run(DEL, [facilityId, r.table_name, r.row_id]); deleted++; }
+      else { await c.run(UP, [facilityId, r.table_name, r.row_id, JSON.stringify(r.data || {}), ts]); stored++; }
       if (typeof r.id === 'number' && r.id > maxId) maxId = r.id;
     }
-    await _run(`INSERT INTO sync_state (facility_id,applied_through,updated_at) VALUES (?,?,?)
+    await c.run(`INSERT INTO sync_state (facility_id,applied_through,updated_at) VALUES (?,?,?)
           ON CONFLICT(facility_id) DO UPDATE SET applied_through=excluded.applied_through, updated_at=excluded.updated_at`,
       [facilityId, maxId, ts]);
-  })();
+  });
   return { stored, deleted, applied_through: maxId };
 }
 
@@ -552,13 +568,13 @@ async function reportOverview() {
       id: f.id, name: f.name, status: f.status, app_version: version, version,
       last_seen_at: f.last_seen_at, online, dark,
       behind: !!(target && version && version !== target),
-      residents:       await _count(f.id, 'clients', "json_extract(data,'$.is_active')=1 AND json_extract(data,'$.is_special')=0 AND json_extract(data,'$.name')<>'VACANT'"),
-      vacant:          await _count(f.id, 'clients', "json_extract(data,'$.name')='VACANT'"),
-      incidents_open:  await _count(f.id, 'incidents', "json_extract(data,'$.status')='open'"),
+      residents:       await _count(f.id, 'clients', `${J('is_active')}='1' AND ${J('is_special')}='0' AND ${J('name')}<>'VACANT'`),
+      vacant:          await _count(f.id, 'clients', `${J('name')}='VACANT'`),
+      incidents_open:  await _count(f.id, 'incidents', `${J('status')}='open'`),
       incidents_total: await _count(f.id, 'incidents'),
       ua_total:        await _count(f.id, 'ua_records'),
       // Facility stores UA outcome as pass/fail (fail = positive), NOT positive/negative.
-      ua_positive:     await _count(f.id, 'ua_records', "lower(json_extract(data,'$.result'))='fail'"),
+      ua_positive:     await _count(f.id, 'ua_records', `lower(${J('result')})='fail'`),
       rows_total:      ct.total,
       applied_through: ct.applied_through,
     };
@@ -639,13 +655,13 @@ async function setManagedUserPassword(id, password) {
 }
 
 async function setManagedUserFacilities(id, facilityIds) {
-  _db.transaction(async () => {
-    await _run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
+  await connection.transaction(async (c) => {
+    await c.run('DELETE FROM managed_user_facilities WHERE user_id=?', [id]);
     for (const fid of facilityIds || []) {
-      if (await _q1('SELECT id FROM facilities WHERE id=?', [fid]))
-        await _run('INSERT INTO managed_user_facilities (user_id,facility_id) VALUES (?,?) ON CONFLICT (user_id,facility_id) DO NOTHING', [id, fid]);
+      if (await c.query1('SELECT id FROM facilities WHERE id=?', [fid]))
+        await c.run('INSERT INTO managed_user_facilities (user_id,facility_id) VALUES (?,?) ON CONFLICT (user_id,facility_id) DO NOTHING', [id, fid]);
     }
-  })();
+  });
   return await getManagedUser(id);
 }
 

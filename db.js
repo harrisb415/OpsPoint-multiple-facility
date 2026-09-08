@@ -976,7 +976,7 @@ async function upsertReport(r) {
       }
       await c.run(`UPDATE reports SET report_date=?,shift=?,mod_name=?,is_closed=?,statuses=?,
         comments=?,last_ua=?,last_room_search=?,issues=?,med_notes=?,updated_at=? WHERE id=?`,
-        [r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
+        [r.report_date||null, r.shift||'', r.mod_name||'', r.is_closed?1:0,
          JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
          JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
          JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, r.id]);
@@ -1016,7 +1016,7 @@ async function upsertReport(r) {
         info = await c.run(`INSERT INTO reports (id,report_date,shift,mod_name,is_closed,statuses,comments,
           last_ua,last_room_search,issues,med_notes,created_at,updated_at)
           ${connection.overriding()}VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [r.id, r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
+          [r.id, r.report_date||null, r.shift||'', r.mod_name||'', r.is_closed?1:0,
            JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
            JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
@@ -1024,7 +1024,7 @@ async function upsertReport(r) {
         info = await c.run(`INSERT INTO reports (report_date,shift,mod_name,is_closed,statuses,comments,
           last_ua,last_room_search,issues,med_notes,created_at,updated_at)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-          [r.report_date||'', r.shift||'', r.mod_name||'', r.is_closed?1:0,
+          [r.report_date||null, r.shift||'', r.mod_name||'', r.is_closed?1:0,
            JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
            JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);

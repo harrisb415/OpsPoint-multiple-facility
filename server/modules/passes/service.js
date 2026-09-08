@@ -35,8 +35,10 @@ async function create(input = {}) {
     client_id: parseInt(client_id),
     room: room || client.room,
     name: name || client.name,
-    departure: departure || '',
-    return_date: return_date || '',
+    // date columns: '' is not a date. SQLite accepted it as TEXT, Postgres
+    // rejects it — and NULL is what "no departure yet" actually means.
+    departure: departure || null,
+    return_date: return_date || null,
     ua_notes: ua_notes || '',
     notes: notes || '',
     status: VALID_STATUS.includes(status) ? status : 'Approved',

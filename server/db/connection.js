@@ -1,62 +1,57 @@
 'use strict';
 /**
- * server/db/connection.js — owns the better-sqlite3 handle.
+ * server/db/connection.js — the storage seam.
  *
- * The ONLY file that instantiates the database driver. Other code talks to
- * SQLite through the run/query/query1 primitives exported here (and, for the
- * parts of db.js not yet split into repositories, through the shared handle
- * from getDb()). A future SQLite -> Postgres port reimplements this file plus
- * the repositories and nothing else.
+ * The ONLY file that decides which database driver is in play. Other code talks
+ * to storage through the run/query/query1 primitives re-exported here (and, for
+ * the parts of db.js not yet split into repositories, through the shared handle
+ * from getDb()).
+ *
+ * Selected by OPSPOINT_DB_DRIVER:
+ *   sqlite  (default) — better-sqlite3-multiple-ciphers, encrypted, on-disk
+ *   pg                — PostgreSQL over the network via node-postgres
+ *
+ * WHY BOTH DRIVERS CAN SHARE ONE SET OF CALL SITES
+ *   The SQLite primitives are synchronous and return plain values; the Postgres
+ *   ones return promises. `await` on a non-promise is a no-op, so a call site
+ *   written as
+ *       const row = await c.query1('SELECT ...', [id]);
+ *   is correct under BOTH. That is what makes SQLite a live rollback rather than
+ *   a branch that rots: the same code runs on either driver, chosen at boot.
+ *
+ *   The corollary is that every caller must await, including under SQLite where
+ *   it looks unnecessary. It is not — it is what keeps the two paths identical.
+ *
+ * WHAT IS NOT PORTABLE
+ *   backupTo() is SQLite-only (VACUUM INTO). The Postgres driver rejects it
+ *   rather than silently doing nothing; backups there are pg_dump's job, run on
+ *   the database host.
  */
-// SQLCipher-capable drop-in for better-sqlite3 — identical API plus PRAGMA key.
-const Database = require('better-sqlite3-multiple-ciphers');
-const fs       = require('fs');
-const path     = require('path');
-const dbcrypt  = require('../../dbcrypt');
+const DRIVER = (process.env.OPSPOINT_DB_DRIVER || 'sqlite').toLowerCase();
 
-let _db = null;
-let _dbPath = null;
-
-// Open (or create) the database and apply connection pragmas. Returns the handle.
-//
-// openEncrypted() generates a key on first run and transparently converts a
-// pre-existing plaintext database (keeping a safety copy). Key loss is
-// unrecoverable by design — see dbcrypt.js.
-function open(dbPath) {
-  _dbPath = dbPath;
-  _db = dbcrypt.openEncrypted(Database, dbPath);
-  _db.pragma('journal_mode = WAL');   // concurrent reads during writes
-  _db.pragma('foreign_keys = ON');    // enforce FK / ON DELETE CASCADE
-  return _db;
+if (DRIVER !== 'sqlite' && DRIVER !== 'pg') {
+  throw new Error(
+    `OPSPOINT_DB_DRIVER must be 'sqlite' or 'pg' (got '${DRIVER}'). ` +
+    'Refusing to guess which database to open.');
 }
 
-// Consistent snapshot of the live database, for scheduled backups.
-//
-// VACUUM INTO, not the backup() online-backup API: backup() refuses to run
-// against an encrypted source ("incompatible source and target databases")
-// because the target it creates has no key. VACUUM INTO is atomic, includes
-// WAL contents, and the output inherits the source's encryption.
-function backupTo(destPath) {
-  if (!_db) return Promise.reject(new Error('database not initialised'));
-  try {
-    fs.mkdirSync(path.dirname(destPath), { recursive: true });
-    if (fs.existsSync(destPath)) fs.rmSync(destPath, { force: true }); // VACUUM INTO needs a free path
-    // SQL string literal: forward slashes (Windows backslashes would be
-    // mangled) and doubled single quotes.
-    _db.exec(`VACUUM INTO '${destPath.replace(/\\/g, '/').replace(/'/g, "''")}'`);
-    return Promise.resolve(destPath);
-  } catch (e) {
-    return Promise.reject(e);
-  }
-}
+const impl = DRIVER === 'pg'
+  ? require('./drivers/pg')
+  : require('./drivers/sqlite');
 
-function getDb()   { return _db; }
-function getPath() { return _dbPath; }
+module.exports = {
+  driver: DRIVER,
+  isPg:   DRIVER === 'pg',
 
-// Low-level primitives. better-sqlite3 caches prepared statements internally,
-// so re-preparing the same SQL string is cheap.
-function run(sql, params = [])    { return _db.prepare(sql).run(...params); }
-function query(sql, params = [])  { return _db.prepare(sql).all(...params); }
-function query1(sql, params = []) { return _db.prepare(sql).get(...params) || null; }
+  open:     (...a) => impl.open(...a),
+  getDb:    ()     => impl.getDb(),
+  getPath:  ()     => impl.getPath(),
+  backupTo: (...a) => impl.backupTo(...a),
 
-module.exports = { open, getDb, getPath, backupTo, run, query, query1 };
+  run:         (...a) => impl.run(...a),
+  query:       (...a) => impl.query(...a),
+  query1:      (...a) => impl.query1(...a),
+  exec:        (...a) => impl.exec(...a),
+  transaction: (...a) => impl.transaction(...a),
+  close:       ()     => impl.close(),
+};

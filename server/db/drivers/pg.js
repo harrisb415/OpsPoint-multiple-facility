@@ -93,11 +93,25 @@ function withReturning(sql) {
 }
 
 /**
- * dsn: a postgresql:// URL, or undefined to build one from PG* env vars.
- * Credentials come from the environment — never a tracked file.
+ * dsn: a postgresql:// URL, or undefined to take DATABASE_URL from the
+ * environment. Credentials come from the environment — never a tracked file.
+ *
+ * The argument is filtered, not trusted. Callers pass whatever init() was
+ * handed, and under the SQLite driver that is a FILE PATH — db.js calls
+ * connection.open(DB_PATH). Accepting it verbatim would build a pool against
+ * "/home/hestia/OpsPoint/data/opspoint.db" and fail with a connection error
+ * that says nothing about the real cause. So only a string that actually looks
+ * like a connection URL is used, and anything else falls back to the
+ * environment; with neither, this throws now rather than at the first query.
  */
 function open(dsn) {
-  _dsn = dsn || process.env.DATABASE_URL || null;
+  const looksLikeDsn = typeof dsn === 'string' && /^postgres(ql)?:\/\//i.test(dsn);
+  _dsn = (looksLikeDsn ? dsn : null) || process.env.DATABASE_URL || null;
+  if (!_dsn) {
+    throw new Error(
+      'OPSPOINT_DB_DRIVER=pg but no connection string was given. Set DATABASE_URL ' +
+      '(and CENTRAL_DATABASE_URL for the HQ server), or pass a postgres:// URL to open().');
+  }
   const ssl = process.env.PGSSLMODE === 'disable'
     ? false
     : { rejectUnauthorized: process.env.PGSSLMODE !== 'require',

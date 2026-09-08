@@ -134,3 +134,35 @@ describe('identity table list matches the shipped DDL', () => {
     expect(extra).toEqual([]);
   });
 });
+
+// ── Connection-string handling ──────────────────────────────────────────────
+// db.js calls connection.open(DB_PATH), and under the sqlite driver DB_PATH is
+// a file path. If the pg driver took that verbatim it would build a pool
+// against "…/data/opspoint.db" and fail at the first query with an error that
+// says nothing about the real cause. This is the cutover's sharpest edge: it
+// only appears when OPSPOINT_DB_DRIVER flips to pg.
+describe('open() connection string', () => {
+  const pg = require('../server/db/drivers/pg');
+  const saved = process.env.DATABASE_URL;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = saved;
+  });
+
+  test('refuses a file path and says what to set', () => {
+    delete process.env.DATABASE_URL;
+    expect(() => pg.open('/home/hestia/OpsPoint/data/opspoint.db'))
+      .toThrow(/DATABASE_URL/);
+  });
+
+  test('accepts a postgres:// URL', () => {
+    pg.open('postgresql://u:p@localhost:5432/opspoint');
+    expect(pg.getPath()).toBe('postgresql://u:p@localhost:5432/opspoint');
+  });
+
+  test('falls back to DATABASE_URL when handed a path', () => {
+    process.env.DATABASE_URL = 'postgresql://u:p@db-mnemosyne/opspoint';
+    pg.open('/some/sqlite/path.db');
+    expect(pg.getPath()).toBe('postgresql://u:p@db-mnemosyne/opspoint');
+  });
+});

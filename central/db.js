@@ -31,7 +31,15 @@ async function init(dbPath) {
   // database (opscentral) rather than the facility's — so it takes its own
   // environment variable. Nothing to mkdir in that case.
   if (connection.isPg) {
-    _db = connection.open(process.env.CENTRAL_DATABASE_URL || dbPath);
+    // Required, with no fallback: the driver would otherwise drop back to
+    // DATABASE_URL and quietly create the HQ tables inside the FACILITY
+    // database. Two stores that are meant to be independent, silently merged.
+    if (!process.env.CENTRAL_DATABASE_URL) {
+      throw new Error(
+        'OPSPOINT_DB_DRIVER=pg requires CENTRAL_DATABASE_URL for the HQ server. ' +
+        'Central uses its own database (opscentral), not the facility one.');
+    }
+    _db = connection.open(process.env.CENTRAL_DATABASE_URL);
     console.log('  Central DB: Postgres');
   } else {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });

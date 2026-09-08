@@ -33,10 +33,29 @@
 const { Pool, types } = require('pg');
 
 // ── Type parsers: keep the wire format identical to SQLite ──────────────────
-// 1082 date · 1114 timestamp · 1184 timestamptz · 20 int8 · 1700 numeric
-for (const oid of [1082, 1114, 1184, 20, 1700]) {
+// Dates and timestamps stay text: SQLite stores them as TEXT and the app
+// compares and serialises them as strings throughout, so parsing them into Date
+// objects here would change every response shape.
+// 1082 date · 1114 timestamp · 1184 timestamptz · 1700 numeric
+for (const oid of [1082, 1114, 1184, 1700]) {
   types.setTypeParser(oid, (v) => v);
 }
+
+// int8 (bigint) is the exception, and it must be a NUMBER.
+//
+// node-postgres returns bigint as a string by default to protect values above
+// 2^53, and COUNT(*) is bigint. Left as a string it breaks silently rather than
+// loudly: `cnt.c === 0` is false for "0", so the first-run seed blocks in
+// db.js and central/db.js never fire and the app comes up with no accounts and
+// no printed credentials. Sums like `a + (b.k || 0)` concatenate instead of
+// adding. SQLite returns a number here, so a string is also simply wrong.
+//
+// Safe because every bigint in this schema is small: counts, SQLite-derived
+// row ids (facility_data.source_id, sync_state.applied_through), a file size,
+// and sessions.expires_at as epoch ms (~1.7e12). All are orders of magnitude
+// below Number.MAX_SAFE_INTEGER. A genuinely large bigint would need its own
+// column-level handling — there isn't one.
+types.setTypeParser(20, (v) => (v === null ? null : Number(v)));
 
 // Tables whose id is GENERATED ALWAYS AS IDENTITY (migrations/pg/001+002).
 // An INSERT into one of these gets RETURNING id appended so run() can report

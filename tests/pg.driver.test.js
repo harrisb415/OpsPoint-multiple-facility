@@ -166,3 +166,36 @@ describe('open() connection string', () => {
     expect(pg.getPath()).toBe('postgresql://u:p@db-mnemosyne/opspoint');
   });
 });
+
+// ── Type parsers ────────────────────────────────────────────────────────────
+// COUNT(*) is bigint, and node-postgres returns bigint as a string by default.
+// Left that way it fails silently rather than loudly: `cnt.c === 0` is false for
+// "0", so the first-run seed blocks in db.js and central/db.js never run and the
+// app comes up with no accounts and no printed credentials — which is exactly
+// what happened on the first Central bring-up against real Postgres.
+describe('type parsers', () => {
+  const types = require('pg').types;
+  require('../server/db/drivers/pg');   // registers the parsers on load
+
+  test('bigint (int8) parses to a number, so COUNT(*) comparisons work', () => {
+    const parse = types.getTypeParser(20);
+    expect(parse('0')).toBe(0);
+    expect(parse('42')).toBe(42);
+    expect(typeof parse('7')).toBe('number');
+    // The failure this guards: a seed gate written as `=== 0`.
+    expect(parse('0') === 0).toBe(true);
+  });
+
+  test('bigint values in this schema stay exactly representable', () => {
+    const parse = types.getTypeParser(20);
+    const epochMs = 1757308800000;            // sessions.expires_at magnitude
+    expect(parse(String(epochMs))).toBe(epochMs);
+    expect(parse(String(epochMs))).toBeLessThan(Number.MAX_SAFE_INTEGER);
+  });
+
+  test('dates and timestamps stay text, matching how SQLite stores them', () => {
+    for (const oid of [1082, 1114, 1184]) {
+      expect(types.getTypeParser(oid)('2026-09-08 12:00:00')).toBe('2026-09-08 12:00:00');
+    }
+  });
+});

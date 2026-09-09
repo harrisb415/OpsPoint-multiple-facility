@@ -1033,6 +1033,9 @@ async function upsertReport(r) {
            JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
       }
+      // An explicit id does not advance the identity sequence, so the next
+      // auto-generated report would collide on the primary key. Re-point it.
+      if (r.id) await connection.resyncSequence('reports');
       const useId = r.id || info.lastInsertRowid;
       for (const e of r.log_entries||[]) {
         await c.run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',

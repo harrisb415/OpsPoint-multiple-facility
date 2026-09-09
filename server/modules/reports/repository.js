@@ -41,6 +41,9 @@ async function insertClientFull(f) {
     ${c.overriding()}VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [f.id, f.room, f.name, f.case_manager, f.phone, f.photo, f.intake_date,
      f.discharge_date, f.is_special, f.is_active, f.special_label, f.sort_order]);
+  // Explicit id supplied above, so the sequence has to be moved past it or the
+  // next ordinary client insert collides. See connection.resyncSequence.
+  await c.resyncSequence('clients');
 }
 
 // ── report PATCH helpers ────────────────────────────────────────────

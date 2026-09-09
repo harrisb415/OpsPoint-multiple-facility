@@ -115,12 +115,34 @@ function ilike() {
   return DRIVER === 'pg' ? 'ILIKE' : 'LIKE';
 }
 
+/**
+ * Re-point a table's identity sequence past its highest id. No-op on SQLite.
+ *
+ * MUST be called after any INSERT that supplies an explicit id (see
+ * overriding()). Postgres does NOT advance the sequence for such a row, so the
+ * next generated id repeats one already taken and the insert dies on the
+ * primary key. It fails later, in unrelated code, which makes it miserable to
+ * diagnose: restoring a report with id=1 breaks the NEXT new report, not the
+ * restore.
+ *
+ * Uses `setval(..., max+1, false)` — "the next value handed out is max+1" —
+ * which is correct for an empty table too, where max(id) is 0 and the next id
+ * should be 1.
+ */
+async function resyncSequence(table, col = 'id') {
+  if (DRIVER !== 'pg') return;
+  await impl.run(
+    `SELECT setval(pg_get_serial_sequence('${table}', '${col}'),
+                   COALESCE((SELECT MAX(${col}) FROM ${table}), 0) + 1, false)`, []);
+}
+
 module.exports = {
   driver: DRIVER,
   isPg:   DRIVER === 'pg',
   roomOrder,
   jsonText,
   ilike,
+  resyncSequence,
   overriding,
 
   open:     (...a) => impl.open(...a),

@@ -174,7 +174,8 @@ async function init(dbPath) {
   await _migrateGroups(_bootNewPerms);
   // Also SQLite-only: it calls _db.pragma() (a better-sqlite3 method that does
   // not exist on the pg driver) and installs SQLite CREATE TRIGGER statements.
-  // The Postgres schema ships sync_outbox and its triggers in migrations/pg/.
+  // Under pg, sync_outbox and its triggers come from migrations/pg/ (the table
+  // in 001, the trigger function and per-table triggers in 003).
   if (!connection.isPg) await _createSyncLayer();  // sync_outbox + triggers (multi-facility Phase 1)
   // HIPAA §164.316(b)(2)(i): six-year retention. Setting exists so a facility
   // under a stricter state rule can raise it; pruneAuditLog() floors it so it

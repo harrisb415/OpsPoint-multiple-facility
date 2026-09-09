@@ -486,16 +486,20 @@ CREATE TABLE group_attendance (
 );
 
 -- ── sync_outbox (multi-facility replication queue) ──────────────────────────
+-- Columns must match db.js (getSyncBatch / outboxPending / markSynced): the
+-- first draft of this file invented entity/entity_id/payload/sent_at and every
+-- read against it failed. The triggers that FILL this table live in
+-- 003_fix_sync_outbox.sql — without them the outbox stays permanently empty
+-- and nothing ever syncs to HQ, silently.
 CREATE TABLE sync_outbox (
   id         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  entity     text        NOT NULL,
-  entity_id  text        NOT NULL,
-  op         text        NOT NULL,
-  payload    text        NOT NULL DEFAULT '{}',
+  table_name text        NOT NULL,
+  row_id     integer     NOT NULL,
+  op         text        NOT NULL CHECK (op IN ('upsert','delete')),
   created_at timestamptz NOT NULL DEFAULT now(),
-  sent_at    timestamptz
+  synced_at  timestamptz
 );
-CREATE INDEX idx_sync_outbox_unsent ON sync_outbox (sent_at NULLS FIRST, id);
+CREATE INDEX idx_outbox_unsynced ON sync_outbox (synced_at NULLS FIRST, id);
 
 -- ============================================================================
 -- Structured Clinical Lite — from migrations/001_clinical_lite.sql

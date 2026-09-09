@@ -372,7 +372,7 @@
   --line         : #4b3c45;
 }
 
-:root[data-theme="salvation"] {
+:root[data-theme="beacon"] {
   --color-primary-50 : #eff6ff;
   --color-primary-100: #dbeafe;
   --color-primary-200: #bfdbfe;
@@ -412,7 +412,7 @@
   --gray-900 : #0a1927;
 }
 
-:root.dark[data-theme="salvation"] {
+:root.dark[data-theme="beacon"] {
   --page-bg      : #111921;
   --bg           : #111921;
   --card-bg      : #202934;

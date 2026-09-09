@@ -66,7 +66,7 @@ breach-notification procedures, and a contingency plan. Those remain the operato
 - **Resident statuses** — rename, recolour, add or retire the statuses staff can select, in Admin → Statuses;
   four are permanent and a status in use on an open shift cannot be removed
 - **Facility theme** — pick the brand colour in Admin → Appearance (Indigo, Blue, Teal, Emerald, Rose,
-  Salvation Army). Applies to every signed-in session without a reload, across the whole interface rather
+  Beacon). Applies to every signed-in session without a reload, across the whole interface rather
   than the sidebar alone. Light and dark mode remain a separate per-user choice.
   Status colours and the red/amber/green used to signal state are deliberately unaffected.
 

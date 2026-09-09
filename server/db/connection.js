@@ -99,11 +99,28 @@ function jsonText(col, key) {
     : `CAST(json_extract(${col},'$.${key}') AS TEXT)`;
 }
 
+/**
+ * Case-insensitive LIKE.
+ *
+ * A quiet incompatibility: SQLite's LIKE is case-INSENSITIVE for ASCII, while
+ * Postgres's is case-SENSITIVE. So a free-text search that matched "Brendan"
+ * for the query "brendan" under SQLite silently returns nothing under Postgres.
+ * Nothing errors; the box just stops finding things.
+ *
+ * Use for user-supplied search text. A LIKE against a fixed, app-generated
+ * marker (an action prefix, a log sentinel) does not need this and should stay
+ * plain LIKE, where case-sensitivity is correct.
+ */
+function ilike() {
+  return DRIVER === 'pg' ? 'ILIKE' : 'LIKE';
+}
+
 module.exports = {
   driver: DRIVER,
   isPg:   DRIVER === 'pg',
   roomOrder,
   jsonText,
+  ilike,
   overriding,
 
   open:     (...a) => impl.open(...a),

@@ -603,7 +603,10 @@ async function getAllData(perms) {
     r.issues           = _j(r.issues, []);
     r.med_notes        = isClinical ? _j(r.med_notes, []) : [];
     r.roster_snapshot  = _j(r.roster_snapshot, null);
-    r.log_entries = await _q('SELECT * FROM log_entries WHERE report_id=? ORDER BY rowid', [r.id]);
+    // Was ORDER BY rowid. Every SQLite table has an implicit rowid; Postgres
+    // has none, so the query errored outright and took GET /api/data with it.
+    // The intent is insertion order, which the identity id gives on both.
+    r.log_entries = await _q('SELECT * FROM log_entries WHERE report_id=? ORDER BY id', [r.id]);
     r.log_entries.forEach(function(e) {
       if (e.ua_photo && (typeof e.ua_photo !== 'string' || !e.ua_photo.startsWith('data:'))) {
         e.ua_photo = true;
@@ -1072,7 +1075,10 @@ async function getAuditLog({actionPrefixes, actorId, from, to, search, limit, of
   if (to)      { where.push('ts <= ?');      params.push(to.length === 10 ? to + ' 23:59:59' : to); }
   if (search) {
     const s = '%' + String(search).replace(/[%_]/g, '\\$&') + '%';
-    where.push('(actor_name LIKE ? OR action LIKE ? OR target_label LIKE ? OR detail LIKE ?)');
+    // ILIKE on pg, LIKE on sqlite — see connection.ilike(). Without this the
+    // search silently matches nothing on Postgres for any non-exact casing.
+    const L = connection.ilike();
+    where.push(`(actor_name ${L} ? OR action ${L} ? OR target_label ${L} ? OR detail ${L} ?)`);
     params.push(s, s, s, s);
   }
   const wc  = where.length ? 'WHERE ' + where.join(' AND ') : '';

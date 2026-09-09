@@ -133,3 +133,53 @@ describe('SQLite session store', () => {
     expect(t).toBeGreaterThan(Date.now() + 4000);
   });
 });
+
+// ── The store must work when the driver returns promises ────────────────────
+// This is the shape of the bug that broke login on Postgres. The store called
+// conn.query1() without awaiting. Under SQLite that returns a row and every
+// test passes; under Postgres it returns a pending Promise, so row.expires_at
+// is undefined, the expiry check silently passes, JSON.parse(undefined) throws
+// into the catch, and get() reports "no session" — the user is bounced back to
+// the login screen with nothing logged anywhere.
+//
+// The suite runs on SQLite and structurally cannot see that. So wrap the real
+// connection in a promise-returning shim — the same contract the pg driver has
+// — and drive the store through it.
+describe('session store against a promise-returning driver (pg shape)', () => {
+  const { createSessionStore } = require('../server/lib/sessionStore');
+  const realConn = require('../server/db/connection');
+
+  const asyncConn = {
+    run:    async (...a) => realConn.run(...a),
+    query:  async (...a) => realConn.query(...a),
+    query1: async (...a) => realConn.query1(...a),
+    exec:   async (...a) => realConn.exec(...a),
+  };
+
+  const store = () => createSessionStore(asyncConn, 60_000);
+  const sess = (ms) => ({ cookie: { expires: new Date(Date.now() + ms).toISOString() }, userId: 42 });
+
+  test('a session written through an async driver can be read back', (done) => {
+    const s = store();
+    s.set('sid-async', sess(60_000), (err) => {
+      expect(err).toBeFalsy();
+      s.get('sid-async', (e, got) => {
+        expect(e).toBeFalsy();
+        // The regression returned null here, which is what logged the user out.
+        expect(got).toBeTruthy();
+        expect(got.userId).toBe(42);
+        s.destroy('sid-async', () => done());
+      });
+    });
+  });
+
+  test('an expired session still reads as absent, not as a live one', (done) => {
+    const s = store();
+    s.set('sid-async-old', sess(-5000), () => {
+      s.get('sid-async-old', (e, got) => {
+        expect(got).toBeNull();
+        done();
+      });
+    });
+  });
+});

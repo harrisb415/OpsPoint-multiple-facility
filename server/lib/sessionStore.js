@@ -39,13 +39,25 @@ function expiryOf(sess, fallbackMs) {
  */
 function createSessionStore(conn, fallbackMs) {
   class SqliteStore extends session.Store {
-    get(sid, cb) {
+    // Every method here is async because the connection is: under Postgres the
+    // primitives return promises, and under SQLite they return values, which
+    // await passes straight through. express-session's Store contract is
+    // callback-based and does not care when the callback fires, so awaiting
+    // inside and calling cb afterwards satisfies both drivers.
+    //
+    // These were plain synchronous calls until the Postgres port, and missing
+    // the await here does NOT throw — it silently breaks login. `row` becomes a
+    // pending Promise, so `row.expires_at` is undefined, `undefined <= now` is
+    // false (NaN comparison), and JSON.parse(undefined) lands in the catch that
+    // returns "no session". The user gets bounced back to the login screen with
+    // no error anywhere.
+    async get(sid, cb) {
       let row;
-      try { row = conn.query1('SELECT data,expires_at FROM sessions WHERE sid=?', [sid]); }
+      try { row = await conn.query1('SELECT data,expires_at FROM sessions WHERE sid=?', [sid]); }
       catch (e) { return cb(e); }
       if (!row) return cb(null, null);
-      if (row.expires_at <= Date.now()) {   // expired — indistinguishable from absent
-        try { conn.run('DELETE FROM sessions WHERE sid=?', [sid]); } catch (e) {}
+      if (Number(row.expires_at) <= Date.now()) {   // expired — indistinguishable from absent
+        try { await conn.run('DELETE FROM sessions WHERE sid=?', [sid]); } catch (e) {}
         return cb(null, null);
       }
       let parsed;
@@ -54,9 +66,9 @@ function createSessionStore(conn, fallbackMs) {
       cb(null, parsed);
     }
 
-    set(sid, sess, cb) {
+    async set(sid, sess, cb) {
       try {
-        conn.run(
+        await conn.run(
           'INSERT INTO sessions (sid,data,expires_at) VALUES (?,?,?) ' +
           'ON CONFLICT(sid) DO UPDATE SET data=excluded.data, expires_at=excluded.expires_at',
           [sid, JSON.stringify(sess), expiryOf(sess, fallbackMs)]
@@ -66,33 +78,33 @@ function createSessionStore(conn, fallbackMs) {
     }
 
     // Rolling-expiry refresh. Never writes session data, only the deadline.
-    touch(sid, sess, cb) {
-      try { conn.run('UPDATE sessions SET expires_at=? WHERE sid=?', [expiryOf(sess, fallbackMs), sid]); }
+    async touch(sid, sess, cb) {
+      try { await conn.run('UPDATE sessions SET expires_at=? WHERE sid=?', [expiryOf(sess, fallbackMs), sid]); }
       catch (e) { return cb(e); }
       cb(null);
     }
 
-    destroy(sid, cb) {
-      try { conn.run('DELETE FROM sessions WHERE sid=?', [sid]); }
+    async destroy(sid, cb) {
+      try { await conn.run('DELETE FROM sessions WHERE sid=?', [sid]); }
       catch (e) { return cb(e); }
       cb(null);
     }
 
-    length(cb) {
+    async length(cb) {
       try {
-        const r = conn.query1('SELECT COUNT(*) AS n FROM sessions WHERE expires_at > ?', [Date.now()]);
-        cb(null, r ? r.n : 0);
+        const r = await conn.query1('SELECT COUNT(*) AS n FROM sessions WHERE expires_at > ?', [Date.now()]);
+        cb(null, r ? Number(r.n) : 0);
       } catch (e) { cb(e); }
     }
 
-    clear(cb) {
-      try { conn.run('DELETE FROM sessions', []); } catch (e) { return cb(e); }
+    async clear(cb) {
+      try { await conn.run('DELETE FROM sessions', []); } catch (e) { return cb(e); }
       cb(null);
     }
 
     // Reap expired rows. MemoryStore never did this; a DB-backed store must.
-    prune() {
-      try { return conn.run('DELETE FROM sessions WHERE expires_at <= ?', [Date.now()]).changes; }
+    async prune() {
+      try { return (await conn.run('DELETE FROM sessions WHERE expires_at <= ?', [Date.now()])).changes; }
       catch (e) { return 0; }
     }
   }

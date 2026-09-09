@@ -28,12 +28,22 @@ DECLARE
   fixed    int := 0;
   checked  int := 0;
 BEGIN
+  -- The join to pg_attribute is load-bearing: pg_get_serial_sequence RAISES
+  -- when the named column does not exist, it does not return NULL. Calling it
+  -- on settings / user_groups / sessions — which have no id — aborts the whole
+  -- migration. Restricting to real identity columns first avoids that, and
+  -- schema-qualifying the name keeps it off anything in pg_catalog.
   FOR r IN
-    SELECT c.relname AS tbl, pg_get_serial_sequence(c.relname, 'id') AS seq
+    SELECT c.relname AS tbl,
+           pg_get_serial_sequence(
+             quote_ident(n.nspname) || '.' || quote_ident(c.relname), 'id') AS seq
     FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+    JOIN pg_namespace n  ON n.oid = c.relnamespace AND n.nspname = 'public'
+    JOIN pg_attribute a  ON a.attrelid = c.oid
+                        AND a.attname = 'id'
+                        AND NOT a.attisdropped
+                        AND a.attidentity IN ('a', 'd')   -- ALWAYS or BY DEFAULT
     WHERE c.relkind = 'r'
-      AND pg_get_serial_sequence(c.relname, 'id') IS NOT NULL
     ORDER BY c.relname
   LOOP
     checked := checked + 1;

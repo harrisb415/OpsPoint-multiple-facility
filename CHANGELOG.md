@@ -2,6 +2,33 @@
 
 ---
 
+## Unreleased — UA test times (2026-09-26)
+
+### Fixed
+
+- **UA test times were stored hours early on Postgres** — the same bug as pass times: the
+  Conduct UA dialog sent `tested_at` as local text with no timezone, which Postgres reads as
+  UTC (7 hours early in PDT). It now sends an absolute instant.
+  `scripts/pg-repair-ua-tested-at.sql` corrects existing records. It only touches rows whose
+  test time, read as local time, lands within two minutes before the row's own `created_at` —
+  the exact signature of the bug — and writes each correction to the audit log.
+- **The UA record's time ignored the dialog's Time field.** The log entry used the entered
+  time but `tested_at` was stamped at the moment of saving, so a backdated test (collected at
+  8:30, entered at 9:45) left the log and the chain-of-custody record disagreeing. The record
+  now uses the entered time (yesterday's date if that time would be more than 30 minutes in
+  the future, as for log times).
+- **"Time ago" read NaN on Postgres**, and the 24-hour UA-draw window never matched, so the
+  UA Draws bell section never appeared; announcements also never became dismissable. The
+  bell's parser appended a `Z` to timestamps that already carry `+00`. Now handled by
+  `parseServerTime()` (utils/dates.js).
+- UA lists sort by the actual instant, and read Postgres timestamps in Safari as well.
+- **A positive UA never set the resident profile's "Needs Attention" flag** — it compared the
+  result against `'POS'`, but positives are stored as `'fail'`. Likewise the client report
+  printed results as bare "fail"/"pass" with no colour, and a "Type" column from a field that
+  doesn't exist; it now shows Method and Positive/Negative like the UA tab.
+
+---
+
 ## Unreleased — Pass-extension notifications; pass times fixed on Postgres (2026-09-26)
 
 ### Added

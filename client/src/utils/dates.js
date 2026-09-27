@@ -7,10 +7,10 @@
 //                   onto another day.
 //   instant         '2026-09-29T06:22:00.000Z' (SQLite, written as ISO) or
 //                   '2026-09-29 06:22:00+00'   (Postgres — the pg driver hands
-//                   timestamptz back as its raw text). A moment in time: read
-//                   whole, so the LOCAL day and hour come out. Its first ten
-//                   characters are the UTC date, already "tomorrow" for an
-//                   evening pass.
+//                   timestamptz back as its raw text). Pass times, UA test
+//                   times. A moment in time: read whole, so the LOCAL day and
+//                   hour come out. Its first ten characters are the UTC date,
+//                   already "tomorrow" for an evening pass.
 //   local datetime  '2026-09-28T23:22' (old datetime-local values) or
 //                   '2026-09-27 04:22:33' (nowLocal). Wall-clock time with no
 //                   zone, so it is local already.
@@ -36,6 +36,30 @@ export function parseWhen(v) {
     : zone.replace(/^([+-]\d{2}):?(\d{2})?$/, (_, h, mm) => `${h}:${mm || '00'}`)
   const d = new Date(`${day}T${time}${ms}${off}`)
   return Number.isNaN(d.getTime()) ? null : d
+}
+
+// Timestamps the SERVER stamps from a "now" default: created_at, requested_at
+// and the like. Different convention from the shapes above: SQLite writes these
+// with datetime('now'), which is UTC but carries no zone marker, so a zone-less
+// value here means UTC — that is why timeAgo() used to append a 'Z'. Postgres
+// hands the same columns back with an explicit offset, and '…+00' + 'Z' is an
+// Invalid Date: every "time ago" read NaN and the 24-hour UA-draw window never
+// matched anything.
+export function parseServerTime(v) {
+  if (v instanceof Date) return parseWhen(v)
+  const s = String(v ?? '').trim()
+  if (!s) return null
+  return parseWhen(/(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(s) ? s : s.replace(' ', 'T') + 'Z')
+}
+
+// 'YYYY-MM-DD' of the local calendar day, for comparing against date cutoffs.
+// Slicing the string gives the UTC day for an instant — tomorrow, for an
+// evening entry.
+export function localDayKey(v) {
+  const d = parseWhen(v)
+  if (!d) return ''
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 // 'Sep 28, 2026' — the local calendar day.

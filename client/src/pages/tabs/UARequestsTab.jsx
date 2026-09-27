@@ -10,17 +10,21 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
 import { openPrintWindow } from '../../utils/printLog.js'
+import { parseWhen } from '../../utils/dates.js'
 import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, DeltaRow, FilterChip, useConfirm } from '../../components/ui.jsx'
 
+// Reads ISO (SQLite), local text (older rows) and Postgres's raw timestamptz
+// text alike — see utils/dates.js; plain new Date() rejects the last in Safari.
 function fmtDT(s) {
-  if (!s) return '—'
-  try {
-    const d = new Date(s)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  } catch { return s }
+  const d = parseWhen(s)
+  if (!d) return s || '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
+// Newest-first comparator on tested_at by instant. Comparing the strings broke
+// once old local-text rows and new ISO rows were mixed on the same install.
+const byTested = (a, b) => (parseWhen(b.tested_at)?.getTime() || 0) - (parseWhen(a.tested_at)?.getTime() || 0)
 
 const RESULT_LABEL = { pending:'Pending', pass:'Negative', fail:'Positive', dilute:'Dilute', refused:'Refused', invalid:'Invalid' }
 const REASON_LABEL = {
@@ -93,10 +97,10 @@ export default function UARequestsTab() {
     if (filterClient) rows = rows.filter(r => String(r.client_id) === filterClient)
     if (filterResult) rows = rows.filter(r => r.result === filterResult)
     if (gq) rows = rows.filter(r => (r.client_name || '').toLowerCase().includes(gq) || String(r.room || '').includes(gq))
-    if (sortRecords === 'oldest') rows.sort((a, b) => String(a.tested_at || '').localeCompare(String(b.tested_at || '')))
+    if (sortRecords === 'oldest') rows.sort((a, b) => byTested(b, a))
     else if (sortRecords === 'room') rows.sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
     else if (sortRecords === 'name') rows.sort((a, b) => (a.client_name || '').localeCompare(b.client_name || ''))
-    else rows.sort((a, b) => String(b.tested_at || '').localeCompare(String(a.tested_at || '')))
+    else rows.sort(byTested)
     return rows
   }, [uaRecords, filterClient, filterResult, globalSearch, sortRecords])
 

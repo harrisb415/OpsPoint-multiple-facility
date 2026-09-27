@@ -30,7 +30,7 @@ import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { openPrintWindow, classifyLogEntry } from '../utils/printLog.js'
 import { statusLabel, statusBadge, effectiveStatuses } from '../utils/statuses.js'
-import { fmtDay } from '../utils/dates.js'
+import { fmtDay, parseWhen, localDayKey } from '../utils/dates.js'
 
 const LOG_TYPE_CLS = {
   Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
@@ -118,10 +118,13 @@ function computeRisk(clientId, data) {
     i => i.client_id === clientId && i.status !== 'closed'
   )
   if (openInc) return 'red'
-  // Amber: POS UA result in the last 30 days
+  // Amber: positive UA in the last 30 days. A positive is stored as 'fail'
+  // (ConductUAModal writes pass/fail) — this compared against 'POS', which no
+  // record carries, so it never fired. The day is the LOCAL one: slicing the
+  // string gave the UTC date.
   const cutoff = new Date(Date.now() - 30 * 86400000).toLocaleDateString('en-CA')
   const posUA = (data.ua_records || []).find(
-    r => r.client_id === clientId && r.result === 'POS' && (r.tested_at || '').slice(0, 10) >= cutoff
+    r => r.client_id === clientId && r.result === 'fail' && localDayKey(r.tested_at) >= cutoff
   )
   if (posUA) return 'amber'
   // Amber: overdue milestone (due date passed, not yet completed)
@@ -360,7 +363,7 @@ function UATab({ client, data, hasPerm }) {
 
   const records = (data?.ua_records || [])
     .filter(r => r.client_id === client.id)
-    .sort((a, b) => (b.tested_at || '').localeCompare(a.tested_at || ''))
+    .sort((a, b) => (parseWhen(b.tested_at)?.getTime() || 0) - (parseWhen(a.tested_at)?.getTime() || 0))
 
   const pending = (data?.ua_requests || [])
     .filter(r => r.client_id === client.id && !r.acknowledged)

@@ -23,7 +23,7 @@ import { RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF } from '../utils/ui.js'
 import {
   statusLabel, statusPrint, offSiteStatuses, censusKeys, countStatuses, effectiveStatuses,
 } from '../utils/statuses.js'
-import { parseWhen, fmtWhen } from '../utils/dates.js'
+import { parseWhen, fmtWhen, parseServerTime } from '../utils/dates.js'
 
 // ── Sidebar group config ──────────────────────────────────────────────
 const SIDEBAR_GROUPS = [
@@ -62,9 +62,12 @@ const SIDEBAR_GROUPS = [
 ]
 
 // ── Notification time-ago helper ──────────────────────────────────────
+// Server-stamped times: zone-less SQLite text is UTC, Postgres text carries
+// its offset (parseServerTime in utils/dates.js). Appending 'Z' blindly made
+// every Postgres value an Invalid Date — "NaNd ago" on UA requests.
 function timeAgo(ts) {
-  if (!ts) return ''
-  const t   = new Date(ts.replace ? ts.replace(' ', 'T') + 'Z' : ts)
+  const t = parseServerTime(ts)
+  if (!t) return ''
   const sec = Math.floor((Date.now() - t.getTime()) / 1000)
   if (sec < 60)    return 'just now'
   if (sec < 3600)  return Math.floor(sec / 60) + 'm ago'
@@ -108,7 +111,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
   const perm = session?.permissions || []
 
   const draws24h = (notif.uaDraws || []).filter(d => {
-    const ts = d.created_at ? new Date(d.created_at.replace(' ', 'T') + 'Z').getTime() : 0
+    const ts = parseServerTime(d.created_at)?.getTime() || 0
     return ts >= Date.now() - 24 * 3600000 && !dismissedDrawIds?.has(d.id)
   })
 
@@ -229,7 +232,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
         {notif.broadcasts.length > 0 && perm.includes('broadcast.receive') && (
           <NotifSection title="Announcements" count={notif.broadcasts.length}>
             {notif.broadcasts.map(b => {
-              const bcTs       = b.created_at ? new Date(b.created_at.replace(' ','T')+'Z').getTime() : 0
+              const bcTs       = parseServerTime(b.created_at)?.getTime() || 0
               const canDismiss = bcTs > 0 && (Date.now() - bcTs) > 12 * 3600000
               return (
                 <NotifRow key={b.id} icon="📢" wrap
@@ -868,7 +871,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
   }
 
   const draws24h = (notif.uaDraws || []).filter(d => {
-    const ts = d.created_at ? new Date(d.created_at.replace(' ','T')+'Z').getTime() : 0
+    const ts = parseServerTime(d.created_at)?.getTime() || 0
     return ts >= Date.now() - 24*3600000 && !dismissedDrawIds.has(d.id)
   })
   const badgeCount =

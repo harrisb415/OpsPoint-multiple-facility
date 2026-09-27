@@ -62,9 +62,23 @@ function todayStr() {
   const d = new Date(), p = n => String(n).padStart(2,'0')
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
 }
-function nowLocalDT() {
-  const d = new Date(), p = n => String(n).padStart(2,'0')
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+// tested_at: the time staff entered in the dialog, as an absolute ISO instant.
+//  - The entered time, not the moment of saving: the log entry already used
+//    the field, so a backdated test (collected 8:30, entered 9:45) left the log
+//    and the chain-of-custody record disagreeing about when it happened.
+//  - An instant, not local text: Postgres reads zone-less timestamptz input as
+//    UTC, which stored every UA hours early on the hosted deployment.
+// The field is a bare HH:MM, so it takes today's date — or yesterday's when
+// that lands more than 30 minutes ahead (a test entered just after midnight),
+// the same rule ReportTab applies to log times.
+function testedAtFromInput(val) {
+  const d = new Date()
+  const [h, m] = String(val || '').split(':').map(Number)
+  if (Number.isInteger(h) && Number.isInteger(m)) {
+    d.setHours(h, m, 0, 0)
+    if (d.getTime() > Date.now() + 30 * 60000) d.setDate(d.getDate() - 1)
+  }
+  return d.toISOString()
 }
 
 // ── Result cycle colours ──────────────────────────────────────────────────
@@ -182,7 +196,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           client_id:         0,
           client_name:       interviewName.trim() || 'Interview',
           room:              '',
-          tested_at:         nowLocalDT(),
+          tested_at:         testedAtFromInput(time),
           collection_method: collMethod,
           reason,
           result:            overall,
@@ -194,7 +208,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           client_id:         parseInt(clientId),
           client_name:       c?.name  || '',
           room:              c?.room  || '',
-          tested_at:         nowLocalDT(),
+          tested_at:         testedAtFromInput(time),
           collection_method: collMethod,
           reason,
           result:            overall,

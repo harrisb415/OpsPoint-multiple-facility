@@ -11,7 +11,7 @@ import { useState } from 'react'
 import { Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput } from 'flowbite-react'
 import { Field } from './ui.jsx'
 import { classifyLogEntry } from '../utils/printLog.js'
-import { fmtDay } from '../utils/dates.js'
+import { fmtDay, parseWhen } from '../utils/dates.js'
 
 // ── Pure helpers (no React) ───────────────────────────────────────────────
 
@@ -106,18 +106,24 @@ function buildCard(c, data, sections, limit) {
 
   // ── UA Records ──
   if (sections.ua) {
+    // Newest first by instant, not by string (old local-text and new ISO rows
+    // sort wrongly against each other). Result and Method match the UA tab: a
+    // positive is stored as 'fail' — this read 'POS'/'NEG', which no record
+    // carries, and a 'test_type' column that does not exist.
     const recs = (data?.ua_records || [])
       .filter(r => r.client_id === c.id)
-      .sort((a, b) => (b.tested_at||'').localeCompare(a.tested_at||''))
+      .sort((a, b) => (parseWhen(b.tested_at)?.getTime() || 0) - (parseWhen(a.tested_at)?.getTime() || 0))
       .slice(0, limit)
+    const uaResult = r => r.result === 'fail' ? ['pos', 'Positive'] : r.result === 'pass' ? ['neg', 'Negative'] : ['', r.result || '—']
+    const uaMethod = r => r.collection_method ? r.collection_method.charAt(0).toUpperCase() + r.collection_method.slice(1) : '—'
     h += `<div class="sec"><div class="slbl">UA Records${recs.length ? ` <span class="sub">(${recs.length} most recent)</span>` : ''}</div>`
     h += recs.length === 0
       ? `<div class="empty">No UA records</div>`
-      : `<table class="dt"><thead><tr><th>Date</th><th>Type</th><th>Result</th><th>Witnessed By</th><th>Notes</th></tr></thead><tbody>
+      : `<table class="dt"><thead><tr><th>Date</th><th>Method</th><th>Result</th><th>Witnessed By</th><th>Notes</th></tr></thead><tbody>
           ${recs.map(r => `<tr>
             <td class="mo">${esc(fd(r.tested_at))}</td>
-            <td>${esc(r.test_type||'—')}</td>
-            <td class="${r.result==='POS'?'pos':r.result==='NEG'?'neg':''}">${esc(r.result||'—')}</td>
+            <td>${esc(uaMethod(r))}</td>
+            <td class="${uaResult(r)[0]}">${esc(uaResult(r)[1])}</td>
             <td>${esc(r.witnessed_by_name||'—')}</td>
             <td>${esc(r.notes||'')}</td>
           </tr>`).join('')}

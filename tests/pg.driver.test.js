@@ -210,6 +210,25 @@ describe('type parsers', () => {
     expect(parse(null)).toBe(null);
   });
 
+  // A startup option, not a SET query: a SET fired from the pool's connect
+  // event raced the first real query onto the same client (deprecated in pg 8,
+  // rejected in pg 9). It must keep any options the URL already carries.
+  test('the session time zone rides in the connection options, keeping existing ones', () => {
+    const { _withSessionTimeZone } = require('../server/db/drivers/pg');
+    const parse = require('pg-connection-string').parse || require('pg-connection-string');
+    const saved = process.env.PGTZ;
+    try {
+      process.env.PGTZ = 'America/Los_Angeles';
+      const a = parse(_withSessionTimeZone('postgresql://u:p%40ss@db:5432/opspoint'));
+      expect(a.options).toBe('-c TimeZone=America/Los_Angeles');
+      expect(a.password).toBe('p@ss');
+      const b = parse(_withSessionTimeZone('postgresql://u:p@db:5432/x?options=-c%20search_path%3Dcentral_test'));
+      expect(b.options).toBe('-c search_path=central_test -c TimeZone=America/Los_Angeles');
+    } finally {
+      if (saved === undefined) delete process.env.PGTZ; else process.env.PGTZ = saved;
+    }
+  });
+
   test('the session time zone follows PGTZ, then the process, and rejects junk', () => {
     const { _sessionTimeZone } = require('../server/db/drivers/pg');
     const saved = process.env.PGTZ;

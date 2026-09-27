@@ -57,10 +57,24 @@ types.setTypeParser(1184, (v) => {
 });
 
 // The zone each session runs in: PGTZ if set, else the process's own (TZ).
-// Only IANA-shaped names get through, since it is spliced into a SET.
+// Only IANA-shaped names get through, since it becomes a startup option.
 function sessionTimeZone() {
   const tz = process.env.PGTZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   return /^[A-Za-z0-9_+\-/]{1,64}$/.test(tz) ? tz : 'UTC';
+}
+
+// Put TimeZone in the connection's startup options, so every session begins
+// in the process zone before any query runs. (A `SET TIME ZONE` sent from the
+// pool's 'connect' event raced the first real query onto the same client,
+// which node-postgres deprecates and will reject in pg@9.) Merged into the
+// URL's own `options` rather than passed as a config field, because values
+// parsed from the connection string override config fields.
+function withSessionTimeZone(dsn) {
+  try {
+    const u = new URL(dsn);
+    u.searchParams.set('options', [u.searchParams.get('options'), `-c TimeZone=${sessionTimeZone()}`].filter(Boolean).join(' '));
+    return u.toString();
+  } catch (e) { return dsn; }
 }
 
 // int8 (bigint) is the exception, and it must be a NUMBER.
@@ -159,7 +173,7 @@ function open(dsn) {
         ca: process.env.PGSSLROOTCERT ? require('fs').readFileSync(process.env.PGSSLROOTCERT, 'utf8') : undefined };
 
   _pool = new Pool({
-    connectionString: _dsn || undefined,
+    connectionString: _dsn ? withSessionTimeZone(_dsn) : undefined,
     ssl,
     max: parseInt(process.env.PGPOOL_MAX, 10) || 10,
     idleTimeoutMillis: 30_000,
@@ -171,15 +185,6 @@ function open(dsn) {
   // process down — an idle backend being terminated is routine, not fatal.
   _pool.on('error', (err) => {
     console.error('[pg] idle client error:', err.message);
-  });
-
-  // Match the session to the process zone before the client is handed out
-  // (queries on one client run in order, so this lands first). Without it the
-  // server default applies — UTC on db-mnemosyne — and a zone-less stamp
-  // written by a process in any other zone would be read hours off.
-  const tz = sessionTimeZone();
-  _pool.on('connect', (client) => {
-    client.query(`SET TIME ZONE '${tz}'`).catch((err) => console.error('[pg] SET TIME ZONE failed:', err.message));
   });
 
   return _pool;
@@ -256,5 +261,6 @@ async function close() { if (_pool) { await _pool.end(); _pool = null; } }
 module.exports = {
   open, getDb, getPath, backupTo, run, query, query1, exec, transaction, close,
   // exported for unit tests
-  _toPositional: toPositional, _withReturning: withReturning, _sessionTimeZone: sessionTimeZone, IDENTITY_TABLES,
+  _toPositional: toPositional, _withReturning: withReturning, _sessionTimeZone: sessionTimeZone,
+  _withSessionTimeZone: withSessionTimeZone, IDENTITY_TABLES,
 };

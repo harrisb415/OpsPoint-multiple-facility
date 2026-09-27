@@ -1,16 +1,11 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
+import {
+  statusLabel, statusTone, censusKeys, countStatuses, effectiveStatuses, TONE_PRINT,
+} from '../utils/statuses.js'
 
 // ── Constants ───────────────────────────────────────────────────────
-const ST_LABELS = {
-  building: 'In Building', work: 'At Work', pass: 'Weekend Pass',
-  bhc: 'BHC', efc: 'EFC', hospital: 'Hospital', out: 'Out/Other', vacant: 'Vacant',
-}
-const ST_CLS = {
-  building: 's-building', work: 's-work', pass: 's-pass',
-  bhc: 's-bhc', efc: 's-efc', hospital: 's-hospital', out: 's-out', vacant: 's-vacant',
-}
 const DEFAULT_AREAS = [
   'Supply Room', 'Basement / Offices', 'Kitchen', 'Meeting Room', 'Dining Room',
   'Laundry Area', 'Clothing Closet', 'Stairs to Roof', 'Floors 2, 3 & 4',
@@ -54,6 +49,9 @@ export default function Mobile() {
   const [areas, setAreas]               = useState(DEFAULT_AREAS)
   const [wsConnected, setWsConnected]   = useState(false)
   const [toast, setToast]               = useState('')
+  // What the statuses.js helpers read: the configured statuses, the Passes
+  // feature flag, and the passes themselves (they decide who is on pass).
+  const [statusCfg, setStatusCfg]       = useState({})
 
   // Local wellness check state (cleared on log submit)
   const [checked, setChecked] = useState(() => new Set())
@@ -113,6 +111,7 @@ export default function Mobile() {
       const cls = data.clients || []
       const rps = data.reports || []
       setClients(cls)
+      setStatusCfg({ client_statuses: data.client_statuses, ui_visibility: data.ui_visibility, passes: data.passes || [] })
       if (data.active_report_id !== undefined) activeIdRef.current = data.active_report_id
 
       const cCount = cls.filter(c => c.is_active && !c.is_special).length
@@ -156,6 +155,20 @@ export default function Mobile() {
             const d = msg.settings
             if (d.facility_name) setFacilityName(d.facility_name)
             if (Array.isArray(d.walk_areas) && d.walk_areas.length) setAreas(d.walk_areas)
+            if (d.client_statuses || d.ui_visibility) {
+              setStatusCfg(prev => ({
+                ...prev,
+                ...(d.client_statuses ? { client_statuses: d.client_statuses } : {}),
+                ...(d.ui_visibility ? { ui_visibility: d.ui_visibility } : {}),
+              }))
+            }
+          } else if (msg.type === 'passes_updated') {
+            // Just the passes: a full loadAll() would also reset the wellness
+            // check in progress on this phone.
+            fetch('/api/passes', { credentials: 'include' })
+              .then(r => (r.ok ? r.json() : null))
+              .then(list => { if (Array.isArray(list)) setStatusCfg(prev => ({ ...prev, passes: list })) })
+              .catch(() => {})
           } else if (msg.type === 'data_saved') {
             if (msg.active_report_id !== undefined) activeIdRef.current = msg.active_report_id
             loadAll()
@@ -213,7 +226,8 @@ export default function Mobile() {
     [clients]
   )
 
-  const statuses = currentRpt?.statuses || {}
+  // Passes laid over the stored map — someone away on pass is on pass here too.
+  const statuses = useMemo(() => effectiveStatuses(statusCfg, currentRpt), [statusCfg, currentRpt])
 
   // ── Patch helper ─────────────────────────────────────────────────
   async function patchReport(patch) {
@@ -336,14 +350,10 @@ export default function Mobile() {
 
   // ── Census ───────────────────────────────────────────────────────
   const census = useMemo(() => {
-    const cnt = { building: 0, work: 0, pass: 0, bhc: 0, efc: 0, hospital: 0, out: 0 }
-    activeClients.forEach(c => {
-      const st = statuses[c.id] || 'building'
-      if (Object.hasOwn(cnt, st)) cnt[st]++
-    })
+    const cnt = countStatuses(statusCfg, activeClients, statuses)
     const tot = Object.values(cnt).reduce((a, b) => a + b, 0)
     return { cnt, tot }
-  }, [activeClients, statuses])
+  }, [activeClients, statuses, statusCfg])
 
   // ── Active report label ──────────────────────────────────────────
   const activeRptLabel = useMemo(() => {
@@ -413,7 +423,7 @@ export default function Mobile() {
                   <div key={c.id} className="mob-card">
                     <span className="mob-rm">{c.room}</span>
                     <span className="mob-name">{c.name}</span>
-                    <span className={`mob-status ${ST_CLS[st] || 's-building'}`}>{ST_LABELS[st] || st}</span>
+                    <span className={`mob-status t-${statusTone(statusCfg, st)}`}>{statusLabel(statusCfg, st)}</span>
                     {hasPerm('ua.request') && (
                       <button className="mob-ua-btn" onClick={() => requestUA(c)} title="Request UA">🧪</button>
                     )}
@@ -517,12 +527,12 @@ export default function Mobile() {
             {!currentRpt
               ? <div className="mob-empty" style={{ gridColumn: 'span 2' }}>Select a report on the Wellness tab</div>
               : <>
-                {Object.entries({ building: 'In Building', work: 'At Work', pass: 'Weekend Pass', bhc: 'BHC', efc: 'EFC', hospital: 'Hospital', out: 'Out/Other' })
-                  .filter(([k]) => census.cnt[k] > 0)
-                  .map(([k, lbl]) => (
+                {censusKeys(statusCfg, census.cnt)
+                  .filter(k => census.cnt[k] > 0)
+                  .map(k => (
                     <div key={k} className="mob-ccard">
                       <div className="mob-cnum">{census.cnt[k]}</div>
-                      <div className="mob-clbl">{lbl}</div>
+                      <div className="mob-clbl">{statusLabel(statusCfg, k)}</div>
                     </div>
                   ))
                 }
@@ -586,10 +596,7 @@ const MOBILE_CSS = `
 .mob-rm{font-size:.76rem;font-weight:700;color:#4B5563;font-family:'JetBrains Mono Variable','JetBrains Mono',SFMono-Regular,Consolas,monospace;min-width:32px;}
 .mob-name{flex:1;font-size:.97rem;font-weight:700;color:#0F172A;}
 .mob-status{font-size:.7rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;}
-.s-building{background:#d8f3dc;color:#14532d;}.s-work{background:#dbeafe;color:#1d4ed8;}
-.s-pass{background:#fef9c3;color:#854d0e;}.s-bhc{background:#ede9fe;color:#6d28d9;}
-.s-efc{background:#fce7f3;color:#be185d;}.s-hospital{background:#fee2e2;color:#991b1b;}
-.s-out{background:#fff7ed;color:#9a3412;}.s-vacant{background:#f1f5f9;color:#94a3b8;}
+${Object.entries(TONE_PRINT).map(([t, c]) => `.t-${t}{background:#${c.bg};color:#${c.fg};}`).join('')}
 .mob-chk{width:44px;height:44px;border-radius:50%;border:2.5px solid #E2E8F0;background:#fff;font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s;}
 .mob-chk.present{background:#1A5C42;border-color:#1A5C42;color:#fff;}
 .mob-chk.missing{background:#C0392B;border-color:#C0392B;color:#fff;}

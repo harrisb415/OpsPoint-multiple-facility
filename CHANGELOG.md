@@ -2,6 +2,43 @@
 
 ---
 
+## Unreleased — Resident statuses: built-in defaults, Passes owns Weekend Pass (2026-09-26)
+
+### Changed
+
+- **A new facility starts with the four built-in statuses only** — In Building, Weekend
+  Pass, Hospital and Out / Other, all of which can be renamed and recoloured but not
+  removed. At Work, BHC and EFC are no longer seeded; a facility that wants them adds them
+  in Admin → Facility → Statuses. Existing facilities keep their current list.
+
+- **Weekend Pass belongs to the Passes tab.** While the Passes feature is on, it is no
+  longer offered in the roster dropdown: a resident goes onto it when their pass is marked
+  Out and comes off it when the pass is Returned. Turning Passes off in Admin → Features
+  makes it an ordinary hand-picked status again.
+
+- **Every screen, print and export now follows the configured status list.** The DOCX
+  export, wellness filing print, Mobile, Archive, Clients, Caseloads and the resident
+  profile each carried their own hard-coded copy (with At Work / BHC / EFC columns and
+  chips baked in); they now read `client/src/utils/statuses.js`, so an added, renamed or
+  retired status shows up everywhere at once.
+
+### Fixed
+
+- **A resident away on pass showed as In Building almost everywhere.** A pass never writes
+  a status — it is laid over the stored one — but only the shift report and dashboard
+  applied that overlay. Mobile, Clients, Caseloads, the profile, the DOCX export and the
+  wellness filing print all read the stored value, and the **UA draw could pick a resident
+  who was away on pass**. All of them now read through `effectiveStatuses()`.
+
+- **Closed shifts recorded residents on pass as In Building.** Close Shift saved the
+  stored statuses without the overlay, and once the pass was Returned nothing could
+  reconstruct it. The overlay is now frozen into the record at close.
+
+- The roster's attempt to hide Weekend Pass keyed on a pass status (`In`) that no longer
+  exists, so it never fired; replaced by the Passes-owns-it rule above.
+
+---
+
 ## Unreleased — Session-security hardening for the hosted deployment (2026-09-01)
 
 ### Security

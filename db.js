@@ -218,15 +218,14 @@ async function _seedDefaults() {
     // Selectable resident statuses, editable in Admin -> Facility -> Statuses.
     // `key` is what gets stored in reports.statuses, so renaming a label is
     // safe but changing a key would orphan historical data — the API blocks
-    // removing a key that any report still references. `building` is the
-    // default state and cannot be removed. 'vacant' is NOT here: it is
-    // derived from name='VACANT', not chosen by staff.
+    // removing a key that any report still references. A new facility starts
+    // with the built-in set only (SYSTEM_STATUS_KEYS in the facility service),
+    // which can be renamed but never removed; anything site-specific is added
+    // in Admin. 'vacant' is NOT here: it is derived from name='VACANT', not
+    // chosen by staff. Mirrored by DEFAULT_STATUSES in client/src/utils/statuses.js.
     client_statuses:        JSON.stringify([
       { key: 'building', label: 'In Building',  tone: 'green',  system: true },
-      { key: 'work',     label: 'At Work',      tone: 'blue'   },
       { key: 'pass',     label: 'Weekend Pass', tone: 'amber',  system: true },
-      { key: 'bhc',      label: 'BHC',          tone: 'purple' },
-      { key: 'efc',      label: 'EFC',          tone: 'pink'   },
       { key: 'hospital', label: 'Hospital',     tone: 'red',    system: true },
       { key: 'out',      label: 'Out / Other',  tone: 'orange', system: true },
     ]),

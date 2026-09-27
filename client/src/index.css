@@ -580,16 +580,6 @@ html:not(.dark) .border-gray-200 { border-color: var(--surface-line); }
   }
 }
 
-/* - Status chips (Mobile.jsx) ----------------------------------- */
-.s-building { background: #d7f5e1; color: #13733e; border-color: #6fdc9c; }
-.s-work     { background: #d8e9fe; color: #1652c4; border-color: #88b6f5; }
-.s-pass     { background: #fdeec4; color: #8a5a08; border-color: #f6c75a; }
-.s-bhc      { background: #e8e2fd; color: #6428c9; border-color: #bba6f4; }
-.s-efc      { background: #fce0ef; color: #b21a6b; border-color: #f49ac9; }
-.s-hospital { background: #fdd9d9; color: #b81d1d; border-color: #f59a9a; }
-.s-vacant   { background: #eef2f5; color: #8597a6; border-color: #cfd9e0; font-style: italic; }
-.s-out      { background: #ffe4cc; color: #9a3d12; border-color: #fbb277; }
-
 /* - Loading screen ---------------------------------------------- */
 .loading-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--grad-sidebar); }
 .loading-inner { text-align: center; }

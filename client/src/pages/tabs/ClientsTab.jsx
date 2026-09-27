@@ -9,20 +9,11 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
+import { statusList, statusLabel, statusBadge, effectiveStatuses } from '../../utils/statuses.js'
 import ClientReportModal from '../../components/ClientReportModal.jsx'
 import { Field, ColoredAvatar, DeltaRow } from '../../components/ui.jsx'
 
 // Prototype-style status badge class strings (rounded-md pill, not rounded-full)
-const BADGE_CLS = {
-  green:  'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  blue:   'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
-  yellow: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
-  red:    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  purple: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
-  orange: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
-  gray:   'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-}
-
 const PAGE_SIZE = 50
 
 function fmtDate(d) {
@@ -68,7 +59,7 @@ export default function ClientsTab() {
   const { globalSearch = '' } = useOutletContext() || {}
 
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState(0)
+  const [statusFilter, setStatusFilter] = useState(null)   // status key; null = All
   const [showDischarged, setShowDischarged] = useState(false)
   const [page, setPage] = useState(0)
   const [sortKey, setSortKey] = useState('room')
@@ -362,21 +353,21 @@ export default function ClientsTab() {
   const discharged = clients.filter(c => !c.is_special && !c.is_active).length
 
   // ── Console table data (active residents; shift status from active report) ──
-  const STATUS = { building:{tone:'green',label:'In Building'}, work:{tone:'blue',label:'At Work'}, pass:{tone:'yellow',label:'On Pass'}, hospital:{tone:'red',label:'Hospital'}, bhc:{tone:'purple',label:'BHC'}, efc:{tone:'purple',label:'EFC'}, out:{tone:'orange',label:'Out'} }
-  const STATUS_KEYS = [null, 'building', 'work', 'pass', 'hospital']
+  // Filter chips are the configured statuses; statuses have passes laid over
+  // them, so someone away on pass reads as on pass here too.
+  const statusChips = statusList(data)
   const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
-  const statuses = activeReport?.statuses || {}
+  const statuses = useMemo(() => effectiveStatuses(data, activeReport), [data, activeReport])
   const residents = useMemo(() => clients.filter(c => c.is_active && !c.is_special && c.name !== 'VACANT'), [clients])
   const rows = useMemo(() => {
     const q = search.toLowerCase().trim()
     const gq = globalSearch.toLowerCase().trim()
-    const key = STATUS_KEYS[statusFilter]
     const match = (c, s) => !s || c.name.toLowerCase().includes(s) || String(c.room).includes(s) || (c.case_manager || '').toLowerCase().includes(s)
     return residents
-      .filter(c => !key || (statuses[c.id] || 'building') === key)
+      .filter(c => !statusFilter || (statuses[c.id] || 'building') === statusFilter)
       .filter(c => match(c, q) && match(c, gq))
       .slice().sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
-  }, [residents, statuses, search, statusFilter, globalSearch])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [residents, statuses, search, statusFilter, globalSearch])
   const daysSince = d => { if (!d) return null; return Math.max(0, Math.floor((Date.now() - new Date(d + 'T12:00:00').getTime()) / 86400000)) }
   const onSite = residents.filter(c => (statuses[c.id] || 'building') === 'building').length
   const pct = residents.length ? Math.round(onSite / residents.length * 100) : 0
@@ -431,16 +422,16 @@ export default function ClientsTab() {
       {/* Toolbar */}
       <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          {['All', 'In Building', 'At Work', 'On Pass', 'Hospital'].map((f, i) => (
+          {[{ key: null, label: 'All' }, ...statusChips].map(f => (
             <button
-              key={f}
-              onClick={() => setStatusFilter(i)}
+              key={f.key ?? 'all'}
+              onClick={() => setStatusFilter(f.key)}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                i === statusFilter
+                f.key === statusFilter
                   ? 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-800'
                   : 'text-gray-600 bg-white border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700'
               }`}
-            >{f}</button>
+            >{f.label}</button>
           ))}
         </div>
         <div className="flex items-center gap-3">
@@ -465,7 +456,7 @@ export default function ClientsTab() {
           {rows.length === 0 ? (
             <TableRow><TableCell colSpan={6} className="text-sm text-center text-gray-400">No residents found.</TableCell></TableRow>
           ) : rows.map(c => {
-            const st = STATUS[statuses[c.id] || 'building'] || STATUS.building
+            const stKey = statuses[c.id] || 'building'
             const days = daysSince(c.intake_date)
             return (
               <TableRow key={c.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -479,7 +470,7 @@ export default function ClientsTab() {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${BADGE_CLS[st.tone] || BADGE_CLS.gray}`}>{st.label}</span>
+                  <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${statusBadge(data, stKey)}`}>{statusLabel(data, stKey)}</span>
                 </TableCell>
                 <TableCell>{c.program_track || '—'}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">

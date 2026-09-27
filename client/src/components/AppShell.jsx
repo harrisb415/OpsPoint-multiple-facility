@@ -11,7 +11,7 @@ import {
   Badge, Drawer, DrawerHeader, DrawerItems,
 } from 'flowbite-react'
 import JSZip from 'jszip'
-import {
+import {
   Users, UserCheck, ClipboardList,
   FileText, CheckSquare, Ticket, Mail, CalendarCheck,
   FlaskConical,
@@ -20,6 +20,9 @@ import {
   Moon, Sun, MoreHorizontal, LayoutDashboard, Search,
 } from 'lucide-react'
 import { RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF } from '../utils/ui.js'
+import {
+  statusLabel, statusPrint, offSiteStatuses, censusKeys, countStatuses, effectiveStatuses,
+} from '../utils/statuses.js'
 
 // ── Sidebar group config ──────────────────────────────────────────────
 const SIDEBAR_GROUPS = [
@@ -282,14 +285,14 @@ function UADrawModal({ open, onClose, clients, statuses }) {
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState('')
 
-  const ABSENT = ['pass', 'work', 'hospital', 'out', 'bhc', 'efc']
-
+  // Only residents actually in the building can be drawn. Every other status
+  // is off site — including ones an admin adds, which a fixed list of absent
+  // keys used to miss. `statuses` arrives with passes already laid over it.
   function buildPool(excludeIds) {
     return (clients || []).filter(c => {
       if (!c.is_active || c.is_special || c.name === 'VACANT') return false
       if (excludeIds && excludeIds.has(c.id)) return false
-      const st = statuses?.[c.id] || 'building'
-      return !ABSENT.includes(st)
+      return (statuses?.[c.id] || 'building') === 'building'
     })
   }
 
@@ -642,16 +645,11 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
     const logEntrs  = report?.log_entries || []
     const issues    = report?.issues || []
     const medNotes  = report?.med_notes || []
-    const statuses  = report?.statuses || {}
+    const statuses  = effectiveStatuses(data, report)
     const comments  = report?.comments || {}
     const shiftFull = {'Day Shift':'Day Shift (7:00 a.m. – 3:30 p.m.)','Swing Shift':'Swing Shift (3:00 p.m. – 11:30 p.m.)','Graveyard Shift':'Graveyard Shift (11:00 p.m. – 7:30 a.m.)'}[sv]||sv
     const dateStr   = dv ? new Date(dv+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}) : '—'
-    const stShd={building:'D8F3DC',work:'DBEAFE',pass:'FEF9C3',bhc:'EDE9FE',efc:'FCE7F3',hospital:'FEE2E2',out:'FFF7ED',vacant:'F1F5F9'}
-    const stLbl={building:'In Building',work:'Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out / Other',vacant:'Vacant'}
-    const cnt={building:0,work:0,pass:0,bhc:0,efc:0,hospital:0,out:0}
-    clients.filter(c=>c.is_active&&!c.is_special&&c.name!=='VACANT').forEach(c=>{
-      const st=statuses[c.id]||'building'; if(Object.hasOwn(cnt, st))cnt[st]++
-    })
+    const cnt=countStatuses(data,clients.filter(c=>c.is_active&&!c.is_special&&c.name!=='VACANT'),statuses)
     const tot=Object.values(cnt).reduce((a,b)=>a+b,0)
     const CW=9360
     let body=''
@@ -666,14 +664,14 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
     )
     body+=_tbl(iCols,infoRows)+_ep(140)
     body+=_secHdr('CENSUS')
-    const cKeys=['building','work','pass','bhc','efc','hospital','out','TOTAL']
-    const cLabels={building:'In Building',work:'At Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out/Other',TOTAL:'TOTAL'}
-    const cBg={building:'D8F3DC',work:'DBEAFE',pass:'FEF9C3',bhc:'EDE9FE',efc:'FCE7F3',hospital:'FEE2E2',out:'FFF7ED',TOTAL:'D4A017'}
-    const cFg={building:'14532D',work:'1D4ED8',pass:'854D0E',bhc:'5B21B6',efc:'9D174D',hospital:'991B1B',out:'7C2D12',TOTAL:'FFFFFF'}
-    const cW2=Math.floor(CW/8)
-    body+=_tbl(Array(8).fill(cW2),[
-      _tr(cKeys.map(k=>_th(cLabels[k],cW2)).join(''),{header:true}),
-      _tr(cKeys.map(k=>_tc(k==='TOTAL'?String(tot):String(cnt[k]),cW2,{bold:true,sz:16,col:cFg[k]||'1A3327',shade:cBg[k]||'F8FAFC',align:'center'})).join(''))
+    // One column per configured status (plus any key a resident holds that
+    // isn't configured), then TOTAL — so the row always adds up.
+    const cKeys=[...censusKeys(data,cnt),'TOTAL']
+    const cW2=Math.floor(CW/cKeys.length)
+    const cClr=k=>k==='TOTAL'?{bg:'D4A017',fg:'FFFFFF'}:statusPrint(data,k)
+    body+=_tbl(Array(cKeys.length).fill(cW2),[
+      _tr(cKeys.map(k=>_th(k==='TOTAL'?'TOTAL':statusLabel(data,k),cW2)).join(''),{header:true}),
+      _tr(cKeys.map(k=>_tc(k==='TOTAL'?String(tot):String(cnt[k]||0),cW2,{bold:true,sz:16,col:cClr(k).fg,shade:cClr(k).bg,align:'center'})).join(''))
     ])+_ep(140)
     body+=_secHdr('SHIFT ACTIVITY LOG')
     if(!logEntrs.length){body+=_para(_run('No entries recorded.',{sz:10,col:'94A3B8',italic:true}),{sa:40,il:160})}
@@ -690,7 +688,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
       const rs=i%2===0?'FFFFFF':'F4FAF6'
       if(c.is_special)return _tr([_tc(c.room,rC[0],{sz:8,col:'94A3B8',shade:'F1F5F9',align:'center'}),_tc(c.name,rC[1],{sz:9,col:'94A3B8',shade:'F1F5F9',italic:true}),_tc('',rC[2],{shade:'F1F5F9'}),_tc('',rC[3],{shade:'F1F5F9'}),_tc('',rC[4],{shade:'F1F5F9'})].join(''))
       const st=statuses[c.id]||(c.name==='VACANT'?'vacant':'building')
-      return _tr([_tc(c.room,rC[0],{sz:9,col:'5C6B5E',shade:rs,align:'center',bold:true}),_tc(c.name,rC[1],{sz:10,col:'1A3327',shade:rs,bold:true}),_tc(c.case_manager||'',rC[2],{sz:9,col:'5C6B5E',shade:rs}),_tc(stLbl[st]||st,rC[3],{sz:9,col:'1A3327',shade:stShd[st]||rs,align:'center',bold:true}),_tc(comments[c.id]||'',rC[4],{sz:9,col:'444444',shade:rs})].join(''))
+      return _tr([_tc(c.room,rC[0],{sz:9,col:'5C6B5E',shade:rs,align:'center',bold:true}),_tc(c.name,rC[1],{sz:10,col:'1A3327',shade:rs,bold:true}),_tc(c.case_manager||'',rC[2],{sz:9,col:'5C6B5E',shade:rs}),_tc(statusLabel(data,st),rC[3],{sz:9,col:'1A3327',shade:statusPrint(data,st).bg,align:'center',bold:true}),_tc(comments[c.id]||'',rC[4],{sz:9,col:'444444',shade:rs})].join(''))
     })
     body+=_tbl(rC,[rHdr,...rRows])+_ep(80)
     body+=_para(_run(fn,{sz:8,col:'5C6B5E',italic:true}),{align:'center',border_bottom:'D4A017',sb:0,sa:0})
@@ -767,17 +765,18 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
       return { time: e.time, monitor, notLocated }
     })
     const activeClients = (data?.clients || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT').slice().sort((a, b) => (parseInt(a.room)||0) - (parseInt(b.room)||0))
-    const statuses = activeReport?.statuses || {}
-    const statusLabel = { bhc:'BHC',efc:'EFC',hospital:'HOSP',work:'WORK',pass:'PASS',out:'OUT',building:'',vacant:'' }
-    const statusBg    = { bhc:'#ede9fe',efc:'#fce7f3',hospital:'#fee2e2',work:'#dbeafe',pass:'#fef9c3',out:'#fff7ed',building:'',vacant:'' }
+    const statuses = effectiveStatuses(data, activeReport)
+    // Labels come from Admin now, so they go through esc() like everything
+    // else written into this document.
+    const offHint  = offSiteStatuses(data).map(s => esc(s.label.toUpperCase())).join(' / ')
     const colWidth = Math.max(55, Math.min(80, Math.floor(400/checkCols.length)))
     const thCols = checkCols.map(col => `<th class="chk-th">${esc(col.time)}<div style="font-size:8px;font-weight:400;color:#cce8ef;margin-top:2px;">${esc(col.monitor)}</div></th>`).join('')
     const clientRows = activeClients.map((c, i) => {
       const st = statuses[c.id] || 'building'
-      const isOut = ['work','pass','bhc','efc','hospital','out'].includes(st)
+      const isOut = st !== 'building'
       const cells = checkCols.map(col => {
         const wasNotLocated = col.notLocated.includes(parseInt(c.room))
-        if (isOut && !wasNotLocated) { const lbl=statusLabel[st]||st.toUpperCase(); const bg=statusBg[st]||''; return `<td class="chk-td" style="background:${bg};font-size:9px;font-weight:700;text-align:center;">${lbl}</td>` }
+        if (isOut && !wasNotLocated) { const lbl=esc(statusLabel(data, st).toUpperCase()); const bg='#'+statusPrint(data, st).bg; return `<td class="chk-td" style="background:${bg};font-size:8px;font-weight:700;text-align:center;">${lbl}</td>` }
         if (wasNotLocated) return `<td class="chk-td" style="background:#fee2e2;color:#991b1b;font-weight:700;text-align:center;font-size:13px;">✗</td>`
         return `<td class="chk-td" style="text-align:center;font-size:13px;color:#15803d;">✓</td>`
       }).join('')
@@ -786,7 +785,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
     }).join('')
     const totalCells = checkCols.map(col => { const accounted=activeClients.length-col.notLocated.length; return `<td class="chk-td" style="text-align:center;font-weight:700;font-size:10px;">${accounted} / ${activeClients.length}</td>` }).join('')
     const initCells = checkCols.map(col => `<td class="chk-td" style="border-bottom:2px solid #0f4c5c;text-align:center;height:26px;font-size:9px;font-weight:700;color:#1a6b80;">${esc(col.monitor.split(' ')[0])}</td>`).join('')
-    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Wellness Check Filing</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;}.page-hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #0f4c5c;padding:16px 20px 8px;}.org{font-size:7px;font-weight:700;letter-spacing:.8px;color:#1a6b80;text-transform:uppercase;margin-bottom:2px;}.title{font-size:15px;font-weight:700;color:#0f4c5c;}.sub-title{font-size:9.5px;color:#444;margin-top:2px;}.hdr-right{text-align:right;font-size:9.5px;color:#444;line-height:1.85;}.hdr-right b{color:#0f4c5c;}.badge{display:inline-block;background:#d1fae5;color:#065f46;font-weight:700;font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid #6ee7b7;}.hint{font-size:8px;color:#888;font-style:italic;padding:4px 20px 2px;}.wrap{padding:0 20px 10px;}table{width:100%;border-collapse:collapse;}thead{display:table-header-group;}tfoot{display:table-footer-group;}thead tr th{background:#0f4c5c;color:#fff;padding:6px 7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #163825;text-align:left;}.rm-td{font-family:monospace;font-weight:700;color:#555;text-align:center;width:42px;padding:4px 6px;}.name-td{width:155px;padding:4px 6px;font-weight:500;}.chk-th{width:${colWidth}px;text-align:center;border-left:1px solid #245c3a;padding:5px 4px;}.chk-td{width:${colWidth}px;border-left:1.5px solid #8dbda0;padding:4px;vertical-align:middle;}.notes-td{padding:4px 6px;}td{vertical-align:middle;border-right:1px solid #D0DAEF;font-size:11px;}td:last-child{border-right:none;}tfoot tr.sum td{background:#dff0e6;border-top:2px solid #0f4c5c;font-weight:700;font-size:10px;padding:5px 6px;}tfoot tr.init-row td{background:#f0f7f2;border-top:1px solid #8dbda0;padding:4px;}.sig{display:flex;gap:20px;padding:10px 20px 14px;border-top:1.5px solid #999;margin-top:4px;}.sig-b{flex:1;font-size:9px;font-weight:700;color:#333;}.sig-l{display:inline-block;border-bottom:1px solid #333;width:55%;margin-left:4px;}@media print{@page{size:letter portrait;margin:0.35in;}body{font-size:10px;}.wrap{padding:0;}.hint{padding:3px 0 1px;}.sig{padding:8px 0 0;}}</style></head><body><div class="page-hdr"><div><div class="org">${esc(fn)}</div><div class="title">${esc(fn)} — Wellness Check Filing Record</div><div class="sub-title">${esc(shiftLabels[shift]||shift)} | ${dateStr}</div></div><div class="hdr-right"><b>Program Assistant on Duty:</b> ${esc(mod)||'_______________'}<br><b>Checks Conducted:</b> ${checks.length}<br><b>Active Clients:</b> ${activeClients.length} &nbsp; <span class="badge">FILING COPY</span></div></div><div class="hint">✓ = present &nbsp; ✗ = not located &nbsp; WORK / PASS / OUT / BHC / EFC / HOSP = off-site status</div><div class="wrap"><table><thead><tr><th class="rm-td" style="width:42px;">Rm</th><th style="width:155px;">Client Name</th>${thCols}<th class="notes-td">Notes</th></tr></thead><tfoot><tr class="sum"><td colspan="2" style="text-align:left;padding-left:6px;">Total Accounted For:</td>${totalCells}<td></td></tr><tr class="init-row"><td colspan="2" style="text-align:right;padding-right:8px;font-size:10px;font-weight:700;">PA:</td>${initCells}<td></td></tr></tfoot><tbody>${clientRows}</tbody></table></div><div class="sig"><div class="sig-b">Filed By: <span class="sig-l"></span></div><div class="sig-b">Supervisor Review: <span class="sig-l"></span></div><div class="sig-b">Date Filed: <span class="sig-l"></span></div></div></body></html>`
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Wellness Check Filing</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;}.page-hdr{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #0f4c5c;padding:16px 20px 8px;}.org{font-size:7px;font-weight:700;letter-spacing:.8px;color:#1a6b80;text-transform:uppercase;margin-bottom:2px;}.title{font-size:15px;font-weight:700;color:#0f4c5c;}.sub-title{font-size:9.5px;color:#444;margin-top:2px;}.hdr-right{text-align:right;font-size:9.5px;color:#444;line-height:1.85;}.hdr-right b{color:#0f4c5c;}.badge{display:inline-block;background:#d1fae5;color:#065f46;font-weight:700;font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid #6ee7b7;}.hint{font-size:8px;color:#888;font-style:italic;padding:4px 20px 2px;}.wrap{padding:0 20px 10px;}table{width:100%;border-collapse:collapse;}thead{display:table-header-group;}tfoot{display:table-footer-group;}thead tr th{background:#0f4c5c;color:#fff;padding:6px 7px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #163825;text-align:left;}.rm-td{font-family:monospace;font-weight:700;color:#555;text-align:center;width:42px;padding:4px 6px;}.name-td{width:155px;padding:4px 6px;font-weight:500;}.chk-th{width:${colWidth}px;text-align:center;border-left:1px solid #245c3a;padding:5px 4px;}.chk-td{width:${colWidth}px;border-left:1.5px solid #8dbda0;padding:4px;vertical-align:middle;}.notes-td{padding:4px 6px;}td{vertical-align:middle;border-right:1px solid #D0DAEF;font-size:11px;}td:last-child{border-right:none;}tfoot tr.sum td{background:#dff0e6;border-top:2px solid #0f4c5c;font-weight:700;font-size:10px;padding:5px 6px;}tfoot tr.init-row td{background:#f0f7f2;border-top:1px solid #8dbda0;padding:4px;}.sig{display:flex;gap:20px;padding:10px 20px 14px;border-top:1.5px solid #999;margin-top:4px;}.sig-b{flex:1;font-size:9px;font-weight:700;color:#333;}.sig-l{display:inline-block;border-bottom:1px solid #333;width:55%;margin-left:4px;}@media print{@page{size:letter portrait;margin:0.35in;}body{font-size:10px;}.wrap{padding:0;}.hint{padding:3px 0 1px;}.sig{padding:8px 0 0;}}</style></head><body><div class="page-hdr"><div><div class="org">${esc(fn)}</div><div class="title">${esc(fn)} — Wellness Check Filing Record</div><div class="sub-title">${esc(shiftLabels[shift]||shift)} | ${dateStr}</div></div><div class="hdr-right"><b>Program Assistant on Duty:</b> ${esc(mod)||'_______________'}<br><b>Checks Conducted:</b> ${checks.length}<br><b>Active Clients:</b> ${activeClients.length} &nbsp; <span class="badge">FILING COPY</span></div></div><div class="hint">✓ = present &nbsp; ✗ = not located &nbsp; ${offHint} = off-site status</div><div class="wrap"><table><thead><tr><th class="rm-td" style="width:42px;">Rm</th><th style="width:155px;">Client Name</th>${thCols}<th class="notes-td">Notes</th></tr></thead><tfoot><tr class="sum"><td colspan="2" style="text-align:left;padding-left:6px;">Total Accounted For:</td>${totalCells}<td></td></tr><tr class="init-row"><td colspan="2" style="text-align:right;padding-right:8px;font-size:10px;font-weight:700;">PA:</td>${initCells}<td></td></tr></tfoot><tbody>${clientRows}</tbody></table></div><div class="sig"><div class="sig-b">Filed By: <span class="sig-l"></span></div><div class="sig-b">Supervisor Review: <span class="sig-l"></span></div><div class="sig-b">Date Filed: <span class="sig-l"></span></div></div></body></html>`
     const w = window.open('', '_blank')
     if (!w) { alert('Popup blocked — allow popups for this site.'); return }
     w.document.write(html); w.document.close()
@@ -970,7 +969,7 @@ function InnerShell() {
   }, [data])
 
   const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
-  const statuses     = activeReport?.statuses || {}
+  const statuses     = effectiveStatuses(data, activeReport)
   const clients      = data?.clients || []
   const facilityName = data?.facility_name || 'OpsPoint'
 

@@ -1,7 +1,10 @@
 import { useMemo, lazy, Suspense } from 'react'
 import { Button } from 'flowbite-react'
-import { useData } from '../contexts/DataContext.jsx'
-import { allStatuses, statusList, offSiteStatuses, TONE_HEX, TONE_BADGE } from '../utils/statuses.js'
+import { useData } from '../contexts/DataContext.jsx'
+import {
+  statusList, offSiteStatuses, statusLabel, statusTone, statusBadge, censusKeys, effectiveStatuses,
+  TONE_HEX,
+} from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_INSET, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
@@ -36,37 +39,17 @@ const FEED_BADGE = {
 const Chart = lazy(() => import('react-apexcharts'))
 const ChartFallback = () => <div className="flex items-center justify-center h-[260px] text-sm text-gray-400">Loading chart…</div>
 
-// Resident status → label + chart color + badge tone
-const STATUS_META = {
-  building: { label: 'In Building', color: '#22c55e', badge: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' },
-  work:     { label: 'At Work',     color: '#3b82f6', badge: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
-  pass:     { label: 'On Pass',     color: '#f59e0b', badge: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300' },
-  bhc:      { label: 'BHC',         color: '#8b5cf6', badge: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' },
-  efc:      { label: 'EFC',         color: '#ec4899', badge: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300' },
-  hospital: { label: 'Hospital',    color: '#ef4444', badge: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
-  out:      { label: 'Out / Other', color: '#f97316', badge: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' },
-}
-const STATUS_ORDER = ['building', 'work', 'pass', 'bhc', 'efc', 'hospital', 'out']
-
-// Live status metadata, derived from the configured list so a renamed or
-// recoloured status flows through to the census donut and the roster badges.
-// Falls back to STATUS_META for any key not in the list (e.g. a status
-// retired before archiving existed).
-function metaFrom(data) {
-  const m = {}
-  for (const st of allStatuses(data)) {
-    m[st.key] = {
-      label: st.label,
-      color: TONE_HEX[st.tone] || TONE_HEX.gray,
-      badge: TONE_BADGE[st.tone] || TONE_BADGE.gray,
-    }
+// Resident status → label + chart colour + badge, straight from the
+// configured statuses (archived included) so a renamed or recoloured status
+// flows through to the census donut and the roster badges. A key missing from
+// the list (a slug predating the setting) gets its titlecased name in gray
+// rather than borrowing another status's label.
+function metaOf(data, key) {
+  return {
+    label: statusLabel(data, key),
+    color: TONE_HEX[statusTone(data, key)] || TONE_HEX.gray,
+    badge: statusBadge(data, key),
   }
-  return { ...STATUS_META, ...m }
-}
-// Census order follows the admin's ordering, with any legacy key appended.
-function orderFrom(data) {
-  const live = statusList(data).map(s => s.key)
-  return [...live, ...STATUS_ORDER.filter(k => !live.includes(k))]
 }
 
 // Parse an hour (0–23) from a log time like "14:30" or "2:30 PM"
@@ -117,20 +100,13 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
   const chartTheme = dark ? 'dark' : 'light'
 
   const report   = data?.reports?.find(r => r.id === data?.active_report_id)
-  const statuses = report?.statuses || {}
+  // Residents away on pass read as on pass whatever the report stored.
+  const statuses = useMemo(() => effectiveStatuses(data, report), [data, report])
   const logs     = report?.log_entries || []
   const issues   = report?.issues || []
   const facility = data?.facility_name || 'OpsPoint'
 
-  // Clients on active passes should always show "pass" regardless of what
-  // statuses says — mirrors the passOverride logic in ReportTab.jsx
-  const passOverride = useMemo(() => {
-    const po = {}
-    ;(data?.passes || []).filter(p => p.status === 'Out' || p.status === 'Extended').forEach(p => { po[p.client_id] = 'pass' })
-    return po
-  }, [data?.passes])
-
-  const resolveStatus = (id) => passOverride[id] ?? statuses[String(id)] ?? statuses[id] ?? 'building'
+  const resolveStatus = (id) => statuses[id] ?? 'building'
 
   const allResidents = useMemo(
     () => (data?.clients || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT'),
@@ -149,9 +125,9 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
     // floor here, so its residents vanished from the donut and from offSite.
     const c = {}
     for (const st of statusList(data)) c[st.key] = 0
-    allResidents.forEach(r => { const s = resolveStatus(r.id); c[s] = (c[s] || 0) + 1 })
+    allResidents.forEach(r => { const s = statuses[r.id] ?? 'building'; c[s] = (c[s] || 0) + 1 })
     return c
-  }, [allResidents, statuses, passOverride, data])
+  }, [allResidents, statuses, data])
 
   const onSite       = census.building
   const offSite      = total - onSite
@@ -172,12 +148,6 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
     return { cats, series }
   }, [logs])
 
-  // Status metadata/order from the configured list, so renames and colour
-  // changes in Admin flow straight through to the donut and roster badges.
-  // Declared before `donut` — its callback runs during render, so a later
-  // const would be in the temporal dead zone.
-  const statusMeta  = useMemo(() => metaFrom(data), [data])
-  const statusOrder = useMemo(() => orderFrom(data), [data])
   const offSiteLbl  = useMemo(() => {
     const names = offSiteStatuses(data).map(s => s.label)
     if (!names.length) return 'no off-site statuses'
@@ -189,11 +159,13 @@ export default function DashboardHome({ onNavigate, globalSearch = '' }) {
     return txt.toLowerCase()
   }, [data])
 
+  // Admin's order, plus any key a resident holds that isn't configured, so
+  // the slices always add up to the resident count.
   const donut = useMemo(() => {
     const labels = [], series = [], colors = []
-    statusOrder.forEach(k => { const mt = statusMeta[k]; if (mt && census[k] > 0) { labels.push(mt.label); series.push(census[k]); colors.push(mt.color) } })
+    censusKeys(data, census).forEach(k => { if (census[k] > 0) { const mt = metaOf(data, k); labels.push(mt.label); series.push(census[k]); colors.push(mt.color) } })
     return { labels, series, colors }
-  }, [census, statusMeta, statusOrder])
+  }, [census, data])
 
   const recentAll = logs.slice(-8).reverse()
   const recent = !gq ? recentAll : recentAll.filter(l => (l.text || '').toLowerCase().includes(gq))
@@ -308,7 +280,7 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                 {residents.map(r => {
-                  const meta = statusMeta[resolveStatus(r.id)] || statusMeta.building || STATUS_META.building
+                  const meta = metaOf(data, resolveStatus(r.id))
                   return (
                     <tr key={r.id} className="hover:bg-primary-50/60 dark:hover:bg-gray-700/40">
                       <td className="px-4 py-2.5">

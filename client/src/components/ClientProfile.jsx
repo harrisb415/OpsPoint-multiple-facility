@@ -29,6 +29,7 @@ import { Badge, Button } from 'flowbite-react'
 import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { openPrintWindow, classifyLogEntry } from '../utils/printLog.js'
+import { statusLabel, statusBadge, effectiveStatuses } from '../utils/statuses.js'
 
 const LOG_TYPE_CLS = {
   Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
@@ -161,11 +162,8 @@ function RiskChip({ level }) {
 
 function OverviewTab({ client, data }) {
   const activeReport = data?.reports?.find(r => r.id === data?.active_report_id)
-  const status  = activeReport?.statuses?.[client.id] || 'building'
-  const STATUS_LABEL = {
-    building: '🏠 In Building', work: '💼 At Work', pass: '🗓 On Pass',
-    bhc: '🏥 BHC', efc: '🏠 EFC', hospital: '🏥 Hospital', out: '🚶 Out / Other',
-  }
+  // Passes laid over the stored status — away on pass reads as on pass.
+  const status  = effectiveStatuses(data, activeReport)[client.id] || 'building'
   const days = daysSince(client.intake_date)
   const ecs  = parseECs(client.emergency_contacts)
 
@@ -195,7 +193,7 @@ function OverviewTab({ client, data }) {
           </Field>
           <Field label="Intake Date">{fmtDate(client.intake_date)}</Field>
           <Field label="Current Status">
-            <span className="font-semibold">{STATUS_LABEL[status] || status}</span>
+            <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${statusBadge(data, status)}`}>{statusLabel(data, status)}</span>
           </Field>
           {client.program_track && (
             <Field label="Program Track" span>{client.program_track}</Field>

@@ -21,10 +21,13 @@ async function getSettings() {
 const STATUS_TONES = ['green','blue','amber','purple','pink','red','orange','gray'];
 const KEY_RE = /^[a-z][a-z0-9_]{0,23}$/;
 
-// Statuses the app itself depends on. Every shift report and the census
-// assume these exist: 'building' is the default state, and the other three
-// are the off-site buckets the dashboard totals against. Labels and colours
-// stay editable — only removal is blocked.
+// The built-in statuses — also the whole of a new facility's seeded list.
+// 'building' is the default state every read falls back to. 'pass' is laid
+// over residents whose pass is Out or Extended (client/src/utils/statuses.js,
+// effectiveStatuses), so the key has to exist for the Passes tab to work.
+// 'hospital' and 'out' are the off-site buckets every facility gets. Labels
+// and colours stay editable — only removal is blocked. Mirrors
+// SYSTEM_STATUS_KEYS in client/src/utils/statuses.js.
 const SYSTEM_STATUS_KEYS = ['building', 'pass', 'hospital', 'out'];
 
 // Validate the editable status list. Keys are what live in reports.statuses,

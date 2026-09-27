@@ -5,8 +5,11 @@ import {
   TextInput, Select, Textarea, Checkbox, Label, Alert,
 } from 'flowbite-react'
 import { Field, useConfirm, StatusBadge, ColoredAvatar } from '../components/ui.jsx'
-import { useData } from '../contexts/DataContext.jsx'
-import { statusList, allStatuses, TONE_BADGE, TONE_DOT } from '../utils/statuses.js'
+import { useData } from '../contexts/DataContext.jsx'
+import {
+  statusList, allStatuses, statusLabel, passOverlay, passesEnabled, effectiveStatuses,
+  DEFAULT_STATUSES, TONE_BADGE, TONE_DOT,
+} from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
@@ -41,15 +44,7 @@ function Panel({ title, right, flush, children }) {
 // Fallback only — the live list is editable in Admin -> Facility -> Statuses
 // and arrives on the data payload. Kept so a first paint (or a payload that
 // predates the setting) still renders real labels instead of raw slugs.
-const STATUS_OPTS = [
-  { v: 'building', l: 'In Building', c: 's-building' },
-  { v: 'work',     l: 'Work',        c: 's-work' },
-  { v: 'pass',     l: 'Weekend Pass',c: 's-pass' },
-  { v: 'out',      l: 'Out / Other', c: 's-out' },
-  { v: 'bhc',      l: 'BHC',         c: 's-bhc' },
-  { v: 'efc',      l: 'EFC',         c: 's-efc' },
-  { v: 'hospital', l: 'Hospital',    c: 's-hospital' },
-]
+const STATUS_OPTS = DEFAULT_STATUSES.map(s => ({ v: s.key, l: s.label, tone: s.tone }))
 
 
 const LOG_TYPE_CLS = {
@@ -63,17 +58,6 @@ const LOG_TYPE_CLS = {
   Intake:        'bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300',
   Discharge:     'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400',
   Note:          'bg-slate-100 text-slate-600 dark:bg-gray-700 dark:text-slate-400',
-}
-
-const STATUS_BADGE_CLS = {
-  building: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  work:     'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  pass:     'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-  out:      'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300',
-  bhc:      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  efc:      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-  hospital: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  vacant:   'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500',
 }
 
 const DEFAULT_WALK_AREAS = [
@@ -114,17 +98,17 @@ function parseLogTimeToDate(timeStr) {
   if (d.getTime() > Date.now() + 30 * 60000) d.setDate(d.getDate() - 1)
   return d
 }
-function stOpt(v, opts) { return (opts || STATUS_OPTS).find(o => o.v === v) || { v, l: v, c: '' } }
+function stOpt(v, opts) { return (opts || STATUS_OPTS).find(o => o.v === v) || { v, l: statusLabel(null, v) } }
 
 // Map the configured statuses onto the shape this file already uses.
 function optsFrom(data) {
-  return statusList(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
+  return statusList(data).map(s => ({ v: s.key, l: s.label, tone: s.tone }))
 }
 
 // Picker vs render: a row already sitting on a retired status must still
 // show its label, so lookups fall back to the full list (archived included).
 function lookupFrom(data) {
-  return allStatuses(data).map(s => ({ v: s.key, l: s.label, c: `s-${s.key}`, tone: s.tone }))
+  return allStatuses(data).map(s => ({ v: s.key, l: s.label, tone: s.tone }))
 }
 
 function dateStamp() {
@@ -175,7 +159,6 @@ export default function ReportTab() {
 
   const clients  = data?.clients  || []
   const reports  = data?.reports  || []
-  const passes   = data?.passes   || []
   const activeId = data?.active_report_id ?? null
   const activeReport = reports.find(r => r.id === activeId) ?? null
 
@@ -269,22 +252,13 @@ export default function ReportTab() {
     }
   }, [activeReport, activeId])
 
-  // passOverride: only Out/Extended passes lock status to 'pass' (Weekend Pass)
-  // In passes do NOT override — the user can still set any status except Weekend Pass
-  const passOverride = useMemo(() => {
-    const m = {}
-    passes.forEach(p => {
-      if (p.status === 'Out' || p.status === 'Extended') m[p.client_id] = 'pass'
-    })
-    return m
-  }, [passes])
-
-  // inPass: clients with an active In-status pass (not Returned) — used to filter out Weekend Pass option
-  const inPass = useMemo(() => {
-    const s = new Set()
-    passes.forEach(p => { if (p.status === 'In') s.add(p.client_id) })
-    return s
-  }, [passes])
+  // The Passes tab owns Weekend Pass: an Out/Extended pass locks the resident
+  // onto it (passOverride), and while the Passes feature is on it isn't
+  // offered in the dropdown at all (passOwned) — see effectiveStatuses() in
+  // utils/statuses.js. Turning Passes off in Features makes it a hand-picked
+  // status again.
+  const passOverride = useMemo(() => passOverlay(data), [data])
+  const passOwned    = passesEnabled(data)
   // Census
   const census = useMemo(() => {
     // Seed from the configured statuses so a newly added one shows 0 rather
@@ -420,7 +394,12 @@ export default function ReportTab() {
     await saveData({
       reports: [{
         ...report, report_date: s.reportDate, shift: s.shift, mod_name: s.modName,
-        statuses: s.statuses, comments: s.comments, issues: s.issues, med_notes: s.medNotes,
+        // Freeze who was on pass into the record. The overlay is computed
+        // from live passes, so once a pass is Returned the archive could no
+        // longer tell — it recorded those residents as In Building. Local
+        // state keeps the stored map, so the next shift doesn't inherit it.
+        statuses: effectiveStatuses(dataRef.current, report, s.statuses),
+        comments: s.comments, issues: s.issues, med_notes: s.medNotes,
         is_closed: true, roster_snapshot: clients.slice(),
       }],
       active_report_id: null,
@@ -560,9 +539,8 @@ export default function ReportTab() {
           case 'room': return ((parseInt(a.room) || 0) - (parseInt(b.room) || 0)) * sortDir
           case 'name': av = (a.name||'').toLowerCase(); bv = (b.name||'').toLowerCase(); break
           case 'status': {
-            const lbls = { building:'In Building',work:'Work',pass:'Weekend Pass',bhc:'BHC',efc:'EFC',hospital:'Hospital',out:'Out/Other',vacant:'Vacant' }
-            av = lbls[a.name==='VACANT'?'vacant':(passOverride[a.id]??statuses[a.id]??'building')]||''
-            bv = lbls[b.name==='VACANT'?'vacant':(passOverride[b.id]??statuses[b.id]??'building')]||''
+            av = statusLabel(data, a.name==='VACANT'?'vacant':(passOverride[a.id]??statuses[a.id]??'building'))
+            bv = statusLabel(data, b.name==='VACANT'?'vacant':(passOverride[b.id]??statuses[b.id]??'building'))
             break
           }
           case 'last_ua': av = lastUa[a.id]||''; bv = lastUa[b.id]||''; break
@@ -571,7 +549,7 @@ export default function ReportTab() {
         }
         return av < bv ? -sortDir : av > bv ? sortDir : 0
       })
-  }, [clients, search, sortKey, sortDir, statuses, lastUa, lastRs, passOverride, showAllRooms])
+  }, [clients, search, sortKey, sortDir, statuses, lastUa, lastRs, passOverride, showAllRooms, data])
 
   const isClosed = activeReport?.is_closed ?? false
 
@@ -917,7 +895,7 @@ export default function ReportTab() {
                     key={c.id} client={c}
                     status={passOverride[c.id] ?? statuses[c.id] ?? 'building'} comment={comments[c.id] || ''}
                     passLocked={passOverride[c.id] === 'pass'}
-                    hasInPass={inPass.has(c.id)}
+                    passOwned={passOwned}
                     lastUA={lastUa[c.id]} lastRS={lastRs[c.id]}
                     isClosed={isClosed} canStatus={canStatus} canUA={canUA}
                     statusOptions={statusOptions} statusLookup={statusLookup}
@@ -945,6 +923,7 @@ export default function ReportTab() {
           clients={data?.clients || []}
           statuses={statuses}
           passOverride={passOverride}
+          data={data}
           onClose={() => setQuickModal(null)}
           onSubmit={addLogEntry}
         />
@@ -1140,7 +1119,7 @@ function tsFromInput(val) {
 }
 
 // Wellness Check
-function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose, onSubmit }) {
+function WellnessModal({ clients = [], statuses = {}, passOverride = {}, data, onClose, onSubmit }) {
   const [by, setBy]       = useState('')
   const [time, setTime]   = useState(timeFieldDefault)
   const [saving, setSaving] = useState(false)
@@ -1152,8 +1131,6 @@ function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose
   const activeClients = (clients || [])
     .filter(c => c.is_active && !c.is_special && c.name !== 'VACANT')
     .slice().sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
-
-  const stLabel = { building: 'In Building', work: 'Work', pass: 'Pass', bhc: 'BHC', efc: 'EFC', hospital: 'Hospital', out: 'Out/Other' }
 
   function toggleNotLocated(id) {
     setNotLocated(prev => {
@@ -1207,7 +1184,7 @@ function WellnessModal({ clients = [], statuses = {}, passOverride = {}, onClose
                         {c.room}
                       </span>
                       <span className={`flex-1 text-sm ${marked ? 'font-bold text-red-800 dark:text-red-300' : 'font-medium text-gray-800 dark:text-gray-200'}`}>{c.name}</span>
-                      <span className="text-[0.7rem] text-gray-400 shrink-0">{stLabel[st] || st}</span>
+                      <span className="text-[0.7rem] text-gray-400 shrink-0">{statusLabel(data, st)}</span>
                     </div>
                   )
                 })}
@@ -1584,14 +1561,19 @@ function SortTh({ k, label, sortKey, dir, onSort, className }) {
   )
 }
 
-function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, hasInPass, statusOptions, statusLookup, onStatusChange, onCommentChange, onUARequest }) {
+function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canStatus, canUA, passLocked, passOwned, statusOptions, statusLookup, onStatusChange, onCommentChange, onUARequest }) {
   const cur = status || (c.name === 'VACANT' ? 'vacant' : 'building')
   const allOpts = statusOptions && statusOptions.length ? statusOptions : STATUS_OPTS
   const opt = stOpt(cur, (statusLookup && statusLookup.length ? statusLookup : allOpts))
-  const statusOpts = hasInPass ? allOpts.filter(o => o.v !== 'pass') : allOpts
-  // Prefer the configured tone; fall back to the legacy per-key map so any
-  // key predating the setting still renders with its original colour.
-  const badgeCls = (opt.tone && TONE_BADGE[opt.tone]) || STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
+  // While the Passes tab owns Weekend Pass it can't be picked by hand — the
+  // only way onto it is marking a pass Out. The current value always keeps an
+  // <option>, though: a row already on it (or on a retired status) with no
+  // matching option makes the hidden select show the first entry as chosen,
+  // and picking that entry then fires no change at all.
+  const pickable = allOpts.filter(o => !(passOwned && o.v === 'pass'))
+  const statusOpts = pickable.some(o => o.v === cur) ? pickable : [opt, ...pickable]
+  // Unknown keys (a slug predating the setting) fall back to gray.
+  const badgeCls = TONE_BADGE[opt.tone] || TONE_BADGE.gray
 
   const ResidentCell = () => {
     if (c.is_special) return (

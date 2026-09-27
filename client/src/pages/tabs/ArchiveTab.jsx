@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { useOutletContext } from 'react-router-dom'
 import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
@@ -10,6 +10,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { StatusBadge, useConfirm } from '../../components/ui.jsx'
+import { statusLabel, statusBadge, censusKeys } from '../../utils/statuses.js'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -27,28 +28,9 @@ function fmtDateShort(d) {
   catch { return d }
 }
 
-const STATUS_OPTS = [
-  { v: 'building', l: 'In Building', c: 's-building' },
-  { v: 'work',     l: 'Work',         c: 's-work' },
-  { v: 'pass',     l: 'Weekend Pass', c: 's-pass' },
-  { v: 'out',      l: 'Out / Other',  c: 's-out' },
-  { v: 'bhc',      l: 'BHC',          c: 's-bhc' },
-  { v: 'efc',      l: 'EFC',          c: 's-efc' },
-  { v: 'hospital', l: 'Hospital',     c: 's-hospital' },
-]
-
-function stOpt(v) { return STATUS_OPTS.find(o => o.v === v) || { v, l: v, c: '' } }
-
-const STATUS_BADGE_CLS = {
-  building: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  work:     'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  pass:     'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  out:      'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
-  bhc:      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  efc:      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  hospital: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  vacant:   'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500',
-}
+// Labels and colours resolve through the configured statuses, archived ones
+// included, so an old shift on a since-retired status still shows its name.
+const VACANT_BADGE = 'bg-gray-100 text-gray-400 dark:bg-gray-800 dark:text-gray-500'
 
 function parseTimeMins(t) {
   const m = t?.match(/(\d+):(\d+)\s*(AM|PM)/i)
@@ -212,10 +194,9 @@ function printArchivedReport(r, data) {
 
   const rosterRows = clients.map((c, i) => {
     const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
-    const opt = stOpt(cur)
     return `<tr${i % 2 === 1 ? ' class="alt"' : ''}${c.is_special ? ' class="srow"' : ''}>
       <td>${esc(c.room||'')}</td><td>${esc(c.name)}</td>
-      <td>${c.is_special ? '—' : esc(opt.l)}</td>
+      <td>${c.is_special ? '—' : esc(statusLabel(data, cur))}</td>
       <td>${esc(comments[c.id]||'')}</td></tr>`
   }).join('')
 
@@ -224,9 +205,8 @@ function printArchivedReport(r, data) {
       <td class="mono">${esc(e.time)}</td><td>${esc(e.text)}</td></tr>`
   ).join('')
 
-  const censusCells = [['building','In Building'],['work','Work'],['pass','Pass'],
-    ['bhc','BHC'],['efc','EFC'],['hospital','Hospital'],['out','Out/Other']]
-    .map(([k,l]) => `<td>${esc(l)}<br><strong>${census[k]||0}</strong></td>`).join('')
+  const censusCells = censusKeys(data, census)
+    .map(k => `<td>${esc(statusLabel(data, k))}<br><strong>${census[k]||0}</strong></td>`).join('')
 
   const issuesHtml = (r.issues||[]).length > 0
     ? `<div class="section"><div class="sh">Issues &amp; Concerns</div><div class="sb">
@@ -366,7 +346,8 @@ function ReportDetail({ report: r, data, onBack }) {
       {Object.keys(census).length > 0 && (
         <Panel title="Census">
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-            {[['building','In Building'],['work','Work'],['pass','Pass'],['bhc','BHC'],['efc','EFC'],['hospital','Hospital'],['out','Out/Other']].map(([k, l]) => {
+            {censusKeys(data, census).map(k => {
+              const l = statusLabel(data, k)
               const n = census[k] || 0
               return (
                 <div key={k} className={`flex flex-col items-center p-3 border rounded-xl ${n > 0 ? 'bg-white border-teal-200 dark:bg-gray-700 dark:border-teal-700' : 'bg-gray-50 border-gray-200 dark:bg-gray-800 dark:border-gray-700'}`}>
@@ -444,8 +425,7 @@ function ReportDetail({ report: r, data, onBack }) {
           <TableBody className="divide-y">
             {clients.filter(c => c.is_active).map(c => {
               const cur = statuses[c.id] || (c.name === 'VACANT' ? 'vacant' : 'building')
-              const opt = stOpt(cur)
-              const badgeCls = STATUS_BADGE_CLS[cur] || STATUS_BADGE_CLS.out
+              const badgeCls = cur === 'vacant' ? VACANT_BADGE : statusBadge(data, cur)
               return (
                 <TableRow key={c.id} className={c.is_special ? 'italic' : ''}>
                   <TableCell className="font-mono text-xs text-center text-gray-500 dark:text-gray-400">{c.room}</TableCell>
@@ -453,7 +433,7 @@ function ReportDetail({ report: r, data, onBack }) {
                   <TableCell>
                     {c.is_special
                       ? <span className="text-gray-300 dark:text-gray-600">—</span>
-                      : <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${badgeCls}`}>{opt.l}</span>}
+                      : <span className={`inline-flex text-xs font-medium px-2.5 py-0.5 rounded-md whitespace-nowrap ${badgeCls}`}>{statusLabel(data, cur)}</span>}
                   </TableCell>
                   <TableCell className="text-sm text-gray-600 dark:text-gray-300">{comments[c.id] || ''}</TableCell>
                 </TableRow>

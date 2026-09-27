@@ -4,6 +4,7 @@
  * No SQL, no req/res. Validation failures throw an Error carrying `.status`.
  */
 const repo = require('./repository');
+const { localDate } = require('../../lib/time');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -41,7 +42,7 @@ async function assignChore(id, patch = {}) {
 // Chore log for a single date or a date range. `query` is req.query.
 async function getLog({ date, from, to } = {}) {
   if (from && to) return await repo.getChoreLogRange(from, to);
-  const d = date || new Date().toISOString().slice(0, 10);
+  const d = date || localDate();
   return await repo.getChoreLogByDate(d);
 }
 

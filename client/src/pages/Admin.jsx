@@ -16,6 +16,7 @@ import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
 import { THEMES, DEFAULT_THEME, applyTheme } from '../utils/themes.js'
+import { parseWhen } from '../utils/dates.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -1870,13 +1871,13 @@ const AUDIT_CATS = [
   { value: 'server', label: 'Server' },
 ]
 
+// Audit ts is nowLocal() text on SQLite and an ISO instant on Postgres;
+// parseWhen reads both — new Date() alone showed "Invalid Date" in Safari.
 function fmtDT(s) {
-  if (!s) return '—'
-  try {
-    const d = new Date(s)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  } catch { return s }
+  const d = parseWhen(s)
+  if (!d) return s || '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
 function AuditLogTab() {

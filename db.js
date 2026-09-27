@@ -8,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 const migrate    = require('./server/db/migrate');    // schema DDL + column migrations
 const connection = require('./server/db/connection'); // better-sqlite3 handle + primitives
+const { localDate } = require('./server/lib/time');   // local calendar day (not the UTC one)
 
 let _db     = null;
 let _dbPath = null;
@@ -159,12 +160,46 @@ for (const preset of Object.values(ROLE_PRESETS)) {
   for (const p of EVERYONE_PERMS) if (!preset.includes(p)) preset.push(p);
 }
 
+// ── Driver guard ─────────────────────────────────────────────────────
+// The driver defaults to SQLite, and SQLite creates a missing database file
+// without complaint. So a Postgres install whose .env lost its
+// OPSPOINT_DB_DRIVER line would come up on a brand-new EMPTY database — no
+// residents, no reports, no accounts — and look exactly like total data loss.
+// Refuse instead, when the evidence says this install is a Postgres one:
+// DATABASE_URL still set, the SQLite files the cutover renamed to *.pre-pg,
+// or the marker a Postgres boot leaves in the data directory. A deliberate
+// rollback (restore the .db files, set the driver to sqlite) still works: the
+// guard only fires when there is no SQLite database to open.
+function _pgMarker() { return path.join(require('./server/config').DATA_DIR, '.db-driver'); }
+function _guardAgainstEmptySqlite(dbPath) {
+  if (connection.isPg || fs.existsSync(dbPath)) return;
+  let why = null;
+  if (process.env.DATABASE_URL) why = 'DATABASE_URL is set';
+  else if (fs.existsSync(dbPath + '.pre-pg')) why = `${path.basename(dbPath)}.pre-pg exists (this install was migrated to Postgres)`;
+  else { try { if (fs.readFileSync(_pgMarker(), 'utf8').trim() === 'pg') why = `${_pgMarker()} says this install runs on Postgres`; } catch (e) { /* no marker */ } }
+  if (!why) return;
+  throw new Error(
+    `Refusing to start on a new, empty SQLite database: ${why}, but OPSPOINT_DB_DRIVER is not "pg". ` +
+    'Set OPSPOINT_DB_DRIVER=pg (and DATABASE_URL) and restart. To deliberately start fresh on SQLite, ' +
+    `remove that evidence first.`);
+}
+
 // ── Init (synchronous) ───────────────────────────────────────────────
 async function init(dbPath) {
   _dbPath = dbPath;
-  const isNew = !fs.existsSync(dbPath);
-  _db = connection.open(dbPath);   // owns new Database() + WAL/FK pragmas
-  console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
+  _guardAgainstEmptySqlite(dbPath);
+  const isNew = !connection.isPg && !fs.existsSync(dbPath);
+  _db = connection.open(dbPath);   // owns new Database() + WAL/FK pragmas (pg: takes DATABASE_URL)
+  if (connection.isPg) {
+    // Says where it actually connected — it used to print "Created opspoint.db"
+    // under Postgres, naming a SQLite file it never touched.
+    let target = 'DATABASE_URL';
+    try { const u = new URL(process.env.DATABASE_URL); target = `${u.hostname}/${u.pathname.replace(/^\//, '')}`; } catch (e) { /* keep generic */ }
+    console.log('  DB: Postgres', target);
+    try { fs.mkdirSync(path.dirname(_pgMarker()), { recursive: true }); fs.writeFileSync(_pgMarker(), 'pg\n'); } catch (e) { /* best effort */ }
+  } else {
+    console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
+  }
 
   // Schema bootstrap is SQLite-only. All three steps emit SQLite-dialect DDL —
   // AUTOINCREMENT, SQLite CREATE TRIGGER, and ALTER TABLE probes that rely on a
@@ -627,7 +662,7 @@ async function getAllData(perms) {
     });
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDate();   // local day — the UTC one is tomorrow by evening
   const staffRows = await _q('SELECT * FROM staff ORDER BY sort_order, id');
   const passRows  = await _q("SELECT * FROM passes ORDER BY CASE status WHEN 'Out' THEN 0 WHEN 'Extended' THEN 1 ELSE 2 END, return_date ASC");
   const choreLog  = await _q('SELECT * FROM chore_log WHERE log_date=?', [today]);
@@ -664,7 +699,7 @@ async function getGroupSessions({ date, from, to }) {
   if (from && to) {
     return await _q('SELECT * FROM group_sessions WHERE session_date>=? AND session_date<=? ORDER BY session_date, id', [from, to]);
   }
-  const d = date || new Date().toISOString().slice(0, 10);
+  const d = date || localDate();
   return await _q('SELECT * FROM group_sessions WHERE session_date=? ORDER BY id', [d]);
 }
 
@@ -815,7 +850,25 @@ async function getMilestones(filter) {
   sql += ' ORDER BY client_id, phase, id DESC';
   return await _q(sql, p);
 }
+// ── Blank form values ─────────────────────────────────────────────────
+// A date, timestamp or numeric field left empty arrives as ''. SQLite stored
+// the empty string; Postgres refuses it for date, timestamptz and numeric
+// columns ("invalid input syntax") and the request 500s. The app's own forms
+// send null for a blank, but the API must not depend on every caller doing
+// so. Blank means "no value": NULL — or, for a column that cannot be NULL,
+// "leave it as it was", so the key is dropped from the write.
+const _BLANK_TYPED = /(_date|_at)$|^score$/;
+function _blankToNull(fields, keepIfBlank = []) {
+  const out = { ...fields };
+  for (const [k, v] of Object.entries(out)) {
+    if (v !== '' || !_BLANK_TYPED.test(k)) continue;
+    if (keepIfBlank.includes(k)) delete out[k]; else out[k] = null;
+  }
+  return out;
+}
+
 async function updateMilestone(id, patch) {
+  patch = _blankToNull(patch);
   const fields = [], vals = [];
   ['phase','objective','target_date','completion_date','status','notes','treatment_plan_id','goal_id']
     .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
@@ -867,6 +920,7 @@ async function getIncidents(filter) {
   return (await _q(sql, p)).map(r => _parseJsonFields(r, ['notifications_required','notifications_sent']));
 }
 async function updateIncident(id, patch) {
+  patch = _blankToNull(patch, ['incident_date']);   // required: a blank keeps the date on file
   const fields = [], vals = [];
   ['incident_date','incident_time','narrative','severity','corrective_action']
     .forEach(k => { if (patch[k] !== undefined) { fields.push(`${k}=?`); vals.push(patch[k]); } });
@@ -946,7 +1000,7 @@ async function revokeConsent(id, by) {
 }
 // Returns the active consent that covers a (client, informationType) pair, or null if blocked.
 async function findActiveConsent(clientId, informationType) {
-  const now = new Date().toISOString().slice(0,10);
+  const now = localDate();   // local day: a consent expiring today is valid all of today
   const rows = await _q(
     `SELECT * FROM consent_records
      WHERE client_id=? AND revoked=0
@@ -1046,8 +1100,9 @@ async function upsertReport(r) {
            JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, now]);
       }
       // An explicit id does not advance the identity sequence, so the next
-      // auto-generated report would collide on the primary key. Re-point it.
-      if (r.id) await connection.resyncSequence('reports');
+      // auto-generated report would collide on the primary key. Re-point it —
+      // on THIS transaction's connection, which can see the row just inserted.
+      if (r.id) await connection.resyncSequence('reports', 'id', c);
       const useId = r.id || info.lastInsertRowid;
       for (const e of r.log_entries||[]) {
         await c.run('INSERT INTO log_entries (report_id,time,text,ua_photo) VALUES (?,?,?,?)',
@@ -1164,7 +1219,7 @@ async function getUADraws(sinceDate) {
   });
 }
 async function getRecentDrawnClientIds(lookbackDays) {
-  const since = new Date(Date.now() - (lookbackDays || 30) * 86400000).toISOString().slice(0, 10);
+  const since = localDate(-(lookbackDays || 30));
   const rows = await _q(`SELECT residents FROM ua_draws WHERE date(created_at) >= date(?)`, [since]);
   const ids = new Set();
   rows.forEach(r => {
@@ -1312,7 +1367,7 @@ function _makeClinical(table, opts) {
   }
   async function create(db = _db, fields = {}) {
     if (onWrite) fields = onWrite(fields);
-    const f    = _ser(fields);
+    const f    = _ser(_blankToNull(fields));
     const cols = createCols.filter(c => f[c] !== undefined);
     const now  = nowLocal();
     const allCols = [...cols, 'created_at', 'updated_at'];
@@ -1326,7 +1381,7 @@ function _makeClinical(table, opts) {
   }
   async function update(db = _db, id, fields = {}, userId) {
     if (onWrite) fields = onWrite(fields);
-    const f    = _ser(fields);
+    const f    = _ser(_blankToNull(fields));
     const cols = updateCols.filter(c => f[c] !== undefined);
     const sets = cols.map(c => `${c}=?`); sets.push('updated_at=?');
     const vals = cols.map(c => f[c]); vals.push(nowLocal(), id);

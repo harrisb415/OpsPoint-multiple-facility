@@ -176,7 +176,19 @@ async function reorder(order) {
 
 async function reset(rooms) {
   if (!Array.isArray(rooms)) throw httpError(400, 'rooms must be an array');
-  await repo.deleteAllClients();
+  // Residents with records on file (UA results, notes, passes…) are held in
+  // place by foreign keys, and rightly: wiping them would orphan clinical
+  // records that must be retained. That surfaced as a raw 500 ("FOREIGN KEY
+  // constraint failed" / pg 23503); say what is actually wrong instead.
+  try {
+    await repo.deleteAllClients();
+  } catch (e) {
+    if (e.code === '23503' || /FOREIGN KEY constraint failed/i.test(e.message)) {
+      throw httpError(409, 'The roster cannot be reset while residents have records on file ' +
+        '(UA results, notes, passes and so on). Discharge residents instead, or edit rooms individually.');
+    }
+    throw e;
+  }
   for (const [i, r] of (rooms).entries()) { await repo.insertResetRoom(r, i); }
   return { count: rooms.length };
 }

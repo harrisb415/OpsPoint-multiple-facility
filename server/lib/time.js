@@ -20,4 +20,14 @@ function timeToMins(t) {
   return h * 60 + mn;
 }
 
-module.exports = { nowLocal, timeToMins };
+// "YYYY-MM-DD" of the server's local calendar day, `days` from today.
+// NOT toISOString().slice(0, 10): that is the UTC date, already tomorrow by
+// late afternoon in the Americas — the chore log's "today" emptied out at
+// 5 PM Pacific, and a consent expiring today stopped counting hours early.
+// Correct once the process runs in the facility's zone (TZ).
+function localDate(days = 0) {
+  const d = new Date(Date.now() + days * 86400000), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+module.exports = { nowLocal, timeToMins, localDate };

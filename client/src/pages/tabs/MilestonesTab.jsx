@@ -8,6 +8,7 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { Field, ColoredAvatar, useConfirm } from '../../components/ui.jsx'
+import { parseServerTime, localDayKey } from '../../utils/dates.js'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 const MS_BADGE = { in_progress: 'warning', completed: 'success', waived: 'gray' }
@@ -19,17 +20,19 @@ function fmtDate(d) {
   try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
   catch { return d }
 }
-// created_at is stored as a UTC timestamp ('YYYY-MM-DD HH:MM:SS'); date-only
-// fields parse at local noon. Handles both.
+// created_at is database-stamped (SQLite: UTC text with no zone marker;
+// Postgres: an instant) — parseServerTime reads both. Appending 'Z' blindly
+// broke on Postgres, which already ends in an offset: the raw text was shown.
+// Date-only fields parse at local noon.
 function fmtLogged(ts) {
   if (!ts) return '—'
-  try {
-    const d = String(ts).includes(' ') ? new Date(ts.replace(' ', 'T') + 'Z') : new Date(ts + 'T12:00:00')
-    return isNaN(d.getTime()) ? ts : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return ts }
+  const d = /^d{4}-d{2}-d{2}$/.test(String(ts)) ? new Date(ts + 'T12:00:00') : parseServerTime(ts)
+  return !d || isNaN(d.getTime()) ? String(ts) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
+// signed_off_at is written by nowLocal() — its local day, not the UTC date
+// sliced off the text (tomorrow, for an evening sign-off).
 function completedOn(m) {
-  return m.completion_date || (m.signed_off_at ? String(m.signed_off_at).slice(0, 10) : null)
+  return m.completion_date || (m.signed_off_at ? localDayKey(m.signed_off_at) : null)
 }
 
 const _MS_CLS = { warning: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300', success: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300', gray: 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' }

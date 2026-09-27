@@ -6,8 +6,10 @@
  *
  * register(app) attaches the routes to the existing Express app in the SAME
  * order and at the SAME paths as the original inline definitions, so route
- * matching/precedence is byte-for-byte unchanged (notably: `/:id` is still
- * registered before `/categories`).
+ * matching/precedence is unchanged — except `/categories`, which now comes
+ * before `/:id`. Registered after it, PUT /api/staff/categories matched as
+ * PUT /api/staff/:id with id "categories": a 404 on SQLite, and on Postgres a
+ * 500 from parseInt('categories') -> NaN in the id comparison.
  */
 const { requireAuth, requirePermission } = require('../../middleware/auth');
 const { csrfCheck } = require('../../middleware/csrf');
@@ -30,6 +32,19 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
+  // Staff categories setting
+  app.get('/api/staff/categories', requireAuth, async (req, res) => {
+    res.json(await service.getCategories());
+  });
+
+  app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
+    try {
+      const clean = await service.setCategories(req.body.categories);
+      await audit(req, 'staff.categories', 'settings', null, 'Staff Categories', { categories: clean });
+      res.json({ ok: true });
+    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  });
+
   app.put('/api/staff/:id', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -46,19 +61,6 @@ function register(app) {
       const info = await service.remove(id);
       await audit(req, 'staff.delete', 'staff', id, info.name, { category: info.category });
       broadcast({ type: 'staff_updated', user: req.session.displayName });
-      res.json({ ok: true });
-    } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
-  });
-
-  // Staff categories setting
-  app.get('/api/staff/categories', requireAuth, async (req, res) => {
-    res.json(await service.getCategories());
-  });
-
-  app.put('/api/staff/categories', requireAuth, csrfCheck, requirePermission('staff.edit'), async (req, res) => {
-    try {
-      const clean = await service.setCategories(req.body.categories);
-      await audit(req, 'staff.categories', 'settings', null, 'Staff Categories', { categories: clean });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

@@ -12,18 +12,19 @@ import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
+import { parseWhen, localDayKey } from '../../utils/dates.js'
 
 const PAGE_SIZE = 30
 const MAIL_BADGE = { pending: 'warning', approved: 'info', delivered: 'success' }
 const MAIL_LABEL = { pending: 'Pending', approved: 'Approved', delivered: 'Delivered' }
 
+// logged_at is local text on SQLite (the mail service writes nowLocal()) and
+// an ISO instant on Postgres; parseWhen reads both, Safari included.
 function fmtDT(s) {
-  if (!s) return '—'
-  try {
-    const d = new Date(s)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  } catch { return s }
+  const d = parseWhen(s)
+  if (!d) return s || '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
 export default function MailTab() {
@@ -93,7 +94,7 @@ export default function MailTab() {
     approved: mail.filter(m => m.status === 'approved').length,
     delivered: mail.filter(m => m.status === 'delivered').length,
   }), [mail])
-  const loggedToday = useMemo(() => { const t = new Date().toLocaleDateString('en-CA'); return mail.filter(m => (m.logged_at || '').slice(0, 10) === t).length }, [mail])
+  const loggedToday = useMemo(() => { const t = new Date().toLocaleDateString('en-CA'); return mail.filter(m => localDayKey(m.logged_at) === t).length }, [mail])
 
   function toggleClient(id) {
     const sid = String(id)
@@ -283,7 +284,7 @@ export default function MailTab() {
               : `Status: ${filter} · ${entries.length} records`
           } else {
             entries = entries.filter(m => {
-              const d = (m.logged_at || '').slice(0, 10)
+              const d = localDayKey(m.logged_at)   // local day, not the UTC one sliced off the text
               return d >= startDate && d <= endDate
             })
             subtitle = `${fmtDateFriendly(startDate)} – ${fmtDateFriendly(endDate)}  ·  ${entries.length} records`

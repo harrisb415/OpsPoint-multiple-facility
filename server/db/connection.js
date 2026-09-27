@@ -128,10 +128,16 @@ function ilike() {
  * Uses `setval(..., max+1, false)` — "the next value handed out is max+1" —
  * which is correct for an empty table too, where max(id) is 0 and the next id
  * should be 1.
+ *
+ * Inside a transaction, pass the transaction's scoped connection as `conn`.
+ * Run on the pool instead, MAX(id) comes from another backend that cannot see
+ * the uncommitted insert, so the sequence is set one row short and the next
+ * generated id collides anyway — the reports_pkey failure this function exists
+ * to prevent, from inside upsertReport.
  */
-async function resyncSequence(table, col = 'id') {
+async function resyncSequence(table, col = 'id', conn = null) {
   if (DRIVER !== 'pg') return;
-  await impl.run(
+  await (conn || impl).run(
     `SELECT setval(pg_get_serial_sequence('${table}', '${col}'),
                    COALESCE((SELECT MAX(${col}) FROM ${table}), 0) + 1, false)`, []);
 }

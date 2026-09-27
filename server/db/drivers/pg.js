@@ -17,28 +17,50 @@
  *      it blindly would fail on settings, user_groups, sessions and the other
  *      four tables that have no id column.
  *
- *   3. TYPE PARSERS.  node-postgres turns timestamptz into a JS Date, which
- *      would change /api/data's wire format from '2026-09-08 01:29:00' to
- *      '2026-09-08T01:29:00.000Z' the moment it is JSON.stringify'd — a
- *      client-visible change for a database port that should be invisible.
- *      Dates, timestamps and int8 are pinned to strings to match SQLite byte
- *      for byte. int8 matters separately: JS cannot hold every bigint exactly,
- *      and node-postgres returns it as a string for that reason.
+ *   3. TYPE PARSERS.  Dates stay 'YYYY-MM-DD' text and int8 becomes a number,
+ *      as SQLite hands them back. timestamptz becomes ISO-8601 UTC — see the
+ *      parser below for why the raw Postgres text was not good enough.
  *
  *   4. TLS.  Defaults to verify-full. PHI crosses DMZ->DATA on every query and
  *      libpq's default `prefer` silently downgrades to plaintext when the
  *      server has no certificate. Failing loudly is the point; set
  *      PGSSLMODE=require explicitly to relax it.
+ *
+ *   5. TIME ZONE.  Each session runs in the process's own zone, so zone-less
+ *      timestamps the app writes (nowLocal(), localShift()) and SQL such as
+ *      date(created_at) mean the same local time on both sides.
  */
 const { Pool, types } = require('pg');
 
-// ── Type parsers: keep the wire format identical to SQLite ──────────────────
-// Dates and timestamps stay text: SQLite stores them as TEXT and the app
-// compares and serialises them as strings throughout, so parsing them into Date
-// objects here would change every response shape.
-// 1082 date · 1114 timestamp · 1184 timestamptz · 1700 numeric
-for (const oid of [1082, 1114, 1184, 1700]) {
+// ── Type parsers ─────────────────────────────────────────────────────────────
+// Stay text: calendar dates ('YYYY-MM-DD', what the date inputs speak),
+// timestamps without zone and numerics. Parsing them into Date objects would
+// change every response shape.
+// 1082 date · 1114 timestamp · 1700 numeric
+for (const oid of [1082, 1114, 1700]) {
   types.setTypeParser(oid, (v) => v);
+}
+
+// 1184 timestamptz -> ISO-8601 UTC ('2026-09-27T04:22:33.923Z').
+//
+// Postgres's own text ('2026-09-27 04:22:33.923546+00') names the right moment,
+// but the client read it wrong in three ways: timeAgo() appended a 'Z' to the
+// '+00' and got an Invalid Date ("NaNd ago", a UA-draw window that matched
+// nothing); Safari's Date() rejects the space-separated spelling outright; and
+// slicing it for a date or time handed staff UTC values they read as local. ISO
+// is the one spelling every consumer parses the same way, and it still sorts as
+// text. Output only — how zone-less INPUT is read is the session TimeZone's job.
+types.setTypeParser(1184, (v) => {
+  if (v == null) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : d.toISOString();   // 'infinity' stays as-is
+});
+
+// The zone each session runs in: PGTZ if set, else the process's own (TZ).
+// Only IANA-shaped names get through, since it is spliced into a SET.
+function sessionTimeZone() {
+  const tz = process.env.PGTZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  return /^[A-Za-z0-9_+\-/]{1,64}$/.test(tz) ? tz : 'UTC';
 }
 
 // int8 (bigint) is the exception, and it must be a NUMBER.
@@ -151,6 +173,15 @@ function open(dsn) {
     console.error('[pg] idle client error:', err.message);
   });
 
+  // Match the session to the process zone before the client is handed out
+  // (queries on one client run in order, so this lands first). Without it the
+  // server default applies — UTC on db-mnemosyne — and a zone-less stamp
+  // written by a process in any other zone would be read hours off.
+  const tz = sessionTimeZone();
+  _pool.on('connect', (client) => {
+    client.query(`SET TIME ZONE '${tz}'`).catch((err) => console.error('[pg] SET TIME ZONE failed:', err.message));
+  });
+
   return _pool;
 }
 
@@ -225,5 +256,5 @@ async function close() { if (_pool) { await _pool.end(); _pool = null; } }
 module.exports = {
   open, getDb, getPath, backupTo, run, query, query1, exec, transaction, close,
   // exported for unit tests
-  _toPositional: toPositional, _withReturning: withReturning, IDENTITY_TABLES,
+  _toPositional: toPositional, _withReturning: withReturning, _sessionTimeZone: sessionTimeZone, IDENTITY_TABLES,
 };

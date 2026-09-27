@@ -193,9 +193,35 @@ describe('type parsers', () => {
     expect(parse(String(epochMs))).toBeLessThan(Number.MAX_SAFE_INTEGER);
   });
 
-  test('dates and timestamps stay text, matching how SQLite stores them', () => {
-    for (const oid of [1082, 1114, 1184]) {
-      expect(types.getTypeParser(oid)('2026-09-08 12:00:00')).toBe('2026-09-08 12:00:00');
+  test('calendar dates and zone-less timestamps stay text', () => {
+    expect(types.getTypeParser(1082)('2026-09-08')).toBe('2026-09-08');
+    expect(types.getTypeParser(1114)('2026-09-08 12:00:00')).toBe('2026-09-08 12:00:00');
+  });
+
+  // Postgres's own timestamptz text broke the client three ways (a Z appended
+  // to '+00', Safari rejecting the space, UTC read off by slicing). ISO UTC is
+  // the one spelling everything parses alike — whatever zone the session is in.
+  test('timestamptz becomes ISO-8601 UTC, from any session offset', () => {
+    const parse = types.getTypeParser(1184);
+    expect(parse('2026-09-27 04:22:33.923546+00')).toBe('2026-09-27T04:22:33.923Z');
+    expect(parse('2026-09-26 21:22:33+00')).toBe('2026-09-26T21:22:33.000Z');
+    expect(parse('2026-09-26 21:22:33.5-07')).toBe('2026-09-27T04:22:33.500Z');
+    expect(parse('infinity')).toBe('infinity');
+    expect(parse(null)).toBe(null);
+  });
+
+  test('the session time zone follows PGTZ, then the process, and rejects junk', () => {
+    const { _sessionTimeZone } = require('../server/db/drivers/pg');
+    const saved = process.env.PGTZ;
+    try {
+      process.env.PGTZ = 'America/Los_Angeles';
+      expect(_sessionTimeZone()).toBe('America/Los_Angeles');
+      process.env.PGTZ = "UTC'; DROP TABLE users; --";
+      expect(_sessionTimeZone()).toBe('UTC');
+      delete process.env.PGTZ;
+      expect(_sessionTimeZone()).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    } finally {
+      if (saved === undefined) delete process.env.PGTZ; else process.env.PGTZ = saved;
     }
   });
 });

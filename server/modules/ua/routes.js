@@ -9,6 +9,7 @@ const { csrfCheck } = require('../../middleware/csrf');
 const { audit } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
 const service = require('./service');
+const { localDate } = require('../../lib/time');
 
 function register(app) {
   // ── UA Requests ────────────────────────────────────────────────────
@@ -47,7 +48,7 @@ function register(app) {
 
   // ── UA Draws ───────────────────────────────────────────────────────
   app.get('/api/ua-draws', requireAuth, async (req, res) => {
-    const since = req.query.since || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+    const since = req.query.since || localDate(-30);
     res.json(await service.getDraws(since));
   });
 

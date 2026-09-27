@@ -42,6 +42,15 @@ async function init(dbPath) {
     _db = connection.open(process.env.CENTRAL_DATABASE_URL);
     console.log('  Central DB: Postgres');
   } else {
+    // Same trap as the facility's driver guard (db.js): SQLite would create an
+    // empty HQ database on the spot and every facility, account and release
+    // would appear gone. CENTRAL_DATABASE_URL still being set means the .env
+    // only lost its driver line.
+    if (!fs.existsSync(dbPath) && process.env.CENTRAL_DATABASE_URL) {
+      throw new Error(
+        'Refusing to start HQ on a new, empty SQLite database: CENTRAL_DATABASE_URL is set but ' +
+        'OPSPOINT_DB_DRIVER is not "pg". Set OPSPOINT_DB_DRIVER=pg and restart.');
+    }
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     const isNew = !fs.existsSync(dbPath);
     _db = connection.open(dbPath);   // owns the WAL / foreign_keys pragmas

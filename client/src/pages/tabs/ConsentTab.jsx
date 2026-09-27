@@ -9,10 +9,19 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
+import { parseServerTime, localDayKey } from '../../utils/dates.js'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
+// disclosed_at is stamped by the database (SQLite datetime('now') — UTC with
+// no zone marker; Postgres — an instant). Slicing the text showed UTC as if it
+// were local: seven hours off in the evening, and on the wrong day.
+function fmtDisclosed(v) {
+  const t = parseServerTime(v)
+  if (!t) return '—'
+  return `${fmtDate(localDayKey(t))} ${t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`
+}
 function fmtDate(d) {
   if (!d) return '—'
   try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
@@ -250,7 +259,7 @@ export default function ConsentTab() {
                     <TableBody className="divide-y">
                       {disclosures.map(d => (
                         <TableRow key={d.id} className="bg-white dark:border-gray-700 dark:bg-gray-800">
-                          <TableCell className="font-mono">{fmtDate((d.disclosed_at||'').slice(0,10))} {(d.disclosed_at||'').slice(11,16)}</TableCell>
+                          <TableCell className="font-mono">{fmtDisclosed(d.disclosed_at)}</TableCell>
                           <TableCell>{d.recipient}</TableCell>
                           <TableCell className="text-gray-500 dark:text-gray-400">{INFO_LABEL[d.information_type] || d.information_type}</TableCell>
                           <TableCell className="text-gray-500 dark:text-gray-400">{d.method || '—'}</TableCell>

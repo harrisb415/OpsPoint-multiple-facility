@@ -11,6 +11,7 @@ import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { Field, ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
+import { parseServerTime, localDayKey } from '../../utils/dates.js'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -320,7 +321,7 @@ export default function ViolationsTab() {
                     <TableCell className="font-mono">{fmtDate(v.violation_date)}</TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.description}</TableCell>
                     <TableCell><StatusBadge color={VIO_BADGE[v.status] || 'gray'}>{VIO_LABEL[v.status] || v.status}</StatusBadge></TableCell>
-                    <TableCell className="text-gray-500 dark:text-gray-400">{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0, 10))}</span>}</TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(localDayKey(v.completed_at))}</span>}</TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.logged_by || '—'}</TableCell>
                     <TableCell className="text-right">
                       {(canReview || canComplete || canDelete) && (
@@ -465,7 +466,7 @@ export default function ViolationsTab() {
             subtitle = `Current filters · ${rows.length} records`
           } else {
             rows = rows.filter(v => {
-              const d = v.violation_date || (v.logged_at || '').slice(0, 10)
+              const d = v.violation_date || localDayKey(parseServerTime(v.logged_at))   // logged_at: database-stamped
               return d && d >= startDate && d <= endDate
             })
             subtitle = `${fmtDateFriendly(startDate)} – ${fmtDateFriendly(endDate)}  ·  ${rows.length} records`
@@ -551,7 +552,7 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
           <div className="text-[0.7rem] text-gray-400">by {v.consequence_by}</div>
         )}
         {v.completed_at && (
-          <div className="text-[0.7rem] text-green-600 dark:text-green-400">✓ {fmtDate(v.completed_at?.slice?.(0,10))}</div>
+          <div className="text-[0.7rem] text-green-600 dark:text-green-400">✓ {fmtDate(localDayKey(v.completed_at))}</div>
         )}
       </td>
       {!compact && <td className="px-3.5 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.logged_by}</td>}

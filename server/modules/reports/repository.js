@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Reports repository — SQL for the core shift-report / data API domain
- * (reports, log_entries, the clients bulk-sync, and active_report_id).
+ * (reports, log_entries, and active_report_id).
  *
  * The big aggregate/serialization helpers (getAllData, upsertReport, savePhoto,
  * getPhotoB64) and the active_report_id setting still live in db.js and are
@@ -23,27 +23,6 @@ async function setActiveReportId(v) { await db.setSetting('active_report_id', v)
 async function isReportClosed(reportId) {
   const r = await c.query1('SELECT is_closed FROM reports WHERE id=?', [reportId]);
   return !!(r && r.is_closed);
-}
-
-// ── clients bulk sync (POST /api/data) ──────────────────────────────
-async function allClientsBrief() { return await c.query('SELECT id,name,room FROM clients'); }
-async function clientExists(id) { return await c.query1('SELECT id FROM clients WHERE id=?', [id]); }
-async function deleteClient(id) { await c.run('DELETE FROM clients WHERE id=?', [id]); }
-async function updateClientFull(f) {
-  await c.run(`UPDATE clients SET room=?,name=?,case_manager=?,phone=?,photo=?,
-    intake_date=?,discharge_date=?,is_special=?,is_active=?,special_label=?,sort_order=? WHERE id=?`,
-    [f.room, f.name, f.case_manager, f.phone, f.photo,
-     f.intake_date, f.discharge_date, f.is_special, f.is_active, f.special_label, f.sort_order, f.id]);
-}
-async function insertClientFull(f) {
-  await c.run(`INSERT INTO clients (id,room,name,case_manager,phone,photo,intake_date,
-    discharge_date,is_special,is_active,special_label,sort_order)
-    ${c.overriding()}VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [f.id, f.room, f.name, f.case_manager, f.phone, f.photo, f.intake_date,
-     f.discharge_date, f.is_special, f.is_active, f.special_label, f.sort_order]);
-  // Explicit id supplied above, so the sequence has to be moved past it or the
-  // next ordinary client insert collides. See connection.resyncSequence.
-  await c.resyncSequence('clients');
 }
 
 // ── report PATCH helpers ────────────────────────────────────────────
@@ -86,7 +65,6 @@ async function resolveLogEntry(id) { return await c.query1('SELECT * FROM log_en
 module.exports = {
   getAllData, upsertReport, savePhoto, getPhotoB64, getActiveReportId, setActiveReportId,
   isReportClosed,
-  allClientsBrief, clientExists, deleteClient, updateClientFull, insertClientFull,
   getReportField, updateReportField, insertLogEntry, touchReport, updateShiftData,
   getLogText, deleteLog,
   getReportBrief, deleteLogsForReport, deleteReport,

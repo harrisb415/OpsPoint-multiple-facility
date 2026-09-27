@@ -109,6 +109,18 @@ describe('API tour', () => {
     expect(drain()).toEqual([]);
   });
 
+  // POST /api/data used to take a resident list and delete everyone missing
+  // from it. It must refuse the list — even from this all-permissions user —
+  // and leave the roster exactly as it was.
+  test('POST /api/data refuses a resident list and deletes nobody', async () => {
+    const roster = async () => ((await get('/api/data', [200])).body.clients || []).map(c => c.id).sort((a, b) => a - b);
+    const before = await roster();
+    expect(before).toEqual(expect.arrayContaining([ctx.clientId, ctx.client2Id]));
+    await post('/api/data', { clients: [{ id: ctx.clientId, room: '203', name: 'Pat Tour' }] }, [400]);
+    expect(await roster()).toEqual(before);
+    expect(drain()).toEqual([]);
+  });
+
   test('shift report — create, patch, log photo, delete a log entry', async () => {
     const report = {
       id: 1, report_date: TODAY, shift: 'Day Shift', mod_name: 'Tour', is_closed: false,

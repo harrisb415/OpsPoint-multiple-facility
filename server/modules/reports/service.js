@@ -17,30 +17,23 @@ function httpError(status, message) {
 
 function nowIso() { return new Date().toISOString(); }
 
-// Magic-byte image check for data-URI client photos (was _validImageMagicBytes).
-function validImageMagicBytes(dataUri) {
-  try {
-    if (!dataUri || !dataUri.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,/i)) return false;
-    const bytes = Buffer.from(dataUri.split(',')[1].slice(0, 12), 'base64');
-    const isJpeg = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
-    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
-    const isGif = bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
-    const isWebp = bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-    return isJpeg || isPng || isGif || isWebp;
-  } catch (e) { return false; }
-}
-
 async function getData(perms) {
   return await repo.getAllData(perms);
 }
 
-// POST /api/data — bulk save of clients + reports + active_report_id.
+// POST /api/data — bulk save of reports + active_report_id.
 // Returns { activeReportId } for the broadcast. May throw 403/400 mid-way
 // (matching the original's partial-write-then-reject behaviour).
+//
+// Residents are not saved here. This used to accept a `clients` list and
+// delete every resident missing from it, so one hand-built request from any
+// account with residents.edit could empty the roster. No screen has sent a
+// list since May 2026; residents change through /api/clients and
+// /api/facility/rooms, one at a time, with their own validation and audit.
+// A list is refused before anything is written.
 async function saveData(d = {}, { perms = [] } = {}) {
-  if (Array.isArray(d.clients) && d.clients.length > 0 &&
-      !perms.includes('residents.edit') && !perms.includes('facility.manage')) {
-    throw httpError(403, 'Permission denied (residents.edit or facility.manage required)');
+  if (Array.isArray(d.clients) && d.clients.length > 0) {
+    throw httpError(400, 'Residents are not saved through /api/data; use /api/clients or /api/facility/rooms');
   }
   if (Array.isArray(d.reports) && d.reports.length > 0) {
     const wantsClose = d.reports.some(r => r.is_closed);
@@ -49,27 +42,6 @@ async function saveData(d = {}, { perms = [] } = {}) {
   }
   if (d.logos && !perms.includes('admin.settings')) {
     throw httpError(403, 'Permission denied (admin.settings required to change logos)');
-  }
-
-  if (Array.isArray(d.clients) && d.clients.length > 0) {
-    const incomingIds = d.clients.map(c => c.id).filter(Boolean);
-    for (const ec of await repo.allClientsBrief()) { if (!incomingIds.includes(ec.id)) await repo.deleteClient(ec.id); }
-    for (const cl of d.clients) {
-      let photo = cl.photo;
-      if (photo && photo.startsWith('data:')) {
-        if ((photo.split(',')[1] || '').length > 5592406) { photo = null; }
-        else if (!validImageMagicBytes(photo)) { photo = null; }
-        else photo = await repo.savePhoto(photo, `client_${String(cl.id).replace(/[^a-zA-Z0-9_-]/g, '_')}.${photo.includes('gif') ? 'gif' : 'jpg'}`);
-      }
-      const f = {
-        id: cl.id, room: cl.room, name: cl.name, case_manager: cl.case_manager || '', phone: cl.phone || '',
-        photo: photo || null, intake_date: cl.intake_date || null, discharge_date: cl.discharge_date || null,
-        is_special: cl.is_special ? 1 : 0, is_active: cl.is_active ? 1 : 0,
-        special_label: cl.special_label || null, sort_order: cl.sort_order || 0,
-      };
-      if (await repo.clientExists(cl.id)) await repo.updateClientFull(f);
-      else await repo.insertClientFull(f);
-    }
   }
 
   if (Array.isArray(d.reports)) {

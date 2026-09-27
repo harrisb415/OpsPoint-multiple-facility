@@ -170,8 +170,8 @@ app.use(express.static(REACT_DIST, {
 // ── Users + permission profiles + groups (modular: server/modules/users) ─────────
 require('./server/modules/users/routes').register(app);
 
-// _validImageMagicBytes now lives in server/modules/reports/service.js
-// (clients module has its own copy). Other photo routes inline their own check.
+// Photo magic-byte checks live with their routes: resident photos in
+// server/modules/clients/service.js, UA log photos in reports/service.js.
 
 // API rate limiting (apiRateCheck) now lives in server/middleware/rateLimit.js
 

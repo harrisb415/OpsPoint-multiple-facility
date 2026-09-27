@@ -28,7 +28,6 @@ function register(app) {
         const act = r.is_closed ? 'report.close' : 'report.save';
         await audit(req, act, 'report', r.id, (r.shift || '') + (r.report_date ? ' ' + r.report_date : ''));
       }
-      if (Array.isArray(d.clients) && d.clients.length > 0) await audit(req, 'client.bulk_edit', 'client', null, d.clients.length + ' clients');
       broadcast({ type: 'data_saved', user: req.session.displayName, active_report_id: result.activeReportId });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

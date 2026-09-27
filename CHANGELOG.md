@@ -34,6 +34,13 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
   database** — indistinguishable from total data loss. Both apps now refuse to start, and the
   boot line names the Postgres database actually in use.
 
+### Security
+
+- **`POST /api/data` no longer accepts a resident list.** Given one, it deleted every resident
+  not on it, so a single hand-built request from any account with `residents.edit` could empty
+  the roster. No screen has sent a list since May 2026 — residents change through the resident
+  and room screens — so a request carrying one is now refused (400) before anything is written.
+
 ### Added
 
 - `scripts/pg-audit.sh` — runs the whole suite on Postgres, rebuilding a scratch database from

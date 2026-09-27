@@ -5,10 +5,10 @@
 //   calendar date   '2026-09-01'            intake, report, incident dates.
 //                   No zone. Pinned to local noon so no offset can move it
 //                   onto another day.
-//   instant         '2026-09-29T06:22:00.000Z' (SQLite, written as ISO) or
-//                   '2026-09-29 06:22:00+00'   (Postgres — the pg driver hands
-//                   timestamptz back as its raw text). Pass times, UA test
-//                   times. A moment in time: read whole, so the LOCAL day and
+//   instant         '2026-09-29T06:22:00.000Z' — SQLite stores it that way and
+//                   the pg driver converts timestamptz to it. Postgres's raw
+//                   '2026-09-29 06:22:00+00' is still accepted. Pass times, UA
+//                   test times. A moment in time: read whole, so the LOCAL day and
 //                   hour come out. Its first ten characters are the UTC date,
 //                   already "tomorrow" for an evening pass.
 //   local datetime  '2026-09-28T23:22' (old datetime-local values) or
@@ -60,6 +60,15 @@ export function localDayKey(v) {
   if (!d) return ''
   const p = n => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+// '2026-09-28 16:22:05' — local wall-clock time for exports: sortable, and
+// spreadsheets read it as a date. The raw value is UTC on Postgres.
+export function localStamp(v) {
+  const d = parseWhen(v)
+  if (!d) return v == null ? '' : String(v)
+  const p = n => String(n).padStart(2, '0')
+  return `${localDayKey(d)} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 // 'Sep 28, 2026' — the local calendar day.

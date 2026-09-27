@@ -16,7 +16,7 @@ import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
 import { THEMES, DEFAULT_THEME, applyTheme } from '../utils/themes.js'
-import { parseWhen } from '../utils/dates.js'
+import { parseWhen, localStamp } from '../utils/dates.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -1916,7 +1916,7 @@ function AuditLogTab() {
   function exportCSV() {
     const header = ['Time', 'User', 'IP', 'Action', 'Target Type', 'Target', 'Detail']
     const csvRows = [header, ...rows.map(r => [
-      r.ts, r.actor_name || '', r.ip || '',
+      localStamp(r.ts), r.actor_name || '', r.ip || '',
       r.action, r.target_type || '', r.target_label || r.target_id || '',
       r.detail || '',
     ])]

@@ -2,6 +2,50 @@
 
 ---
 
+## Unreleased — Postgres audit (2026-09-27)
+
+A full audit of the SQLite → Postgres port: production error logs, a column-by-column schema
+diff, a sweep by bug class, and the whole test suite run against a real Postgres database.
+
+### Fixed
+
+- **HQ's facility list, facility detail, update reports and rollouts failed on Postgres** —
+  `opscentral.facilities` never got the `upd_*` columns SQLite adds at boot.
+  `migrations/pg/006` adds them.
+- **Creating a shift report could fail on Postgres** (`reports_pkey`) — the id sequence was
+  resynced outside the report's transaction, so it stayed one behind. It now resyncs on the
+  transaction's own connection.
+- **Postgres timestamps read wrong in the browser** — "time ago" showed NaN, Safari rejected
+  them outright, and date/time slices came out in UTC. The driver now returns ISO-8601 UTC,
+  and each database session runs in the server's time zone, so the local times the server
+  writes mean local time on both sides. Hosted installs must set `TZ` (web-hestia now has
+  `TZ=America/Los_Angeles`; the container ran UTC, so server-written log times were UTC).
+- **Blank date or number fields returned a 500 on Postgres.** Blanks are now stored empty;
+  for a required date (an incident's) the value on file is kept.
+- **The server's "today" was the UTC date** — already tomorrow by 5 PM Pacific, so the chore
+  log emptied early and consents lapsed hours early. It is the server's local day now.
+- **Saving staff categories returned 404** (500 on Postgres): `/api/staff/:id` caught the
+  request first.
+- **Reset Facility with residents on record** returned a raw database error; now a clear 409.
+- Consent disclosure times, mail "logged today" and day grouping, milestone and violation
+  dates, and the audit viewer read UTC or failed in Safari; they go through `utils/dates.js`
+  now. The audit-log **CSV export** writes local time (it wrote UTC on Postgres).
+- **A Postgres install whose `.env` lost `OPSPOINT_DB_DRIVER` booted on a new, empty SQLite
+  database** — indistinguishable from total data loss. Both apps now refuse to start, and the
+  boot line names the Postgres database actually in use.
+
+### Added
+
+- `scripts/pg-audit.sh` — runs the whole suite on Postgres, rebuilding a scratch database from
+  `migrations/pg/` before each test file. Refuses any database without verify/test/audit/scratch
+  in its name.
+- `scripts/schema-parity.cjs` — compares the SQLite schema with a Postgres one (the migration
+  files, or production); fails on a missing table or column.
+- `tests/api.tour.test.js`, `tests/central.tour.test.js` — every module's real flows,
+  collecting all failures rather than stopping at the first; run on either driver.
+
+---
+
 ## Unreleased — UA test times (2026-09-26)
 
 ### Fixed

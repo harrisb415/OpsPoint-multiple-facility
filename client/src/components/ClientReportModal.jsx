@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput } from 'flowbite-react'
 import { Field } from './ui.jsx'
 import { classifyLogEntry } from '../utils/printLog.js'
+import { fmtDay } from '../utils/dates.js'
 
 // ── Pure helpers (no React) ───────────────────────────────────────────────
 
@@ -26,13 +27,8 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function fd(d) {
-  if (!d) return '—'
-  try {
-    return new Date(String(d).slice(0, 10) + 'T12:00:00')
-      .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-  } catch { return String(d) }
-}
+// Calendar dates and instants (pass times) alike — see utils/dates.js.
+const fd = fmtDay
 
 // ── Timeline badge styles (inline CSS strings for print window) ───────────
 const TL_TYPE_STYLE = {

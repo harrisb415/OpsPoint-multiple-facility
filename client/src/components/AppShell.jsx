@@ -23,6 +23,7 @@ import { RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF } from '../utils/ui.js'
 import {
   statusLabel, statusPrint, offSiteStatuses, censusKeys, countStatuses, effectiveStatuses,
 } from '../utils/statuses.js'
+import { parseWhen, fmtWhen } from '../utils/dates.js'
 
 // ── Sidebar group config ──────────────────────────────────────────────
 const SIDEBAR_GROUPS = [
@@ -103,7 +104,7 @@ function NotifRow({ icon, name, meta, actions, children, wrap }) {
   )
 }
 
-function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIncident, onAckUA, onGoTab, dismissedDrawIds, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence }) {
+function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIncident, onAckUA, onGoTab, dismissedDrawIds, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence, passExts = [], dismissPassExt }) {
   const perm = session?.permissions || []
 
   const draws24h = (notif.uaDraws || []).filter(d => {
@@ -121,6 +122,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
   const hasAny =
     (notif.uaRequests.length > 0 && perm.includes('ua.acknowledge'))
     || (draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')))
+    || (passExts.length > 0 && perm.includes('passes.notify_extended'))
     || (notif.violReview > 0 && perm.includes('violations.notify_review'))
     || (notif.violConsequence > 0 && perm.includes('violations.notify_consequence'))
     || (notif.broadcasts.length > 0 && perm.includes('broadcast.receive'))
@@ -156,6 +158,27 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
                     </p>
                   )}
                 </NotifRow>
+              )
+            })}
+          </NotifSection>
+        )}
+
+        {passExts.length > 0 && perm.includes('passes.notify_extended') && (
+          <NotifSection title="Passes Extended" count={passExts.length}>
+            {passExts.map(p => {
+              const key = `${p.id}:${p.extended_at}`
+              return (
+                <NotifRow key={key} icon="🕓" wrap
+                  name={`${p.name}${p.room ? ` · Rm. ${p.room}` : ''} — back ${fmtWhen(p.return_date)}`}
+                  meta={[
+                    p.extended_from && `was ${fmtWhen(p.extended_from)}`,
+                    p.extended_by && `by ${p.extended_by}`,
+                    parseWhen(p.extended_at) && timeAgo(parseWhen(p.extended_at)),
+                  ].filter(Boolean).join(' · ')}
+                  actions={<>
+                    <Button size="xs" color="light" onClick={() => { onGoTab('passes'); onClose() }}>View</Button>
+                    <Button size="xs" color="light" onClick={() => dismissPassExt(key)} title="Dismiss">✕</Button>
+                  </>} />
               )
             })}
           </NotifSection>
@@ -570,6 +593,29 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
     })
   }
 
+  // Pass extensions: one notice per extension, keyed pass id + extended_at, so
+  // extending the same pass again brings it back after a dismissal. Kept per
+  // user, like announcements, since workstations are shared across shifts.
+  const passExtStore = 'spDismissedPassExt_' + (session?.username || '')
+  const [dismissedPassExt, setDismissedPassExt] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(passExtStore) || '[]')) }
+    catch { return new Set() }
+  })
+  function dismissPassExt(key) {
+    setDismissedPassExt(prev => {
+      const next = [...prev, key].slice(-200)   // old keys belong to returned passes
+      try { localStorage.setItem(passExtStore, JSON.stringify(next)) } catch { /* empty */ }
+      return new Set(next)
+    })
+  }
+  // A notice lasts while the resident is still out on that pass. Once it is
+  // Returned there is nothing left to act on, so it drops off by itself.
+  const passExts = useMemo(() => (data?.passes || [])
+    .filter(p => p.extended_at && (p.status === 'Out' || p.status === 'Extended')
+      && !dismissedPassExt.has(`${p.id}:${p.extended_at}`))
+    .sort((a, b) => (parseWhen(b.extended_at) || 0) - (parseWhen(a.extended_at) || 0)),
+  [data?.passes, dismissedPassExt])
+
   const [dismissedViolReview, setDismissedViolReview] = useState(() => {
     try { return parseInt(localStorage.getItem('spDismissedViolReview') || '0') } catch { return 0 }
   })
@@ -828,6 +874,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
   const badgeCount =
     (hasPerm('ua.acknowledge') ? notif.uaRequests.length : 0) +
     ((hasPerm('ua.draw') || hasPerm('ua.acknowledge')) ? draws24h.length : 0) +
+    (hasPerm('passes.notify_extended') ? passExts.length : 0) +
     (hasPerm('violations.notify_review') && notif.violReview > (dismissedViolReview || 0) ? 1 : 0) +
     (hasPerm('violations.notify_consequence') && notif.violConsequence > (dismissedViolConsequence || 0) ? 1 : 0) +
     (hasPerm('broadcast.receive') ? notif.broadcasts.length : 0) +
@@ -937,6 +984,8 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
         dismissedViolConsequence={dismissedViolConsequence}
         dismissViolReview={dismissViolReview}
         dismissViolConsequence={dismissViolConsequence}
+        passExts={passExts}
+        dismissPassExt={dismissPassExt}
       />
 
       <BroadcastModal open={broadcastOpen} onClose={() => setBroadcastOpen(false)} />

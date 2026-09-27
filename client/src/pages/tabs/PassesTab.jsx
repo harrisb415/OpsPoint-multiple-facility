@@ -11,19 +11,36 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import { CARD_HEAD_TITLE, CARD_HEAD_INSET_LG, CARD_HEAD_BAND } from '../../utils/ui.js'
 import { Field, ErrLine, ColoredAvatar, StatusBadge, DeltaRow, useConfirm } from '../../components/ui.jsx'
+import { parseWhen } from '../../utils/dates.js'
 
 const PAGE_SIZE = 25
 const PASS_BADGE = { Approved: 'info', Out: 'warning', Extended: 'failure', In: 'success', Returned: 'gray' }
 
+// Pass times come back as ISO (SQLite) or raw Postgres text; parseWhen reads
+// both — plain new Date() fails on the Postgres spelling in Safari.
 function fmtDT(s) {
-  if (!s) return '—'
-  try {
-    const d = new Date(s)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  } catch { return s }
+  const d = parseWhen(s)
+  if (!d) return s || '—'
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
-function localDT(s) { if (!s) return ''; try { return new Date(s).toISOString().slice(0, 16) } catch { return '' } }
+// <input type="datetime-local"> speaks local wall-clock time with no zone.
+// localDT fills it in LOCAL time — it used to take toISOString(), i.e. UTC
+// digits, so opening Edit and saving untouched moved a pass by the UTC offset.
+// toInstant sends it back as an absolute ISO instant: a zone-less string is
+// read as UTC by Postgres (timestamptz), which stored every pass time hours
+// early on the hosted deployment. The browser is the only party that knows
+// the facility's zone, so the conversion happens here.
+function localDT(s) {
+  const d = parseWhen(s)
+  if (!d) return ''
+  const p = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+function toInstant(v) {
+  const d = parseWhen(v)
+  return d ? d.toISOString() : null
+}
 
 // How early a resident may be marked departed, relative to the scheduled time.
 const EARLY_DEPART_MS = 10 * 60 * 1000
@@ -61,9 +78,8 @@ export default function PassesTab() {
     return () => clearInterval(t)
   }, [])
   const departureAt = (p) => {
-    if (!p.departure) return null
-    const t = new Date(p.departure).getTime()
-    return Number.isNaN(t) ? null : t
+    const d = parseWhen(p.departure)
+    return d ? d.getTime() : null
   }
   const canDepart = (p) => { const t = departureAt(p); return t === null || nowTs >= t - EARLY_DEPART_MS }
   // Earliest the button unlocks — used for the tooltip so the reason is exact.
@@ -108,7 +124,7 @@ export default function PassesTab() {
     try {
       const isNew = modal === 'add'
       const url = isNew ? '/api/passes' : `/api/passes/${modal.id}`
-      const body = { client_id: form.client_id ? parseInt(form.client_id) : null, room: form.room, name: form.name.trim(), departure: form.departure || null, return_date: form.return_date || null, ua_notes: form.ua_notes, notes: form.notes, status: form.status }
+      const body = { client_id: form.client_id ? parseInt(form.client_id) : null, room: form.room, name: form.name.trim(), departure: toInstant(form.departure), return_date: toInstant(form.return_date), ua_notes: form.ua_notes, notes: form.notes, status: form.status }
       const r = await fetch(url, { method: isNew ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(body) })
       const j = await r.json()
       if (!r.ok) { setError(j.error || 'Save failed'); return }
@@ -136,13 +152,19 @@ export default function PassesTab() {
   }
   async function submitExtend() {
     if (!extendDate) { setExtendErr('Pick a new return date and time.'); return }
-    const prev = extendFor.return_date ? new Date(extendFor.return_date).getTime() : null
-    if (prev !== null && new Date(extendDate).getTime() <= prev) {
+    const next = parseWhen(extendDate)
+    if (!next) { setExtendErr('Pick a new return date and time.'); return }
+    const prev = parseWhen(extendFor.return_date)?.getTime() ?? null
+    if (prev !== null && next.getTime() <= prev) {
       setExtendErr('The new return must be later than the current one.'); return
     }
+    // tz: the server writes the extension note in this zone, not its own.
     const r = await fetch(`/api/passes/${extendFor.id}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-      body: JSON.stringify({ status: 'Extended', return_date: extendDate }),
+      body: JSON.stringify({
+        status: 'Extended', return_date: toInstant(extendDate),
+        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
     })
     if (r.ok) { setExtendFor(null); loadData() }
     else { const d = await r.json().catch(() => ({})); setExtendErr(d.error || 'Could not extend this pass.') }

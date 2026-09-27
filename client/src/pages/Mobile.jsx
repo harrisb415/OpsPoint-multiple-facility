@@ -4,6 +4,7 @@ import { usePermission } from '../hooks/usePermission.js'
 import {
   statusLabel, statusTone, censusKeys, countStatuses, effectiveStatuses, TONE_PRINT,
 } from '../utils/statuses.js'
+import { fmtWhen } from '../utils/dates.js'
 
 // ── Constants ───────────────────────────────────────────────────────
 const DEFAULT_AREAS = [
@@ -163,6 +164,10 @@ export default function Mobile() {
               }))
             }
           } else if (msg.type === 'passes_updated') {
+            const ext = msg.extended
+            if (ext && (session.permissions || []).includes('passes.notify_extended')) {
+              showToast(`Pass extended — ${ext.name}${ext.return_date ? `, back ${fmtWhen(ext.return_date)}` : ''}`)
+            }
             // Just the passes: a full loadAll() would also reset the wellness
             // check in progress on this phone.
             fetch('/api/passes', { credentials: 'include' })

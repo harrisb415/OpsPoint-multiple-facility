@@ -2,6 +2,40 @@
 
 ---
 
+## Unreleased — Pass-extension notifications; pass times fixed on Postgres (2026-09-26)
+
+### Added
+
+- **Notification when a pass is extended.** Everyone with the new permission
+  `passes.notify_extended` ("Notification — pass extended", under Weekend Passes) gets a
+  bell entry — resident, room, the new return time, what it was, who extended it — plus a
+  chime, and a toast on Mobile. The entry stays until that person dismisses it or the
+  resident is marked Returned; extending the same pass again raises a fresh one.
+  Every role starts with the permission: new installs seed it into all four presets, and
+  on upgrade it is granted once to **every** group, custom ones included. An admin can
+  still remove it per group, and later boots respect that.
+- Passes now record the latest extension as data (`extended_at`, `extended_by`,
+  `extended_from`) alongside the existing note. Postgres: apply
+  `migrations/pg/005_pass_extension_stamp.sql` before deploying; SQLite migrates itself.
+
+### Fixed
+
+- **Pass times were stored hours early on the Postgres deployment.** The pass forms sent
+  `datetime-local` values with no timezone; SQLite kept the text and browsers read it as
+  local time, but Postgres reads a zone-less timestamp as UTC — so a return entered as
+  11:22 PM showed as 4:22 PM (PDT). The client now sends absolute instants. Passes saved
+  before this fix keep their shifted times and need re-entering.
+- **Opening Edit or Extend and saving moved the time** by the UTC offset, on both drivers:
+  the picker was pre-filled with UTC digits. It now shows local time.
+- **The extension note was written in the server's timezone** (UTC when hosted), so it
+  disagreed with the Passes table for the same pass. It is now written in the browser's.
+- Pass dates in the resident profile and client report showed the next day for evening
+  passes (they read the UTC date); they now use the local day. `client/src/utils/dates.js`
+  reads both timestamp spellings (ISO from SQLite, raw text from Postgres) — plain
+  `new Date()` rejects the Postgres one in Safari.
+
+---
+
 ## Unreleased — Resident statuses: built-in defaults, Passes owns Weekend Pass (2026-09-26)
 
 ### Changed

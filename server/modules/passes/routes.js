@@ -33,12 +33,26 @@ function register(app) {
     try {
       const id = parseInt(req.params.id);
       const canEditDetails = (await userPerms(req)).includes('passes.edit');
-      const { status } = req.body;
+      const { status, tz } = req.body;
       const actor = req.session.displayName || req.session.username || '';
-      const name = await service.update(id, req.body, { canEditDetails, actor });
-      if (status !== undefined) await audit(req, 'passes.status', 'pass', id, name, { status });
+      const { name, extension } = await service.update(id, req.body,
+        { canEditDetails, actor, timeZone: tz });
+      if (extension) {
+        await audit(req, 'passes.status', 'pass', id, name,
+          { status, return_date: extension.return_date, extended_from: extension.extended_from });
+      } else if (status !== undefined) await audit(req, 'passes.status', 'pass', id, name, { status });
       else await audit(req, 'passes.edit', 'pass', id, name);
-      broadcast({ type: 'passes_updated', user: req.session.displayName });
+      // An extension rides on the usual refresh; `extended` lets clients holding
+      // passes.notify_extended chime. Everyone signed in can already see passes,
+      // so the payload exposes nothing new.
+      broadcast({
+        type: 'passes_updated', user: req.session.displayName,
+        ...(extension ? { extended: {
+          id: extension.id, name: extension.name, room: extension.room,
+          return_date: extension.return_date, extended_from: extension.extended_from,
+          extended_by: extension.extended_by, extended_at: extension.extended_at,
+        } } : {}),
+      });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

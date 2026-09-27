@@ -52,6 +52,7 @@ const PERMISSIONS = [
   'chores.log',       // initial / log chore completions
   'passes.edit',      // create / edit / delete passes and pass notice
   'passes.status',    // change pass In/Out status and mark as Returned (check in/out)
+  'passes.notify_extended', // notification (bell + chime) when a pass is extended
   'reminders.view',   // see wellness check and walkthrough reminder banners
   'ua.request',       // flag a resident for UA from the roster
   'ua.acknowledge',   // see the UA alert banner and acknowledge requests
@@ -146,6 +147,17 @@ const ROLE_PRESETS = {
     'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   ],
 };
+
+// Permissions every role starts with — alerts the whole team needs, like a
+// resident not coming back when expected. Appended to each preset here, and
+// when one is NEWLY introduced it is granted to every existing group and
+// profile, custom ones included, not only the built-in groups whose preset
+// lists it (_migrateProfiles / _migrateGroups). An admin can still take it
+// away afterwards; it is never re-added once known.
+const EVERYONE_PERMS = ['passes.notify_extended'];
+for (const preset of Object.values(ROLE_PRESETS)) {
+  for (const p of EVERYONE_PERMS) if (!preset.includes(p)) preset.push(p);
+}
 
 // ── Init (synchronous) ───────────────────────────────────────────────
 async function init(dbPath) {
@@ -358,16 +370,15 @@ async function _migrateProfiles() {
     // Strip retired permissions
     const cleaned = p.permissions.filter(perm => PERMISSIONS.includes(perm));
     if (cleaned.length !== p.permissions.length) { p.permissions = cleaned; changed = true; }
-    // Add new perms that belong to this profile's preset
+    // Add new perms that belong to this profile's preset (or to everyone)
     const preset = ROLE_PRESETS[p.key];
-    if (preset) {
-      newPerms.forEach(perm => {
-        if (preset.includes(perm) && !p.permissions.includes(perm)) {
-          p.permissions.push(perm);
-          changed = true;
-        }
-      });
-    }
+    newPerms.forEach(perm => {
+      const belongs = EVERYONE_PERMS.includes(perm) || (preset && preset.includes(perm));
+      if (belongs && !p.permissions.includes(perm)) {
+        p.permissions.push(perm);
+        changed = true;
+      }
+    });
   });
   if (changed) await setSetting('permission_profiles', profiles);
   return newPerms; // pass to _migrateGroups so it uses the same delta
@@ -411,7 +422,9 @@ async function _migrateGroups(newPerms = []) {
     const preset  = ROLE_PRESETS[g.key];
     // Only add permissions that are NEWLY introduced in this boot (not previously known).
     // Never add back permissions that were deliberately removed from a group.
-    const toAdd   = preset ? newPerms.filter(p => preset.includes(p) && !perms.includes(p)) : [];
+    // EVERYONE_PERMS go to custom groups too; the rest only to their preset's group.
+    const toAdd   = newPerms.filter(p =>
+      (EVERYONE_PERMS.includes(p) || (preset && preset.includes(p))) && !perms.includes(p));
     const cleaned = perms.filter(p => PERMISSIONS.includes(p)); // drop retired perms
     const stripped = cleaned.length !== perms.length;
     if (!toAdd.length && !stripped) continue;

@@ -196,9 +196,16 @@ export function DataProvider({ children }) {
 
     function handleMessage(msg) {
       switch (msg.type) {
+        case 'passes_updated':
+          // The refresh brings the extension into the bell (AppShell reads
+          // extended_at off data.passes); this is just the chime, for the
+          // people who follow extensions.
+          if (msg.extended && _hasSessionPerm('passes.notify_extended')) playSound('pass-extended')
+          loadData()
+          break
+
         case 'data_saved':
         case 'staff_updated':
-        case 'passes_updated':
         case 'chore_log_updated':
         case 'mail_updated':
         case 'pass_notice_updated':
@@ -494,6 +501,10 @@ export function playSound(type) {
     } else if (type === 'broadcast') {
       _beep(ctx, 523, 0,  .15, 'sine', .22)
       _beep(ctx, 659, .2, .25, 'sine', .22)
+    } else if (type === 'pass-extended') {
+      _beep(ctx, 587, 0,   .12, 'sine', .22)
+      _beep(ctx, 587, .16, .12, 'sine', .22)
+      _beep(ctx, 440, .32, .24, 'sine', .22)
     }
   } catch { /* audio playback failure — ignore */ }
 }

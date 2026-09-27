@@ -45,16 +45,26 @@ async function create(input = {}) {
   });
 }
 
+// The browser's IANA zone ('America/Los_Angeles'), or undefined when it is
+// missing or not one Intl recognises. A hosted server runs in UTC, and
+// formatting in its own zone wrote extension notes hours away from the times
+// the Passes table shows for the very same pass.
+function validZone(tz) {
+  if (typeof tz !== 'string' || !tz || tz.length > 64) return undefined;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return tz; }
+  catch (e) { return undefined; }
+}
+
 // One line per extension: when, by whom, and what the return date moved from
 // and to. Kept human-readable because it is shown verbatim in the Notes column.
-function appendExtensionNote(before, newReturn, actor) {
+function appendExtensionNote(before, newReturn, actor, timeZone) {
+  const opts = { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone };
   const fmt = (v) => {
     if (!v) return 'unset';
     const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? String(v)
-      : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return Number.isNaN(d.getTime()) ? String(v) : d.toLocaleString('en-US', opts);
   };
-  const stamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const stamp = new Date().toLocaleString('en-US', opts);
   const who   = actor ? ` by ${actor}` : '';
   const line  = `[Extended ${stamp}${who}: return ${fmt(before.return_date)} -> ${fmt(newReturn)}]`;
   const prev  = (before.notes || '').trim();
@@ -62,9 +72,11 @@ function appendExtensionNote(before, newReturn, actor) {
 }
 
 // Update a pass. `canEditDetails` reflects the caller's passes.edit permission;
-// status-only callers may change only the status field. Returns the pass name
-// (for the audit label).
-async function update(id, patch = {}, { canEditDetails, actor } = {}) {
+// status-only callers may change only the status field. `timeZone` is the
+// browser's, used to write the extension note in local time. Returns
+// { name } for the audit label, plus `extension` — the updated row — when
+// this was an extension, so the route can announce it.
+async function update(id, patch = {}, { canEditDetails, actor, timeZone } = {}) {
   const before = await repo.getById(id);
   if (!before) throw httpError(404, 'Not found');
   const { departure, return_date, ua_notes, notes, status } = patch;
@@ -74,6 +86,9 @@ async function update(id, patch = {}, { canEditDetails, actor } = {}) {
   // on shift — so it does not require passes.edit even though it writes
   // return_date. Any other detail change still does.
   const isExtend = status === 'Extended' && return_date !== undefined;
+  if (isExtend && (!return_date || Number.isNaN(new Date(return_date).getTime()))) {
+    throw httpError(400, 'A valid new return date and time is required');
+  }
 
   const touchingNonStatusField =
     departure !== undefined || (return_date !== undefined && !isExtend) ||
@@ -93,13 +108,18 @@ async function update(id, patch = {}, { canEditDetails, actor } = {}) {
   // reads it next, not only in the audit log. Appended rather than replacing,
   // so repeated extensions read as a history.
   if (isExtend) {
-    fields.notes = appendExtensionNote(before, return_date, actor);
+    fields.notes = appendExtensionNote(before, return_date, actor, validZone(timeZone));
+    // The same extension as data. The note is free text anyone with
+    // passes.edit can rewrite; the pass-extended notification reads these.
+    fields.extended_at   = new Date().toISOString();
+    fields.extended_by   = actor || '';
+    fields.extended_from = before.return_date || null;
   }
 
   await repo.update(id, fields);
 
   const row = await repo.getById(id);
-  return row ? row.name : String(id);
+  return { name: row ? row.name : String(id), extension: isExtend ? row : null };
 }
 
 // Delete a pass. Returns { name } captured before deletion.

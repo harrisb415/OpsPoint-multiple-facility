@@ -30,6 +30,7 @@ import { useData } from '../contexts/DataContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { openPrintWindow, classifyLogEntry } from '../utils/printLog.js'
 import { statusLabel, statusBadge, effectiveStatuses } from '../utils/statuses.js'
+import { fmtDay } from '../utils/dates.js'
 
 const LOG_TYPE_CLS = {
   Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
@@ -85,15 +86,8 @@ const VIOL_STATUS_DEFAULT = { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 d
 
 // ── Shared helpers ────────────────────────────────────────────────────────
 
-function fmtDate(d) {
-  if (!d) return '—'
-  const s = String(d).slice(0, 10) // accept ISO timestamps too
-  try {
-    return new Date(s + 'T12:00:00').toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric',
-    })
-  } catch { return s }
-}
+// Calendar dates and instants (pass times) alike — see utils/dates.js.
+const fmtDate = fmtDay
 
 function daysSince(dateStr) {
   if (!dateStr) return null

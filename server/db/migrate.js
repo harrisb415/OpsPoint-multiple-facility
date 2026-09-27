@@ -397,6 +397,12 @@ const COLUMN_MIGRATIONS = [
     "ALTER TABLE chore_log ADD COLUMN pm_initials TEXT DEFAULT ''",
     // clients — per-day shift assignments (JSON dict: dayIdx → 'AM'|'PM')
     "ALTER TABLE clients ADD COLUMN chore_day_shifts TEXT DEFAULT NULL",
+    // passes — the latest extension: when (ISO instant), by whom, and the
+    // return it replaced. Drives the "pass extended" notification.
+    // Postgres: migrations/pg/005_pass_extension_stamp.sql.
+    "ALTER TABLE passes ADD COLUMN extended_at TEXT DEFAULT NULL",
+    "ALTER TABLE passes ADD COLUMN extended_by TEXT DEFAULT ''",
+    "ALTER TABLE passes ADD COLUMN extended_from TEXT DEFAULT NULL",
 ];
 
 function runColumnMigrations(db) {

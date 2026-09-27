@@ -13,7 +13,7 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
-import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
+import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
 import { THEMES, DEFAULT_THEME, applyTheme } from '../utils/themes.js'
 
@@ -184,7 +184,7 @@ const PERM_CATEGORIES = [
   { label: 'Residents',        perms: ['status.edit','residents.edit'] },
   { label: 'Staff Directory',  perms: ['staff.edit'] },
   { label: 'Chores',           perms: ['chores.assign', 'chores.log'] },
-  { label: 'Weekend Passes',   perms: ['passes.edit','passes.status'] },
+  { label: 'Weekend Passes',   perms: ['passes.edit','passes.status','passes.notify_extended'] },
   { label: 'Reminders',        perms: ['reminders.view'] },
   { label: 'UA',               perms: ['ua.request','ua.acknowledge','ua.delete','ua.record','ua.draw'] },
   { label: 'Mail Management',  perms: ['mail.log','mail.approve','mail.deliver','mail.delete'] },
@@ -207,6 +207,7 @@ const PERM_LABELS = {
   'status.edit':'Change resident statuses','residents.edit':'Edit resident info','staff.edit':'Manage staff',
   'chores.assign':'Assign chores to residents',
   'chores.log':'Log chore completions','passes.edit':'Create / edit passes & notice','passes.status':'Check pass in / out',
+  'passes.notify_extended':'Notification — pass extended',
   'reminders.view':'Wellness & walkthrough reminders','ua.request':'Flag resident for UA','ua.acknowledge':'Acknowledge UA alert',
   'ua.delete':'Delete UA entries','mail.log':'Log incoming mail','mail.approve':'Approve mail for delivery',
   'mail.deliver':'Mark mail as delivered to resident','mail.delete':'Delete mail records','violations.log':'Log violation','violations.review':'Review / assign consequence',

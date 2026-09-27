@@ -7,7 +7,8 @@ const c = require('../../db/connection');
 
 function _j(str, def) { try { return JSON.parse(str); } catch (e) { return def; } }
 
-const COLUMNS = ['departure', 'return_date', 'ua_notes', 'notes', 'status'];
+const COLUMNS = ['departure', 'return_date', 'ua_notes', 'notes', 'status',
+  'extended_at', 'extended_by', 'extended_from'];
 
 // Active passes first (Out, then Extended), then everything else by return date.
 async function list() {

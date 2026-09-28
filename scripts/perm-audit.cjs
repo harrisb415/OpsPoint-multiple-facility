@@ -16,9 +16,17 @@ const os = require('os');
 const path = require('path');
 const fs = require('fs');
 
-const TMP_DB = path.join(os.tmpdir(), `opspoint_permaudit_${Date.now()}.db`);
-if (!process.env.DATABASE_URL) process.env.OPSPOINT_DB = TMP_DB;
-process.env.OPSPOINT_QUIET = '1';
+// Always a throwaway SQLite database and data folder, whatever the environment
+// says: the audit creates hundreds of accounts, residents and records, so it
+// must never reach a real database — not even when run on the production box
+// with its .env loaded. (On Postgres it runs through tests/ under pg-audit.sh,
+// against that script's scratch database.)
+const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'opspoint_permaudit_'));
+const TMP_DB = path.join(TMP_DIR, 'audit.db');
+delete process.env.DATABASE_URL;
+process.env.OPSPOINT_DB_DRIVER = 'sqlite';
+process.env.OPSPOINT_DATA = TMP_DIR;
+process.env.OPSPOINT_DB = TMP_DB;
 
 const verbose = process.argv.includes('--verbose');
 
@@ -71,6 +79,6 @@ const verbose = process.argv.includes('--verbose');
     log(`\n✓ ${r.passes.length} actions work for every role and permission set that can see them.`);
   }
 
-  ['', '-shm', '-wal'].forEach(s => { try { fs.unlinkSync(TMP_DB + s); } catch (e) { /* ignore */ } });
+  try { fs.rmSync(TMP_DIR, { recursive: true, force: true }); } catch (e) { /* ignore */ }
   process.exit(r.conflicts.length ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(2); });

@@ -40,8 +40,10 @@ const verbose = process.argv.includes('--verbose');
   const { audit, guardText } = require('./perm-audit/engine.cjs');
   const catalog = require('./perm-audit/catalog.cjs');
   process.stdout.write(`Permission audit: ${catalog.length} actions\n`);
-  const r = await audit({ app, db, catalog, onProgress: (i, n) => process.stdout.write(`\r  running ${i}/${n}…`) });
-  process.stdout.write('\r' + ' '.repeat(40) + '\r');
+  // A live counter only on a terminal; redirected to a file, just the report.
+  const tty = process.stdout.isTTY;
+  const r = await audit({ app, db, catalog, onProgress: (i, n) => { if (tty) process.stdout.write(`\r  running ${i}/${n}…`); } });
+  if (tty) process.stdout.write('\r' + ' '.repeat(40) + '\r');
 
   const where = (a) => `      ${a.where}`;
   const step = (s) => s ? `${s.verb} ${s.url.split('?')[0]} → ${s.status}${s.error ? ` "${s.error}"` : ''}${s.route && s.route.guards.length ? ` (route needs ${guardText(s.route.guards)})` : ''}` : '';

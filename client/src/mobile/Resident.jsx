@@ -3,8 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { Alert, Button, Spinner } from 'flowbite-react'
 import {
   ChevronLeft, FlaskConical, Ticket, SquareCheck, Mail, Ban, Clock, Lock,
-  HeartPulse, FileText, ClipboardList, Flag, UserRound,
+  HeartPulse, FileText, ClipboardList, Flag, UserRound, Undo2,
 } from 'lucide-react'
+import { ExtendPassSheet, LogInfractionSheet } from './sheets.jsx'
 import { useMobile } from './context.js'
 import { api } from './api.js'
 import { Card, Initials } from './ui.jsx'
@@ -21,10 +22,13 @@ const words = (s) => {
 // server, so it isn't re-fetched on each live update.
 export default function Resident() {
   const { id } = useParams()
-  const { snap, hasPerm, toast } = useMobile()
+  const { snap, hasPerm, toast, reload } = useMobile()
   const [card, setCard] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [extending, setExtending] = useState(null)
+  const [logging, setLogging] = useState(false)
+  const [version, setVersion] = useState(0)   // bumped after an action here, to re-read the card
 
   useEffect(() => {
     let cancelled = false
@@ -32,7 +36,21 @@ export default function Resident() {
       .then(c => { if (!cancelled) { setCard(c); setError(null) } })
       .catch(e => { if (!cancelled) setError(e) })
     return () => { cancelled = true }
-  }, [id])
+  }, [id, version])
+
+  const canPass = hasPerm('passes.status') || hasPerm('passes.edit')
+  const afterAction = () => { setVersion(v => v + 1); reload() }
+
+  async function markReturned() {
+    setBusy(true)
+    try {
+      await api('PUT', `/api/passes/${card.pass.id}`, { status: 'Returned' })
+      toast(`${card.resident.name} marked returned.`, 'ok')
+      afterAction()
+    } catch (e) {
+      toast(`Not saved: ${e.message}`, 'error')
+    } finally { setBusy(false) }
+  }
 
   const sd = statusData(snap)
   const st = currentStatuses(snap)[Number(id)] || 'building'
@@ -81,11 +99,17 @@ export default function Resident() {
               </div>
             </Card>
 
-            {hasPerm('ua.request') && !uaPending && (
-              <Button color="light" onClick={requestUA} disabled={busy} className="w-full">
-                <FlaskConical className="mr-2 h-4 w-4" aria-hidden="true" />Request a UA
-              </Button>
-            )}
+            {(() => {
+              const actions = [
+                card.pass && canPass && <Button key="ext" color="light" onClick={() => setExtending(card.pass)} disabled={busy}><Ticket className="mr-2 h-4 w-4" aria-hidden="true" />Extend pass</Button>,
+                card.pass && canPass && <Button key="ret" color="light" onClick={markReturned} disabled={busy}><Undo2 className="mr-2 h-4 w-4" aria-hidden="true" />Returned</Button>,
+                hasPerm('ua.request') && !uaPending && <Button key="ua" color="light" onClick={requestUA} disabled={busy}><FlaskConical className="mr-2 h-4 w-4" aria-hidden="true" />Request a UA</Button>,
+                hasPerm('violations.log') && <Button key="inf" color="light" onClick={() => setLogging(true)} disabled={busy}><Ban className="mr-2 h-4 w-4" aria-hidden="true" />Log infraction</Button>,
+              ].filter(Boolean)
+              return actions.length > 0 && <div className="grid grid-cols-2 gap-2 [&>*:last-child:nth-child(odd)]:col-span-2">{actions}</div>
+            })()}
+            {extending && <ExtendPassSheet key={extending.id} pass={extending} resident={card.resident} onClose={() => setExtending(null)} onDone={afterAction} />}
+            <LogInfractionSheet open={logging} resident={card.resident} onClose={() => setLogging(false)} onDone={afterAction} />
 
             <Section title="TODAY">
               {card.pass && (

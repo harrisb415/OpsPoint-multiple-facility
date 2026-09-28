@@ -178,4 +178,4 @@ async function found(roundId, clientId, user, { note = '' } = {}) {
   return { reportId: report.id, logEntry: { id: logEntryId, time, text }, label: who };
 }
 
-module.exports = { current, last, start, mark, finish, found, _awayIds: awayIds };
+module.exports = { current, last, start, mark, finish, found, awayIds, _awayIds: awayIds };

@@ -11,6 +11,7 @@ const { csrfCheck, originHost } = require('../../middleware/csrf');
 const { loginRateCheck } = require('../../middleware/rateLimit');
 const { audit } = require('../../middleware/audit');
 const service = require('./service');
+const { establishSession } = require('./session');
 
 function register(app, { serveSPA } = {}) {
   // ── Login / logout — React SPA handles the UI ─────────────────────
@@ -65,18 +66,13 @@ function register(app, { serveSPA } = {}) {
     }
 
     const u = r.user;
-    req.session.regenerate(async function (err) {
-      if (err) return res.status(500).json({ error: 'Login error.' });
-      req.session.userId = u.id; req.session.username = u.username;
-      req.session.displayName = u.display_name; req.session.role = u.role;
-      req.session.permissions = await service.loginPermissions(u.id, u.role);
+    try {
+      const { mustChangePw } = await establishSession(req, u);
       await audit(req, 'auth.login', 'user', u.id, u.display_name || u.username, null, { actorId: u.id, actorName: u.display_name || u.username });
-      if (u.must_change_pw) {
-        req.session.must_change_pw = true;
-        return req.session.save(() => res.json({ ok: true, mustChangePw: true }));
-      }
-      req.session.save(() => res.json({ ok: true, mustChangePw: false }));
-    });
+      res.json({ ok: true, mustChangePw });
+    } catch (e) {
+      res.status(500).json({ error: 'Login error.' });
+    }
   });
 }
 

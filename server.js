@@ -143,6 +143,8 @@ app.use(requireForceChangePw);  // forced-password-change gate — server/middle
 
 // ── Auth: login / logout / me / change-password (modular: server/modules/auth) ─────────
 require('./server/modules/auth/routes').register(app, { serveSPA });
+// ── Quick unlock: the mobile app's PIN after the idle sign-out (modular: server/modules/quickunlock) ──
+require('./server/modules/quickunlock/routes').register(app);
 
 
 // ── Page routes (React SPA handles client-side routing) ──────────

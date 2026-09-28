@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Alert, Button, ToggleSwitch } from 'flowbite-react'
-import { BellRing, Download, LogOut, Monitor, ShieldCheck, Smartphone, Palette, ChevronRight, Contact, Megaphone } from 'lucide-react'
+import { BellRing, Download, LogOut, Monitor, ShieldCheck, Smartphone, Palette, ChevronRight, Contact, Megaphone, KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { themeLabel } from '../utils/themes.js'
 import { useMobile } from './context.js'
 import { api } from './api.js'
 import { pushSupport, currentSubscription, enableAlerts, disableAlerts } from './push.js'
 import { Card, Initials, ScreenHeader } from './ui.jsx'
+import { PinSetupSheet } from './sheets.jsx'
 import { unseenAnnouncements } from './model.js'
 
 const ROLE_LABELS = { pa: 'Program Assistant', supervisor: 'Supervisor', admin: 'Administrator', case_manager: 'Case Manager' }
@@ -21,6 +22,24 @@ export default function More() {
   const [cfg, setCfg] = useState(null)
   const [device, setDevice] = useState({ loading: true, endpoint: null, prefs: {} })
   const [busy, setBusy] = useState(false)
+  const [pinOn, setPinOn] = useState(null)   // null while checking
+  const [pinSheet, setPinSheet] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    api('GET', '/api/auth/pin/status')
+      .then(s => { if (!cancelled) setPinOn(!!s.mine) })
+      .catch(() => { if (!cancelled) setPinOn(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  async function pinOff() {
+    try {
+      await api('DELETE', '/api/auth/pin')
+      setPinOn(false)
+      toast('Quick unlock is off for this phone.', 'ok')
+    } catch (e) { toast(`Couldn’t turn it off: ${e.message}`, 'error') }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -117,6 +136,24 @@ export default function More() {
             <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden="true" />
             Alerts never include a resident&rsquo;s name or room.
           </p>
+        </section>
+
+        <section className="flex flex-col gap-2" aria-labelledby="unlock-h">
+          <h2 id="unlock-h" className="px-1 text-xs font-bold tracking-wider text-gray-600 dark:text-gray-400">SIGNING IN</h2>
+          <Card className="flex items-center gap-3 p-4">
+            <KeyRound className="h-6 w-6 shrink-0 text-primary-700 dark:text-primary-300" aria-hidden="true" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-[15px] font-semibold">Unlock with a PIN</span>
+              <span className="text-xs text-gray-600 dark:text-gray-400">
+                {pinOn
+                  ? 'On for this phone. Signing out turns it off.'
+                  : 'After the idle sign-out, use a 6-digit PIN instead of your password. Only on this phone.'}
+              </span>
+            </span>
+            {pinOn === true && <Button size="sm" color="light" onClick={pinOff}>Turn off</Button>}
+            {pinOn === false && <Button size="sm" onClick={() => setPinSheet(true)}>Set up</Button>}
+          </Card>
+          <PinSetupSheet open={pinSheet} onClose={() => setPinSheet(false)} onDone={() => setPinOn(true)} />
         </section>
 
         {installPrompt && !support.standalone && (

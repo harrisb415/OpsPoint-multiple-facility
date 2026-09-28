@@ -2,6 +2,48 @@
 
 ---
 
+## Unreleased — Mobile app: "For you", quick actions, PIN unlock (2026-09-28)
+
+Step 4 of the mobile rewrite.
+
+### Added
+
+- **"For you" on Home.** A list of what this person can act on now, built on the server from
+  their permissions: passes due back or late, residents leaving on an approved pass today,
+  UA requests, infractions to review, consequences to carry out, mail to approve or deliver,
+  chores not yet signed off (skipping anyone away), milestones due within a week, open
+  incidents, consents expiring within two weeks and treatment plan reviews due. Each group
+  appears only with the permission that acts on it. Most rows can be done from the phone
+  (Returned, Acknowledge, Review, Done, Checked out, Delivered, Approve, Sign off); incidents,
+  consents and plan reviews are headlines to take to the desktop. Every button calls an
+  endpoint the desktop already uses.
+- **Quick actions.** Random UA draw (same pool and 30-day skip as the desktop), log an
+  infraction, send an announcement, each shown only with its permission.
+- **Actions on the resident card:** extend a pass, mark returned, log an infraction.
+- **Unlock with a PIN** (More → Signing in). After the idle sign-out, a phone can sign back in
+  with a 6-digit PIN instead of the password. The PIN only works together with a random
+  token that phone holds in an httpOnly cookie, so a PIN seen over a shoulder is useless on
+  any other device, and only hashes are stored. Five wrong PINs switch it off. It also ends
+  on signing out, a password change or reset, losing mobile access, or 30 days unused.
+  Unlocks share the login rate limit, and setup, unlocks and failures go to the audit log.
+  Patterns (`123456`, `111111`, `121212`…) are refused.
+
+### Changed
+
+- Signing out on purpose (desktop, classic or new mobile) also switches off that phone's PIN.
+  The idle sign-out doesn't, so the PIN can be used after it.
+- Bottom sheets in the mobile app leave the tab order and screen-reader view while closed,
+  and move focus in when they open.
+- Tests allow 60 seconds per test: each test account is a real 600,000-round password hash,
+  and on a busy machine setting several up could pass Jest's 5-second default.
+
+### Database
+
+- New table `device_pins` (one row per phone with a PIN). Postgres:
+  `migrations/pg/008_device_pins.sql`, applied before restarting; SQLite creates it itself.
+
+---
+
 ## Unreleased — Mobile app: residents, staff directory, announcements (2026-09-27)
 
 Step 3 of the mobile rewrite.

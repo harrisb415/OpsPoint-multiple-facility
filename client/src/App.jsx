@@ -104,7 +104,8 @@ function MobileGuard() {
 // Gate /m — the new mobile app — the same way.
 function MobileAppGuard() {
   const { session } = useAuth()
-  if (!session) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname)}`} replace />
+  const { pathname, search } = useLocation()
+  if (!session) return <Navigate to={`/login?next=${encodeURIComponent(pathname + search)}`} replace />
   if (session.mustChangePw) return <Navigate to="/change-password" replace />
   if (!session.permissions?.includes('mobile.access')) return <Navigate to="/" replace />
   return <MobileApp />

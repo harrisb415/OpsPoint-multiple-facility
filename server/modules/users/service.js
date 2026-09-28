@@ -7,6 +7,7 @@
  */
 const repo = require('./repository');
 const { hashPw, validatePw, verifyPw } = require('../../lib/crypto');
+const quickUnlock = require('../quickunlock/service');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -80,6 +81,7 @@ async function update(id, body = {}, { currentUserId } = {}) {
     const { hash, salt } = hashPw(password);
     isOwnPw = (id === currentUserId);
     await repo.setPassword(id, hash, salt, isOwnPw ? 0 : 1);
+    await quickUnlock.revokeUser(id);   // a new password ends every phone's PIN
     passwordChanged = true;
   }
 
@@ -187,6 +189,7 @@ async function changeOwnPassword(currentUserId, body = {}) {
   if (!verifyPw(currentPassword, u.hash, u.salt)) throw httpError(401, 'Current password incorrect');
   const { hash, salt } = hashPw(newPassword);
   await repo.setOwnPassword(currentUserId, hash, salt);
+  await quickUnlock.revokeUser(currentUserId);
 }
 
 module.exports = {

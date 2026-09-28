@@ -4,6 +4,7 @@ import { CircleCheck, Building2, TriangleAlert, ChevronRight, Megaphone } from '
 import { useMobile } from './context.js'
 import { useNow } from './useSnapshot.js'
 import { Card, Bar, Initials, ScreenHeader, SectionTitle } from './ui.jsx'
+import ForYou, { QuickActions } from './ForYou.jsx'
 import { countStatuses, censusKeys, statusLabel, statusBadge } from '../utils/statuses.js'
 import { mostRecentLogTime, scheduledStatus, fmtClock, fmtSpan } from './schedule.js'
 import { statusData, currentStatuses, roundStats, lastWellness, openNotLocated, shortName, unseenAnnouncements, fmtSent } from './model.js'
@@ -55,6 +56,9 @@ export default function Home() {
         )}
 
         {showHero && <WellnessHero snap={snap} statuses={statuses} entries={entries} now={now} reportOpen={reportOpen} />}
+
+        <ForYou />
+        <QuickActions />
 
         {snap.announcements?.length > 0 && <LatestAnnouncement snap={snap} />}
 

@@ -1,6 +1,7 @@
 // Small building blocks shared by the mobile screens.
-import { Toast } from 'flowbite-react'
-import { CircleCheck, TriangleAlert, CircleAlert } from 'lucide-react'
+import { useEffect, useId, useRef } from 'react'
+import { Drawer, DrawerItems, Toast } from 'flowbite-react'
+import { CircleCheck, TriangleAlert, CircleAlert, X } from 'lucide-react'
 import { initials } from '../utils/ui.js'
 
 export function Card({ className = '', children, ...rest }) {
@@ -66,6 +67,46 @@ export function Toaster({ toast }) {
         <div className="ml-3 text-sm font-medium text-gray-800 dark:text-gray-100">{toast.message}</div>
       </Toast>
     </div>
+  )
+}
+
+// A panel that slides up from the bottom, for a short form or a choice.
+// Closed, it stays mounted (so it can slide away) but inert: out of the tab
+// order and hidden from screen readers. Open, it takes focus, and gives it
+// back when it closes.
+export function Sheet({ open, onClose, title, children }) {
+  const ref = useRef(null)
+  const titleId = useId()
+  useEffect(() => {
+    if (!open) return
+    const before = document.activeElement
+    ref.current?.focus()
+    return () => before?.focus?.()
+  }, [open])
+
+  return (
+    <Drawer
+      ref={ref}
+      open={open}
+      onClose={onClose}
+      position="bottom"
+      inert={!open}
+      aria-labelledby={titleId}
+      className="max-h-[88dvh] overflow-y-auto rounded-t-2xl p-0 pb-[max(1rem,env(safe-area-inset-bottom))] outline-none"
+    >
+      <div className="flex items-center justify-between gap-3 py-2 pl-4 pr-2">
+        <h2 id={titleId} className="text-lg font-bold text-gray-900 dark:text-white">{title}</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700"
+        >
+          <X className="h-5 w-5" aria-hidden="true" />
+        </button>
+      </div>
+      <DrawerItems className="px-4">{children}</DrawerItems>
+    </Drawer>
   )
 }
 

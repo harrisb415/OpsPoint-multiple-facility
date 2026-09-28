@@ -55,6 +55,7 @@ async function forceChangePassword(userId, newPassword) {
   const err = validatePw(newPassword); if (err) throw httpError(400, err);
   const { hash, salt } = hashPw(newPassword);
   await repo.setForcedPassword(userId, hash, salt);
+  await require('../quickunlock/service').revokeUser(userId);   // a new password ends every phone's PIN
 }
 
 module.exports = { authenticate, loginPermissions, getMe, forceChangePassword };

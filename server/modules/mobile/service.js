@@ -59,10 +59,103 @@ async function snapshot(perms = []) {
     passes: await c.query("SELECT id, client_id, status, return_date FROM passes WHERE status IN ('Out','Extended')"),
     ua_pending: (await c.query('SELECT DISTINCT client_id FROM ua_requests WHERE acknowledged=0')).map(r => r.client_id),
     announcements,
+    todo: await todo(perms),
     round: await rounds.current(),
     last_round: await rounds.last(),
     server_time: new Date().toISOString(),
   };
+}
+
+/**
+ * "For you" on Home: what this person can act on now. A group is present only
+ * when they hold the permission that acts on it (or, for the headline-only
+ * groups, the one that reads it); each maps to an action the desktop already
+ * has. Clinical items — incidents, consents, plan reviews — are headlines that
+ * send them to the desktop.
+ */
+async function todo(perms = []) {
+  const has = (p) => perms.includes(p);
+  const out = {};
+  const now = Date.now();
+  const today = localDate(), inAWeek = localDate(7), inTwoWeeks = localDate(14);
+  const active = 'client_id IN (SELECT id FROM clients WHERE is_active=1)';
+
+  if (has('ua.acknowledge') || has('ua.record')) {
+    out.ua = await c.query(
+      'SELECT id, client_id, client_name, room, requested_by, requested_at, is_interview, interview_name FROM ua_requests WHERE acknowledged=0 ORDER BY id');
+  }
+  if (has('passes.status') || has('passes.edit')) {
+    const rows = await c.query("SELECT id, client_id, name, room, status, departure, return_date FROM passes WHERE status IN ('Approved','Out','Extended')");
+    const at = (v) => Date.parse(v);
+    const endOfToday = new Date(); endOfToday.setHours(23, 59, 59, 999);
+    // Due back within two hours, or already late; leaving by the end of today.
+    out.pass_due = rows.filter(p => p.status !== 'Approved' && at(p.return_date) <= now + 2 * 3600000).sort((a, b) => at(a.return_date) - at(b.return_date));
+    out.pass_leaving = rows.filter(p => p.status === 'Approved' && at(p.departure) <= endOfToday.getTime()).sort((a, b) => at(a.departure) - at(b.departure));
+  }
+  if (has('mail.approve')) {
+    out.mail_approve = await c.query(`SELECT id, client_id, client_name, room, mail_type, logged_at FROM mail_log WHERE status='pending' AND ${active} ORDER BY id`);
+  }
+  if (has('mail.deliver')) {
+    out.mail_deliver = await c.query(`SELECT id, client_id, client_name, room, mail_type, approved_at FROM mail_log WHERE status='approved' AND ${active} ORDER BY id`);
+  }
+  if (has('chores.log')) {
+    // Due today, not signed off, and in the building (no chores on a pass).
+    const rid = await reportLog.getActiveReportId();
+    const rep = rid ? await c.query1('SELECT id, statuses FROM reports WHERE id=?', [rid]) : null;
+    const away = rep ? await rounds.awayIds(rep) : new Set();
+    const done = new Set((await c.query(
+      "SELECT client_id FROM chore_log WHERE log_date=? AND (COALESCE(initials,'')<>'' OR COALESCE(am_initials,'')<>'' OR COALESCE(pm_initials,'')<>'')", [today]))
+      .map(r => r.client_id));
+    const dow = new Date().getDay();
+    out.chores = (await c.query(
+      `SELECT id, room, name, chore, chore_time, chore_days FROM clients WHERE ${RESIDENT_WHERE} AND chore IS NOT NULL AND chore<>'' ORDER BY ${c.roomOrder('room')}, room, id`))
+      .filter(r => {
+        const days = parseJson(r.chore_days, null);
+        const due = !Array.isArray(days) || !days.length || days.map(Number).includes(dow);
+        return due && !done.has(r.id) && !away.has(r.id);
+      })
+      .map(r => ({ client_id: r.id, room: r.room, name: r.name, chore: r.chore, chore_time: r.chore_time || '' }));
+  }
+  if (has('violations.review')) {
+    out.infractions = await c.query(
+      `SELECT id, client_id, client_name, room, violation_date, description, logged_by FROM violations WHERE status='pending' AND ${active} ORDER BY id`);
+  }
+  if (has('violations.complete') || has('violations.notify_consequence')) {
+    out.consequences = (await c.query(
+      `SELECT id, client_id, client_name, room, consequence, consequence_by FROM violations WHERE status='assigned' AND ${active} ORDER BY id`))
+      .map(v => ({ ...v, can_complete: has('violations.complete') }));
+  }
+  // Milestones and incidents don't always carry the resident's name (the API
+  // takes a client_id), so it comes from the roster.
+  if (has('milestones.signoff')) {
+    out.milestones = await c.query(
+      `SELECT m.id, m.client_id, COALESCE(NULLIF(m.client_name,''), cl.name, '') AS client_name, cl.room, m.objective, m.phase, m.target_date
+         FROM milestones m JOIN clients cl ON cl.id = m.client_id
+        WHERE m.status='in_progress' AND m.locked_at IS NULL AND m.target_date IS NOT NULL AND m.target_date<=? AND cl.is_active=1
+        ORDER BY m.target_date, m.id`, [inAWeek]);
+  }
+  if (has('incidents.review')) {
+    out.incidents = await c.query(
+      `SELECT i.id, i.client_id, COALESCE(NULLIF(i.client_name,''), cl.name, '') AS client_name, COALESCE(NULLIF(i.room,''), cl.room, '') AS room,
+              i.incident_date, i.severity, i.logged_by_name
+         FROM incidents i LEFT JOIN clients cl ON cl.id = i.client_id
+        WHERE i.status='open' ORDER BY i.id`);
+  }
+  if (has('consent.manage')) {
+    out.consents = await c.query(
+      `SELECT cr.id, cr.client_id, cl.name AS client_name, cl.room, cr.recipient_name, cr.recipient_org, cr.expiration_date
+         FROM consent_records cr JOIN clients cl ON cl.id = cr.client_id
+        WHERE cr.revoked=0 AND cl.is_active=1 AND cr.expiration_date IS NOT NULL AND cr.expiration_date>=? AND cr.expiration_date<=?
+        ORDER BY cr.expiration_date, cr.id`, [today, inTwoWeeks]);
+  }
+  if (has('clinical.treatment')) {
+    out.plan_reviews = await c.query(
+      `SELECT t.id, t.client_id, cl.name AS client_name, cl.room, t.review_date
+         FROM treatment_plans t JOIN clients cl ON cl.id = t.client_id
+        WHERE t.status='active' AND cl.is_active=1 AND t.review_date IS NOT NULL AND t.review_date<=?
+        ORDER BY t.review_date, t.id`, [inAWeek]);
+  }
+  return out;
 }
 
 /**
@@ -79,7 +172,7 @@ async function residentCard(id, perms = []) {
   const parts = ['resident', 'ua'];
 
   const pass = await c.query1(
-    "SELECT status, departure, return_date, extended_by, extended_at FROM passes WHERE client_id=? AND status IN ('Out','Extended') ORDER BY id DESC LIMIT 1", [id]);
+    "SELECT id, status, departure, return_date, extended_by, extended_at FROM passes WHERE client_id=? AND status IN ('Out','Extended') ORDER BY id DESC LIMIT 1", [id]);
 
   let chore = null;
   if (r.chore) {
@@ -148,4 +241,4 @@ async function residentCard(id, perms = []) {
   };
 }
 
-module.exports = { snapshot, residentCard };
+module.exports = { snapshot, residentCard, todo };

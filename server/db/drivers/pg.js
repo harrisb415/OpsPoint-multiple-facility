@@ -106,7 +106,7 @@ const IDENTITY_TABLES = new Set([
   'discharge_records', 'consent_records', 'disclosures', 'group_sessions',
   'group_attendance', 'sync_outbox', 'clinical_notes', 'treatment_plans',
   'assessments', 'group_notes', 'discharge_summaries',
-  'wellness_rounds', 'push_subscriptions',
+  'wellness_rounds', 'push_subscriptions', 'device_pins',
   // central
   'central_users', 'audit',
 ]);

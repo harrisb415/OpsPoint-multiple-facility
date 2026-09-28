@@ -6,6 +6,9 @@ import { api } from './api.js'
 const RELOAD_ON = new Set([
   'data_saved', 'patched', 'passes_updated', 'settings_updated', 'round_updated',
   'ua_request', 'broadcast_message',
+  // what the "For you" list is built from
+  'mail_updated', 'violations_updated', 'chore_log_updated', 'milestones_updated',
+  'incidents_updated', 'ua_draw_created',
 ])
 
 // The mobile app's data (GET /api/m/snapshot), kept current by the WebSocket

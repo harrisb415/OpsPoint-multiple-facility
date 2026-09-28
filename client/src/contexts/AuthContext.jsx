@@ -29,6 +29,9 @@ export function AuthProvider({ children }) {
   }, [])
 
   const logout = useCallback(async () => {
+    // Signing out on purpose also ends this phone's quick unlock. The idle
+    // sign-out happens on the server, so the PIN still works after that.
+    await fetch('/api/auth/pin', { method: 'DELETE', credentials: 'include' }).catch(() => {})
     await fetch('/logout', { method: 'POST', credentials: 'include' })
     setSession(null)
   }, [])

@@ -407,6 +407,21 @@ function createSchema(db) {
     last_ok_at  TEXT,
     failures    INTEGER NOT NULL DEFAULT 0
   )`);
+  // Quick unlock: one row per phone that set a PIN. The phone holds a random
+  // token in an httpOnly cookie; only its hash and the PIN's hash live here.
+  // Postgres: migrations/pg/008_device_pins.sql.
+  db.exec(`CREATE TABLE IF NOT EXISTS device_pins (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash   TEXT    NOT NULL UNIQUE,
+    pin_hash     TEXT    NOT NULL,
+    pin_salt     TEXT    NOT NULL,
+    failures     INTEGER NOT NULL DEFAULT 0,
+    user_agent   TEXT    NOT NULL DEFAULT '',
+    created_at   TEXT    NOT NULL,
+    last_used_at TEXT,
+    expires_at   TEXT    NOT NULL
+  )`);
 }
 
 // Backward-compat column additions for DBs that predate the current schema.

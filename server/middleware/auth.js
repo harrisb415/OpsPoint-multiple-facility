@@ -24,9 +24,10 @@ async function requireAuth(req, res, next) {
   req.session.returnTo = req.originalUrl; res.redirect('/login');
 }
 
-// Require one named permission.
+// Require one named permission. The guard carries what it checks
+// (`requires`), so scripts/perm-audit can read the route map at run time.
 function requirePermission(perm) {
-  return async function (req, res, next) {
+  const guard = async function (req, res, next) {
     if (!req.session || !req.session.userId) {
       if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated' });
       req.session.returnTo = req.originalUrl; return res.redirect('/login');
@@ -41,11 +42,13 @@ function requirePermission(perm) {
     if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Permission denied' });
     return res.status(403).send('Access denied.');
   };
+  guard.requires = { all: [perm] };
+  return guard;
 }
 
 // Require at least one of the listed permissions.
 function requireAnyPermission(...perms) {
-  return async function (req, res, next) {
+  const guard = async function (req, res, next) {
     if (!req.session || !req.session.userId) {
       if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated' });
       req.session.returnTo = req.originalUrl; return res.redirect('/login');
@@ -60,6 +63,8 @@ function requireAnyPermission(...perms) {
     if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Permission denied' });
     return res.status(403).send('Access denied.');
   };
+  guard.requires = { any: perms };
+  return guard;
 }
 
 module.exports = { userPerms, requireAuth, requirePermission, requireAnyPermission };

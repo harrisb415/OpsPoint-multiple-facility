@@ -2,6 +2,51 @@
 
 ---
 
+## Unreleased — Permission audit, and what it found (2026-09-28)
+
+### Added
+
+- **`node scripts/perm-audit.cjs`: a permission audit.** A catalog of every action the
+  screens offer (`scripts/perm-audit/catalog.cjs`: when the UI shows it, and the exact
+  requests it sends). For each one, the audit signs in as a user holding *only* the
+  permissions that make the UI show it, and as each built-in role, then performs the action
+  on a throwaway database. It reports:
+  - **conflicts**: the screen offers it, the server refuses;
+  - **not enforced**: the UI requires a permission the server never checks;
+  - **errors**;
+  - any permission-checked route no action exercises, so the catalog can't fall behind.
+
+  `npm test` runs it too (`tests/permissions.audit.test.js`), so a new mismatch fails the
+  suite; so does the Postgres audit.
+
+### Fixed (found by the audit)
+
+- **Report tab › Shift Details** (date, shift, PA on duty) were editable by everyone, but
+  saving needed `reports.create`. Case managers' changes silently failed. Now they need
+  `reports.create`.
+- **Report tab › roster comments** autosaved the whole report, which needed
+  `reports.create`. Case managers' comments silently failed, and comments shared a timer
+  with Shift Details, so one could cancel the other. Comments now save per resident with
+  `status.edit`, the same as the status next to them.
+- **Close Shift** showed with `reports.close` alone. Saving the closed report also needs
+  `reports.create`, so it now shows only with both.
+- **Groups › master group list**: the tab lets `clinical.groups` add group names, but the
+  server wanted `groups.log`, so case managers were refused. It now takes either, as the
+  attendance records already did.
+- **Resident profile › Consents tab** showed with `disclosures.view` alone, but loads the
+  consent list, which needs `consent.manage`.
+- **The bulk report save could delete log lines.** It deleted every line missing from the
+  list sent, and overwrote statuses, issues, med notes and comments, all on
+  `reports.create` alone. A browser with a stale copy (a dropped live connection) closing
+  the shift wiped lines others had added. It now never touches log lines, and keeps any
+  field the caller has no permission for. Closing still freezes statuses.
+- **`ua.delete` could delete any shift-log line**, not just UA lines. Case managers have
+  it. It now covers UA lines only; other lines need `log.delete`.
+- **Log lines on a sealed (closed) report could be deleted.** Nothing else lets a closed
+  report change; now this doesn't either.
+
+---
+
 ## Unreleased — Anyone can conduct a UA (2026-09-28)
 
 ### Changed

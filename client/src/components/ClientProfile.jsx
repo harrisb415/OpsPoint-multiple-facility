@@ -901,7 +901,7 @@ export default function ClientProfile({ onNavigateTab }) {
       t.push({ id: 'incidents', label: '🚨 Incident Reports' })
     if (hasPerm('violations.log') || hasPerm('violations.review'))
       t.push({ id: 'violations', label: '⚠ Infractions' })
-    if (hasPerm('consent.manage') || hasPerm('disclosures.view'))
+    if (hasPerm('consent.manage'))   // the tab lists consents, which needs consent.manage
       t.push({ id: 'consents', label: '📋 Consents' })
     if (hasPerm('groups.view'))
       t.push({ id: 'groups', label: '👥 Groups' })

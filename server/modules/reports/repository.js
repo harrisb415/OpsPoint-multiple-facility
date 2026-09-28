@@ -26,7 +26,11 @@ async function isReportClosed(reportId) {
 }
 
 // ── report PATCH helpers ────────────────────────────────────────────
-const REPORT_JSON_COLS = ['statuses', 'last_ua', 'last_room_search', 'issues', 'med_notes'];
+const REPORT_JSON_COLS = ['statuses', 'comments', 'last_ua', 'last_room_search', 'issues', 'med_notes'];
+// The fields a bulk save may overwrite, as stored (for keeping the ones the caller can't change).
+async function getReportRow(id) {
+  return await c.query1('SELECT id,is_closed,report_date,shift,mod_name,statuses,comments,last_ua,last_room_search,issues,med_notes FROM reports WHERE id=?', [id]);
+}
 async function getReportField(id, col) {
   if (!REPORT_JSON_COLS.includes(col)) throw new Error('bad column ' + col);
   const row = await c.query1(`SELECT ${col} FROM reports WHERE id=?`, [id]);
@@ -48,6 +52,9 @@ async function updateShiftData(id, report_date, shift, mod_name, iso) {
 
 // ── log entry delete ────────────────────────────────────────────────
 async function getLogText(id) { return await c.query1('SELECT text FROM log_entries WHERE id=?', [id]); }
+async function getLogWithReport(id) {
+  return await c.query1('SELECT le.id, le.text, r.is_closed FROM log_entries le JOIN reports r ON r.id=le.report_id WHERE le.id=?', [id]);
+}
 async function deleteLog(id) { await c.run('DELETE FROM log_entries WHERE id=?', [id]); }
 
 // ── report delete ───────────────────────────────────────────────────
@@ -63,6 +70,7 @@ async function setLogPhoto(id, p) { await c.run('UPDATE log_entries SET ua_photo
 async function resolveLogEntry(id) { return await c.query1('SELECT * FROM log_entries WHERE id=?', [id]) || null; }
 
 module.exports = {
+  getReportRow, getLogWithReport,
   getAllData, upsertReport, savePhoto, getPhotoB64, getActiveReportId, setActiveReportId,
   isReportClosed,
   getReportField, updateReportField, insertLogEntry, touchReport, updateShiftData,

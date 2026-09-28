@@ -167,7 +167,8 @@ export default function ReportTab() {
   const canDelLog     = hasPerm('log.delete')
   const canIssues     = hasPerm('issues.edit')
   const canCreate     = hasPerm('reports.create')
-  const canClose      = hasPerm('reports.close')
+  // Closing saves the report, which the server allows with reports.create.
+  const canClose      = hasPerm('reports.close') && canCreate
   const canUA         = hasPerm('ua.request')
   const canReminders  = hasPerm('reminders.view')
   const canViolations = hasPerm('violations.log')
@@ -347,24 +348,6 @@ export default function ReportTab() {
     })
   }
 
-  // Debounced save
-  const scheduleSave = useCallback(() => {
-    if (!activeId) return
-    clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(async () => {
-      const s = stateRef.current
-      const report = dataRef.current?.reports?.find(r => r.id === activeId)
-      if (!report) return
-      await saveData({
-        reports: [{
-          ...report,
-          report_date: s.reportDate, shift: s.shift, mod_name: s.modName,
-          statuses: s.statuses, comments: s.comments, issues: s.issues, med_notes: s.medNotes,
-        }],
-      })
-    }, 900)
-  }, [activeId, saveData])
-
   // New report
   const handleNewReport = useCallback(async () => {
     if (!await confirm({ title: 'Start a new shift report?', body: 'Issues and current statuses will carry over.', confirmText: 'Start' })) return
@@ -412,11 +395,18 @@ export default function ReportTab() {
     if (activeId) patchData({ reportId: activeId, statuses: { [clientId]: val } })
   }, [activeId, patchData])
 
-  // Comment change
+  // Comment change: saved for that resident alone a moment after typing
+  // stops (status.edit). It used to autosave the whole report, which needed
+  // reports.create, and shared a timer with Shift Details.
+  const commentTimers = useRef({})
   const handleCommentChange = useCallback((clientId, val) => {
     setComments(prev => ({ ...prev, [clientId]: val }))
-    scheduleSave()
-  }, [scheduleSave])
+    if (!activeId) return
+    clearTimeout(commentTimers.current[clientId])
+    commentTimers.current[clientId] = setTimeout(() => {
+      patchData({ reportId: activeId, comments: { [clientId]: val } })
+    }, 900)
+  }, [activeId, patchData])
 
   // Meta change
   const handleMetaChange = useCallback((field, val) => {
@@ -617,11 +607,11 @@ export default function ReportTab() {
       <Panel title="Shift Details" right={activeId && <span className="text-xs text-gray-400">Report #{activeId} · {isClosed ? 'Closed' : 'Open'}</span>}>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Date">
-              <TextInput type="date" value={reportDate} disabled={isClosed}
+              <TextInput type="date" value={reportDate} disabled={isClosed || !canCreate}
                 onChange={e => handleMetaChange('date', e.target.value)} />
             </Field>
             <Field label="Shift">
-              <Select value={shift} disabled={isClosed}
+              <Select value={shift} disabled={isClosed || !canCreate}
                 onChange={e => handleMetaChange('shift', e.target.value)}>
                 <option value="Day Shift">Day Shift ({data?.shift_day_start || '7:00 AM'} – {data?.shift_swing_start || '3:00 PM'})</option>
                 <option value="Swing Shift">Swing Shift ({data?.shift_swing_start || '3:00 PM'} – {data?.shift_grave_start || '11:00 PM'})</option>
@@ -629,7 +619,7 @@ export default function ReportTab() {
               </Select>
             </Field>
             <Field label="Program Assistant on Duty (PA)">
-              <TextInput type="text" value={modName} placeholder="Name(s)" disabled={isClosed}
+              <TextInput type="text" value={modName} placeholder="Name(s)" disabled={isClosed || !canCreate}
                 onChange={e => handleMetaChange('mod', e.target.value)} />
             </Field>
           </div>
@@ -1633,9 +1623,9 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
       <td className="px-4 py-2 text-center font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{!c.is_special ? (lastRS || '—') : ''}</td>
       <td className="px-4 py-2">
         {!c.is_special && (
-          <input type="text" value={comment} placeholder="—" disabled={isClosed}
+          <input type="text" value={comment} placeholder="—" disabled={isClosed || !canStatus}
             onChange={e => onCommentChange(c.id, e.target.value)}
-            className={`w-full text-sm px-2 py-1 rounded border border-transparent focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary-500 ${isClosed ? 'bg-slate-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400' : 'bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100'}`}
+            className={`w-full text-sm px-2 py-1 rounded border border-transparent focus:border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary-500 ${isClosed || !canStatus ? 'bg-slate-50 text-gray-500 dark:bg-gray-900 dark:text-gray-400' : 'bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100'}`}
           />
         )}
       </td>

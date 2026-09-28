@@ -30,4 +30,9 @@ function apiRateCheck(req) {
   return _apiHits[ip].count > 300; // 300 requests/min per IP
 }
 
-module.exports = { loginRateCheck, loginRateClear, apiRateCheck };
+// Tests and scripts/perm-audit, which make thousands of requests from one IP.
+function apiRateClear() {
+  for (const ip of Object.keys(_apiHits)) delete _apiHits[ip];
+}
+
+module.exports = { loginRateCheck, loginRateClear, apiRateCheck, apiRateClear };

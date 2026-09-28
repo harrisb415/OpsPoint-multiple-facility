@@ -28,7 +28,16 @@ cd client && npm run dev
 
 # Lint the frontend
 cd client && npm run lint
+
+# Permission audit: does every action a screen offers get past the server for
+# everyone who can see it? (throwaway DB; exit 1 on conflicts)
+node scripts/perm-audit.cjs
 ```
+
+**Adding or changing a button that calls the API?** Add or update its entry in
+`scripts/perm-audit/catalog.cjs`: when the UI shows it, and the requests it sends.
+The audit (also run by `npm test`) then proves every permission set that sees the
+button can actually use it.
 
 **Build is required.** The frontend is a Vite-compiled React SPA served from `client/dist/`. Run `cd client && npm run build` after any frontend change before testing with the Express server. The dev server (`npm run dev` inside `client/`) proxies `/api/*`, `/login`, etc. to `https://localhost:3000` — the backend **must** be running with TLS (`data/cert.pem` + `data/key.pem` must exist) or the proxy will fail with SSL errors. Run `node generate_cert.js` first if certs don't exist.
 

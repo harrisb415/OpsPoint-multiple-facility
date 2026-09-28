@@ -3,7 +3,7 @@
  * Groups routes — HTTP layer only. register(app) attaches the routes in the SAME
  * order and at the SAME paths as the original inline definitions.
  */
-const { requireAuth, requirePermission } = require('../../middleware/auth');
+const { requireAuth, requirePermission, requireAnyPermission } = require('../../middleware/auth');
 const { csrfCheck } = require('../../middleware/csrf');
 const { audit, auditRead } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
@@ -15,7 +15,9 @@ function register(app) {
     res.json(await service.getMaster());
   });
 
-  app.put('/api/master-groups', requireAuth, csrfCheck, requirePermission('groups.log'), async (req, res) => {
+  // Either permission that logs attendance (the Groups tab shows the list to
+  // both) may add a group name, as with the attendance records themselves.
+  app.put('/api/master-groups', requireAuth, csrfCheck, requireAnyPermission('groups.log', 'clinical.groups'), async (req, res) => {
     try {
       const { count } = await service.setMaster(req.body.groups);
       await audit(req, 'groups.master_edit', 'settings', null, 'Master Groups', { count });

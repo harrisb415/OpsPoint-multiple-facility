@@ -50,7 +50,7 @@ function register(app) {
   app.delete('/api/log/:id', requireAuth, csrfCheck, requireAnyPermission('log.delete', 'ua.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { label } = await service.deleteLog(id);
+      const { label } = await service.deleteLog(id, { perms: await userPerms(req) });
       await audit(req, 'log.delete', 'log_entry', id, label);
       broadcast({ type: 'data_saved', user: req.session.displayName });
       res.json({ ok: true });

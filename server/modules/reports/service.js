@@ -49,15 +49,30 @@ async function saveData(d = {}, { perms = [] } = {}) {
       const closed = r.id && await repo.isReportClosed(r.id);
       if (closed && !r.is_closed) throw httpError(403, `Report ${r.id} is closed (sealed). Cannot modify.`);
       if (closed && r.is_closed) continue; // both agree closed — skip
-      if (r.mod_name != null) r.mod_name = sanitizeText(r.mod_name, 100);
-      if (Array.isArray(r.log_entries)) {
-        for (const e of r.log_entries) {
-          if (e.time && !validTime(e.time)) {
-            throw httpError(400, `Invalid log entry time "${String(e.time).slice(0, 20)}" — expected format H:MM AM/PM`);
-          }
-          if (e.text != null) e.text = sanitizeText(e.text, 2000);
-        }
+      // A bulk save never touches log entries: they are added, deleted and
+      // photographed through their own routes, with their own permissions.
+      // It used to delete every stored entry missing from the list sent — so a
+      // stale browser saving a comment or closing the shift wiped lines others
+      // had added, and reports.create alone could delete any line.
+      delete r.log_entries;
+      // On an existing report, fields the caller has no permission for (or
+      // didn't send) keep their stored value; closing a shift may freeze
+      // statuses (the pass overlay), since that is part of closing it.
+      const cur = r.id ? await repo.getReportRow(r.id) : null;
+      if (cur) {
+        const keep = (field, allowed) => {
+          if (!allowed || r[field] === undefined) r[field] = JSON.parse(cur[field] || (field === 'issues' || field === 'med_notes' ? '[]' : '{}'));
+        };
+        for (const f of ['report_date', 'shift', 'mod_name']) if (r[f] === undefined) r[f] = cur[f];
+        const closing = !!r.is_closed && !cur.is_closed;
+        keep('statuses', perms.includes('status.edit') || closing);
+        keep('comments', perms.includes('status.edit'));
+        keep('issues', perms.includes('issues.edit'));
+        keep('med_notes', perms.includes('issues.edit'));
+        keep('last_ua', perms.includes('ua.request') || perms.includes('ua.record'));
+        keep('last_room_search', perms.includes('log.add'));
       }
+      if (r.mod_name != null) r.mod_name = sanitizeText(r.mod_name, 100);
       if (r.shift != null) r.shift = sanitizeText(r.shift, 50);
       await repo.upsertReport(r);
     }
@@ -70,6 +85,7 @@ async function saveData(d = {}, { perms = [] } = {}) {
 // Returns { rptId, logEntryId, safePatch, activeReportId }.
 async function patchData(patch = {}, { perms = [] } = {}) {
   if (patch.statuses && !perms.includes('status.edit')) throw httpError(403, 'Permission denied');
+  if (patch.comments && !perms.includes('status.edit')) throw httpError(403, 'Permission denied');
   if (patch.log_entry && !perms.includes('log.add')) throw httpError(403, 'Permission denied');
   if (patch.issues !== undefined && !perms.includes('issues.edit')) throw httpError(403, 'Permission denied');
   if (patch.med_notes !== undefined && !perms.includes('issues.edit')) throw httpError(403, 'Permission denied');
@@ -102,6 +118,16 @@ async function patchData(patch = {}, { perms = [] } = {}) {
         let s = {}; try { s = JSON.parse(cur); } catch (e) { /* keep {} */ }
         Object.assign(s, patch.statuses);
         await repo.updateReportField(rptId, 'statuses', JSON.stringify(s), nowIso());
+      }
+    }
+    // Roster comments, one resident at a time (they used to ride on a bulk save
+    // of the whole report, which needed reports.create).
+    if (patch.comments && typeof patch.comments === 'object') {
+      const cur = await repo.getReportField(rptId, 'comments');
+      if (cur !== undefined) {
+        let s = {}; try { s = JSON.parse(cur || '{}') || {}; } catch (e) { /* keep {} */ }
+        for (const [k, v] of Object.entries(patch.comments)) s[k] = sanitizeText(v, 500);
+        await repo.updateReportField(rptId, 'comments', JSON.stringify(s), nowIso());
       }
     }
     if (patch.log_entry) {
@@ -140,6 +166,9 @@ async function patchData(patch = {}, { perms = [] } = {}) {
   const safePatch = {};
   if (patch.reportId) safePatch.reportId = parseInt(patch.reportId);
   if (patch.statuses && typeof patch.statuses === 'object') safePatch.statuses = patch.statuses;
+  if (patch.comments && typeof patch.comments === 'object') {
+    safePatch.comments = Object.fromEntries(Object.entries(patch.comments).map(([k, v]) => [k, sanitizeText(v, 500)]));
+  }
   if (patch.log_entry && typeof patch.log_entry === 'object') {
     safePatch.log_entry = {
       time: String(patch.log_entry.time || '').slice(0, 20),
@@ -162,10 +191,14 @@ async function patchData(patch = {}, { perms = [] } = {}) {
 }
 
 // DELETE /api/log/:id — returns { label } for the audit.
-async function deleteLog(id) {
-  const le = await repo.getLogText(id);
+// ua.delete (without log.delete) covers UA lines only; nobody edits a sealed report.
+async function deleteLog(id, { perms = [] } = {}) {
+  const le = await repo.getLogWithReport(id);
+  if (!le) throw httpError(404, 'Log entry not found');
+  if (le.is_closed) throw httpError(403, 'Report is closed (sealed). Cannot modify.');
+  if (!perms.includes('log.delete') && !/— UA:/i.test(le.text || '')) throw httpError(403, 'Permission denied (log.delete required)');
   await repo.deleteLog(id);
-  return { label: le ? String(le.text || '').slice(0, 80) : String(id) };
+  return { label: String(le.text || '').slice(0, 80) };
 }
 
 // DELETE /api/reports/:id — 404 if missing; cascades log entries.

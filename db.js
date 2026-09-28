@@ -1081,6 +1081,9 @@ async function upsertReport(r) {
          JSON.stringify(r.statuses||{}), JSON.stringify(r.comments||{}),
          JSON.stringify(r.last_ua||{}), JSON.stringify(r.last_room_search||{}),
          JSON.stringify(r.issues||[]), JSON.stringify(r.med_notes||[]), now, r.id]);
+      // No list sent (every bulk save now): leave the report's log alone. It
+      // used to read a missing list as empty and delete every line.
+      if (!Array.isArray(r.log_entries)) return;
       const existingEntries = await c.query('SELECT id,time,text FROM log_entries WHERE report_id=?', [r.id]);
       const existingIds = existingEntries.map(e => e.id);
       const incomingIds = (r.log_entries||[]).filter(e => e.id).map(e => parseInt(e.id));

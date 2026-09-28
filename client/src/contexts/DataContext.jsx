@@ -326,6 +326,8 @@ export function DataProvider({ children }) {
           let updated = { ...r }
           if (patch.statuses)
             updated.statuses = { ...r.statuses, ...patch.statuses }
+          if (patch.comments)
+            updated.comments = { ...(r.comments || {}), ...patch.comments }
           if (patch.log_entry)
             updated.log_entries = [...(r.log_entries || []), patch.log_entry]
           if (patch.shiftData) {

@@ -38,10 +38,23 @@ function toMins(t) {
   return h * 60 + mn
 }
 
+// Stands in for a submit bar the account can't use, so it says why rather
+// than offering a button the server will refuse.
+function NoLog({ children }) {
+  return (
+    <div className="mob-submit-bar">
+      <div className="mob-nolog">{children} Ask an admin for “Add log entries”.</div>
+    </div>
+  )
+}
+
 // ── Mobile page ─────────────────────────────────────────────────────
 export default function Mobile() {
   const { session, logout } = useAuth()
   const { hasPerm } = usePermission()
+  // Wellness checks, walkthroughs and entries all land in the shift log, which
+  // the server only lets log.add write to.
+  const canLog = hasPerm('log.add')
 
   const [activeTab, setActiveTab]       = useState('wellness') // wellness | walk | log | census
   const [clients, setClients]           = useState([])
@@ -77,10 +90,10 @@ export default function Mobile() {
   const activeIdRef  = useRef(null) // tracks reports.active_report_id from server
 
   // ── Toast ──────────────────────────────────────────────────────────
-  const showToast = useCallback((msg) => {
+  const showToast = useCallback((msg, ms = 2500) => {
     setToast(msg)
     clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(''), 2500)
+    toastTimer.current = setTimeout(() => setToast(''), ms)
   }, [])
 
   // ── Set active report (handles report change) ─────────────────────
@@ -235,8 +248,12 @@ export default function Mobile() {
   const statuses = useMemo(() => effectiveStatuses(statusCfg, currentRpt), [statusCfg, currentRpt])
 
   // ── Patch helper ─────────────────────────────────────────────────
+  // Resolves true only when the server accepted the change. It used to act on
+  // nothing but a 401, so a refused save (no log.add, or the report closed on
+  // desktop in the meantime) still showed as logged and was silently lost. Now
+  // the optimistic entry comes back out and the caller keeps its form state.
   async function patchReport(patch) {
-    if (!currentRpt) return
+    if (!currentRpt) return false
     patch.reportId = currentRpt.id
     // Optimistic update
     setCurrentRpt(prev => {
@@ -251,6 +268,7 @@ export default function Mobile() {
       return next
     })
     if (patch.log_entry) ownPatchRef.current = patch.log_entry.text
+    let problem
     try {
       const pr = await fetch('/api/data', {
         method: 'PATCH',
@@ -258,8 +276,17 @@ export default function Mobile() {
         credentials: 'include',
         body: JSON.stringify(patch),
       })
-      if (pr.status === 401) { showToast('Session expired'); window.location.href = '/login' }
-    } catch { showToast('Save error — check server') }
+      if (pr.status === 401) { showToast('Session expired'); window.location.href = '/login'; return false }
+      if (pr.ok) return true
+      const j = await pr.json().catch(() => ({}))
+      problem = j.error || `server error ${pr.status}`
+    } catch { problem = 'no connection to the server' }
+    ownPatchRef.current = null
+    if (patch.log_entry) {
+      setCurrentRpt(prev => prev && { ...prev, log_entries: (prev.log_entries || []).filter(e => e !== patch.log_entry) })
+    }
+    showToast(`Not saved: ${problem}`, 6000)
+    return false
   }
 
   // ── Wellness: toggle ✓/✗ ─────────────────────────────────────────
@@ -303,7 +330,7 @@ export default function Mobile() {
       ? `${all.length - missingList.length} of ${all.length} accounted for. Not located: ${missingList.join(', ')}.`
       : `All ${all.length} clients accounted for.`
     if (wcNotes.trim()) msg += ` Notes: ${wcNotes.trim()}`
-    await patchReport({ log_entry: { time: ts, text: msg } })
+    if (!await patchReport({ log_entry: { time: ts, text: msg } })) return
     setChecked(new Set())
     setMissing(new Set())
     setWcNotes('')
@@ -335,7 +362,7 @@ export default function Mobile() {
       msg += `Issues noted: ${flagAreas.join(', ')}.`
     }
     if (wkNotes.trim()) msg += ` Notes: ${wkNotes.trim()}`
-    await patchReport({ log_entry: { time: ts, text: msg } })
+    if (!await patchReport({ log_entry: { time: ts, text: msg } })) return
     setWalkState({})
     setWkNotes('')
     setWkTime(nowHHMM())
@@ -347,7 +374,7 @@ export default function Mobile() {
     if (!currentRpt) { showToast('No active report'); return }
     if (!lgText.trim()) return
     const ts = lgTime ? fmtTime(lgTime) : nowTS()
-    await patchReport({ log_entry: { time: ts, text: lgText.trim() } })
+    if (!await patchReport({ log_entry: { time: ts, text: lgText.trim() } })) return
     setLgText('')
     setLgTime(nowHHMM())
     showToast('Entry added ✓')
@@ -441,6 +468,7 @@ export default function Mobile() {
               })
             }
           </div>
+          {canLog ? (
           <div className="mob-submit-bar">
             <div className="mob-row">
               <input type="time" value={wcTime} onChange={e => setWcTime(e.target.value)} />
@@ -455,6 +483,7 @@ export default function Mobile() {
               <button className="mob-btn-primary" onClick={logWellness} style={{ flex: 1 }}>✓ Log Wellness Check</button>
             </div>
           </div>
+          ) : <NoLog>Wellness checks are saved to the shift log, which your account can’t add to.</NoLog>}
         </div>
       )}
 
@@ -475,6 +504,7 @@ export default function Mobile() {
               )
             })}
           </div>
+          {canLog ? (
           <div className="mob-submit-bar">
             <div className="mob-row">
               <input type="time" value={wkTime} onChange={e => setWkTime(e.target.value)} />
@@ -489,6 +519,7 @@ export default function Mobile() {
               <button className="mob-btn-navy" onClick={logWalk} style={{ flex: 1 }}>🕐 Log Walkthrough</button>
             </div>
           </div>
+          ) : <NoLog>Walkthroughs are saved to the shift log, which your account can’t add to.</NoLog>}
         </div>
       )}
 
@@ -506,6 +537,7 @@ export default function Mobile() {
               ))
             }
           </div>
+          {canLog ? (
           <div className="mob-submit-bar">
             <div className="mob-row">
               <input type="time" value={lgTime} onChange={e => setLgTime(e.target.value)} />
@@ -522,6 +554,7 @@ export default function Mobile() {
               <button className="mob-btn-primary" onClick={addLogEntry} style={{ flex: 1 }}>+ Add Log Entry</button>
             </div>
           </div>
+          ) : <NoLog>You can read the shift log, but your account can’t add to it.</NoLog>}
         </div>
       )}
 
@@ -638,6 +671,7 @@ ${Object.entries(TONE_PRINT).map(([t, c]) => `.t-${t}{background:#${c.bg};color:
   padding:10px 14px;padding-bottom:max(10px,env(safe-area-inset-bottom));
   display:flex;flex-direction:column;gap:7px;box-shadow:0 -4px 16px rgba(28,10,16,.12);}
 .mob-row{display:flex;gap:8px;align-items:center;}
+.mob-nolog{font-size:.84rem;color:#4B5563;line-height:1.45;text-align:center;padding:4px 2px;}
 .mob-submit-bar input[type=text]{flex:1;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.92rem;font-family:inherit;}
 .mob-submit-bar input[type=time]{padding:10px 8px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.88rem;font-family:'JetBrains Mono Variable','JetBrains Mono',SFMono-Regular,Consolas,monospace;width:105px;flex-shrink:0;}
 .mob-submit-bar textarea{width:100%;padding:8px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:.88rem;font-family:inherit;resize:none;height:56px;line-height:1.4;}

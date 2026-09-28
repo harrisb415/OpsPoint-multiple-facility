@@ -724,10 +724,12 @@ export default function ReportTab() {
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800 dark:hover:bg-amber-900/50">
                 🍕 Lunch Break
               </button>
-              <button onClick={() => setQuickModal('ua')}
-                className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 dark:hover:bg-yellow-900/50">
-                🧪 UA
-              </button>
+              {hasPerm('ua.record') && (
+                <button onClick={() => setQuickModal('ua')}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 dark:hover:bg-yellow-900/50">
+                  🧪 UA
+                </button>
+              )}
               <button onClick={() => setQuickModal('roomsearch')}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900/50">
                 🔎 Room Search

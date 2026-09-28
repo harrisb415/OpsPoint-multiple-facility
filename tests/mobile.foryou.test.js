@@ -89,7 +89,7 @@ describe('"For you" list', () => {
     const sup = (await agents.sup.get('/api/m/snapshot')).body.todo;
     expect(groups(sup)).toEqual(['chores', 'consequences', 'incidents', 'infractions', 'mail_deliver', 'pass_due', 'pass_leaving', 'plan_reviews', 'ua']);
     const cm = (await agents.cm.get('/api/m/snapshot')).body.todo;
-    expect(groups(cm)).toEqual(['consents', 'mail_approve', 'milestones', 'pass_due', 'pass_leaving', 'plan_reviews']);
+    expect(groups(cm)).toEqual(['consents', 'mail_approve', 'milestones', 'pass_due', 'pass_leaving', 'plan_reviews', 'ua']);   // everyone records UAs
   });
 
   test('the items are the right ones', async () => {

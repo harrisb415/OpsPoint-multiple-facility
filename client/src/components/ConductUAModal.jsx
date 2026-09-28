@@ -10,9 +10,9 @@
  *   onSaved       — called after all server calls succeed (parent closes modal)
  *
  * Behaviour:
- *   • Always saves to /api/ua-records (resident UAs only — interviews get log-only)
- *   • If an active (unclosed, today) report exists, also adds a log entry via patchData
- *   • If !interview and active report, also stamps last_ua for the resident
+ *   • One request, POST /api/ua-records, which "Record UA results" covers. With
+ *     log_time the server also writes the UA's line in the open shift report and
+ *     stamps the resident's last UA; with no open report the record is saved alone
  *   • If req provided, acknowledges the pending request
  */
 import { useState, useMemo } from 'react'
@@ -54,13 +54,6 @@ function tsFromInput(val) {
 function fmtTime(d = new Date()) {
   const h = d.getHours(), m = String(d.getMinutes()).padStart(2, '0')
   return `${h % 12 || 12}:${m} ${h >= 12 ? 'PM' : 'AM'}`
-}
-function dateStamp() {
-  return new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
-}
-function todayStr() {
-  const d = new Date(), p = n => String(n).padStart(2,'0')
-  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`
 }
 // tested_at: the time staff entered in the dialog, as an absolute ISO instant.
 //  - The entered time, not the moment of saving: the log entry already used
@@ -104,11 +97,8 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
   const [saving,         setSaving]         = useState(false)
   const [err,            setErr]            = useState('')
 
-  // The report to stamp the log entry / last_ua against MUST be the server's
-  // authoritative active report — the PATCH /api/data route rejects (403) any
-  // reportId that isn't exactly active_report_id. Recomputing it client-side by
-  // date breaks for overnight shifts / multiple same-day reports, silently
-  // dropping the log entry + last_ua. Use the server value directly.
+  // Only for the "no open shift report" hint: the server decides where the
+  // UA's log line goes.
   const activeReportId = useMemo(() => {
     const id = data?.active_report_id
     if (!id) return null
@@ -130,27 +120,6 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
 
     const c = clients.find(x => String(x.id) === String(clientId))
 
-    // ── Build log entry text ──
-    const subjectName  = isInterview
-      ? (interviewName.trim() || 'Interview')
-      : `${c?.name || 'Unknown'} (Rm. ${c?.room || '?'})`
-    const pos  = panel.filter(code => results[code] === 'POS')
-    const neg  = panel.filter(code => results[code] === 'NEG')
-    const nt   = panel.filter(code => results[code] === 'NT')
-    const parts = []
-    if (pos.length) parts.push(`POS: ${pos.join(', ')}`)
-    if (neg.length) parts.push(`NEG: ${neg.join(', ')}`)
-    if (nt.length)  parts.push(`NT: ${nt.join(', ')}`)
-    const resultStr   = parts.join(' | ') || 'No results entered'
-    const reasonLabel = reason
-      ? (REASON_OPTS.find(o => o.v === reason)?.l || reason)
-      : (isInterview ? 'Interview' : '')
-    const collLabel   = collMethod.charAt(0).toUpperCase() + collMethod.slice(1)
-    const suffix      = ` — by ${staff.trim()} [${[reasonLabel, collLabel].filter(Boolean).join(', ')}]`
-    const logMsg      = pos.length === 0 && nt.length === 0
-      ? `${subjectName} — UA: All NEG${suffix}`
-      : `${subjectName} — UA: ${resultStr}${suffix}`
-
     // ── Build panel_results (neg/pos/na) ──
     const panelResults = {}
     panel.forEach(code => {
@@ -163,33 +132,9 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
     setSaving(true); setErr('')
 
     try {
-      // 1. Create log entry first — we need its ID to link the UA record.
-      //    Single PATCH combines the log_entry + last_ua stamp in one round-trip.
-      let logEntryId = null
-      if (activeReportId) {
-        const patch = {
-          reportId: activeReportId,
-          log_entry: { time: tsFromInput(time), text: logMsg },
-          ...(!isInterview && clientId
-            ? { last_ua: { [parseInt(clientId)]: dateStamp() } }
-            : {}),
-        }
-        const pr = await fetch('/api/data', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(patch),
-        })
-        const pj = await pr.json().catch(() => ({}))
-        // Don't fail silently: a UA must always produce its log entry + last_ua
-        // stamp. If the PATCH is rejected, surface it instead of saving a UA
-        // record with no log trail.
-        if (!pr.ok) { setErr(pj.error || 'Could not write the log entry — UA not saved.'); setSaving(false); return }
-        logEntryId = pj.log_entry_id || null
-      }
-
-      // 2. Save UA record (residents and interviews)
-      //    log_entry_id links it to the shared chain-of-custody photo on the log entry.
+      // 1. Save the UA record. log_time asks the server to write its line in
+      //    the open shift log (linked to the record, for the chain-of-custody
+      //    photo) and stamp the resident's last UA, all in this one request.
       {
         const body = isInterview ? {
           is_interview:      true,
@@ -203,7 +148,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           panel_results:     panelResults,
           witnessed_by_name: staff.trim(),
           notes,
-          log_entry_id:      logEntryId,
+          log_time:          tsFromInput(time),
         } : {
           client_id:         parseInt(clientId),
           client_name:       c?.name  || '',
@@ -215,7 +160,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
           panel_results:     panelResults,
           witnessed_by_name: staff.trim(),
           notes,
-          log_entry_id:      logEntryId,
+          log_time:          tsFromInput(time),
         }
         const r = await fetch('/api/ua-records', {
           method: 'POST', credentials: 'include',
@@ -226,7 +171,7 @@ export default function ConductUAModal({ req, clientId: initialClientId, panel, 
         if (!r.ok) { setErr(j.error || 'Save failed'); setSaving(false); return }
       }
 
-      // 3. Acknowledge pending request (if any)
+      // 2. Acknowledge pending request (if any)
       if (req?.id && !req.acknowledged) {
         await fetch(`/api/ua-requests/${req.id}/acknowledge`, {
           method: 'POST', credentials: 'include',

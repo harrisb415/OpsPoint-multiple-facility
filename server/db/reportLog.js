@@ -21,5 +21,19 @@ async function insertLogEntry(reportId, time, text) {
 async function touchReport(reportId, iso) {
   await c.run('UPDATE reports SET updated_at=? WHERE id=?', [iso, reportId]);
 }
+// A report that exists and isn't closed (sealed) takes new lines.
+async function isReportOpen(reportId) {
+  const r = await c.query1('SELECT is_closed FROM reports WHERE id=?', [reportId]);
+  return !!r && !r.is_closed;
+}
+// Merge { clientId: 'Sep 28, 2026' } into the report's last-UA stamps.
+async function stampLastUa(reportId, stamps, iso) {
+  const row = await c.query1('SELECT last_ua FROM reports WHERE id=?', [reportId]);
+  if (!row) return;
+  let u = {};
+  try { u = JSON.parse(row.last_ua || '{}') || {}; } catch (e) { /* keep {} */ }
+  Object.assign(u, stamps);
+  await c.run('UPDATE reports SET last_ua=?,updated_at=? WHERE id=?', [JSON.stringify(u), iso, reportId]);
+}
 
-module.exports = { getActiveReportId, insertLogEntry, touchReport };
+module.exports = { getActiveReportId, insertLogEntry, touchReport, isReportOpen, stampLastUa };

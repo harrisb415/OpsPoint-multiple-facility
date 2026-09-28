@@ -156,10 +156,18 @@ const ROLE_PRESETS = {
 // profile, custom ones included, not only the built-in groups whose preset
 // lists it (_migrateProfiles / _migrateGroups). An admin can still take it
 // away afterwards; it is never re-added once known.
-const EVERYONE_PERMS = ['passes.notify_extended'];
+const EVERYONE_PERMS = ['passes.notify_extended', 'ua.record'];
 for (const preset of Object.values(ROLE_PRESETS)) {
   for (const p of EVERYONE_PERMS) if (!preset.includes(p)) preset.push(p);
 }
+
+// A permission that already existed becoming everyone's has no "newly
+// introduced" boot to ride on, so it is granted here instead: once, to every
+// existing group and profile, on the first boot that lists it (recorded in
+// the perm_grants setting), and never again — an admin can still take it away.
+const ONE_TIME_GRANTS = [
+  { id: 'ua.record-everyone', perm: 'ua.record' },   // 2026-09-28: anyone can conduct a UA
+];
 
 // ── Driver guard ─────────────────────────────────────────────────────
 // The driver defaults to SQLite, and SQLite creates a missing database file
@@ -220,6 +228,7 @@ async function init(dbPath) {
   await _seedGroups();
   await _migrateUserGroups();
   await _migrateGroups(_bootNewPerms);
+  await _applyOneTimeGrants();
   // Also SQLite-only: it calls _db.pragma() (a better-sqlite3 method that does
   // not exist on the pg driver) and installs SQLite CREATE TRIGGER statements.
   // Under pg, sync_outbox and its triggers come from migrations/pg/ (the table
@@ -468,6 +477,27 @@ async function _migrateGroups(newPerms = []) {
     await _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(updated), g.id]);
     await recomputeGroupMemberPermissions(g.id);
   }
+}
+
+async function _applyOneTimeGrants() {
+  const got = await getSetting('perm_grants', []);
+  const done = Array.isArray(got) ? got : [];
+  const pending = ONE_TIME_GRANTS.filter(g => !done.includes(g.id) && PERMISSIONS.includes(g.perm));
+  if (!pending.length) return;
+  for (const g of await _q('SELECT id, permissions FROM groups')) {
+    const perms = _j(g.permissions, []);
+    const add = pending.map(x => x.perm).filter(p => !perms.includes(p));
+    if (!add.length) continue;
+    await _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(perms.concat(add)), g.id]);
+    await recomputeGroupMemberPermissions(g.id);
+  }
+  const profiles = await getPermissionProfiles();
+  let changed = false;
+  for (const p of profiles) {
+    for (const x of pending) if (!p.permissions.includes(x.perm)) { p.permissions.push(x.perm); changed = true; }
+  }
+  if (changed) await setSetting('permission_profiles', profiles);
+  await setSetting('perm_grants', done.concat(pending.map(x => x.id)));
 }
 
 async function getGroups() {
@@ -1683,6 +1713,7 @@ module.exports = {
   DEFAULT_WALK_AREAS, DEFAULT_UA_PANEL,
   PERMISSIONS, ROLE_PRESETS,
   getPermissionProfiles, setPermissionProfiles,
+  _applyOneTimeGrants,   // tests: a grant never re-applies
   // Groups
   getGroups, getUserGroups, computeGroupsPermissions,
   getUserEffectivePermissions, recomputeUserPermissions,

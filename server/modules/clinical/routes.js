@@ -44,10 +44,15 @@ function register(app) {
   });
   app.post('/api/ua-records', requireAuth, csrfCheck, requirePermission('ua.record'), async (req, res) => {
     try {
-      const rec = await service.createUA(req.body || {}, req.session);
+      const { record: rec, log } = await service.createUA(req.body || {}, req.session);
       await audit(req, 'ua.record.create', 'ua_records', rec.id, rec.client_name, { result: rec.result });
+      if (log) {
+        // Its line in the shift log: audited and relayed as a PATCH line would be.
+        await audit(req, 'log.add', 'log_entry', log.logEntryId, log.patch.log_entry.text.slice(0, 80), { reportId: log.rptId, via: 'ua.record' });
+        broadcast({ type: 'patched', patch: log.patch, user: req.session.displayName, active_report_id: log.rptId });
+      }
       broadcast({ type: 'ua_records_updated' });
-      res.json({ ok: true, record: rec });
+      res.json({ ok: true, record: rec, log_entry_id: rec.log_entry_id || null });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
   app.patch('/api/ua-records/:id', requireAuth, csrfCheck, requirePermission('ua.record'),

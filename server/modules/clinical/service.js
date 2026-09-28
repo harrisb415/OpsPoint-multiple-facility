@@ -7,6 +7,8 @@
  * the HIPAA read-audit with the record count + filter.
  */
 const repo = require('./repository');
+const reportLog = require('../../db/reportLog');
+const { sanitizeText, validTime } = require('../../lib/text');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -30,16 +32,70 @@ async function getUA(id) {
   if (!r) throw httpError(404, 'Not found');
   return r;
 }
+const UA_REASONS = { suspicious: 'Suspicion', random: 'Random', return_from_pass: 'Return from pass', cm_request: 'CM request', other: 'Other' };
+const UA_METHODS = { observed: 'Observed', unobserved: 'Unobserved', lab: 'Lab' };
+
+// The shift-log line for a recorded UA, worded as the UA form used to write
+// it. Built from the record's own fields (panel codes, known reasons and
+// methods only), so recording a UA is no way to write an arbitrary line.
+function uaLogText(b, subject) {
+  const results = b.panel_results && typeof b.panel_results === 'object' ? b.panel_results : {};
+  const pos = [], neg = [], nt = [];
+  for (const [code, v] of Object.entries(results)) {
+    if (/^[A-Za-z0-9-]{1,12}$/.test(code)) (v === 'pos' ? pos : v === 'na' ? nt : neg).push(code);
+  }
+  const parts = [pos.length && `POS: ${pos.join(', ')}`, neg.length && `NEG: ${neg.join(', ')}`, nt.length && `NT: ${nt.join(', ')}`].filter(Boolean);
+  const reason = UA_REASONS[b.reason] || (b.is_interview ? 'Interview' : '');
+  const by = String(b.witnessed_by_name || '').trim().slice(0, 80);
+  const suffix = ` — by ${by} [${[reason, UA_METHODS[b.collection_method] || ''].filter(Boolean).join(', ')}]`;
+  return !pos.length && !nt.length
+    ? `${subject} — UA: All NEG${suffix}`
+    : `${subject} — UA: ${parts.join(' | ') || 'No results entered'}${suffix}`;
+}
+const uaDateStamp = () => new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// Resolves { record, log }. With `log_time`, the UA's line in the open shift
+// log and the resident's last-UA stamp are written as part of recording it,
+// so "Record UA results" alone covers a UA: no separate log.add or
+// ua.request, and no refused second request leaving half a record behind.
+// No open report: the record is saved without a line (log is null).
 async function createUA(b = {}, session) {
   if (!b.client_id && !b.is_interview) throw httpError(400, 'client_id required');
   if (!b.tested_at) throw httpError(400, 'tested_at required');
-  return await repo.createUARecord({
+
+  let log = null;
+  if (b.log_time != null) {
+    const time = String(b.log_time);
+    if (!validTime(time)) throw httpError(400, `Invalid log entry time "${time.slice(0, 20)}" — expected format H:MM AM/PM`);
+    const rptId = parseInt(await reportLog.getActiveReportId());
+    if (rptId && await reportLog.isReportOpen(rptId)) {
+      const client = b.is_interview ? null : await repo.getClientById(b.client_id);
+      const subject = b.is_interview
+        ? (String(b.client_name || '').trim().slice(0, 100) || 'Interview')
+        : `${client ? client.name : (b.client_name || 'Unknown')} (Rm. ${client ? client.room : (b.room || '?')})`;
+      const text = sanitizeText(uaLogText(b, subject), 2000);
+      const ins = await reportLog.insertLogEntry(rptId, time, text);
+      const iso = new Date().toISOString();
+      await reportLog.touchReport(rptId, iso);
+      const lastUa = b.is_interview ? null : { [parseInt(b.client_id)]: uaDateStamp() };
+      if (lastUa) await reportLog.stampLastUa(rptId, lastUa, iso);
+      log = {
+        rptId,
+        logEntryId: (ins && ins.lastInsertRowid) || null,
+        patch: { reportId: rptId, log_entry: { time, text }, ...(lastUa ? { last_ua: lastUa } : {}) },
+      };
+    }
+  }
+
+  const record = await repo.createUARecord({
     ...b,
+    log_entry_id: log ? log.logEntryId : (b.log_entry_id || null),
     witnessed_by_id: b.witnessed_by_id || session.userId,
     witnessed_by_name: b.witnessed_by_name || actorName(session),
     created_by_id: session.userId,
     created_by_name: actorName(session),
   });
+  return { record, log };
 }
 async function updateUA(id, b = {}) {
   const cur = await repo.getUARecord(id);

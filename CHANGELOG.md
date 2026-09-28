@@ -2,6 +2,24 @@
 
 ---
 
+## Unreleased — Anyone can conduct a UA (2026-09-28)
+
+### Changed
+
+- **Every role records UA results** (`ua.record`). It is in every role preset, and existing
+  installs grant it once to every group, custom ones included, on the first start. An
+  admin can still remove it from a group; it is not re-added.
+- **Saving a UA is one request that `ua.record` covers.** `POST /api/ua-records` with
+  `log_time` now writes the UA's line in the open shift log and stamps the resident's last
+  UA itself. The form used to send those in a separate request that needed `log.add` and
+  `ua.request`. So a PA (no `ua.request`) got "Permission denied" on Save, and a case
+  manager (no `log.add`) would have too. The server builds the line from the record's
+  fields, in the same wording as before, so this is no way to write arbitrary log entries.
+  With no open report the UA is saved without a line, as before.
+- The Report tab's 🧪 UA quick button shows only to people who can record UAs.
+
+---
+
 ## Unreleased — Notification bell: Conduct UA, past 24 hours (2026-09-28)
 
 ### Added

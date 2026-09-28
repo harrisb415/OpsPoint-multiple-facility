@@ -8,6 +8,7 @@ const { requireAuth, requirePermission, requireAnyPermission } = require('../../
 const { csrfCheck } = require('../../middleware/csrf');
 const { audit } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
+const push = require('../push/service');
 const service = require('./service');
 const { localDate } = require('../../lib/time');
 
@@ -23,6 +24,9 @@ function register(app) {
       const r = await service.createRequest(req.body, { actor });
       await audit(req, 'ua.request', 'client', r.targetId, r.label, { room: r.room, interview: r.isIntv });
       broadcast({ type: 'ua_request', requests: await service.listPending() });
+      // Lock-screen text: no name, no room.
+      push.notify('ua', { body: 'UA requested. Open OpsPoint to see who.', url: '/m/', tag: 'ua' },
+        { excludeUserId: req.session.userId }).catch(() => {});
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

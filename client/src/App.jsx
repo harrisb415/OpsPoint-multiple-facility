@@ -16,6 +16,7 @@ import { applyTheme, readStoredTheme } from './utils/themes.js'
 const Admin              = lazy(() => import('./pages/Admin.jsx'))
 const About              = lazy(() => import('./pages/About.jsx'))
 const Mobile             = lazy(() => import('./pages/Mobile.jsx'))
+const MobileApp          = lazy(() => import('./mobile/MobileApp.jsx'))
 const ClinicalNotes      = lazy(() => import('./pages/clinical/ClinicalNotes.jsx'))
 const TreatmentPlans     = lazy(() => import('./pages/clinical/TreatmentPlans.jsx'))
 const Assessments        = lazy(() => import('./pages/clinical/Assessments.jsx'))
@@ -53,11 +54,25 @@ function isMobileUA() {
   return /Android|iPhone|iPad|iPod|Mobile|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
 }
 
-// Auto-redirect mobile UAs to /mobile when:
+// Running as the installed app (Add to Home Screen), not in a browser tab.
+function isStandalone() {
+  return window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+}
+
+// Which mobile app a phone lands on while both exist. The new one (/m) once
+// this phone has opened it or runs it installed; otherwise the classic page.
+// "Back to the classic mobile page" in the new app's More tab sets 'classic'.
+function mobileHome() {
+  let pref = null
+  try { pref = localStorage.getItem('opspoint-mobile') } catch { /* private mode */ }
+  return isStandalone() || pref === 'new' ? '/m' : '/mobile'
+}
+
+// Auto-redirect mobile UAs (and the installed app) to the mobile app when:
 //   - user is logged in
 //   - user has mobile.access permission
 //   - URL doesn't have ?desktop=1 (Desktop override)
-//   - we're not already on /mobile, /login, /change-password, /admin, /about
+//   - we're not already on /mobile, /m, /login, /change-password, /admin, /about
 function MobileAutoRedirect() {
   const { session } = useAuth()
   const navigate = useNavigate()
@@ -65,13 +80,13 @@ function MobileAutoRedirect() {
 
   useEffect(() => {
     if (!session) return
-    if (!isMobileUA()) return
+    if (!isMobileUA() && !isStandalone()) return
     const url = new URL(window.location.href)
     if (url.searchParams.get('desktop') === '1') return
     const p = location.pathname
-    if (p === '/mobile' || p === '/login' || p === '/change-password' || p === '/admin' || p === '/about') return
+    if (p === '/mobile' || p === '/m' || p.startsWith('/m/') || p === '/login' || p === '/change-password' || p === '/admin' || p === '/about') return
     if (!session.permissions?.includes('mobile.access')) return // no access → stay on desktop
-    navigate('/mobile', { replace: true })
+    navigate(mobileHome(), { replace: true })
   }, [session, location.pathname, navigate])
 
   return null
@@ -84,6 +99,15 @@ function MobileGuard() {
   if (session.mustChangePw) return <Navigate to="/change-password" replace />
   if (!session.permissions?.includes('mobile.access')) return <Navigate to="/" replace />
   return <Mobile />
+}
+
+// Gate /m — the new mobile app — the same way.
+function MobileAppGuard() {
+  const { session } = useAuth()
+  if (!session) return <Navigate to={`/login?next=${encodeURIComponent(window.location.pathname)}`} replace />
+  if (session.mustChangePw) return <Navigate to="/change-password" replace />
+  if (!session.permissions?.includes('mobile.access')) return <Navigate to="/" replace />
+  return <MobileApp />
 }
 
 export default function App() {
@@ -104,6 +128,7 @@ export default function App() {
         </Route>
 
         <Route path="/mobile" element={<MobileGuard />} />
+        <Route path="/m/*" element={<MobileAppGuard />} />
 
         <Route element={<AuthGuard />}>
           <Route path="/about" element={<About />} />

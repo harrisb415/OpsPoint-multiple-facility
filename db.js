@@ -55,6 +55,7 @@ const PERMISSIONS = [
   'passes.status',    // change pass In/Out status and mark as Returned (check in/out)
   'passes.notify_extended', // notification (bell + chime) when a pass is extended
   'reminders.view',   // see wellness check and walkthrough reminder banners
+  'rounds.notify_missing', // push alert when a resident is not located on a wellness round
   'ua.request',       // flag a resident for UA from the roster
   'ua.acknowledge',   // see the UA alert banner and acknowledge requests
   'ua.delete',        // delete individual UA log entries from the report
@@ -116,7 +117,7 @@ const ROLE_PRESETS = {
     'violations.log', 'violations.review', 'violations.complete',
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
-    'mobile.access',
+    'mobile.access', 'rounds.notify_missing',
     'ua.record', 'milestones.edit', 'incidents.log', 'incidents.review',
     'groups.view', 'groups.log',
     'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
@@ -130,7 +131,7 @@ const ROLE_PRESETS = {
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'facility.manage', 'admin.users', 'admin.settings', 'admin.audit', 'admin.system',
-    'mobile.access',
+    'mobile.access', 'rounds.notify_missing',
     'ua.record', 'milestones.edit', 'milestones.signoff',
     'incidents.log', 'incidents.review', 'incidents.delete',
     'consent.manage', 'disclosures.view', 'records.unlock',

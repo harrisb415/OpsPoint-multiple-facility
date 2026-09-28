@@ -150,6 +150,8 @@ app.get('/', requireAuth, (req,res)=> serveSPA(res));
 app.get('/facility', requireAuth, (req,res)=> res.redirect('/admin'));
 app.get('/admin', requireAuth, requirePermission('admin.users'), (req,res)=> serveSPA(res));
 app.get('/mobile', requireAuth, requirePermission('mobile.access'), (req,res)=> serveSPA(res));
+// ── Mobile app: /m pages (with install tags) + its data snapshot (modular: server/modules/mobile) ──
+require('./server/modules/mobile/routes').register(app);
 app.get('/about', requireAuth, (req,res)=> serveSPA(res));
 app.use('/static/icons', express.static(path.join(BASE,'static','icons'))); // public (favicon on login page)
 app.use('/static', requireAuth, express.static(path.join(BASE,'static')));
@@ -224,6 +226,10 @@ require('./server/modules/admin/routes').register(app, { restartServer });
 
 // ── Clinical: UA records / med log / milestones / incidents (modular: server/modules/clinical) ─────────
 require('./server/modules/clinical/routes').register(app);
+
+// ── Mobile app: wellness rounds + push alerts (modular: server/modules/rounds, server/modules/push) ─────────
+require('./server/modules/rounds/routes').register(app);
+require('./server/modules/push/routes').register(app);
 
 // ── Auto-update (Option B — manifest + signed bundle) ─────────────
 const { createUpdater } = require('./updater');
@@ -593,6 +599,16 @@ if (require.main === module) (async ()=>{
 
   // Scheduled database backup (45 CFR §164.308(a)(7)(ii)(A) — Required)
   backup.start(db);
+
+  // Push alerts to phones. The timed ones (wellness check / walkthrough due,
+  // passes overdue) are checked once a minute.
+  {
+    const push = require('./server/modules/push/service').status();
+    if (push.enabled) {
+      require('./server/modules/push/scheduler').start();
+      console.log(`  Push alerts: on (keys from ${push.source}${push.generated ? ', just generated' : ''})`);
+    } else console.log(`  Push alerts: OFF (${push.error})`);
+  }
 
   // Hourly lock sweep — auto-locks clinical records past their 24h grace window
   setInterval(async () => {

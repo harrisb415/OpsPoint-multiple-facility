@@ -417,6 +417,7 @@ export default function Mobile() {
             </div>
           </div>
           <div className="mob-hdr-right">
+            <a href="/m/" className="mob-btn-tiny">New app</a>
             <a href="/?desktop=1" className="mob-btn-tiny">Desktop</a>
             <button onClick={loadAll} className="mob-btn-tiny" title="Reload">↻</button>
             <button

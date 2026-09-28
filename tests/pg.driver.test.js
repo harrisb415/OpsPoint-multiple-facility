@@ -107,8 +107,8 @@ describe('identity table list matches the shipped DDL', () => {
   function identityTablesInDdl(file) {
     const sql = fs.readFileSync(path.join(__dirname, '..', 'migrations', 'pg', file), 'utf8');
     const out = new Set();
-    // CREATE TABLE <name> ( ... id integer GENERATED ALWAYS AS IDENTITY
-    const re = /CREATE TABLE (\w+)\s*\(([\s\S]*?)\n\);/g;
+    // CREATE TABLE [IF NOT EXISTS] <name> ( ... id integer GENERATED ALWAYS AS IDENTITY
+    const re = /CREATE TABLE (?:IF NOT EXISTS )?(\w+)\s*\(([\s\S]*?)\n\);/g;
     let m;
     while ((m = re.exec(sql))) {
       if (/\bGENERATED ALWAYS AS IDENTITY\b/.test(m[2])) out.add(m[1]);
@@ -116,20 +116,24 @@ describe('identity table list matches the shipped DDL', () => {
     return out;
   }
 
+  // Every migration, not just 001/002: later ones add tables too (007).
+  function declaredIdentityTables() {
+    const dir = path.join(__dirname, '..', 'migrations', 'pg');
+    const out = new Set();
+    for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.sql'))) {
+      for (const t of identityTablesInDdl(f)) out.add(t);
+    }
+    return out;
+  }
+
   test('every identity table in the DDL is listed in the driver', () => {
-    const declared = new Set([
-      ...identityTablesInDdl('001_facility_schema.sql'),
-      ...identityTablesInDdl('002_central_schema.sql'),
-    ]);
+    const declared = declaredIdentityTables();
     const missing = [...declared].filter((t) => !IDENTITY_TABLES.has(t));
     expect({ missing, count: declared.size }).toEqual({ missing: [], count: declared.size });
   });
 
   test('the driver lists nothing the DDL does not declare', () => {
-    const declared = new Set([
-      ...identityTablesInDdl('001_facility_schema.sql'),
-      ...identityTablesInDdl('002_central_schema.sql'),
-    ]);
+    const declared = declaredIdentityTables();
     const extra = [...IDENTITY_TABLES].filter((t) => !declared.has(t));
     expect(extra).toEqual([]);
   });

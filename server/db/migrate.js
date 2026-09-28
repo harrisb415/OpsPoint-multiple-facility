@@ -362,6 +362,51 @@ function createSchema(db) {
     notes       TEXT    DEFAULT '',
     UNIQUE(session_id, client_id)
   )`);
+
+  // ── Mobile app: wellness rounds + push subscriptions ──────────────────
+  // Postgres gets the same from migrations/pg/007_mobile_rounds_push.sql.
+  // Timestamps are written by the code as ISO instants, never by a default.
+  db.exec(`CREATE TABLE IF NOT EXISTS wellness_rounds (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_id        INTEGER,
+    status           TEXT    NOT NULL DEFAULT 'open',
+    started_by_id    INTEGER,
+    started_by_name  TEXT    NOT NULL DEFAULT '',
+    started_at       TEXT    NOT NULL,
+    finished_by_id   INTEGER,
+    finished_by_name TEXT    NOT NULL DEFAULT '',
+    finished_at      TEXT,
+    notes            TEXT    NOT NULL DEFAULT '',
+    total            INTEGER NOT NULL DEFAULT 0,
+    missing          INTEGER NOT NULL DEFAULT 0,
+    log_entry_id     INTEGER
+  )`);
+  // One open round at a time: a second phone pressing Start joins it.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS uq_wellness_rounds_open ON wellness_rounds (status) WHERE status = 'open'`);
+  db.exec(`CREATE TABLE IF NOT EXISTS wellness_round_marks (
+    round_id        INTEGER NOT NULL REFERENCES wellness_rounds(id) ON DELETE CASCADE,
+    client_id       INTEGER NOT NULL,
+    mark            TEXT    NOT NULL,
+    marked_by_id    INTEGER,
+    marked_by_name  TEXT    NOT NULL DEFAULT '',
+    marked_at       TEXT    NOT NULL,
+    found_at        TEXT,
+    found_by_name   TEXT    NOT NULL DEFAULT '',
+    found_note      TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (round_id, client_id)
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint    TEXT    NOT NULL UNIQUE,
+    p256dh      TEXT    NOT NULL,
+    auth        TEXT    NOT NULL,
+    user_agent  TEXT    NOT NULL DEFAULT '',
+    prefs       TEXT    NOT NULL DEFAULT '{}',
+    created_at  TEXT    NOT NULL,
+    last_ok_at  TEXT,
+    failures    INTEGER NOT NULL DEFAULT 0
+  )`);
 }
 
 // Backward-compat column additions for DBs that predate the current schema.

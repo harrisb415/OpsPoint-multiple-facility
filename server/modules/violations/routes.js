@@ -10,6 +10,7 @@ const { csrfCheck } = require('../../middleware/csrf');
 const { apiRateCheck } = require('../../middleware/rateLimit');
 const { audit } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
+const push = require('../push/service');
 const service = require('./service');
 
 function register(app) {
@@ -37,6 +38,10 @@ function register(app) {
       const { clientName, action, consequence } = await service.review(id, req.body, { actor });
       await audit(req, 'violation.review', 'violation', id, clientName, { action, consequence });
       broadcast({ type: 'violations_updated', ...await service.counts() });
+      if (action !== 'waive') {
+        push.notify('consequence', { body: 'A consequence was assigned. Open OpsPoint for details.', url: '/m/', tag: 'consequence' },
+          { excludeUserId: req.session.userId }).catch(() => {});
+      }
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

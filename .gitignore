@@ -13,6 +13,8 @@ data/secret.key
 # Database encryption key — NEVER commit. Losing it makes the database and
 # every backup permanently unreadable, so back it up outside the repo.
 data/.dbkey
+# Push alert signing keys (generated when VAPID_* is not in .env) — NEVER commit.
+data/vapid.json
 # Pre-encryption safety copies are plaintext PHI — including WAL/SHM sidecars
 data/*.pre-encryption-*
 data/photos/

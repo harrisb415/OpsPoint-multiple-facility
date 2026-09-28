@@ -2,6 +2,47 @@
 
 ---
 
+## Unreleased — New mobile app: rounds, install, push alerts (2026-09-27)
+
+Step 2 of the mobile rewrite. The new app runs alongside the classic `/mobile` page.
+
+### Added
+
+- **A new mobile app at `/m`.** Home (the next wellness check on the desktop's schedule,
+  census, latest log entries), Rounds (wellness rounds and walkthroughs), Log and More. It
+  follows the facility theme and the phone's own dark mode. A phone that opens it once lands
+  there from then on, and More has a way back; the classic page links to it ("New app").
+  Its data comes from one small snapshot (`GET /api/m/snapshot`) rather than `/api/data`,
+  which carries every resident photo.
+- **Wellness rounds kept on the server.** Tap each resident seen or not located. Progress
+  survives a reload or a dead zone, and two phones can split the floors of one round.
+  Residents away (a pass, hospital, any status but In Building) count as accounted for.
+  Finishing writes the usual shift-log line, which now also names anyone not checked; a
+  resident not located gets a follow-up that logs when they were found and who reported it.
+- **Installable app with push alerts.** Add it to the Home Screen (an iPhone only delivers
+  alerts that way). Each phone chooses its alerts: wellness check or walkthrough due (10
+  minutes ahead, and when overdue), UA requests, resident not located, pass overdue, pass
+  extended, consequence assigned, each only for staff holding the matching permission.
+  Alert text never includes a resident's name or room. Signing out turns alerts off on that
+  phone.
+- New permission `rounds.notify_missing` ("Notification — resident not located"), granted
+  to Supervisor and Administrator.
+
+### Changed
+
+- The security policy allows same-origin workers (`worker-src 'self' blob:`); it allowed
+  only `blob:`, which blocked the service worker.
+- Login honors `?next=` (same-site paths only), so an installed app returns to where it was.
+
+### Deploy notes
+
+- Apply `migrations/pg/007_mobile_rounds_push.sql` before restarting.
+- Push keys: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` in `.env`. Without
+  them a pair is generated once into `data/vapid.json`. Changing the keys cancels every
+  phone's alerts.
+
+---
+
 ## Unreleased — Postgres audit (2026-09-27)
 
 A full audit of the SQLite → Postgres port: production error logs, a column-by-column schema

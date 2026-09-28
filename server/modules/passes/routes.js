@@ -11,6 +11,7 @@ const { requireAuth, requirePermission, requireAnyPermission, userPerms } = requ
 const { csrfCheck } = require('../../middleware/csrf');
 const { audit } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
+const push = require('../push/service');
 const service = require('./service');
 
 function register(app) {
@@ -53,6 +54,10 @@ function register(app) {
           extended_by: extension.extended_by, extended_at: extension.extended_at,
         } } : {}),
       });
+      if (extension) {
+        push.notify('pass_ext', { body: 'A pass was extended.', url: '/m/', tag: 'pass_ext' },
+          { excludeUserId: req.session.userId }).catch(() => {});
+      }
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });

@@ -16,7 +16,9 @@ function securityHeaders(req, res, next) {
     "font-src 'self' data: https://fonts.gstatic.com; " +
     "img-src 'self' data: blob:; " +
     "connect-src 'self' ws: wss:; " +
-    "worker-src blob:; " +
+    // 'self' for the mobile app's service worker (/m-sw.js): without it the
+    // browser refuses to register it, and push alerts can't be delivered.
+    "worker-src 'self' blob:; " +
     "object-src 'none'; frame-src 'none';"
   );
   next();

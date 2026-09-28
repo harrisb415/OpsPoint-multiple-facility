@@ -12,7 +12,7 @@
  *      SQL string keeps working against both drivers.
  *
  *   2. lastInsertRowid.  SQLite hands it back from run(); PostgreSQL needs
- *      RETURNING id. Appended automatically for INSERTs into the 28 tables
+ *      RETURNING id. Appended automatically for INSERTs into the tables
  *      that actually have an identity id (IDENTITY_TABLES below) — appending
  *      it blindly would fail on settings, user_groups, sessions and the other
  *      four tables that have no id column.
@@ -106,6 +106,7 @@ const IDENTITY_TABLES = new Set([
   'discharge_records', 'consent_records', 'disclosures', 'group_sessions',
   'group_attendance', 'sync_outbox', 'clinical_notes', 'treatment_plans',
   'assessments', 'group_notes', 'discharge_summaries',
+  'wellness_rounds', 'push_subscriptions',
   // central
   'central_users', 'audit',
 ]);

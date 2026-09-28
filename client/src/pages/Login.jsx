@@ -35,7 +35,11 @@ export default function Login() {
     const result = await login(username, password)
     setBusy(false)
     if (!result.ok) { setError(result.error); return }
-    navigate(result.mustChangePw ? '/change-password' : '/', { replace: true })
+    // ?next= (set by the /m pages) brings the installed app back where it was.
+    // Same-site paths only: never '//host', which would leave the site.
+    const next = new URLSearchParams(window.location.search).get('next') || ''
+    const dest = /^\/(?![/\\])/.test(next) && !next.startsWith('/login') ? next : '/'
+    navigate(result.mustChangePw ? '/change-password' : dest, { replace: true })
   }
 
   return (

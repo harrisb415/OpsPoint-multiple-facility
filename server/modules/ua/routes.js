@@ -18,6 +18,11 @@ function register(app) {
     res.json(await service.listPending());
   });
 
+  // The notification bell's "Past 24 hours": requests acknowledged since.
+  app.get('/api/ua-requests/recent', requireAuth, async (req, res) => {
+    res.json(await service.listRecentlyAcknowledged(24));
+  });
+
   app.post('/api/ua-requests', requireAuth, csrfCheck, requirePermission('ua.request'), async (req, res) => {
     try {
       const actor = req.session.displayName || req.session.username;

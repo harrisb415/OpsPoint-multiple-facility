@@ -1,10 +1,11 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { DataProvider, useData } from '../contexts/DataContext.jsx'
 import { CLINICAL_SECTION_PERMS } from '../pages/clinical/clinicalShared.jsx'
 import ClientProfile from './ClientProfile.jsx'
+import ConductUAModal from './ConductUAModal.jsx'
 import { Field } from './ui.jsx'
 import {
   Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput, Select, Textarea, Alert,
@@ -75,29 +76,88 @@ function timeAgo(ts) {
   return Math.floor(sec / 86400) + 'd ago'
 }
 
+// ── Past notifications (the bell's "Past 24 hours") ───────────────────
+// Acknowledged UA requests come from the server, so everyone sees who handled
+// them. What this user dismissed with ✕ is remembered per user, as a kind and
+// an id only (never a name), and drawn from the live data.
+const PAST_MS = 24 * 3600000
+
+function usePastNotifs(username) {
+  const key = 'spPastNotifs_' + (username || '')
+  const [entries, setEntries] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(key) || '[]') } catch { return [] }
+  })
+  const remember = useCallback((entry) => {
+    setEntries(prev => {
+      const cutoff = Date.now() - PAST_MS
+      const next = [{ ...entry, at: Date.now() }, ...prev.filter(e => e.key !== entry.key && e.at >= cutoff)].slice(0, 200)
+      try { localStorage.setItem(key, JSON.stringify(next)) } catch { /* private mode */ }
+      return next
+    })
+  }, [key])
+  return [entries, remember]
+}
+
+// What a remembered dismissal was, from the current data; null once its
+// source is gone.
+function describePast(e, notif, data) {
+  const same = (a, b) => Number(a) === Number(b)
+  switch (e.kind) {
+    case 'draw': {
+      const d = (notif.uaDraws || []).find(x => same(x.id, e.ref))
+      if (!d) return null
+      const cnt = Array.isArray(d.residents) ? d.residents.length : 0
+      return { icon: '📋', title: `${cnt} resident${cnt !== 1 ? 's' : ''} drawn for UA`, meta: `By ${d.drawn_by_name || 'Staff'}` }
+    }
+    case 'pass': {
+      const [id, ...rest] = String(e.ref).split(':')   // `${id}:${extended_at}`
+      const p = (data?.passes || []).find(x => String(x.id) === id && String(x.extended_at) === rest.join(':'))
+      if (!p) return null
+      return { icon: '🕓', title: `${p.name}${p.room ? ` · Rm. ${p.room}` : ''} — pass extended`, meta: `Back ${fmtWhen(p.return_date)}${p.extended_by ? ` · by ${p.extended_by}` : ''}` }
+    }
+    case 'incident': {
+      const i = (data?.incidents || []).find(x => same(x.id, e.ref))
+      if (!i) return null
+      const name = i.client_name || (data?.clients || []).find(c => same(c.id, i.client_id))?.name || 'Resident'
+      return { icon: '🚨', title: `${name}${i.room ? ` · Rm. ${i.room}` : ''} — incident report`, meta: [i.severity, i.incident_type].filter(Boolean).join(' · ') }
+    }
+    case 'broadcast': {
+      const b = (notif.broadcastsAll || []).find(x => same(x.id, e.ref))
+      if (!b) return null
+      return { icon: '📢', title: b.message, meta: `From ${b.sender_name}` }
+    }
+    case 'viol_review':
+      return { icon: '⚠️', title: `${e.n} infraction${e.n !== 1 ? 's' : ''} awaiting review`, meta: 'Case conference needed' }
+    case 'viol_consequence':
+      return { icon: '📌', title: `${e.n} consequence${e.n !== 1 ? 's' : ''} to complete`, meta: 'Action required' }
+    default:
+      return null
+  }
+}
+
 function esc(s) {
   return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 }
 
 // ── Notification Panel ────────────────────────────────────────────────
-function NotifSection({ title, count, children }) {
+function NotifSection({ title, count, children, muted }) {
   return (
     <div className="border-b border-gray-100 dark:border-gray-700">
       <div className="flex items-center gap-2 px-4 pt-3 pb-1.5 text-[11px] font-bold tracking-wide text-gray-500 uppercase dark:text-gray-400">
         {title}
-        <span className="px-1.5 py-px text-[10px] font-bold rounded-full text-primary-700 bg-primary-100 dark:bg-primary-900/40 dark:text-primary-300">{count}</span>
+        <span className={`px-1.5 py-px text-[10px] font-bold rounded-full ${muted ? 'text-gray-600 bg-gray-100 dark:bg-gray-700 dark:text-gray-300' : 'text-primary-700 bg-primary-100 dark:bg-primary-900/40 dark:text-primary-300'}`}>{count}</span>
       </div>
       {children}
     </div>
   )
 }
-function NotifRow({ icon, name, meta, actions, children, wrap }) {
+function NotifRow({ icon, name, meta, actions, children, wrap, muted }) {
   return (
     <div className="px-4 py-2.5 border-t border-gray-50 dark:border-gray-700/50 first:border-t-0">
       <div className={`flex gap-2.5 ${wrap ? 'items-start' : 'items-center'}`}>
-        <span className="text-base shrink-0">{icon}</span>
+        <span className={`text-base shrink-0 ${muted ? 'opacity-60' : ''}`}>{icon}</span>
         <div className="flex-1 min-w-0">
-          <div className={`text-sm text-gray-900 dark:text-white ${wrap ? '' : 'truncate'}`}>{name}</div>
+          <div className={`text-sm ${muted ? 'text-gray-600 dark:text-gray-300' : 'text-gray-900 dark:text-white'} ${wrap ? '' : 'truncate'}`}>{name}</div>
           <div className="text-xs text-gray-500 dark:text-gray-400">{meta}</div>
         </div>
         {actions && <div className="flex gap-1 shrink-0">{actions}</div>}
@@ -107,13 +167,8 @@ function NotifRow({ icon, name, meta, actions, children, wrap }) {
   )
 }
 
-function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIncident, onAckUA, onGoTab, dismissedDrawIds, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence, passExts = [], dismissPassExt }) {
+function NotifPanel({ open, onClose, notif, session, now, draws = [], past = [], dismissBroadcast, dismissIncident, onAckUA, onConductUA, onGoTab, dismissDraw, dismissedViolReview, dismissedViolConsequence, dismissViolReview, dismissViolConsequence, passExts = [], dismissPassExt }) {
   const perm = session?.permissions || []
-
-  const draws24h = (notif.uaDraws || []).filter(d => {
-    const ts = parseServerTime(d.created_at)?.getTime() || 0
-    return ts >= Date.now() - 24 * 3600000 && !dismissedDrawIds?.has(d.id)
-  })
 
   const SEV_CLS = {
     low:      'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300',
@@ -124,7 +179,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
 
   const hasAny =
     (notif.uaRequests.length > 0 && perm.includes('ua.acknowledge'))
-    || (draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')))
+    || (draws.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')))
     || (passExts.length > 0 && perm.includes('passes.notify_extended'))
     || (notif.violReview > 0 && perm.includes('violations.notify_review'))
     || (notif.violConsequence > 0 && perm.includes('violations.notify_consequence'))
@@ -140,21 +195,24 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
             {notif.uaRequests.map(r => (
               <NotifRow key={r.id} icon="🧪"
                 name={r.interview_name || r.client_name || 'Interview'}
-                meta={`${r.room ? `Rm. ${r.room} · ` : ''}${timeAgo(r.requested_at)}`}
-                actions={<Button size="xs" color="light" onClick={() => onAckUA(r.id)}>✔ Ack</Button>} />
+                meta={`${r.room ? `Rm. ${r.room} · ` : ''}${timeAgo(parseWhen(r.requested_at))}`}
+                actions={<>
+                  {perm.includes('ua.record') && <Button size="xs" onClick={() => onConductUA(r)}>Conduct UA</Button>}
+                  <Button size="xs" color="light" onClick={() => onAckUA(r.id)}>✔ Ack</Button>
+                </>} />
             ))}
           </NotifSection>
         )}
 
-        {draws24h.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')) && (
-          <NotifSection title="UA Draws (24h)" count={draws24h.length}>
-            {draws24h.map(d => {
+        {draws.length > 0 && (perm.includes('ua.draw') || perm.includes('ua.acknowledge')) && (
+          <NotifSection title="UA Draws (24h)" count={draws.length}>
+            {draws.map(d => {
               const cnt = Array.isArray(d.residents) ? d.residents.length : 0
               return (
                 <NotifRow key={d.id} icon="📋"
                   name={`${cnt} resident${cnt !== 1 ? 's' : ''} drawn`}
                   meta={`By ${d.drawn_by_name || 'Staff'} · ${timeAgo(d.created_at)}`}
-                  actions={dismissDraw && <Button size="xs" color="light" onClick={() => dismissDraw(d.id)} title="Dismiss">✕</Button>}>
+                  actions={dismissDraw && <Button size="xs" color="light" onClick={() => dismissDraw(d)} title="Dismiss">✕</Button>}>
                   {Array.isArray(d.residents) && d.residents.length > 0 && (
                     <p className="pl-8 mt-1 text-xs text-gray-500 dark:text-gray-400">
                       {d.residents.slice(0, 5).map(r => `Rm.${r.room} ${r.name}`).join(', ')}{d.residents.length > 5 ? '…' : ''}
@@ -233,7 +291,7 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
           <NotifSection title="Announcements" count={notif.broadcasts.length}>
             {notif.broadcasts.map(b => {
               const bcTs       = parseServerTime(b.created_at)?.getTime() || 0
-              const canDismiss = bcTs > 0 && (Date.now() - bcTs) > 12 * 3600000
+              const canDismiss = bcTs > 0 && (now - bcTs) > 12 * 3600000
               return (
                 <NotifRow key={b.id} icon="📢" wrap
                   name={<span className="font-medium">{b.message}</span>}
@@ -247,10 +305,16 @@ function NotifPanel({ open, onClose, notif, session, dismissBroadcast, dismissIn
         )}
 
         {!hasAny && (
-          <div className="flex flex-col items-center gap-2 py-16 text-sm text-gray-400">
+          <div className={`flex flex-col items-center gap-2 text-sm text-gray-400 ${past.length ? 'py-8' : 'py-16'}`}>
             <span className="text-3xl">✅</span>
             <span>All clear — no pending notifications</span>
           </div>
+        )}
+
+        {past.length > 0 && (
+          <NotifSection title="Past 24 hours" count={past.length} muted>
+            {past.map(p => <NotifRow key={p.key} icon={p.icon} name={p.title} meta={p.meta} wrap muted />)}
+          </NotifSection>
         )}
       </DrawerItems>
     </Drawer>
@@ -568,7 +632,7 @@ function SettingsMenu({ showAdmin, onAbout, onAdmin, onSignOut }) {
 function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSearch = true }) {
   const { session, logout }                 = useAuth()
   const { hasPerm }                         = usePermission()
-  const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident } = useData()
+  const { data, saveStatus, notif, serverRestarting, wsConnected, dismissBroadcast, dismissIncident, loadData } = useData()
   const navigate                            = useNavigate()
 
   const [panelOpen, setPanelOpen]           = useState(false)
@@ -582,18 +646,36 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
     return () => document.removeEventListener('mousedown', onDoc)
   }, [])
 
+  // The bell's clock: things leave its 24-hour windows on time, not at the
+  // next re-render.
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000)
+    return () => clearInterval(t)
+  }, [])
+  const [pastLocal, rememberPast] = usePastNotifs(session?.username)
+
   const [dismissedDrawIds, setDismissedDrawIds] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('spDismissedDraws') || '[]')) }
     catch { return new Set() }
   })
 
-  function dismissDraw(id) {
+  function dismissDraw(d) {
     setDismissedDrawIds(prev => {
       const next = new Set(prev)
-      next.add(id)
+      next.add(d.id)
       try { localStorage.setItem('spDismissedDraws', JSON.stringify([...next])) } catch { /* empty */ }
       return next
     })
+    rememberPast({ key: `draw:${d.id}`, kind: 'draw', ref: d.id })
+  }
+  function dismissBroadcastPast(id) {
+    dismissBroadcast(id)
+    rememberPast({ key: `broadcast:${id}`, kind: 'broadcast', ref: id })
+  }
+  function dismissIncidentPast(id) {
+    dismissIncident(id)
+    rememberPast({ key: `incident:${id}`, kind: 'incident', ref: id })
   }
 
   // Pass extensions: one notice per extension, keyed pass id + extended_at, so
@@ -610,6 +692,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
       try { localStorage.setItem(passExtStore, JSON.stringify(next)) } catch { /* empty */ }
       return new Set(next)
     })
+    rememberPast({ key: `pass:${key}`, kind: 'pass', ref: key })
   }
   // A notice lasts while the resident is still out on that pass. Once it is
   // Returned there is nothing left to act on, so it drops off by itself.
@@ -628,10 +711,12 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
   function dismissViolReview(count) {
     setDismissedViolReview(count)
     try { localStorage.setItem('spDismissedViolReview', String(count)) } catch { /* empty */ }
+    rememberPast({ key: 'viol_review', kind: 'viol_review', n: count })
   }
   function dismissViolConsequence(count) {
     setDismissedViolConsequence(count)
     try { localStorage.setItem('spDismissedViolConsequence', String(count)) } catch { /* empty */ }
+    rememberPast({ key: 'viol_consequence', kind: 'viol_consequence', n: count })
   }
 
   const facilityName = data?.facility_name || 'OpsPoint'
@@ -865,18 +950,62 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
   }
 
   async function ackUA(id) {
-    await fetch(`/api/ua-requests/${id}/acknowledge`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: '{}'
-    })
+    try {
+      const r = await fetch(`/api/ua-requests/${id}/acknowledge`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: '{}'
+      })
+      return r.ok
+    } catch { return false }
   }
 
-  const draws24h = (notif.uaDraws || []).filter(d => {
+  // Conduct UA from the bell: the request is acknowledged straight away, so
+  // the notification clears for everyone, and the UA form opens on that
+  // resident. If the acknowledgement fails, the form makes it on save.
+  const [conductReq, setConductReq] = useState(null)
+  function conductUA(r) {
+    setPanelOpen(false)
+    setConductReq({ ...r, acknowledged: 1 })
+    ackUA(r.id).then(ok => { if (!ok) setConductReq(c => (c && c.id === r.id ? { ...c, acknowledged: 0 } : c)) })
+  }
+  const conductClients = useMemo(() => {
+    const list = (data?.clients || []).filter(c => c.is_active && !c.is_special && c.name !== 'VACANT')
+      .sort((a, b) => (parseInt(a.room) || 0) - (parseInt(b.room) || 0))
+    // Someone discharged since the request still needs a name on the form.
+    if (conductReq && !conductReq.is_interview && !list.some(c => String(c.id) === String(conductReq.client_id))) {
+      list.push({ id: conductReq.client_id, name: conductReq.client_name, room: conductReq.room })
+    }
+    return list
+  }, [data?.clients, conductReq])
+
+  const draws = (notif.uaDraws || []).filter(d => {
     const ts = parseServerTime(d.created_at)?.getTime() || 0
-    return ts >= Date.now() - 24*3600000 && !dismissedDrawIds.has(d.id)
+    return ts >= now - 24 * 3600000 && !dismissedDrawIds.has(d.id)
   })
+
+  // Past 24 hours, newest first: requests acknowledged (by anyone) and what
+  // this user dismissed.
+  const past = []
+  if (hasPerm('ua.acknowledge')) {
+    for (const r of notif.uaPast || []) {
+      const at = parseWhen(r.acknowledged_at)
+      if (!at || at.getTime() < now - PAST_MS) continue
+      past.push({
+        key: `ua:${r.id}`, at: at.getTime(), icon: '🧪',
+        title: `${r.interview_name || r.client_name || 'Interview'}${r.room ? ` · Rm. ${r.room}` : ''} — UA request`,
+        meta: `Acknowledged${r.acknowledged_by ? ` by ${r.acknowledged_by}` : ''} · ${timeAgo(at)}`,
+      })
+    }
+  }
+  for (const e of pastLocal) {
+    if (e.at < now - PAST_MS) continue
+    const shown = describePast(e, notif, data)
+    if (shown) past.push({ ...shown, key: e.key, at: e.at, meta: [shown.meta, `dismissed ${timeAgo(new Date(e.at))}`].filter(Boolean).join(' · ') })
+  }
+  past.sort((a, b) => b.at - a.at)
+
   const badgeCount =
     (hasPerm('ua.acknowledge') ? notif.uaRequests.length : 0) +
-    ((hasPerm('ua.draw') || hasPerm('ua.acknowledge')) ? draws24h.length : 0) +
+    ((hasPerm('ua.draw') || hasPerm('ua.acknowledge')) ? draws.length : 0) +
     (hasPerm('passes.notify_extended') ? passExts.length : 0) +
     (hasPerm('violations.notify_review') && notif.violReview > (dismissedViolReview || 0) ? 1 : 0) +
     (hasPerm('violations.notify_consequence') && notif.violConsequence > (dismissedViolConsequence || 0) ? 1 : 0) +
@@ -977,11 +1106,14 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
         onClose={() => setPanelOpen(false)}
         notif={notif}
         session={session}
-        dismissBroadcast={dismissBroadcast}
-        dismissIncident={dismissIncident}
+        now={now}
+        draws={draws}
+        past={past}
+        dismissBroadcast={dismissBroadcastPast}
+        dismissIncident={dismissIncidentPast}
         onAckUA={ackUA}
+        onConductUA={conductUA}
         onGoTab={onGoTab}
-        dismissedDrawIds={dismissedDrawIds}
         dismissDraw={dismissDraw}
         dismissedViolReview={dismissedViolReview}
         dismissedViolConsequence={dismissedViolConsequence}
@@ -992,6 +1124,16 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
       />
 
       <BroadcastModal open={broadcastOpen} onClose={() => setBroadcastOpen(false)} />
+
+      {conductReq && (
+        <ConductUAModal
+          req={conductReq}
+          panel={Array.isArray(data?.ua_panel) ? data.ua_panel : []}
+          clients={conductClients}
+          onClose={() => setConductReq(null)}
+          onSaved={async () => { setConductReq(null); await loadData() }}
+        />
+      )}
     </>
   )
 }

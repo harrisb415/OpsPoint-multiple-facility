@@ -9,6 +9,13 @@ function nowLocal() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
+// nowLocal()'s format, `hours` from now (negative = earlier): a cutoff to
+// compare against timestamps nowLocal() wrote.
+function localShift(hours = 0) {
+  const d = new Date(Date.now() + hours * 3600000), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 // Parse a "h:mm AM/PM" string into minutes-since-midnight.
 function timeToMins(t) {
   if (!t) return 0;
@@ -30,4 +37,4 @@ function localDate(days = 0) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-module.exports = { nowLocal, timeToMins, localDate };
+module.exports = { nowLocal, localShift, timeToMins, localDate };

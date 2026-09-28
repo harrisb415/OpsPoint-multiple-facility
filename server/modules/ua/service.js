@@ -4,7 +4,7 @@
  * No SQL, no req/res. Validation failures throw an Error carrying `.status`.
  */
 const repo = require('./repository');
-const { nowLocal } = require('../../lib/time');
+const { nowLocal, localShift } = require('../../lib/time');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -14,6 +14,11 @@ function httpError(status, message) {
 
 async function listPending() {
   return await repo.listPending();
+}
+
+// Acknowledged in the last `hours`, with who acknowledged them and when.
+async function listRecentlyAcknowledged(hours = 24) {
+  return await repo.listAcknowledgedSince(localShift(-hours));
 }
 
 // Create a UA request (resident or interview). Returns audit fields.
@@ -93,4 +98,4 @@ async function getUALog(query = {}) {
   return await repo.getUALog(limit, offset);
 }
 
-module.exports = { listPending, createRequest, deleteRequest, acknowledgeRequest, getDraws, getRecentDrawn, createDraw, getUALog };
+module.exports = { listPending, listRecentlyAcknowledged, createRequest, deleteRequest, acknowledgeRequest, getDraws, getRecentDrawn, createDraw, getUALog };

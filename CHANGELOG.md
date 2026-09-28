@@ -2,6 +2,27 @@
 
 ---
 
+## Unreleased — Notification bell: Conduct UA, past 24 hours (2026-09-28)
+
+### Added
+
+- **Conduct UA** next to Ack on each UA request in the bell. It acknowledges the request,
+  which clears it for everyone, and opens the UA form with that resident filled in and
+  locked. Staff who can record UA results (`ua.record`) see it; everyone else keeps Ack.
+- **Past 24 hours** at the bottom of the bell. UA requests acknowledged in the last day show
+  there with who acknowledged them, for everyone who sees UA requests. Anything a person
+  dismisses with ✕ (UA draws, pass extensions, infraction counts, incidents,
+  announcements) shows there for them for a day. The browser keeps only a reference to
+  each dismissal, never a name, and the row is drawn from current data.
+- `GET /api/ua-requests/recent`: requests acknowledged in the last 24 hours.
+
+### Fixed
+
+- The bell showed a UA request's age wrong on SQLite installs: `requested_at` is local time
+  there and was read as UTC.
+
+---
+
 ## Unreleased — Mobile app: "For you", quick actions, PIN unlock (2026-09-28)
 
 Step 4 of the mobile rewrite.

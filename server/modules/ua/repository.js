@@ -16,6 +16,15 @@ async function listPending() {
   return await c.query(PENDING);
 }
 
+// Requests acknowledged since `since` (nowLocal format), newest first: the
+// bell's "Past 24 hours". Postgres reads the zone-less cutoff in the session
+// time zone, the same way it stored acknowledged_at.
+async function listAcknowledgedSince(since) {
+  return await c.query(
+    `SELECT id, client_id, client_name, room, requested_by, requested_at, acknowledged_by, acknowledged_at, is_interview, interview_name
+       FROM ua_requests WHERE acknowledged=1 AND acknowledged_at >= ? ORDER BY acknowledged_at DESC LIMIT 100`, [since]);
+}
+
 async function insertRequest({ client_id, client_name, room, requested_by, is_interview, interview_name, requested_at }) {
   await c.run(
     `INSERT INTO ua_requests (client_id,client_name,room,requested_by,is_interview,interview_name,requested_at) VALUES (?,?,?,?,?,?,?)`,
@@ -56,6 +65,6 @@ const UA_LOG_SQL = `
 async function getUALog(limit, offset) { return await c.query(UA_LOG_SQL, [limit, offset]); }
 
 module.exports = {
-  listPending, insertRequest, getRequestBrief, getRequestNameRoom, deleteRequest,
+  listPending, listAcknowledgedSince, insertRequest, getRequestBrief, getRequestNameRoom, deleteRequest,
   acknowledgeRequest, getDraws, getRecentDrawnClientIds, createDraw, getUALog,
 };

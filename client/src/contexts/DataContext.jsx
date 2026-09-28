@@ -9,6 +9,8 @@ const NOTIF_DEFAULT = {
   uaRequests:      [],   // pending UA requests
   uaDraws:         [],   // recent draws (last 30 days)
   broadcasts:      [],   // active broadcasts (not dismissed)
+  broadcastsAll:   [],   // the same, dismissed ones included (the bell's "Past 24 hours")
+  uaPast:          [],   // UA requests acknowledged in the last 24 hours
   violReview:      0,    // # violations pending review
   violConsequence: 0,    // # violations with consequence assigned
   incidents:       [],   // new incident alerts (dismissed per session)
@@ -138,6 +140,14 @@ export function DataProvider({ children }) {
     setData(prev => prev ? { ...prev, ...clinical } : prev)
   }, [fetchClinical])
 
+  // UA requests acknowledged in the last 24 hours, and by whom.
+  const loadUaPast = useCallback(async () => {
+    try {
+      const r = await fetch('/api/ua-requests/recent', { credentials: 'include' })
+      if (r.ok) { const uaPast = await r.json(); setNotif(prev => ({ ...prev, uaPast })) }
+    } catch { /* keep the last list */ }
+  }, [])
+
   // Load notification-only data (draws + broadcasts) once on session start
   const loadNotifData = useCallback(async () => {
     loadDismissed()
@@ -149,8 +159,9 @@ export function DataProvider({ children }) {
     const draws     = drawsRes.ok  ? await drawsRes.json() : []
     const bcsRaw    = bcRes.ok     ? await bcRes.json()    : []
     const broadcasts = bcsRaw.filter(b => !dismissedBCIds.current.has(b.id))
-    setNotif(prev => ({ ...prev, uaDraws: draws, broadcasts }))
-  }, [loadDismissed])
+    setNotif(prev => ({ ...prev, uaDraws: draws, broadcasts, broadcastsAll: bcsRaw }))
+    loadUaPast()
+  }, [loadDismissed, loadUaPast])
 
   useEffect(() => {
     if (!session) return
@@ -239,6 +250,7 @@ export function DataProvider({ children }) {
           seenUAIds.current = new Set(requests.map(r => r.id))
           setNotif(prev => ({ ...prev, uaRequests: requests }))
           setData(prev => prev ? { ...prev, ua_requests: requests } : prev)
+          loadUaPast()   // one may have just been acknowledged
           // Only the people who can act on UA requests should hear the sound
           if (hasNew && _hasSessionPerm('ua.acknowledge')) playSound('ua')
           break
@@ -267,6 +279,7 @@ export function DataProvider({ children }) {
             setNotif(prev => ({
               ...prev,
               broadcasts: [msg.message, ...prev.broadcasts.filter(b => b.id !== msg.message.id)],
+              broadcastsAll: [msg.message, ...prev.broadcastsAll.filter(b => b.id !== msg.message.id)],
             }))
             playSound('broadcast')
           }
@@ -336,7 +349,7 @@ export function DataProvider({ children }) {
       wsRef.current = null
       ws?.close()
     }
-  }, [session, loadData])
+  }, [session, loadData, loadUaPast])
 
   // ── HIPAA idle session timeout: poll heartbeat ────────────────────
   // Server enforces idle expiry; client polls to detect it quickly and

@@ -1,5 +1,41 @@
 // Derived views of the snapshot shared by the mobile screens.
 import { effectiveStatuses } from '../utils/statuses.js'
+import { parseServerTime, parseWhen } from '../utils/dates.js'
+import { fmtClock } from './schedule.js'
+
+// ── Announcements: which ones this phone has seen (ids only, no content) ──
+const SEEN_KEY = 'opspoint-m-announcements-seen'
+export function lastSeenAnnouncement() {
+  try { return Number(localStorage.getItem(SEEN_KEY)) || 0 } catch { return 0 }
+}
+export function markAnnouncementsSeen(list) {
+  const max = Math.max(0, ...(list || []).map(b => Number(b.id) || 0))
+  if (max > lastSeenAnnouncement()) {
+    try { localStorage.setItem(SEEN_KEY, String(max)) } catch { /* private mode */ }
+  }
+}
+export function unseenAnnouncements(snap) {
+  const seen = lastSeenAnnouncement()
+  return (snap.announcements || []).filter(b => Number(b.id) > seen).length
+}
+// When a resident is due back, short enough for a list row: '11:15 PM'
+// today, 'Mon 11:15 PM' within the week, 'Oct 12' beyond.
+export function fmtBack(v) {
+  const d = parseWhen(v)
+  if (!d) return ''
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) return fmtClock(d)
+  if (Math.abs(d - now) < 6 * 86400000) return `${d.toLocaleDateString('en-US', { weekday: 'short' })} ${fmtClock(d)}`
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+// '9:41 PM' today, 'Sat, Sep 26, 9:41 PM' before.
+export function fmtSent(v) {
+  const d = parseServerTime(v)
+  if (!d) return ''
+  if (new Date().toDateString() === d.toDateString()) return fmtClock(d)
+  return `${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, ${fmtClock(d)}`
+}
 
 // The shape utils/statuses.js reads: configured statuses, feature flags, passes.
 export function statusData(snap) {

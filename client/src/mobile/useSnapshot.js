@@ -5,6 +5,7 @@ import { api } from './api.js'
 // the snapshot (debounced), which is small enough to simply fetch again.
 const RELOAD_ON = new Set([
   'data_saved', 'patched', 'passes_updated', 'settings_updated', 'round_updated',
+  'ua_request', 'broadcast_message',
 ])
 
 // The mobile app's data (GET /api/m/snapshot), kept current by the WebSocket

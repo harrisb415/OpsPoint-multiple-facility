@@ -9,9 +9,13 @@ import { uiFlags } from './model.js'
 import { Toaster } from './ui.jsx'
 import TabBar from './TabBar.jsx'
 import Home from './Home.jsx'
+import Residents from './Residents.jsx'
+import Resident from './Resident.jsx'
 import Rounds from './Rounds.jsx'
 import Log from './Log.jsx'
 import More from './More.jsx'
+import Staff from './Staff.jsx'
+import Announcements from './Announcements.jsx'
 
 // The mobile app (/m). Separate from the desktop AppShell: its own data
 // snapshot, its own layout, and dark mode taken from the phone rather than
@@ -63,9 +67,13 @@ export default function MobileApp() {
           <main className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain [&>*]:min-w-0">
             <Routes>
               <Route index element={<Home />} />
+              <Route path="residents" element={<Residents />} />
+              <Route path="residents/:id" element={<Resident />} />
               {flags.roundsOn && <Route path="rounds" element={<Rounds />} />}
               <Route path="log" element={<Log />} />
               <Route path="more" element={<More />} />
+              <Route path="staff" element={<Staff />} />
+              <Route path="announcements" element={<Announcements />} />
               <Route path="*" element={<Navigate to="/m" replace />} />
             </Routes>
           </main>

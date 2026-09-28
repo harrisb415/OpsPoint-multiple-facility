@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
 import { Alert } from 'flowbite-react'
-import { CircleCheck, Building2, TriangleAlert, ChevronRight } from 'lucide-react'
+import { CircleCheck, Building2, TriangleAlert, ChevronRight, Megaphone } from 'lucide-react'
 import { useMobile } from './context.js'
 import { useNow } from './useSnapshot.js'
 import { Card, Bar, Initials, ScreenHeader, SectionTitle } from './ui.jsx'
 import { countStatuses, censusKeys, statusLabel, statusBadge } from '../utils/statuses.js'
 import { mostRecentLogTime, scheduledStatus, fmtClock, fmtSpan } from './schedule.js'
-import { statusData, currentStatuses, roundStats, lastWellness, openNotLocated, shortName } from './model.js'
+import { statusData, currentStatuses, roundStats, lastWellness, openNotLocated, shortName, unseenAnnouncements, fmtSent } from './model.js'
 
 export default function Home() {
   const { snap, session, hasPerm, flags } = useMobile()
@@ -56,6 +56,8 @@ export default function Home() {
 
         {showHero && <WellnessHero snap={snap} statuses={statuses} entries={entries} now={now} reportOpen={reportOpen} />}
 
+        {snap.announcements?.length > 0 && <LatestAnnouncement snap={snap} />}
+
         <Card className="flex flex-col gap-3 p-4" aria-labelledby="census-h">
           <div className="flex items-baseline justify-between">
             <h2 id="census-h" className="text-base font-bold">Census</h2>
@@ -63,10 +65,10 @@ export default function Home() {
           </div>
           <div className="grid grid-cols-4 gap-2">
             {censusKeys(statusData(snap), counts).map(k => (
-              <div key={k} className={`flex flex-col gap-1.5 rounded-xl p-2.5 ${statusBadge(statusData(snap), k)}`}>
+              <Link key={k} to={`/m/residents?status=${encodeURIComponent(k)}`} className={`flex flex-col gap-1.5 rounded-xl p-2.5 ${statusBadge(statusData(snap), k)}`}>
                 <span className="font-display text-2xl font-bold leading-none">{counts[k] || 0}</span>
                 <span className="text-[11px] font-semibold leading-tight">{statusLabel(statusData(snap), k)}</span>
-              </div>
+              </Link>
             ))}
           </div>
         </Card>
@@ -90,6 +92,28 @@ export default function Home() {
         )}
       </div>
     </div>
+  )
+}
+
+function LatestAnnouncement({ snap }) {
+  const latest = snap.announcements[0]
+  const unseen = unseenAnnouncements(snap)
+  return (
+    <Link to="/m/announcements" aria-label={`Announcement from ${latest.sender_name}. Open all announcements.`}>
+      <Card className="flex flex-col gap-2 p-4">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200">
+            <Megaphone className="h-[18px] w-[18px]" aria-hidden="true" />
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-sm font-bold">{latest.sender_name}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Announcement · {fmtSent(latest.created_at)}</span>
+          </span>
+          {unseen > 0 && <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">{unseen} new</span>}
+        </div>
+        <p className="line-clamp-3 text-[15px] leading-snug">{latest.message}</p>
+      </Card>
+    </Link>
   )
 }
 

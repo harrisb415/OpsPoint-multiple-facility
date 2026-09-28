@@ -26,6 +26,7 @@ const TYPES = [
   { key: 'pass_late',   perm: 'passes.status',                label: 'Pass overdue',         hint: 'When a resident is not back on time' },
   { key: 'pass_ext',    perm: 'passes.notify_extended',       label: 'Pass extended',        hint: 'When someone extends a pass' },
   { key: 'consequence', perm: 'violations.notify_consequence', label: 'Consequence assigned', hint: 'Infraction outcomes to carry out' },
+  { key: 'broadcast',   perm: 'broadcast.receive',            label: 'Announcements',        hint: 'When a supervisor sends one' },
 ];
 const TYPE_KEYS = TYPES.map(t => t.key);
 

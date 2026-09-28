@@ -165,9 +165,9 @@ describe('push alerts', () => {
   test('config lists only the alerts each account may get', async () => {
     const admin = await agents.admin.get('/api/push/config');
     expect(admin.body).toMatchObject({ enabled: true, publicKey: process.env.VAPID_PUBLIC_KEY });
-    expect(admin.body.types.map(t => t.key).sort()).toEqual(['consequence', 'due', 'missing', 'pass_ext', 'pass_late', 'ua', 'walk']);
+    expect(admin.body.types.map(t => t.key).sort()).toEqual(['broadcast', 'consequence', 'due', 'missing', 'pass_ext', 'pass_late', 'ua', 'walk']);
     const cm = await agents.cm.get('/api/push/config');
-    expect(cm.body.types.map(t => t.key)).toEqual(['pass_ext']);
+    expect(cm.body.types.map(t => t.key)).toEqual(['pass_ext', 'broadcast']);
   });
 
   test('subscribing accepts real push services only', async () => {

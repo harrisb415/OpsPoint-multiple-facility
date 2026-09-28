@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Alert, Button, ToggleSwitch } from 'flowbite-react'
-import { BellRing, Download, LogOut, Monitor, ShieldCheck, Smartphone, Palette, ChevronRight } from 'lucide-react'
+import { BellRing, Download, LogOut, Monitor, ShieldCheck, Smartphone, Palette, ChevronRight, Contact, Megaphone } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { themeLabel } from '../utils/themes.js'
 import { useMobile } from './context.js'
 import { api } from './api.js'
 import { pushSupport, currentSubscription, enableAlerts, disableAlerts } from './push.js'
 import { Card, Initials, ScreenHeader } from './ui.jsx'
+import { unseenAnnouncements } from './model.js'
 
 const ROLE_LABELS = { pa: 'Program Assistant', supervisor: 'Supervisor', admin: 'Administrator', case_manager: 'Case Manager' }
 
 export default function More() {
-  const { session, snap, toast, installPrompt, clearInstallPrompt } = useMobile()
+  const { session, snap, toast, installPrompt, clearInstallPrompt, hasPerm } = useMobile()
+  const unseen = unseenAnnouncements(snap)
   const { logout } = useAuth()
   const navigate = useNavigate()
   const support = useMemo(() => pushSupport(), [])
@@ -124,6 +126,22 @@ export default function More() {
             <Button size="sm" onClick={install}><Download className="mr-1.5 h-4 w-4" aria-hidden="true" />Install</Button>
           </Card>
         )}
+
+        <Card className="overflow-hidden">
+          <Link to="/m/staff" className="flex min-h-[52px] items-center gap-3 border-b border-gray-200 px-4 text-[15px] font-medium last:border-b-0 dark:border-gray-700">
+            <Contact className="h-5 w-5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+            <span className="flex-1">Staff directory</span>
+            <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
+          </Link>
+          {(hasPerm('broadcast.receive') || hasPerm('broadcast.send')) && (
+            <Link to="/m/announcements" className="flex min-h-[52px] items-center gap-3 px-4 text-[15px] font-medium">
+              <Megaphone className="h-5 w-5 shrink-0 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+              <span className="flex-1">Announcements</span>
+              {unseen > 0 && <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">{unseen} new</span>}
+              <ChevronRight className="h-4 w-4 text-gray-400" aria-hidden="true" />
+            </Link>
+          )}
+        </Card>
 
         <Card className="overflow-hidden">
           <div className="flex items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700">

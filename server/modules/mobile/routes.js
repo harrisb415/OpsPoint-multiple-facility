@@ -10,7 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('../../config');
-const { requireAuth, requirePermission } = require('../../middleware/auth');
+const { requireAuth, requirePermission, userPerms } = require('../../middleware/auth');
+const { auditRead } = require('../../middleware/audit');
 const service = require('./service');
 
 const MOBILE_HEAD = [
@@ -34,7 +35,22 @@ function register(app) {
   app.get('/api/m/snapshot', requireAuth, requirePermission('mobile.access'), async (req, res) => {
     try {
       res.set('Cache-Control', 'no-store');
-      res.json(await service.snapshot());
+      res.json(await service.snapshot(await userPerms(req)));
+    } catch (e) { res.status(500).json({ error: e.message }); }
+  });
+
+  // One resident's card. It shows their latest UA result and, for clinical
+  // staff, clinical headlines, so every view is written to the access log the
+  // way the desktop's record reads are.
+  app.get('/api/m/residents/:id', requireAuth, requirePermission('mobile.access'), async (req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      const id = parseInt(req.params.id, 10);
+      const card = Number.isInteger(id) ? await service.residentCard(id, await userPerms(req)) : null;
+      if (!card) return res.status(404).json({ error: 'Resident not found' });
+      const { parts, ...body } = card;
+      await auditRead(req, 'clients', id, `Resident card (mobile): ${body.resident.name}`, { parts });
+      res.json(body);
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
 

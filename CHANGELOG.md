@@ -2,6 +2,30 @@
 
 ---
 
+## Unreleased — Mobile app: residents, staff directory, announcements (2026-09-27)
+
+Step 3 of the mobile rewrite.
+
+### Added
+
+- **Residents tab.** The whole roster with search, status filters and floors; each row shows
+  when a resident on a pass is due back and whether a UA has been requested. The census
+  tiles on Home open the list filtered to that status.
+- **Resident card.** Room, admission date, status; today's pass, chore and mail; last UA
+  result and open infractions; and a button to request a UA. Staff with clinical permissions
+  also see **clinical headlines, read-only**: treatment plan status and review date, the last
+  note's type, date and signature, the last assessment, and the next milestone — never a
+  note's content or a plan's goals. Each section needs the same permission its desktop screen
+  does, and the server leaves out what the caller can't see. Every card opened is written to
+  the audit log as a record read.
+- **Staff directory** (More): grouped as on the desktop, with tap to call or text.
+- **Announcements** (More): the last week's, for staff who receive them; staff who can send
+  them can do it from the phone. The latest shows on Home, with a count of new ones.
+- New push alert: **Announcements** — "New announcement from Dana W." and nothing of the
+  message itself, which may mention a resident.
+
+---
+
 ## Unreleased — New mobile app: rounds, install, push alerts (2026-09-27)
 
 Step 2 of the mobile rewrite. The new app runs alongside the classic `/mobile` page.

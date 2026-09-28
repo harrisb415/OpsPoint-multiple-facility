@@ -293,7 +293,10 @@ describe('the /m page', () => {
 
   test('the security policy lets the service worker register', async () => {
     // worker-src once allowed only blob:, which blocks /m-sw.js outright.
-    const r = await request(app).get('/login');
+    // An API route, not a page: without a client build a page errors, and
+    // Express's error response replaces the policy with its own.
+    const r = await request(app).get('/api/me');
+    expect(r.status).toBe(401);
     expect(r.headers['content-security-policy']).toMatch(/worker-src 'self'/);
   });
 });

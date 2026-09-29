@@ -32,7 +32,16 @@ cd client && npm run lint
 # Permission audit: does every action a screen offers get past the server for
 # everyone who can see it? (throwaway DB; exit 1 on conflicts)
 node scripts/perm-audit.cjs
+
+# Settings: every value and where it came from (secrets hidden); --check = would it start?
+node server/cli/opspoint.js settings [--check] [--app central]
+# Regenerate docs/SETTINGS.md after changing server/settings/schema.js (a test checks it)
+node server/cli/opspoint.js settings docs > docs/SETTINGS.md
 ```
+
+**Adding a setting?** Declare it in `server/settings/schema.js`, read it with
+`settings.get('NAME')` (never `process.env` — `tests/settings.test.js` fails on a direct read of
+a declared setting), and regenerate `docs/SETTINGS.md`.
 
 **Adding or changing a button that calls the API?** Add or update its entry in
 `scripts/perm-audit/catalog.cjs`: when the UI shows it, and the requests it sends.
@@ -65,6 +74,34 @@ The digest is a SHA-256 over all git-tracked files (sorted), independent of comm
 | Frontend | React 19 + Vite SPA served from `client/dist/` |
 | Routing | React Router v7 (client-side); Express mirrors routes server-side for direct navigation |
 | Auth state | `GET /api/me` → `AuthContext`; no `window.SESSION` injection |
+
+### Settings (`server/settings/`)
+
+Every setting the facility app, HQ and `bootstrap.js` read from their environment is declared
+once in `server/settings/schema.js` (type, default, secret, scope, per-profile default or
+requirement); `docs/SETTINGS.md` is generated from it. Values come from layers, later wins:
+built-in default → the profile's default → `opspoint.config.json` (app folder, or the file
+`OPSPOINT_CONFIG` names; `none` ignores it) → environment variables (read live). Phase 5 of the
+deployment plan adds the provider's secret store on top.
+
+- **Profiles** (`OPSPOINT_PROFILE`): `windows-local`, `linux-local` (inferred from the platform
+  when unset, with the historical defaults), `azure`, `aws`, `gcp` (managed: Postgres, trust 1
+  proxy hop, `OPSPOINT_UPDATES=platform`), `docker`.
+- **Startup check**: `server.js` and `central/server.js` call `settings.startupCheck()` first
+  thing (only when run directly). Errors print `OpsPoint can't start: <one sentence>` and exit
+  78 before any folder, key or database exists; `bootstrap.js` stops instead of relaunching.
+  Warnings print and startup continues. TZ: a real IANA zone; unset only if the machine's zone
+  isn't UTC; required on managed/docker.
+- `settings.get(name)` throws `SettingsError` on a value that doesn't parse — never falls back.
+  HQ code uses `require('../server/settings').forApp('central')`; `central/server.js` calls
+  `useApp('central')` so shared modules (connection.js, pg.js) resolve in HQ's scope. In the
+  file, the top level is the facility's and a `"central"` object holds HQ's own values (its PORT).
+- `OPSPOINT_UPDATES=platform`: `GET /api/update/status` returns `mode:'platform'` + `message`,
+  and check/apply/rollback answer 409; Admin → System shows the message instead of the buttons,
+  and HQ auto-rollouts are skipped.
+- Tests run with `OPSPOINT_CONFIG=none` (`tests/setup-env.js`, jest `setupFiles`), as do
+  `scripts/perm-audit.cjs` and schema-parity's SQLite side, so a developer's settings file can
+  never hand them a real database.
 
 ### Server (`server.js`)
 
@@ -334,6 +371,10 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | File | Purpose |
 |------|---------|
 | `server.js` | All routes, WS logic, auth, CSRF, rate limiting |
+| `server/settings/schema.js` | Every setting and the six deployment profiles, declared once |
+| `server/settings/index.js` | Layered values (`get`), the startup check (`startupCheck`) |
+| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `keys` |
+| `docs/SETTINGS.md` | Generated from the schema — do not edit by hand |
 | `db.js` | Database layer — schema, migrations, queries, photo storage |
 | `client/src/App.jsx` | Route tree, auth guards, mobile redirect |
 | `client/src/contexts/AuthContext.jsx` | Session state |

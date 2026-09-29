@@ -48,8 +48,10 @@ server/
 
 - `realtime/broadcast.js` — ~75 call sites call `broadcast({...})`; the transport
   is swappable to a pub/sub backplane for multi-instance deploys.
-- `config.js` — every path/secret/knob reads from env with the old hard-coded
-  value as fallback, so single-box installs are byte-for-byte unchanged.
+- `settings/` + `config.js` — every path/secret/knob is declared once in
+  `settings/schema.js` (its default is the old hard-coded value, so single-box
+  installs are unchanged), layered from the deployment profile, the settings
+  file and env, and checked at startup. See docs/SETTINGS.md.
 - (planned) `storage/photoStore.js` — local-disk photo I/O behind an interface so
   blobs can move to object storage.
 

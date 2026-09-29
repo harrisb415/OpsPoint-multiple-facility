@@ -11,6 +11,7 @@
  */
 'use strict';
 const connection = require('../server/db/connection'); // same driver dispatcher as the facility
+const settings   = require('../server/settings').forApp('central'); // CENTRAL_DATABASE_URL, CENTRAL_ADMIN_PW
 const fs       = require('fs');
 const path     = require('path');
 const crypto   = require('crypto');
@@ -34,19 +35,19 @@ async function init(dbPath) {
     // Required, with no fallback: the driver would otherwise drop back to
     // DATABASE_URL and quietly create the HQ tables inside the FACILITY
     // database. Two stores that are meant to be independent, silently merged.
-    if (!process.env.CENTRAL_DATABASE_URL) {
+    if (!settings.get('CENTRAL_DATABASE_URL')) {
       throw new Error(
         'OPSPOINT_DB_DRIVER=pg requires CENTRAL_DATABASE_URL for the HQ server. ' +
         'Central uses its own database (opscentral), not the facility one.');
     }
-    _db = connection.open(process.env.CENTRAL_DATABASE_URL);
+    _db = connection.open(settings.get('CENTRAL_DATABASE_URL'));
     console.log('  Central DB: Postgres');
   } else {
     // Same trap as the facility's driver guard (db.js): SQLite would create an
     // empty HQ database on the spot and every facility, account and release
     // would appear gone. CENTRAL_DATABASE_URL still being set means the .env
     // only lost its driver line.
-    if (!fs.existsSync(dbPath) && process.env.CENTRAL_DATABASE_URL) {
+    if (!fs.existsSync(dbPath) && settings.get('CENTRAL_DATABASE_URL')) {
       throw new Error(
         'Refusing to start HQ on a new, empty SQLite database: CENTRAL_DATABASE_URL is set but ' +
         'OPSPOINT_DB_DRIVER is not "pg". Set OPSPOINT_DB_DRIVER=pg and restart.');
@@ -268,11 +269,11 @@ async function _seedDefaults() {
 
   const cnt = await _q1('SELECT COUNT(*) AS c FROM central_users');
   if (!cnt || cnt.c === 0) {
-    const pw = process.env.CENTRAL_ADMIN_PW || _randPw();
+    const pw = settings.get('CENTRAL_ADMIN_PW') || _randPw();
     const { hash, salt } = _hashPw(pw);
     await _run(`INSERT INTO central_users (username,display_name,role,hash,salt,must_change_pw)
           VALUES ('admin','HQ Administrator','admin',?,?,1)`, [hash, salt]);
-    if (!process.env.CENTRAL_ADMIN_PW) {
+    if (!settings.get('CENTRAL_ADMIN_PW')) {
       console.log('\n  ╔══════════════════════════════════════════════╗');
       console.log('  ║  CENTRAL FIRST-RUN ADMIN (change on login)   ║');
       console.log('  ╠══════════════════════════════════════════════╣');

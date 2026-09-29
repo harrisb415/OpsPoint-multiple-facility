@@ -8,6 +8,7 @@
  * phone is not a place for PHI. The alert only says where to look.
  */
 const config = require('../../config');
+const settings = require('../../settings');
 const db = require('../../../db');
 const webpush = require('../../lib/webpush');
 const repo = require('./repository');
@@ -40,12 +41,17 @@ let _keys;          // undefined = not tried yet
 let _keyError = null;
 function keys() {
   if (_keys !== undefined) return _keys;
-  try { _keys = webpush.loadKeys(config.DATA_DIR); }
+  try {
+    _keys = webpush.loadKeys(config.DATA_DIR, {
+      VAPID_PUBLIC_KEY: settings.get('VAPID_PUBLIC_KEY') || undefined,
+      VAPID_PRIVATE_KEY: settings.get('VAPID_PRIVATE_KEY') || undefined,
+    });
+  }
   catch (e) { _keys = null; _keyError = e.message; }
   return _keys;
 }
 function subject() {
-  return process.env.VAPID_SUBJECT || 'mailto:opspoint@localhost';
+  return settings.get('VAPID_SUBJECT');
 }
 function status() {
   const k = keys();

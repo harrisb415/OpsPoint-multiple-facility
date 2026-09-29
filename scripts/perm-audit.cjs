@@ -24,6 +24,7 @@ const fs = require('fs');
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'opspoint_permaudit_'));
 const TMP_DB = path.join(TMP_DIR, 'audit.db');
 delete process.env.DATABASE_URL;
+process.env.OPSPOINT_CONFIG = 'none';   // nor a settings file's database, profile or folders
 process.env.OPSPOINT_DB_DRIVER = 'sqlite';
 process.env.OPSPOINT_DATA = TMP_DIR;
 process.env.OPSPOINT_DB = TMP_DB;

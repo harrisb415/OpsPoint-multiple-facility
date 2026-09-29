@@ -2242,7 +2242,7 @@ function SystemTab() {
                   : 'Off — this facility manages its own accounts. Your local admin always stays in control.'}
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
+            {upd?.mode !== 'platform' && <div className="mt-4 pt-4 border-t border-emerald-200 dark:border-emerald-800">
               <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200 cursor-pointer">
                 <Checkbox checked={!!central.auto_update} disabled={cBusy} onChange={e => centralSetAuto(e.target.checked, cWindow)} />
                 Auto-apply HQ rollout updates
@@ -2259,7 +2259,7 @@ function SystemTab() {
                     </>
                   : 'Off — updates wait for an admin to click Install above. Turn on for hands-off HQ rollouts.'}
               </div>
-            </div>
+            </div>}
           </div>
         ) : (
           <div className="max-w-md space-y-3">
@@ -2280,7 +2280,7 @@ function SystemTab() {
 
       {/* Software Updates */}
       <Section title="Software Updates"
-        right={!busy ? <Button size="xs" color="light" onClick={check} isProcessing={checking} disabled={checking}>{checking ? 'Checking…' : 'Check for Updates'}</Button> : null}>
+        right={!busy && upd?.mode !== 'platform' ? <Button size="xs" color="light" onClick={check} isProcessing={checking} disabled={checking}>{checking ? 'Checking…' : 'Check for Updates'}</Button> : null}>
         <div className="flex items-center gap-2 mb-3 flex-wrap">
           <span className="text-sm text-gray-500 dark:text-gray-400">Current version</span>
           <span className="font-mono font-bold text-gray-800 dark:text-white">v{cur}</span>
@@ -2289,7 +2289,9 @@ function SystemTab() {
 
         {checkErr && <Alert color="failure" className="mb-3">{checkErr}</Alert>}
 
-        {progress && progress.phase !== 'idle' ? (
+        {upd?.mode === 'platform' ? (
+          <Alert color="info">{upd.message}</Alert>
+        ) : progress && progress.phase !== 'idle' ? (
           <div className="mb-3">
             {progress.phase === 'error' ? (
               <Alert color="failure">

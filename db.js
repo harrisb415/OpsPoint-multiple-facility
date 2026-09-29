@@ -9,6 +9,7 @@ const crypto = require('crypto');
 const migrate    = require('./server/db/migrate');    // schema DDL + column migrations
 const connection = require('./server/db/connection'); // better-sqlite3 handle + primitives
 const { localDate } = require('./server/lib/time');   // local calendar day (not the UTC one)
+const settings   = require('./server/settings');       // DATABASE_URL, for the driver guard
 
 let _db     = null;
 let _dbPath = null;
@@ -192,7 +193,7 @@ function _pgMarker() { return path.join(require('./server/config').DATA_DIR, '.d
 function _guardAgainstEmptySqlite(dbPath) {
   if (connection.isPg || fs.existsSync(dbPath)) return;
   let why = null;
-  if (process.env.DATABASE_URL) why = 'DATABASE_URL is set';
+  if (settings.get('DATABASE_URL')) why = 'DATABASE_URL is set';
   else if (fs.existsSync(dbPath + '.pre-pg')) why = `${path.basename(dbPath)}.pre-pg exists (this install was migrated to Postgres)`;
   else { try { if (fs.readFileSync(_pgMarker(), 'utf8').trim() === 'pg') why = `${_pgMarker()} says this install runs on Postgres`; } catch (e) { /* no marker */ } }
   if (!why) return;
@@ -212,7 +213,7 @@ async function init(dbPath) {
     // Says where it actually connected — it used to print "Created opspoint.db"
     // under Postgres, naming a SQLite file it never touched.
     let target = 'DATABASE_URL';
-    try { const u = new URL(process.env.DATABASE_URL); target = `${u.hostname}/${u.pathname.replace(/^\//, '')}`; } catch (e) { /* keep generic */ }
+    try { const u = new URL(settings.get('DATABASE_URL')); target = `${u.hostname}/${u.pathname.replace(/^\//, '')}`; } catch (e) { /* keep generic */ }
     console.log('  DB: Postgres', target);
     try { fs.mkdirSync(path.dirname(_pgMarker()), { recursive: true }); fs.writeFileSync(_pgMarker(), 'pg\n'); } catch (e) { /* best effort */ }
   } else {

@@ -27,13 +27,10 @@
  *   rather than silently doing nothing; backups there are pg_dump's job, run on
  *   the database host.
  */
-const DRIVER = (process.env.OPSPOINT_DB_DRIVER || 'sqlite').toLowerCase();
-
-if (DRIVER !== 'sqlite' && DRIVER !== 'pg') {
-  throw new Error(
-    `OPSPOINT_DB_DRIVER must be 'sqlite' or 'pg' (got '${DRIVER}'). ` +
-    'Refusing to guess which database to open.');
-}
+// server/settings throws on anything but sqlite or pg (after the profile's
+// default: pg on the managed and docker profiles) — it refuses to guess which
+// database to open.
+const DRIVER = require('../settings').get('OPSPOINT_DB_DRIVER');
 
 const impl = DRIVER === 'pg'
   ? require('./drivers/pg')

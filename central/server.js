@@ -11,6 +11,12 @@
  * the API key travels over the network, so TLS (or a VPN) is mandatory.
  */
 'use strict';
+// Settings first (server/settings), in HQ's scope: its own port, data folder
+// and database. A missing or contradictory one stops HQ here, with one
+// sentence, before anything is created.
+const settingsModule = require('../server/settings');
+const settings = settingsModule.useApp('central');
+if (require.main === module) settingsModule.startupCheck(settings);
 const express = require('express');
 const session = require('express-session');
 const path    = require('path');
@@ -19,8 +25,8 @@ const http    = require('http');
 const https   = require('https');
 const db      = require('./db');
 
-const PORT     = parseInt(process.env.PORT || '4000', 10);
-const DATA_DIR = process.env.CENTRAL_DATA || path.join(__dirname, 'data');
+const PORT     = settings.get('PORT');
+const DATA_DIR = settings.get('CENTRAL_DATA');
 
 // Async under both drivers. A top-level `await` here would make this file an
 // ESM graph that require() refuses to load, so the promise is held and every
@@ -566,7 +572,7 @@ if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
 // Same reasoning as the facility server: default to every interface so an
 // on-premise HQ is reachable on its LAN, but let a hosted box behind nginx set
 // CENTRAL_BIND=127.0.0.1 so a firewall mistake cannot expose it directly.
-const BIND_ADDR = process.env.CENTRAL_BIND || '0.0.0.0';
+const BIND_ADDR = settings.get('CENTRAL_BIND');
 // Bind only once the schema is applied and the session secret is loaded —
 // every route below queries the database, so accepting connections earlier
 // would serve errors during startup rather than simply not answering yet.

@@ -2,6 +2,46 @@
 
 ---
 
+## Unreleased — Settings: one schema, deployment profiles, a startup check (2026-09-29)
+
+Roadmap phase 1 of the deployment plan (OpsPoint on Windows, Linux, Docker and the Azure, AWS
+and Google Cloud managed platforms from one release).
+
+- **Every setting is declared once**, in `server/settings/schema.js`: its type, default, whether
+  it is secret, and which kinds of deployment need it. The code reads settings only through
+  `server/settings` (a test fails on a direct `process.env` read of one), and
+  `docs/SETTINGS.md` is generated from the schema (a test fails when they differ).
+- **Values come from layers**, later wins: built-in default, the profile's default,
+  `opspoint.config.json` (in the app folder, or the file `OPSPOINT_CONFIG` names), environment
+  variables. A `TZ` given in the file is applied to the process at start.
+- **Six profiles** (`OPSPOINT_PROFILE`): `windows-local`, `linux-local`, `azure`, `aws`, `gcp`,
+  `docker`. Unset, it is `windows-local` on Windows and `linux-local` elsewhere, with the defaults
+  every install already had. The managed profiles default to Postgres, trust one load-balancer
+  hop, and switch the in-app updater off (`OPSPOINT_UPDATES=platform`: Admin > System says
+  updates arrive from the platform, and the update routes refuse); docker likewise, with its proxy
+  on the private Docker network.
+- **A startup check.** `server.js` and HQ stop before creating a folder, a key or a database when
+  a setting is missing or contradictory, with one sentence naming the fix and exit code 78
+  (`bootstrap.js` doesn't relaunch into it). It checks types, profile requirements (managed
+  platforms need `SESSION_SECRET` and the push keys in their settings, since their disk is wiped),
+  values a profile can't use (SQLite on a managed platform), the time zone (a real zone, never an
+  implicit UTC clock, and `PGTZ` agreeing with `TZ`), a push key pair that really is one pair,
+  Postgres TLS on managed platforms, HQ's database not being the facility's, and misspelt keys in
+  the settings file. It warns about unknown `OPSPOINT_*` variables and plaintext database traffic
+  to another host.
+- **`node server/cli/opspoint.js`**: `settings` (every value and where it came from, secrets
+  hidden), `settings --check`, `settings docs`, and `keys` (a new session secret and push key pair).
+- Stricter reading of three values that used to be guessed: `OPSPOINT_TRUST_PROXY=1` is now one
+  hop (Express read it as the address 0.0.0.1), `OPSPOINT_ENCRYPT` takes only 1 or 0 (`false`
+  used to mean encrypted), and `PGSSLMODE` must be `disable`, `require`, `verify-ca` or
+  `verify-full`. The browser opens at start only on `windows-local`.
+- Tests: `tests/settings.test.js`, `tests/settings.startup.test.js` (real processes: exit 78
+  before anything is created, the file's TZ reaching the clock, bootstrap not relaunching),
+  `tests/updates.platform.test.js`. Jest now runs with `OPSPOINT_CONFIG=none`
+  (`tests/setup-env.js`), and so do the permission audit and schema parity's SQLite side.
+
+---
+
 ## v2.7.0 — Phone app, voids instead of deletes, Postgres (2026-09-28)
 
 **Highlights**

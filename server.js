@@ -3,6 +3,11 @@
  * SQLite + HTTPS + Session Auth + Role-based access
  */
 'use strict';
+// Settings come first: a missing or contradictory one stops the server here,
+// with one sentence, before this file creates a data folder, a key or a
+// database (server/settings; every setting is declared in its schema.js).
+const settings = require('./server/settings');
+if (require.main === module) settings.startupCheck();
 const http    = require('http');
 const https   = require('https');
 const express = require('express');
@@ -258,14 +263,26 @@ const updater = createUpdater({
   },
 });
 
+// OPSPOINT_UPDATES=platform (the managed and docker profiles): new versions
+// arrive as a new image or deployment, which replaces these files anyway, so
+// the in-app updater stays switched off and Admin says why.
+const UPDATES_BY_PLATFORM = settings.get('OPSPOINT_UPDATES') === 'platform';
+const PLATFORM_UPDATES = 'Updates on this deployment arrive as new versions from the hosting platform, not through this page.';
+function inAppUpdatesOnly(req, res, next) {
+  if (UPDATES_BY_PLATFORM) return res.status(409).json({ error: PLATFORM_UPDATES });
+  next();
+}
+
 app.get('/api/update/status', requireAuth, requirePermission('admin.system'), (req,res)=>{
-  res.json(updater.status());
+  res.json(UPDATES_BY_PLATFORM
+    ? { ...updater.status(), mode: 'platform', message: PLATFORM_UPDATES }
+    : { ...updater.status(), mode: 'in-app' });
 });
-app.post('/api/update/check', requireAuth, csrfCheck, requirePermission('admin.system'), async (req,res)=>{
+app.post('/api/update/check', requireAuth, csrfCheck, requirePermission('admin.system'), inAppUpdatesOnly, async (req,res)=>{
   try { const r = await updater.check(); res.json(r); }
   catch(e){ res.status(502).json({error:(e&&e.message)||'Check failed'}); }
 });
-app.post('/api/update/apply', requireAuth, csrfCheck, requirePermission('admin.system'), async (req,res)=>{
+app.post('/api/update/apply', requireAuth, csrfCheck, requirePermission('admin.system'), inAppUpdatesOnly, async (req,res)=>{
   const st = updater.status();
   if (st.progress && st.progress.applying) return res.status(409).json({error:'An update is already in progress'});
   const actor = req.session.displayName || req.session.username || 'admin';
@@ -276,7 +293,7 @@ app.post('/api/update/apply', requireAuth, csrfCheck, requirePermission('admin.s
 app.get('/api/update/backups', requireAuth, requirePermission('admin.system'), (req,res)=>{
   res.json(updater.backups());
 });
-app.post('/api/update/rollback', requireAuth, csrfCheck, requirePermission('admin.system'), async (req,res)=>{
+app.post('/api/update/rollback', requireAuth, csrfCheck, requirePermission('admin.system'), inAppUpdatesOnly, async (req,res)=>{
   const actor = req.session.displayName || req.session.username || 'admin';
   try { const r = await updater.rollback(actor); res.json(r); }
   catch(e){ res.status(400).json({error:(e&&e.message)||'Rollback failed'}); }
@@ -481,6 +498,7 @@ async function _inUpdateWindow() {
 }
 const _autoTried = new Set();   // versions attempted this process (avoid tight retry loops)
 async function _maybeAutoUpdate(d) {
+  if (UPDATES_BY_PLATFORM) return;                                      // the platform ships new versions
   if (!d || !d.version || d.apply !== 'auto') return;
   if (!await db.getSetting('central_auto_update', false)) return;       // opt-in per facility
   if (d.version === _appVersion || _autoTried.has(d.version)) return;
@@ -632,8 +650,12 @@ if (require.main === module) (async ()=>{
     console.log(`  Admin:    ${proto}://localhost:${PORT}/admin`);
     console.log('══════════════════════════════════════════════');
     console.log('══════════════════════════════════════════════\n');
-    const{exec}=require('child_process');
-    setTimeout(()=>exec(`start ${proto}://localhost:${PORT}`),1200);
+    // A browser on this machine (windows-local's default): pointless on a
+    // server or in a container, so every other profile leaves it off.
+    if (settings.get('OPSPOINT_OPEN_BROWSER')) {
+      const{exec}=require('child_process');
+      setTimeout(()=>exec(`start ${proto}://localhost:${PORT}`),1200);
+    }
   });
 
   // Multi-facility sync agent — drain the outbox to HQ shortly after boot, then

@@ -31,6 +31,7 @@
  *      date(created_at) mean the same local time on both sides.
  */
 const { Pool, types } = require('pg');
+const settings = require('../../settings');
 
 // ── Type parsers ─────────────────────────────────────────────────────────────
 // Stay text: calendar dates ('YYYY-MM-DD', what the date inputs speak),
@@ -57,9 +58,13 @@ types.setTypeParser(1184, (v) => {
 });
 
 // The zone each session runs in: PGTZ if set, else the process's own (TZ).
-// Only IANA-shaped names get through, since it becomes a startup option.
+// Only IANA-shaped names get through, since it becomes a startup option; a
+// PGTZ that isn't a zone at all is refused by the startup check, and never
+// reaches Postgres from here either.
 function sessionTimeZone() {
-  const tz = process.env.PGTZ || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  let pgtz;
+  try { pgtz = settings.get('PGTZ'); } catch (e) { return 'UTC'; }
+  const tz = pgtz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   return /^[A-Za-z0-9_+\-/]{1,64}$/.test(tz) ? tz : 'UTC';
 }
 
@@ -162,21 +167,24 @@ function withReturning(sql) {
  */
 function open(dsn) {
   const looksLikeDsn = typeof dsn === 'string' && /^postgres(ql)?:\/\//i.test(dsn);
-  _dsn = (looksLikeDsn ? dsn : null) || process.env.DATABASE_URL || null;
+  _dsn = (looksLikeDsn ? dsn : null) || settings.get('DATABASE_URL') || null;
   if (!_dsn) {
     throw new Error(
       'OPSPOINT_DB_DRIVER=pg but no connection string was given. Set DATABASE_URL ' +
       '(and CENTRAL_DATABASE_URL for the HQ server), or pass a postgres:// URL to open().');
   }
-  const ssl = process.env.PGSSLMODE === 'disable'
+  // PGSSLMODE defaults to verify-full; only an explicit disable or require relaxes it.
+  const sslMode = settings.get('PGSSLMODE');
+  const rootCert = settings.get('PGSSLROOTCERT');
+  const ssl = sslMode === 'disable'
     ? false
-    : { rejectUnauthorized: process.env.PGSSLMODE !== 'require',
-        ca: process.env.PGSSLROOTCERT ? require('fs').readFileSync(process.env.PGSSLROOTCERT, 'utf8') : undefined };
+    : { rejectUnauthorized: sslMode !== 'require',
+        ca: rootCert ? require('fs').readFileSync(rootCert, 'utf8') : undefined };
 
   _pool = new Pool({
     connectionString: _dsn ? withSessionTimeZone(_dsn) : undefined,
     ssl,
-    max: parseInt(process.env.PGPOOL_MAX, 10) || 10,
+    max: settings.get('PGPOOL_MAX'),
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     application_name: 'opspoint',

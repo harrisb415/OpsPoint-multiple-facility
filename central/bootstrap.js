@@ -9,11 +9,34 @@ const fs = require('fs');
 const path = require('path');
 
 const BASE = process.env.OPSPOINT_BOOTSTRAP_BASE || __dirname;
-const DATA = process.env.OPSPOINT_BOOTSTRAP_DATA || process.env.CENTRAL_DATA || path.join(BASE, 'data');
+
+// HQ's port and data folder may come from the settings file too: its "central"
+// object, or CENTRAL_DATA at the top level (docs/SETTINGS.md). Read without
+// requiring server/settings, like the facility's bootstrap.js; env wins.
+function fileSettings() {
+  const named = process.env.OPSPOINT_CONFIG;
+  if (named && named.trim().toLowerCase() === 'none') return {};
+  try {
+    const j = JSON.parse(fs.readFileSync(named ? path.resolve(named) : path.join(BASE, '..', 'opspoint.config.json'), 'utf8').replace(/^\uFEFF/, ''));
+    if (!j || typeof j !== 'object' || Array.isArray(j)) return {};
+    const c = j.central && typeof j.central === 'object' ? j.central : {};
+    return { CENTRAL_DATA: j.CENTRAL_DATA, ...c };
+  } catch (e) { return {}; }
+}
+const FILE = fileSettings();
+function setting(name) {
+  const e = process.env[name];
+  if (e !== undefined && e !== '') return e;
+  const f = FILE[name];
+  return f === undefined || f === null || f === '' ? undefined : String(f);
+}
+
+const DATA = process.env.OPSPOINT_BOOTSTRAP_DATA || setting('CENTRAL_DATA') || path.join(BASE, 'data');
 const ENTRY = process.env.OPSPOINT_BOOTSTRAP_ENTRY || path.join(BASE, 'server.js');
-const PORT = parseInt(process.env.PORT || '4000', 10);
+const PORT = parseInt(setting('PORT') || '4000', 10);
 const HEALTH_PATH = process.env.OPSPOINT_HEALTH_PATH || '/api/health';
 const VERIFY_TIMEOUT = parseInt(process.env.OPSPOINT_VERIFY_TIMEOUT || '90000', 10);
+const EX_CONFIG = 78;   // HQ refused to start over a setting: relaunching can't fix that
 const UP_DIR = path.join(DATA, 'updates');
 const PENDING = path.join(UP_DIR, 'pending-verify.json');
 
@@ -82,6 +105,7 @@ async function supervise() {
     }
     const code = await new Promise((r) => child.once('exit', (c) => r(c)));
     if (readPending()) { continue; }
+    if (code === EX_CONFIG) { log('HQ refused to start: a setting needs fixing (the reason is printed above). Not relaunching.'); process.exit(EX_CONFIG); }
     const now = Date.now(); crashes = crashes.filter((t) => now - t < 60000); crashes.push(now);
     if (crashes.length >= 5) { log('server exited ' + crashes.length + 'x in 60s (last code ' + code + ') — stopping to avoid a crash loop.'); process.exit(1); }
     log('server exited (code ' + code + ') — relaunching');

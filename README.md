@@ -117,6 +117,23 @@ To run without encryption (leaves an existing plaintext database alone):
 OPSPOINT_ENCRYPT=0 node server.js
 ```
 
+### Settings
+
+With no settings at all, OpsPoint runs as before: SQLite in `data/`, port 3000. Anything else is
+set with environment variables or an `opspoint.config.json` file in the app folder (never
+committed; the environment wins over the file). `OPSPOINT_PROFILE` picks the defaults for a kind of
+deployment: `windows-local`, `linux-local`, `azure`, `aws`, `gcp` or `docker`. Every setting, its
+default and the profiles that require it are listed in [`docs/SETTINGS.md`](./docs/SETTINGS.md).
+
+A missing or contradictory setting stops the server with one sentence saying what to fix. The
+facility's time zone is required: set `TZ` (for example `TZ=America/Chicago`) unless the machine's
+own clock is already in it; a server on UTC files evening entries under the next day.
+
+```bash
+node server/cli/opspoint.js settings           # every value and where it came from (secrets hidden)
+node server/cli/opspoint.js settings --check   # would OpsPoint start? exit 78 and the reasons if not
+```
+
 ---
 
 ## Development

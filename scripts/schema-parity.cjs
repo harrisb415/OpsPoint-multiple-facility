@@ -60,15 +60,20 @@ function sqliteSchema(which) {
   // A clean environment: the child must run SQLite no matter what the parent's
   // driver settings are, so the pg variables (and the driver guard's evidence)
   // are stripped.
-  const env = { ...process.env, OPSPOINT_DB_DRIVER: 'sqlite' };
-  delete env.DATABASE_URL; delete env.CENTRAL_DATABASE_URL;
+  const env = { ...process.env, OPSPOINT_DB_DRIVER: 'sqlite', OPSPOINT_CONFIG: 'none' };
+  delete env.DATABASE_URL; delete env.CENTRAL_DATABASE_URL; delete env.OPSPOINT_PROFILE;
   const out = execFileSync(process.execPath, [__filename, '--dump', which], { env, maxBuffer: 32 << 20 }).toString();
   return JSON.parse(out.slice(out.indexOf('@@SCHEMA') + 8));
 }
 
 async function pgSchema(url) {
   const { Client } = require('pg');
-  const c = new Client({ connectionString: url, ssl: process.env.PGSSLMODE === 'disable' ? false : undefined });
+  // The same TLS rule as the app's driver (server/db/drivers/pg.js).
+  const settings = require('../server/settings');
+  const mode = settings.get('PGSSLMODE'), ca = settings.get('PGSSLROOTCERT');
+  const ssl = mode === 'disable' ? false
+    : { rejectUnauthorized: mode !== 'require', ca: ca ? fs.readFileSync(ca, 'utf8') : undefined };
+  const c = new Client({ connectionString: url, ssl });
   await c.connect();
   const { rows } = await c.query(`
     SELECT c.table_name, c.column_name, c.is_nullable = 'NO' AS notnull, c.column_default AS dflt, c.is_identity = 'YES' AS identity
@@ -96,7 +101,10 @@ function compare(label, S, P) {
 }
 
 (async () => {
-  const targets = [['facility', process.env.DATABASE_URL], ['central', process.env.CENTRAL_DATABASE_URL]];
+  // From the environment or the settings file, like the apps themselves.
+  const settings = require('../server/settings');
+  const targets = [['facility', settings.forApp('facility').get('DATABASE_URL')],
+                   ['central', settings.forApp('central').get('CENTRAL_DATABASE_URL')]];
   let failed = false;
   for (const [which, url] of targets) {
     if (!url) { console.log(`${which}: skipped (no ${which === 'facility' ? 'DATABASE_URL' : 'CENTRAL_DATABASE_URL'})`); continue; }

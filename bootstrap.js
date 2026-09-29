@@ -19,17 +19,46 @@
  *   OPSPOINT_BOOTSTRAP_ENTRY  server entry (default: <base>/server.js)
  *   OPSPOINT_DATA             data dir (default: <base>/data)
  *   PORT, OPSPOINT_HEALTH_PATH, OPSPOINT_VERIFY_TIMEOUT
+ * OPSPOINT_DATA, PORT and the last two may also come from opspoint.config.json
+ * (see docs/SETTINGS.md); the environment wins, as it does for the server.
+ *
+ * A server that exits with code 78 refused to start over a setting: that is
+ * printed, and the supervisor stops rather than relaunching into it forever.
  */
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const BASE = process.env.OPSPOINT_BOOTSTRAP_BASE || __dirname;
-const DATA = process.env.OPSPOINT_DATA || path.join(BASE, 'data');
+
+// The settings file (opspoint.config.json, or the file OPSPOINT_CONFIG names)
+// can move the port or the data folder, and the health probe has to follow it.
+// Read here without requiring server/settings: the supervisor must keep
+// working even when an update broke that code. The environment still wins.
+function fileSettings() {
+  const named = process.env.OPSPOINT_CONFIG;
+  if (named && named.trim().toLowerCase() === 'none') return {};
+  try {
+    const j = JSON.parse(fs.readFileSync(named ? path.resolve(named) : path.join(BASE, 'opspoint.config.json'), 'utf8').replace(/^\uFEFF/, ''));
+    return j && typeof j === 'object' && !Array.isArray(j) ? j : {};
+  } catch (e) { return {}; }
+}
+const FILE = fileSettings();
+function setting(name) {
+  const e = process.env[name];
+  if (e !== undefined && e !== '') return e;
+  const f = FILE[name];
+  return f === undefined || f === null || f === '' ? undefined : String(f);
+}
+
+const DATA = setting('OPSPOINT_DATA') || path.join(BASE, 'data');
 const ENTRY = process.env.OPSPOINT_BOOTSTRAP_ENTRY || path.join(BASE, 'server.js');
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const HEALTH_PATH = process.env.OPSPOINT_HEALTH_PATH || '/api/health';
-const VERIFY_TIMEOUT = parseInt(process.env.OPSPOINT_VERIFY_TIMEOUT || '90000', 10);
+const PORT = parseInt(setting('PORT') || '3000', 10);
+const HEALTH_PATH = setting('OPSPOINT_HEALTH_PATH') || '/api/health';
+const VERIFY_TIMEOUT = parseInt(setting('OPSPOINT_VERIFY_TIMEOUT') || '90000', 10);
+// server.js exits with this when a setting is missing or contradictory
+// (server/settings EX_CONFIG): relaunching can't fix that, so stop.
+const EX_CONFIG = 78;
 const UP_DIR = path.join(DATA, 'updates');
 const PENDING = path.join(UP_DIR, 'pending-verify.json');
 
@@ -113,6 +142,10 @@ async function supervise() {
     // Supervise until the child exits (normal restart, update-exit, or crash).
     const code = await new Promise((r) => child.once('exit', (c) => r(c)));
     if (readPending()) { continue; } // an update just applied → relaunch + verify
+    if (code === EX_CONFIG) {
+      log('server refused to start: a setting needs fixing (the reason is printed above). Not relaunching.');
+      process.exit(EX_CONFIG);
+    }
     const now = Date.now(); crashes = crashes.filter((t) => now - t < 60000); crashes.push(now);
     if (crashes.length >= 5) { log('server exited ' + crashes.length + 'x in 60s (last code ' + code + ') — stopping to avoid a crash loop.'); process.exit(1); }
     log('server exited (code ' + code + ') — relaunching');
@@ -120,6 +153,6 @@ async function supervise() {
   }
 }
 
-module.exports = { healthOnce, waitHealthy, restoreBackup, readPending, clearPending };
+module.exports = { healthOnce, waitHealthy, restoreBackup, readPending, clearPending, PORT, DATA, HEALTH_PATH, VERIFY_TIMEOUT };
 
 if (require.main === module) supervise();

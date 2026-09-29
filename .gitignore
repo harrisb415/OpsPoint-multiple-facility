@@ -49,6 +49,10 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# The settings file (docs/SETTINGS.md). It can hold DATABASE_URL, SESSION_SECRET
+# and the push keys, so it is never tracked.
+opspoint.config.json
+
 # Database credentials (Postgres migration). The DSN carries the password for
 # the `opspoint` role, so this must never be tracked. Loaded explicitly by the
 # service manager — there is no dotenv in this project, nothing reads it

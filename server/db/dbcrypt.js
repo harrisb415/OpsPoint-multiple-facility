@@ -120,7 +120,9 @@ function migratePlaintextToEncrypted(Database, dbPath, key) {
 // Open the database, encrypting it on the way if needed.
 // Returns the open connection.
 function openEncrypted(Database, dbPath) {
-  const enabled = process.env.OPSPOINT_ENCRYPT !== '0';
+  // 1 (the default) or 0; anything else is refused by server/settings rather
+  // than read as either — "false" used to mean encrypted.
+  const enabled = require('../settings').get('OPSPOINT_ENCRYPT');
   const exists  = fs.existsSync(dbPath);
 
   if (!enabled) {

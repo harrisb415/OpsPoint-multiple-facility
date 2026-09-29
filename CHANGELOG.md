@@ -9,7 +9,7 @@
 - **Nobody can delete a UA result.** A mistaken one is **voided**. That takes a reason
   and the new permission **"Void a UA result"** (`ua.void`, Supervisor and Administrator
   by default). The result stays on file, and so does its line in the shift log. Both show
-  struck through, with who voided it, when and why: on the Report tab, the UA tab, the
+  struck through, with who voided it, when (date and time) and why: on the Report tab, the UA tab, the
   resident profile, the resident report, the phone, and in print and the Word export.
   Voided results don't count in the positive/negative totals, the resident's recent
   positive flag, or the phone's "last UA".

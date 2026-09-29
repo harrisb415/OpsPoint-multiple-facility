@@ -1,12 +1,16 @@
 // Shift-log lines: which ones are UA results, and the note a voided UA result
 // carries in every view — the Report tab, print, the Word export, the phone.
 // UA results are never deleted, only voided with a reason.
+import { parseWhen } from './dates.js'
 
 export const isUALine = (e) => /\s—\sUA:/i.test((e && e.text) || '')
 
+// "VOIDED Sep 28, 2026, 5:20 PM by Dana W.: entered for the wrong resident"
 export function voidNote(x) {
   if (!x || !x.voided_at) return ''
-  return `VOIDED${x.voided_by_name ? ` by ${x.voided_by_name}` : ''}: ${x.void_reason || 'no reason given'}`
+  const at = parseWhen(x.voided_at)
+  const when = at ? at.toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''
+  return `VOIDED${when ? ` ${when}` : ''}${x.voided_by_name ? ` by ${x.voided_by_name}` : ''}: ${x.void_reason || 'no reason given'}`
 }
 
 // The line's text as printed or exported: the original words, then the note.

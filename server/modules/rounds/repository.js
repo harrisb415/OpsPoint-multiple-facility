@@ -76,7 +76,7 @@ async function finishRound(id, f) {
       [f.userId, f.userName, f.now, f.notes, f.total, f.missing, id]);
     if (!upd.changes) return null;
     const le = await t.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [f.reportId, f.time, f.text]);
-    await t.run('UPDATE reports SET updated_at=? WHERE id=?', [f.now, f.reportId]);
+    await t.run('UPDATE reports SET updated_at=? WHERE id=?', [f.touched || f.now, f.reportId]);
     await t.run('UPDATE wellness_rounds SET log_entry_id=? WHERE id=?', [le.lastInsertRowid, id]);
     return le.lastInsertRowid;
   });
@@ -92,7 +92,7 @@ async function markFound(roundId, clientId, f) {
       [f.now, f.userName, f.note, roundId, clientId]);
     if (!upd.changes) return null;
     const le = await t.run('INSERT INTO log_entries (report_id,time,text) VALUES (?,?,?)', [f.reportId, f.time, f.text]);
-    await t.run('UPDATE reports SET updated_at=? WHERE id=?', [f.now, f.reportId]);
+    await t.run('UPDATE reports SET updated_at=? WHERE id=?', [f.touched || f.now, f.reportId]);
     return le.lastInsertRowid;
   });
 }

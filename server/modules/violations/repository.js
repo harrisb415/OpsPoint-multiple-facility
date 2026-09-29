@@ -30,10 +30,10 @@ async function getClientName(id) {
   return await c.query1('SELECT client_name FROM violations WHERE id=?', [id]);
 }
 
-async function insert({ client_id, client_name, room, violation_date, description, notes, logged_by }) {
+async function insert({ client_id, client_name, room, violation_date, description, notes, staff_name, logged_by }) {
   const info = await c.run(
-    'INSERT INTO violations (client_id,client_name,room,violation_date,description,notes,logged_by) VALUES (?,?,?,?,?,?,?)',
-    [client_id, client_name, room, violation_date, description, notes, logged_by]
+    'INSERT INTO violations (client_id,client_name,room,violation_date,description,notes,staff_name,logged_by) VALUES (?,?,?,?,?,?,?,?)',
+    [client_id, client_name, room, violation_date, description, notes, staff_name, logged_by]
   );
   return await c.query1('SELECT * FROM violations WHERE id=?', [info.lastInsertRowid]);
 }

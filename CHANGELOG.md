@@ -2,6 +2,71 @@
 
 ---
 
+## Unreleased — The phone keeps working without signal (2026-09-28)
+
+Mobile rewrite step 5: the offline queue.
+
+### Added
+
+- **Rounds and log entries survive dead zones.** On the phone, marking residents on a
+  wellness round, finishing the round, recording a "found" follow-up, logging a
+  walkthrough and adding a log entry no longer need signal. Made without it, they're
+  saved on the phone, shown at once (log lines marked **Waiting to send**) and sent in
+  order when the connection comes back. They survive closing the app, and after the idle
+  sign-out they wait for the PIN or password, then go.
+  - **The original time is kept.** A round mark, a finished round and a "found" are
+    recorded at the moment they were tapped, not when they reached the server (a time in
+    the future, or from before the round started, isn't believed). A late tap loses to a
+    newer one made on another phone meanwhile.
+  - **Nothing is logged twice.** Each queued entry carries a one-time key
+    (`Idempotency-Key`); if the phone resends because the answer was lost, the server
+    replies with the first answer instead of writing again.
+  - **The server has the last word.** An entry it refuses (say the shift was closed in the
+    meantime) isn't dropped: a bar says "1 entry couldn't be sent", and **View** shows it
+    with the reason. A log entry can be sent to the shift open now (**Add to this shift**);
+    anything else can be dismissed.
+- **A bar above the tab bar** says when there's no connection, how many entries are waiting
+  and how old the data on screen is ("Showing what was loaded at 9:41 PM").
+- **Signing out warns first** when entries haven't been sent: signing out on purpose
+  deletes them from the phone.
+
+Starting a round still needs signal (the server hands out the round); once it's started,
+the rest works without it. Other phone actions (UA requests and draws, infractions, the
+"For you" buttons) still need signal and say so.
+
+### Database
+
+- New table `idempotency_keys` (the first answer to each queued write, kept 48 hours).
+  Postgres: `migrations/pg/011_idempotency_keys.sql`, applied before restarting; SQLite
+  creates it itself.
+
+---
+
+## Unreleased — Staff name on infractions (2026-09-28)
+
+### Added
+
+- **Logging an infraction takes a staff name**, typed in like a UA's "Conducted by": on
+  the Infractions tab, the Report tab's ⚠ Infraction button and the phone. It's required.
+  The Infractions list, its print-out, the resident profile and the phone show it (older
+  infractions show the account that logged them). The Report tab's log line ends
+  "— by *staff name*". The signed-in account is still recorded, and the audit log is
+  unchanged.
+
+### Fixed
+
+- **Waiving an infraction on the Infractions tab** failed with "consequence required":
+  the dialog sent the wrong request. (The phone's review sheet was fine.)
+- **The Infractions tab's date** defaulted to tomorrow from 5 PM Pacific on (it used the
+  UTC date).
+
+### Database
+
+- New column `violations.staff_name`. Postgres: `migrations/pg/010_violation_staff_name.sql`,
+  applied before restarting; SQLite adds it itself.
+
+---
+
 ## Unreleased — UA results are voided, never deleted (2026-09-28)
 
 ### Changed

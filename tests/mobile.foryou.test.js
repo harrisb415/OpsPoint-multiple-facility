@@ -65,8 +65,8 @@ beforeAll(async () => {
   expect((await a.put('/api/chore-log').send({ client_id: ids['204'], log_date: TODAY, initials: 'MD' })).status).toBe(200);
 
   // An infraction to review (Alex) and one with a consequence to carry out (Morgan).
-  expect((await a.post('/api/violations').send({ client_id: ids['201'], client_name: 'Alex Rivera', room: '201', violation_date: TODAY, description: 'Late to group' })).status).toBe(200);
-  expect((await a.post('/api/violations').send({ client_id: ids['204'], client_name: 'Morgan Diaz', room: '204', violation_date: TODAY, description: 'Noise' })).status).toBe(200);
+  expect((await a.post('/api/violations').send({ client_id: ids['201'], client_name: 'Alex Rivera', room: '201', violation_date: TODAY, description: 'Late to group', staff_name: 'Sam Staff' })).status).toBe(200);
+  expect((await a.post('/api/violations').send({ client_id: ids['204'], client_name: 'Morgan Diaz', room: '204', violation_date: TODAY, description: 'Noise', staff_name: 'Sam Staff' })).status).toBe(200);
   const v = (await a.get('/api/violations')).body;
   const list = Array.isArray(v) ? v : (v.violations || v.rows || []);
   const morgan = list.find(x => x.client_id === ids['204']);

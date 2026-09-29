@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Button, Spinner } from 'flowbite-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
@@ -6,8 +6,10 @@ import { applyTheme, storeTheme } from '../utils/themes.js'
 import { MobileCtx } from './context.js'
 import { useSnapshot } from './useSnapshot.js'
 import { uiFlags } from './model.js'
+import { createOutbox, withPending } from './outbox.js'
 import { Toaster } from './ui.jsx'
 import TabBar from './TabBar.jsx'
+import OutboxBar from './OutboxBar.jsx'
 import Home from './Home.jsx'
 import Residents from './Residents.jsx'
 import Resident from './Resident.jsx'
@@ -51,12 +53,30 @@ export default function MobileApp() {
     toastTimer.current = setTimeout(() => setToastState(null), tone === 'error' ? 6000 : 3000)
   }, [])
 
+  // Writes made without signal wait in the outbox (outbox.js); the screens
+  // see the snapshot with them laid over.
+  const outbox = useMemo(() => createOutbox(session?.id || 0), [session?.id])
+  const box = useSyncExternalStore(outbox.subscribe, outbox.getState)
+  useEffect(() => {
+    outbox.start({
+      onSettled: reload,
+      onLater: ({ sent, failed }) => {
+        if (failed) toast(`${failed === 1 ? 'A saved entry' : `${failed} saved entries`} couldn’t be sent. See the bar at the bottom.`, 'error')
+        else toast(`Back online: ${sent === 1 ? '1 saved entry' : `${sent} saved entries`} sent.`, 'ok')
+      },
+    })
+    return () => outbox.stop()
+  }, [outbox, toast, reload])
+  useEffect(() => { if (live) outbox.reachable() }, [live, outbox])
+  const offline = useOffline(live, box.net)
+  const view = useMemo(() => (snap ? withPending(snap, box, session?.displayName || '') : null), [snap, box, session?.displayName])
+
   const flags = useMemo(() => (snap ? uiFlags(snap) : null), [snap])
   const value = useMemo(() => ({
-    snap, reload, patchSnap, live, session, toast, installPrompt, flags,
+    snap: view, reload, patchSnap, live, session, toast, installPrompt, flags, outbox, box, offline,
     clearInstallPrompt: () => setInstallPrompt(null),
     hasPerm: (p) => !!session?.permissions?.includes(p),
-  }), [snap, reload, patchSnap, live, session, toast, installPrompt, flags])
+  }), [view, reload, patchSnap, live, session, toast, installPrompt, flags, outbox, box, offline])
 
   return (
     <div className="flex h-dvh flex-col bg-gray-100 font-sans text-gray-900 dark:bg-gray-900 dark:text-gray-100">
@@ -77,6 +97,7 @@ export default function MobileApp() {
               <Route path="*" element={<Navigate to="/m" replace />} />
             </Routes>
           </main>
+          <OutboxBar />
           <TabBar roundsOn={flags.roundsOn} />
           <Toaster toast={toastState} />
         </MobileCtx.Provider>
@@ -94,6 +115,27 @@ export default function MobileApp() {
       )}
     </div>
   )
+}
+
+// No connection: the phone says so, the last send found no network, or the
+// live connection has been down a while (a blip while the server restarts
+// isn't worth a banner).
+function useOffline(live, net) {
+  const [online, setOnline] = useState(() => navigator.onLine !== false)
+  const [liveDown, setLiveDown] = useState(false)
+  useEffect(() => {
+    const on = () => setOnline(true)
+    const off = () => setOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+  useEffect(() => {
+    if (live) return
+    const t = setTimeout(() => setLiveDown(true), 8000)
+    return () => { clearTimeout(t); setLiveDown(false) }
+  }, [live])
+  return !online || net === 'offline' || (!live && liveDown)
 }
 
 // Follow the phone's light/dark setting while this app is open, and match the

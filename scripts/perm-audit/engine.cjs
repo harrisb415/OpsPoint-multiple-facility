@@ -116,7 +116,7 @@ function harness(admin, db) {
     },
     async violation(status = 'pending') {
       const c = await h.resident();
-      await must(await admin.post('/api/violations').send({ client_id: c.id, client_name: c.name, room: c.room, violation_date: TODAY(), description: 'Audit infraction', notes: '' }), 'violation');
+      await must(await admin.post('/api/violations').send({ client_id: c.id, client_name: c.name, room: c.room, violation_date: TODAY(), description: 'Audit infraction', staff_name: 'Sam Staff', notes: '' }), 'violation');
       const v = await db.query1('SELECT * FROM violations WHERE client_id=? ORDER BY id DESC LIMIT 1', [c.id]);
       if (status === 'assigned') await must(await admin.put(`/api/violations/${v.id}/review`).send({ action: 'assign', consequence: 'Audit consequence' }), 'assign');
       return v;

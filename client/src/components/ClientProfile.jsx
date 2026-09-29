@@ -761,7 +761,7 @@ function ViolationsProfileTab({ client }) {
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-sm text-gray-900 leading-snug dark:text-gray-100">{v.description || 'Infraction'}</div>
                 <div className="text-[11px] text-gray-400 mt-0.5">
-                  {fmtDate(v.violation_date)}{v.logged_by ? ` · logged by ${v.logged_by}` : ''}
+                  {fmtDate(v.violation_date)}{(v.staff_name || v.logged_by) ? ` · by ${v.staff_name || v.logged_by}` : ''}
                 </div>
                 {v.notes && <div className="text-xs text-gray-500 mt-0.5 dark:text-gray-400">{v.notes}</div>}
                 {(v.status === 'assigned' || v.status === 'completed') && v.consequence && (

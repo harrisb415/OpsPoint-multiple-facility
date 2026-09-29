@@ -114,7 +114,7 @@ module.exports = [
     where: 'ReportTab.jsx — quick button (canLog && violations.log): files it, then logs a line', show: [['log.add', 'violations.log']],
     setup: async (h) => ({ id: await h.report(), resident: await h.resident() }),
     run: async (a, fx) => {
-      await a.post('/api/violations', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room, violation_date: new Date().toLocaleDateString('en-CA'), description: 'Audit', notes: '' });
+      await a.post('/api/violations', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room, violation_date: new Date().toLocaleDateString('en-CA'), description: 'Audit', staff_name: 'Sam Staff', notes: '' });
       await a.patch('/api/data', { reportId: fx.id, log_entry: { time: '10:15 AM', text: `Infraction filed — ${fx.resident.name}` } });
     },
   },
@@ -342,7 +342,7 @@ module.exports = [
   {
     id: 'violations.log', area: 'Infractions', label: 'Log an infraction', where: 'ViolationsTab.jsx (canLog = violations.log)', show: [['violations.log']],
     setup: async (h) => ({ resident: await h.resident() }),
-    run: async (a, fx) => { await a.post('/api/violations', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room, violation_date: new Date().toLocaleDateString('en-CA'), description: 'Audit', notes: '' }); },
+    run: async (a, fx) => { await a.post('/api/violations', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room, violation_date: new Date().toLocaleDateString('en-CA'), description: 'Audit', staff_name: 'Sam Staff', notes: '' }); },
   },
   {
     id: 'violations.review', area: 'Infractions', label: 'Review an infraction (assign or waive)', where: 'ViolationsTab.jsx (canReview = violations.review)', show: [['violations.review']],
@@ -595,7 +595,7 @@ module.exports = [
   {
     id: 'm.quick.infraction', area: 'Mobile app', label: 'Log an infraction (quick action or resident card)', where: 'mobile/sheets.jsx LogInfractionSheet (violations.log)', show: withMobile([['violations.log']]),
     setup: async (h) => ({ resident: await h.resident() }),
-    run: async (a, fx) => { await a.post('/api/violations', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room, violation_date: new Date().toLocaleDateString('en-CA'), description: 'Audit' }); },
+    run: async (a, fx) => { await a.post('/api/violations', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room, violation_date: new Date().toLocaleDateString('en-CA'), description: 'Audit', staff_name: 'Sam Staff' }); },
   },
   {
     id: 'm.announce', area: 'Mobile app', label: 'Send an announcement', where: 'mobile/Announcements.jsx (broadcast.send)', show: withMobile([['broadcast.send']]),

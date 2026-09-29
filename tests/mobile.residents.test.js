@@ -85,7 +85,7 @@ beforeAll(async () => {
     client_id: ids['201'], client_name: 'Alex Rivera', room: '201', tested_at: new Date().toISOString(),
     collection_method: 'observed', reason: 'random', result: 'pass', panel_results: { THC: 'neg' }, witnessed_by_name: 'Res Admin', notes: '', chain_of_custody: '',
   })).status).toBe(200);
-  expect((await a.post('/api/violations').send({ client_id: ids['201'], client_name: 'Alex Rivera', room: '201', violation_date: TODAY, description: 'Late to group' })).status).toBe(200);
+  expect((await a.post('/api/violations').send({ client_id: ids['201'], client_name: 'Alex Rivera', room: '201', violation_date: TODAY, description: 'Late to group', staff_name: 'Sam Staff' })).status).toBe(200);
   for (let i = 0; i < 2; i++) expect((await a.post('/api/mail').send({ clients: [{ client_id: ids['201'], notes: '', mail_type: 'letter' }] })).status).toBe(200);
   const mail = (await a.get('/api/mail')).body.filter(m => m.client_id === ids['201']);
   expect((await a.put(`/api/mail/${mail[0].id}/approve`).send({})).status).toBe(200);

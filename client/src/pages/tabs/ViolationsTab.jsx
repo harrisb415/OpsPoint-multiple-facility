@@ -15,7 +15,8 @@ import { parseServerTime, localDayKey } from '../../utils/dates.js'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+// The facility's date, not UTC's: after 5 PM Pacific UTC is already tomorrow.
+function todayStr() { return new Date().toLocaleDateString('en-CA') }
 
 function fmtDate(d) {
   if (!d) return '—'
@@ -27,7 +28,7 @@ function VioStatusBadge({ status }) {
   return <StatusBadge color={VIO_BADGE[status] || 'gray'}>{VIO_LABEL[status] || status}</StatusBadge>
 }
 
-const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', notes: '' }
+const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', staff_name: '', notes: '' }
 const VIO_BADGE = { pending: 'warning', assigned: 'info', waived: 'gray', completed: 'success' }
 const VIO_LABEL = { pending: 'Pending Review', assigned: 'Consequence Assigned', waived: 'Waived', completed: 'Completed' }
 const VIO_STATUS_KEYS = [null, 'pending', 'assigned', 'waived', 'completed']
@@ -158,6 +159,7 @@ export default function ViolationsTab() {
   async function submitAdd() {
     if (!form.client_id) { setErr('Select a resident'); return }
     if (!form.description.trim()) { setErr('Description required'); return }
+    if (!form.staff_name.trim()) { setErr('Staff name is required'); return }
     setSaving(true); setErr('')
     try {
       const r = await fetch('/api/violations', {
@@ -168,6 +170,7 @@ export default function ViolationsTab() {
           room:            form.room,
           violation_date: form.violation_date,
           description:     form.description.trim(),
+          staff_name:      form.staff_name.trim(),
           notes:           form.notes,
         }),
       })
@@ -186,7 +189,7 @@ export default function ViolationsTab() {
     try {
       const r = await fetch(`/api/violations/${reviewModal.id}/review`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ consequence: waive ? '' : consequence.trim(), waive }),
+        body: JSON.stringify(waive ? { action: 'waive' } : { action: 'assign', consequence: consequence.trim() }),
       })
       if (!r.ok) { const j = await r.json(); setErr(j.error||'Save failed'); return }
       setReviewModal(null); await loadViolations()
@@ -302,7 +305,7 @@ export default function ViolationsTab() {
                   <TableHeadCell>Description</TableHeadCell>
                   <TableHeadCell>Status</TableHeadCell>
                   <TableHeadCell>Consequence</TableHeadCell>
-                  <TableHeadCell>Logged By</TableHeadCell>
+                  <TableHeadCell>Staff</TableHeadCell>
                   <TableHeadCell><span className="sr-only">Actions</span></TableHeadCell>
                 </TableRow>
               </TableHead>
@@ -322,7 +325,7 @@ export default function ViolationsTab() {
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.description}</TableCell>
                     <TableCell><StatusBadge color={VIO_BADGE[v.status] || 'gray'}>{VIO_LABEL[v.status] || v.status}</StatusBadge></TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(localDayKey(v.completed_at))}</span>}</TableCell>
-                    <TableCell className="text-gray-500 dark:text-gray-400">{v.logged_by || '—'}</TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">{v.staff_name || v.logged_by || '—'}</TableCell>
                     <TableCell className="text-right">
                       {(canReview || canComplete || canDelete) && (
                         <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
@@ -413,6 +416,7 @@ export default function ViolationsTab() {
               </Field>
               <Field label="Date"><TextInput type="date" value={form.violation_date} onChange={e => setForm(f => ({ ...f, violation_date: e.target.value }))} /></Field>
               <Field label="Description / Behavior"><Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the violation…" /></Field>
+              <Field label="Staff"><TextInput value={form.staff_name} maxLength={80} onChange={e => setForm(f => ({ ...f, staff_name: e.target.value }))} placeholder="Staff name" /></Field>
               <Field label="Notes (optional)"><TextInput value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional context…" /></Field>
             </div>
           </ModalBody>
@@ -498,7 +502,7 @@ function printViolationsReport({ facility, subtitle, entries }) {
     { key: 'description', label: 'Description' },
     { key: 'status',      label: 'Status',      width: '110px', align: 'center' },
     { key: 'consequence', label: 'Consequence', width: '180px' },
-    { key: 'logged_by',   label: 'Logged By',   width: '110px' },
+    { key: 'staff',       label: 'Staff',       width: '110px' },
   ]
 
   const statusBadge = (s) => {
@@ -522,7 +526,7 @@ function printViolationsReport({ facility, subtitle, entries }) {
     description: v.description || '',
     status:      statusBadge(v.status),
     consequence: v.consequence || (v.status === 'waived' ? 'Waived — no consequence' : '—'),
-    logged_by:   v.logged_by || '—',
+    staff:       v.staff_name || v.logged_by || '—',
     _flag:       v.status === 'pending',
   }))
 
@@ -555,7 +559,7 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
           <div className="text-[0.7rem] text-green-600 dark:text-green-400">✓ {fmtDate(localDayKey(v.completed_at))}</div>
         )}
       </td>
-      {!compact && <td className="px-3.5 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.logged_by}</td>}
+      {!compact && <td className="px-3.5 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.staff_name || v.logged_by}</td>}
       {(canReview || canComplete || canDelete) && (
         <td className="px-3.5 py-2 text-center whitespace-nowrap">
           {canReview && v.status === 'pending' && (

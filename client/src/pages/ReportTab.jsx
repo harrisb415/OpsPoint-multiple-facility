@@ -1491,7 +1491,7 @@ function MailQuickModal({ clients, onClose }) {
 // Violation quick-log
 function ViolationModal({ clients, onClose, onLogEntry }) {
   function todayStrLocal() { return new Date().toLocaleDateString('en-CA') }
-  const [form, setForm]     = useState({ client_id: '', client_name: '', room: '', violation_date: todayStrLocal(), description: '', notes: '' })
+  const [form, setForm]     = useState({ client_id: '', client_name: '', room: '', violation_date: todayStrLocal(), description: '', staff_name: '', notes: '' })
   const [saving, setSaving] = useState(false)
   const [err, setErr]       = useState('')
 
@@ -1503,6 +1503,7 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
   async function handleSubmit() {
     if (!form.client_id) { setErr('Select a resident'); return }
     if (!form.description.trim()) { setErr('Description required'); return }
+    if (!form.staff_name.trim()) { setErr('Staff name is required'); return }
     setSaving(true); setErr('')
     try {
       const r = await fetch('/api/violations', {
@@ -1513,13 +1514,14 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
           room:            form.room,
           violation_date: form.violation_date,
           description:     form.description.trim(),
+          staff_name:      form.staff_name.trim(),
           notes:           form.notes,
         }),
       })
       if (!r.ok) { const j = await r.json(); setErr(j.error || 'Save failed'); return }
       // Log to activity log
       await onLogEntry(
-        `Infraction filed — ${form.client_name} (Rm. ${form.room}): ${form.description.trim()}`,
+        `Infraction filed — ${form.client_name} (Rm. ${form.room}): ${form.description.trim()} — by ${form.staff_name.trim()}`,
         fmtTime()
       )
       onClose()
@@ -1543,6 +1545,7 @@ function ViolationModal({ clients, onClose, onLogEntry }) {
           <Field label="Description">
             <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Describe the infraction…" />
           </Field>
+          <Field label="Staff"><TextInput value={form.staff_name} maxLength={80} onChange={e => setForm(f => ({ ...f, staff_name: e.target.value }))} placeholder="Staff name" /></Field>
           <Field label="Notes (optional)"><TextInput value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Additional context…" /></Field>
         </div>
       </ModalBody>

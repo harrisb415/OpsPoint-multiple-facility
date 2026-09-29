@@ -422,6 +422,19 @@ function createSchema(db) {
     last_used_at TEXT,
     expires_at   TEXT    NOT NULL
   )`);
+  // Answers to writes sent with an Idempotency-Key (the phone's offline
+  // queue), so a resend replays the answer instead of writing twice.
+  // status 0 = still running. Kept 48 h. Postgres: 011_idempotency_keys.sql.
+  db.exec(`CREATE TABLE IF NOT EXISTS idempotency_keys (
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key        TEXT    NOT NULL,
+    route      TEXT    NOT NULL DEFAULT '',
+    status     INTEGER NOT NULL DEFAULT 0,
+    body       TEXT    NOT NULL DEFAULT '',
+    created_at TEXT    NOT NULL,
+    PRIMARY KEY (user_id, key)
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys (created_at)');
 }
 
 // Backward-compat column additions for DBs that predate the current schema.
@@ -451,6 +464,9 @@ const COLUMN_MIGRATIONS = [
     "ALTER TABLE log_entries ADD COLUMN voided_by_id INTEGER DEFAULT NULL",
     "ALTER TABLE log_entries ADD COLUMN voided_by_name TEXT DEFAULT ''",
     "ALTER TABLE log_entries ADD COLUMN void_reason TEXT DEFAULT ''",
+    // violations — the staff member named on the infraction, typed in by hand
+    // (logged_by stays the signed-in account). Postgres: 010_violation_staff_name.sql.
+    "ALTER TABLE violations ADD COLUMN staff_name TEXT DEFAULT ''",
     // mail_log — added post-launch
     "ALTER TABLE mail_log ADD COLUMN mail_type TEXT DEFAULT ''",
     // users — is_protected predates the current CREATE TABLE on some installs

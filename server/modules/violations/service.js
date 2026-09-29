@@ -22,9 +22,14 @@ async function list(query = {}) {
 }
 
 // Log a new violation. Returns { id, label, description } for the audit.
+// staff_name is the staff member named on the infraction, typed in by hand
+// like a UA's "Conducted by"; logged_by is the account that saved it.
 async function create(body = {}, { actor } = {}) {
   const { client_id, client_name, room, violation_date, description, notes } = body;
   if (!client_id || !description) throw httpError(400, 'client_id and description required');
+  const staff_name = String(body.staff_name || '').trim();
+  if (!staff_name) throw httpError(400, 'Staff name is required');
+  if (staff_name.length > 80) throw httpError(400, 'Staff name is too long (80 characters at most)');
   const v = await repo.insert({
     client_id,
     client_name: client_name || '',
@@ -32,6 +37,7 @@ async function create(body = {}, { actor } = {}) {
     violation_date: violation_date || null,   // date column: '' is not a date
     description,
     notes: notes || '',
+    staff_name,
     logged_by: actor,
   });
   return { id: v ? v.id : null, label: String(client_name || client_id), description };

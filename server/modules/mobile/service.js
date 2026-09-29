@@ -118,7 +118,7 @@ async function todo(perms = []) {
   }
   if (has('violations.review')) {
     out.infractions = await c.query(
-      `SELECT id, client_id, client_name, room, violation_date, description, logged_by FROM violations WHERE status='pending' AND ${active} ORDER BY id`);
+      `SELECT id, client_id, client_name, room, violation_date, description, staff_name, logged_by FROM violations WHERE status='pending' AND ${active} ORDER BY id`);
   }
   if (has('violations.complete') || has('violations.notify_consequence')) {
     out.consequences = (await c.query(

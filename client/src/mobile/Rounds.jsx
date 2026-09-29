@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Alert, Button, TextInput } from 'flowbite-react'
-import { Check, X, CloudCheck, TriangleAlert, CircleCheck } from 'lucide-react'
+import { Check, X, CloudCheck, CloudOff, TriangleAlert, CircleCheck } from 'lucide-react'
 import { useConfirm } from '../components/ui.jsx'
 import { useMobile } from './context.js'
 import { api } from './api.js'
@@ -48,8 +48,11 @@ export default function Rounds() {
 }
 
 // ── Wellness round ──────────────────────────────────────────────────────────
+// Starting a round needs signal (the server hands out the round); marks and
+// finishing it don't — they wait on the phone and go when it reconnects,
+// each with the time it was tapped.
 function Wellness() {
-  const { snap, reload, patchSnap, hasPerm, toast, session } = useMobile()
+  const { snap, reload, hasPerm, toast, outbox, offline } = useMobile()
   const confirm = useConfirm()
   const [floor, setFloor] = useState('all')
   const [notes, setNotes] = useState('')
@@ -78,21 +81,16 @@ function Wellness() {
     finally { setBusy(false) }
   }
 
-  // Seen -> not located -> unmarked. Shown at once; a failure reloads the truth.
+  // Seen -> not located -> unmarked. Shown at once (the outbox lays it over
+  // the snapshot); a refusal takes it back.
   async function tap(c) {
     const cur = marks.get(c.id)?.mark || null
     const next = !cur ? 'ok' : cur === 'ok' ? 'missing' : null
-    patchSnap(s => ({
-      ...s,
-      round: {
-        ...s.round,
-        marks: next
-          ? [...s.round.marks.filter(m => m.client_id !== c.id), { client_id: c.id, mark: next, by: session.displayName, at: new Date().toISOString() }]
-          : s.round.marks.filter(m => m.client_id !== c.id),
-      },
-    }))
-    try { await api('PUT', `/api/rounds/${round.id}/marks/${c.id}`, { mark: next }) }
-    catch (e) { toast(`Not saved: ${e.message}`, 'error'); reload() }
+    const r = await outbox.enqueue({
+      kind: 'mark', method: 'PUT', url: `/api/rounds/${round.id}/marks/${c.id}`,
+      body: { mark: next, at: new Date().toISOString() }, meta: { roundId: round.id, clientId: c.id },
+    })
+    if (r.failed) toast(`Not saved: ${r.error}`, 'error')
   }
 
   async function finish() {
@@ -106,20 +104,25 @@ function Wellness() {
       })
       if (!ok) return
     }
+    // For the log line shown while it waits to send (the server writes the real one).
+    const s = roundStats(snap, statuses)
+    const summary = s.missing || s.unchecked ? `${s.accounted} of ${s.total} clients accounted for.` : `All ${s.total} clients accounted for.`
     setBusy(true)
-    try {
-      const r = await api('POST', `/api/rounds/${round.id}/finish`, { notes })
-      setNotes('')
-      toast(r.missing ? `Round logged. ${r.missing} not located.` : 'Round logged. Everyone accounted for.', r.missing ? 'warn' : 'ok')
-      await reload()
-    } catch (e) {
-      toast(`Not saved: ${e.message}`, 'error')
-    } finally { setBusy(false) }
+    const r = await outbox.enqueue({
+      kind: 'finish', method: 'POST', url: `/api/rounds/${round.id}/finish`,
+      body: { notes, at: new Date().toISOString() }, meta: { roundId: round.id, summary },
+    })
+    setBusy(false)
+    if (r.failed) { toast(`Not saved: ${r.error}`, 'error'); return }
+    setNotes('')
+    if (r.queued) toast('No signal. The round is saved on this phone and will be logged when you’re back online.', 'warn')
+    else toast(r.data.missing ? `Round logged. ${r.data.missing} not located.` : 'Round logged. Everyone accounted for.', r.data.missing ? 'warn' : 'ok')
   }
 
-  if (!round) return <NoRound busy={busy} onStart={start} canLog={canLog} reportOpen={reportOpen} />
+  if (!round) return <NoRound busy={busy} onStart={start} canLog={canLog} reportOpen={reportOpen} offline={offline} />
 
   const stats = roundStats(snap, statuses)
+  const unsent = round.marks.some(m => m.pending)
   const shown = floor === 'all' ? snap.residents : (floors.find(f => f.label === floor)?.residents || [])
   const floorCount = (list) => list.filter(c => isAway(statuses, c.id) || marks.get(c.id)?.mark === 'ok').length
 
@@ -131,7 +134,9 @@ function Wellness() {
             <span className="text-[15px] font-bold">{stats.accounted} of {stats.total} accounted for</span>
             {stats.missing > 0
               ? <span className="text-sm font-semibold text-red-700 dark:text-red-300">{stats.missing} not located</span>
-              : <span className="flex items-center gap-1 text-sm font-semibold text-green-700 dark:text-green-300"><CloudCheck className="h-4 w-4" aria-hidden="true" />Saved</span>}
+              : unsent
+                ? <span className="flex items-center gap-1 text-sm font-semibold text-amber-700 dark:text-amber-300"><CloudOff className="h-4 w-4" aria-hidden="true" />On this phone</span>
+                : <span className="flex items-center gap-1 text-sm font-semibold text-green-700 dark:text-green-300"><CloudCheck className="h-4 w-4" aria-hidden="true" />Saved</span>}
           </div>
           <Bar value={stats.accounted} max={stats.total} label="Residents accounted for" />
           <span className="text-sm text-gray-600 dark:text-gray-400">
@@ -227,17 +232,21 @@ function lastMarker(residents, marks) {
   return best ? shortName(best.by) : ''
 }
 
-function NoRound({ busy, onStart, canLog, reportOpen }) {
-  const { snap, reload, toast } = useMobile()
+function NoRound({ busy, onStart, canLog, reportOpen, offline }) {
+  const { snap, toast, outbox, box } = useMobile()
   const last = snap.last_round
   const notLocated = openNotLocated(snap)
+  // A round finished without signal is still on its way: starting another
+  // now would join that one on the server.
+  const finishing = box.items.some(i => i.kind === 'finish')
 
   async function found(m) {
-    try {
-      await api('POST', `/api/rounds/${last.id}/marks/${m.client_id}/found`, {})
-      toast('Logged as found.', 'ok')
-      await reload()
-    } catch (e) { toast(`Not saved: ${e.message}`, 'error') }
+    const r = await outbox.enqueue({
+      kind: 'found', method: 'POST', url: `/api/rounds/${last.id}/marks/${m.client_id}/found`,
+      body: { at: new Date().toISOString() }, meta: { roundId: last.id, clientId: m.client_id },
+    })
+    if (r.failed) toast(`Not saved: ${r.error}`, 'error')
+    else toast(r.queued ? 'No signal. Saved on this phone; it’ll be logged when you’re back online.' : 'Logged as found.', r.queued ? 'warn' : 'ok')
   }
 
   return (
@@ -245,10 +254,13 @@ function NoRound({ busy, onStart, canLog, reportOpen }) {
       {!reportOpen && <Alert color="warning" icon={TriangleAlert}>No shift report is open. Start one on the desktop, then come back to do the round.</Alert>}
 
       {canLog && reportOpen && (
-        <Button size="xl" onClick={onStart} disabled={busy} className="w-full">
+        <Button size="xl" onClick={onStart} disabled={busy || offline || finishing} className="w-full">
           <CircleCheck className="mr-2 h-6 w-6" aria-hidden="true" />
-          Start wellness round
+          {finishing ? 'Sending the last round…' : 'Start wellness round'}
         </Button>
+      )}
+      {canLog && reportOpen && offline && !finishing && (
+        <p className="-mt-2 text-sm text-gray-600 dark:text-gray-400">Starting a round needs signal. Once it&rsquo;s started, marks and finishing work without it.</p>
       )}
       {!canLog && <Alert color="gray">Your account can follow rounds but not record them. Ask an admin for &ldquo;Add log entries&rdquo;.</Alert>}
 
@@ -282,7 +294,7 @@ function NoRound({ busy, onStart, canLog, reportOpen }) {
 
 // ── Walkthrough ─────────────────────────────────────────────────────────────
 function Walkthrough() {
-  const { snap, hasPerm, toast, session, reload } = useMobile()
+  const { snap, hasPerm, toast, session, outbox } = useMobile()
   const areas = snap.facility.walk_areas?.length ? snap.facility.walk_areas : DEFAULT_AREAS
   const [state, setState] = useState({})
   const [notes, setNotes] = useState('')
@@ -302,15 +314,15 @@ function Walkthrough() {
       : `All areas clear: ${ok.join(', ')}.`
     if (notes.trim()) text += ` Notes: ${notes.trim()}`
     setBusy(true)
-    try {
-      await api('PATCH', '/api/data', { reportId: snap.report.id, log_entry: { time: fmtClock(new Date()), text } })
-      setState({})
-      setNotes('')
-      toast('Walkthrough logged.', 'ok')
-      await reload()
-    } catch (e) {
-      toast(`Not saved: ${e.message}`, 'error')
-    } finally { setBusy(false) }
+    const r = await outbox.enqueue({
+      kind: 'log', method: 'PATCH', url: '/api/data',
+      body: { reportId: snap.report.id, log_entry: { time: fmtClock(new Date()), text } },
+    })
+    setBusy(false)
+    if (r.failed) { toast(`Not saved: ${r.error}`, 'error'); return }
+    setState({})
+    setNotes('')
+    toast(r.queued ? 'No signal. The walkthrough is saved on this phone and will be logged when you’re back online.' : 'Walkthrough logged.', r.queued ? 'warn' : 'ok')
   }
 
   return (

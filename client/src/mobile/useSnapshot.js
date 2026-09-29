@@ -21,10 +21,13 @@ export function useSnapshot({ onMessage } = {}) {
   const onMessageRef = useRef(onMessage)
   useEffect(() => { onMessageRef.current = onMessage }, [onMessage])
 
+  // loaded_at: when the request left, which is how old the data on screen
+  // is, and what the offline queue compares its sent entries with.
   const reload = useCallback(async () => {
+    const started = Date.now()
     try {
       const s = await api('GET', '/api/m/snapshot')
-      setSnap(s)
+      setSnap({ ...s, loaded_at: started })
       setError(null)
     } catch (e) {
       setError(e)

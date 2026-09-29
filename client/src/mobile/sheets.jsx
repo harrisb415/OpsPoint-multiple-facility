@@ -39,7 +39,7 @@ export function InfractionReviewSheet({ item, onClose }) {
             <p className="text-[15px] font-semibold">{item.client_name}{item.room ? ` · Rm ${item.room}` : ''}</p>
             <p className="mt-1 text-sm">{item.description || 'No description'}</p>
             <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">
-              {[item.violation_date && fmtDay(item.violation_date), item.logged_by && `logged by ${item.logged_by}`].filter(Boolean).join(' · ')}
+              {[item.violation_date && fmtDay(item.violation_date), (item.staff_name || item.logged_by) && `by ${item.staff_name || item.logged_by}`].filter(Boolean).join(' · ')}
             </p>
           </div>
           <fieldset className="flex flex-col gap-3">
@@ -70,18 +70,20 @@ export function LogInfractionSheet({ open, resident = null, onClose, onDone }) {
   const { snap, toast, reload } = useMobile()
   const [clientId, setClientId] = useState('')
   const [description, setDescription] = useState('')
+  const [staff, setStaff] = useState('')
   const [date, setDate] = useState(todayKey)
   const [busy, setBusy] = useState(false)
   const who = resident || snap.residents.find(c => String(c.id) === String(clientId)) || null
+  const ready = who && description.trim() && staff.trim()
 
-  function close() { setClientId(''); setDescription(''); setDate(todayKey()); onClose() }
+  function close() { setClientId(''); setDescription(''); setStaff(''); setDate(todayKey()); onClose() }
 
   async function submit(e) {
     e.preventDefault()
-    if (!who || !description.trim()) return
+    if (!ready) return
     setBusy(true)
     try {
-      await api('POST', '/api/violations', { client_id: who.id, client_name: who.name, room: String(who.room), violation_date: date, description: description.trim() })
+      await api('POST', '/api/violations', { client_id: who.id, client_name: who.name, room: String(who.room), violation_date: date, description: description.trim(), staff_name: staff.trim() })
       toast(`Infraction logged for ${who.name}.`, 'ok')
       close()
       onDone?.()
@@ -109,10 +111,14 @@ export function LogInfractionSheet({ open, resident = null, onClose, onDone }) {
           <Textarea id="inf-desc" rows={3} maxLength={500} value={description} onChange={e => setDescription(e.target.value)} required className="mt-1" />
         </div>
         <div>
+          <Label htmlFor="inf-staff">Staff</Label>
+          <TextInput id="inf-staff" value={staff} maxLength={80} onChange={e => setStaff(e.target.value)} placeholder="Staff name" autoComplete="off" required className="mt-1" />
+        </div>
+        <div>
           <Label htmlFor="inf-date">Date</Label>
           <TextInput id="inf-date" type="date" value={date} max={todayKey()} onChange={e => setDate(e.target.value)} required className="mt-1" />
         </div>
-        <Button type="submit" disabled={busy || !who || !description.trim()} className="w-full">Log infraction</Button>
+        <Button type="submit" disabled={busy || !ready} className="w-full">Log infraction</Button>
       </form>
     </Sheet>
   )

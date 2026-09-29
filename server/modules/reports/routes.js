@@ -7,6 +7,7 @@
  */
 const { requireAuth, requirePermission, requireAnyPermission, userPerms } = require('../../middleware/auth');
 const { csrfCheck } = require('../../middleware/csrf');
+const { idempotent } = require('../../middleware/idempotency');
 const { apiRateCheck } = require('../../middleware/rateLimit');
 const { audit } = require('../../middleware/audit');
 const { broadcast } = require('../../realtime/broadcast');
@@ -33,7 +34,7 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.patch('/api/data', requireAuth, csrfCheck, async (req, res) => {
+  app.patch('/api/data', requireAuth, csrfCheck, idempotent, async (req, res) => {
     try {
       const patch = req.body;
       const result = await service.patchData(patch, { perms: await userPerms(req) });

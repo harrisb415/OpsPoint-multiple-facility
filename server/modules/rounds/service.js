@@ -17,6 +17,8 @@ const repo = require('./repository');
 
 // A round left open this long is abandoned; the next start begins afresh.
 const STALE_MS = 2 * 3600000;
+// Clock drift allowed between a phone and the server.
+const SKEW_MS = 2 * 60000;
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -44,6 +46,18 @@ function shape(round, marks) {
 }
 
 const isStale = (round) => Date.now() - Date.parse(round.started_at) > STALE_MS;
+
+// When a queued tap was made. The phone sends taps from a dead zone late,
+// each with the time it was made; that time is used when it is believable —
+// not in the future and not before `since` (the round's start, or its finish
+// for a follow-up) — and the server's clock otherwise.
+function tappedAt(at, since) {
+  const now = Date.now();
+  const t = at ? Date.parse(at) : NaN;
+  if (!Number.isFinite(t) || t > now + SKEW_MS) return new Date(now);
+  if (since && t < Date.parse(since) - SKEW_MS) return new Date(now);
+  return new Date(Math.min(t, now));
+}
 
 async function current() {
   const r = await repo.openRound();
@@ -89,11 +103,18 @@ async function openRoundOrThrow(roundId) {
   return r;
 }
 
-async function mark(roundId, clientId, value, user) {
+async function mark(roundId, clientId, value, user, { at } = {}) {
   const r = await openRoundOrThrow(roundId);
   const resident = await repo.activeResident(clientId);
   if (!resident) throw httpError(404, 'Resident not found');
-  const now = new Date().toISOString();
+  const now = tappedAt(at, r.started_at).toISOString();
+  if (at) {
+    // A late tap loses to a newer one made meanwhile on another phone.
+    const cur = await repo.getMark(r.id, resident.id);
+    if (cur && Date.parse(cur.marked_at) > Date.parse(now)) {
+      return { round_id: r.id, client_id: resident.id, mark: cur.mark, by: cur.marked_by_name || '', at: cur.marked_at, superseded: true };
+    }
+  }
   if (value === null) await repo.clearMark(r.id, resident.id);
   else if (value === 'ok' || value === 'missing') await repo.setMark(r.id, resident.id, value, user.id, user.name, now);
   else throw httpError(400, "mark must be 'ok', 'missing' or null");
@@ -120,7 +141,7 @@ function joinNames(names) {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-async function finish(roundId, user, { notes = '' } = {}) {
+async function finish(roundId, user, { notes = '', at } = {}) {
   const r = await openRoundOrThrow(roundId);
   const report = await openReportOrThrow('No shift report is open, so the round has nowhere to be logged. Start one on the desktop, then finish the round.');
   const residents = await repo.activeResidents();
@@ -148,10 +169,10 @@ async function finish(roundId, user, { notes = '' } = {}) {
   if (cleanNotes) text += ` Notes: ${cleanNotes}`;
   text = text.slice(0, 2000);
 
-  const now = new Date();
+  const now = tappedAt(at, r.started_at);
   const time = fmtClock(now);
   const logEntryId = await repo.finishRound(r.id, {
-    userId: user.id, userName: user.name, now: now.toISOString(), notes: cleanNotes,
+    userId: user.id, userName: user.name, now: now.toISOString(), touched: new Date().toISOString(), notes: cleanNotes,
     total, missing: notLocated.length, reportId: report.id, time, text,
   });
   if (!logEntryId) throw httpError(409, 'This round is already finished.');
@@ -159,7 +180,7 @@ async function finish(roundId, user, { notes = '' } = {}) {
 }
 
 // Follow-up for a resident marked not located on a finished round.
-async function found(roundId, clientId, user, { note = '' } = {}) {
+async function found(roundId, clientId, user, { note = '', at } = {}) {
   const r = await repo.getRound(roundId);
   if (!r) throw httpError(404, 'Round not found');
   if (r.status !== 'finished') throw httpError(409, 'The round is still open: mark them seen on the round instead.');
@@ -168,14 +189,14 @@ async function found(roundId, clientId, user, { note = '' } = {}) {
   if (m.found_at) throw httpError(409, 'Already recorded as found');
   const report = await openReportOrThrow('No shift report is open to log this in. Start one on the desktop first.');
   const resident = await repo.resident(clientId);
-  const now = new Date();
+  const now = tappedAt(at, r.finished_at);
   const time = fmtClock(now);
   const cleanNote = sanitizeText(String(note || '').trim(), 300);
   const who = resident ? `Rm. ${resident.room} ${resident.name}` : 'Resident';
   const text = `${who} located at ${time}, reported by ${user.name}.${cleanNote ? ` Notes: ${cleanNote}` : ''}`.slice(0, 2000);
-  const logEntryId = await repo.markFound(r.id, clientId, { now: now.toISOString(), userName: user.name, note: cleanNote, reportId: report.id, time, text });
+  const logEntryId = await repo.markFound(r.id, clientId, { now: now.toISOString(), touched: new Date().toISOString(), userName: user.name, note: cleanNote, reportId: report.id, time, text });
   if (!logEntryId) throw httpError(409, 'Already recorded as found');
   return { reportId: report.id, logEntry: { id: logEntryId, time, text }, label: who };
 }
 
-module.exports = { current, last, start, mark, finish, found, awayIds, _awayIds: awayIds };
+module.exports = { current, last, start, mark, finish, found, awayIds, _awayIds: awayIds, _tappedAt: tappedAt };

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Alert, Button, ToggleSwitch } from 'flowbite-react'
 import { BellRing, Download, LogOut, Monitor, ShieldCheck, Smartphone, Palette, ChevronRight, Contact, Megaphone, KeyRound } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
+import { useConfirm } from '../components/ui.jsx'
 import { themeLabel } from '../utils/themes.js'
 import { useMobile } from './context.js'
 import { api } from './api.js'
@@ -14,9 +15,10 @@ import { unseenAnnouncements } from './model.js'
 const ROLE_LABELS = { pa: 'Program Assistant', supervisor: 'Supervisor', admin: 'Administrator', case_manager: 'Case Manager' }
 
 export default function More() {
-  const { session, snap, toast, installPrompt, clearInstallPrompt, hasPerm } = useMobile()
+  const { session, snap, toast, installPrompt, clearInstallPrompt, hasPerm, outbox, box } = useMobile()
   const unseen = unseenAnnouncements(snap)
   const { logout } = useAuth()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const support = useMemo(() => pushSupport(), [])
   const [cfg, setCfg] = useState(null)
@@ -102,10 +104,33 @@ export default function More() {
     clearInstallPrompt()
   }
 
+  // Entries still waiting to send (or refused) live only on this phone and go
+  // when it signs out on purpose, so say so first.
   async function signOut() {
+    const waiting = box.items.length
+    const refused = box.failed.length
+    if (waiting || refused) {
+      const parts = []
+      if (waiting) parts.push(`${waiting === 1 ? '1 saved entry hasn’t' : `${waiting} saved entries haven’t`} been sent yet.`)
+      if (refused) parts.push(`${refused === 1 ? '1 entry' : `${refused} entries`} couldn’t be sent.`)
+      const ok = await confirm({
+        title: 'Sign out?',
+        body: `${parts.join(' ')} Signing out deletes ${waiting + refused === 1 ? 'it' : 'them'} from this phone.`,
+        confirmText: 'Sign out anyway',
+        color: 'red',
+      })
+      if (!ok) return
+    }
     setBusy(true)
     await disableAlerts().catch(() => {})   // a signed-out phone gets no alerts
-    await logout()
+    try {
+      await logout()
+    } catch {
+      setBusy(false)
+      toast('Couldn’t reach the server to sign out. Try again when you have signal.', 'error')
+      return
+    }
+    outbox.clear()
     navigate('/login', { replace: true })
   }
 

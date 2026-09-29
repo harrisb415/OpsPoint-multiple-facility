@@ -235,9 +235,17 @@ describe('API tour', () => {
   });
 
   test('violations — log (blank date), assign, complete, waive, delete', async () => {
-    const v1 = await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: '', description: 'Late', notes: '' }, [200]);
+    const v1 = await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: '', description: 'Late', staff_name: 'Sam Staff', notes: '' }, [200]);
     const vid = idOf(v1, 'id', 'violation.id');
-    const v2 = await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: TODAY, description: 'Noise' }, [200]);
+    // The staff name is typed in and required; the account that saved it stays in logged_by.
+    await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: TODAY, description: 'No staff named' }, [400]);
+    await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: TODAY, description: 'Blank staff', staff_name: '   ' }, [400]);
+    if (vid) {
+      const row = await db.query1('SELECT staff_name, logged_by FROM violations WHERE id=?', [vid]);
+      expect(row.staff_name).toBe('Sam Staff');
+      expect(row.logged_by).toBeTruthy();
+    }
+    const v2 = await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: TODAY, description: 'Noise', staff_name: 'Sam Staff' }, [200]);
     const vid2 = idOf(v2, 'id', 'violation.id');
     await get('/api/violations', [200]);
     if (vid) {

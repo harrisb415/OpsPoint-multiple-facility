@@ -74,7 +74,7 @@ export default function ForYou() {
     rows.push({
       key: `iv${v.id}`, Icon: Ban, tone: 'orange', to: `/m/residents/${v.client_id}`,
       title: `Review infraction · ${v.client_name}`,
-      detail: [v.description, v.violation_date && fmtDay(v.violation_date)].filter(Boolean).join(' · '),
+      detail: [v.description, v.violation_date && fmtDay(v.violation_date), (v.staff_name || v.logged_by) && `by ${v.staff_name || v.logged_by}`].filter(Boolean).join(' · '),
       action: { label: 'Review', run: () => setReviewing(v) },
     })
   }

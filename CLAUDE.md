@@ -73,6 +73,7 @@ Express + `ws` WebSocket server. Handles auth, all API routes, and real-time bro
 - `requirePermission(perm)` — user must have the named permission
 - `requireAnyPermission(...perms)` — user must have at least one listed permission
 - `csrfCheck` — validates `Origin` header on all state-changing routes
+- `idempotent` (`server/middleware/idempotency.js`) — a request carrying an `Idempotency-Key` runs once; a resend gets the first answer back. Used by the phone's offline queue (`client/src/mobile/outbox.js`) on `PATCH /api/data` and the `/api/rounds` writes. Put it after the permission check, on routes that answer with `res.json`.
 
 Every write route calls `db.save()` then `broadcast({type: '...'})`. The WebSocket is authentication-gated at handshake level; incoming WS messages from clients are dropped.
 

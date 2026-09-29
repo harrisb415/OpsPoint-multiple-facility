@@ -1,4 +1,4 @@
-# OpsPoint · v2.6.1
+# OpsPoint · v2.7.0
 
 Shift management platform for residential facilities. React 19 + Vite SPA frontend, Node.js + Express + SQLite backend, real-time WebSocket sync. Runs on-premise at the facility or self-hosted on a cloud server — no SaaS dependency.
 
@@ -153,8 +153,8 @@ The backend must be running with TLS certs present (`data/cert.pem` + `data/key.
 - **`server.js`** — app wiring; routes live in `server/modules/*` (routes / service / repository per domain)
 - **`server/db/connection.js`** — the only file that instantiates the database driver
 - **`db.js`** — schema, queries, photo storage
-- **`dbcrypt.js`** — key management and plaintext → encrypted migration
-- **`backup.js`** — scheduled online backups
+- **`server/db/dbcrypt.js`** — key management and plaintext → encrypted migration
+- **`server/lib/backup.js`** — scheduled online backups
 - **`client/src/`** — React SPA: `AuthContext`, `DataContext`, `AppShell`, `Dashboard`, tab components
 - **`data/opspoint.db`** — all application data
 - **`data/.dbkey`** — encryption key; back up separately, never commit

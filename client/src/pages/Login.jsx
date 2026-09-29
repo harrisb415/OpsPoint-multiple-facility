@@ -5,7 +5,7 @@ import { AlertCircle, ArrowRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import PinPad from '../components/PinPad.jsx'
 
-const VERSION = '2.6.1'
+const VERSION = '2.7.0'
 
 // ?next= (set by the /m pages) brings the installed app back where it was.
 // Same-site paths only: never '//host', which would leave the site.

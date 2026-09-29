@@ -119,8 +119,14 @@ const cpkgPath = path.join(ROOT, 'central', 'package.json');
 if (fs.existsSync(cpkgPath)) {
   CVER = JSON.parse(fs.readFileSync(cpkgPath, 'utf8')).version;
   console.log(`\n• building central v${CVER}…`);
+  // The HQ console is the Vite-built React app in central/client/dist, which
+  // is what central/updater.js RUNTIME_DIRS swaps in. (central/public is the
+  // old console and untracked; shipping it left the console behind.)
+  const CCLIENT = path.join(ROOT, 'central', 'client');
+  if (!fs.existsSync(path.join(CCLIENT, 'node_modules'))) sh('npm ci --no-audit --no-fund', CCLIENT);
+  sh('npm run build', CCLIENT);
   const C_FILES = ['server.js', 'db.js', 'updater.js', 'bootstrap.js', 'package.json', 'package-lock.json'];
-  const C_DIRS = ['public'];
+  const C_DIRS = [path.join('client', 'dist')];
   const CSTAGE = path.join(REL, `central-${CVER}`);
   CZIP = path.join(REL, `central-${CVER}.tar.gz`);
   fs.rmSync(CSTAGE, { recursive: true, force: true });

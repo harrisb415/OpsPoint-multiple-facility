@@ -2,9 +2,44 @@
 
 ---
 
-## Unreleased — Deletes ask why; incidents and infractions are voided (2026-09-28)
+## v2.7.0 — Phone app, voids instead of deletes, Postgres (2026-09-28)
 
-### Changed
+**Highlights**
+
+- **A new phone app** at `/m`, for every role: wellness rounds (several phones can split
+  one round), walkthroughs, the shift log, residents, the staff directory, announcements,
+  a "For you" list built from each person's permissions, push alerts, and PIN quick
+  unlock. It keeps working with no signal: rounds and log entries are saved on the phone
+  and sent when it reconnects, with the time they were made, and never twice.
+- **Records are voided, not deleted.** UA results, incident reports and infractions are
+  voided with a reason and stay on file. Deleting a log line, a mail record or a shift
+  report (in its first 24 hours only) asks for a reason, and the audit log keeps who, when,
+  why and what was removed.
+- **Anyone can conduct a UA.** The bell has Conduct UA and a Past 24 hours section.
+  Infractions take a staff name.
+- **A permission audit** (`node scripts/perm-audit.cjs`, also part of `npm test`) checks
+  that every button the screens offer works for everyone who can see it. The mismatches it
+  found are fixed.
+- **Postgres support** (the hosted deployment runs on it), with its own migrations in
+  `migrations/pg/`. Dates follow the facility's day rather than UTC throughout.
+- Session-security hardening for hosted deployments.
+
+**Updating**
+
+- SQLite installs update in place; the database schema updates itself on start.
+- Postgres (new in this version): apply `migrations/pg/*.sql` in order before starting
+  (`psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f <file>`); `node scripts/schema-parity.cjs`
+  checks the result.
+- HQ (central) 0.1.6 ships alongside. It runs from inside a facility checkout, since it uses
+  the facility's `server/` modules.
+- The scheduled backup and the database encryption modules moved into `server/`
+  (`server/lib/backup.js`, `server/db/dbcrypt.js`), so the in-app updater now ships them.
+
+---
+
+### Deletes ask why; incidents and infractions are voided (2026-09-28)
+
+#### Changed
 
 - **Every delete asks for a reason**, and the audit log records who did it, when, why and
   what was removed:
@@ -30,12 +65,12 @@
   account and group that had the old one has the new one after the first start.
 - Admin › Audit Log has **Infractions** and **Incidents** filters.
 
-### Fixed
+#### Fixed
 
 - The resident profile and the resident report showed incident dates as "—" and no author:
   they read fields incidents don't have. They show the incident date and who logged it now.
 
-### Database
+#### Database
 
 - New columns on `incidents` and `violations`: `voided_at`, `voided_by_id`,
   `voided_by_name`, `void_reason`. Postgres: `migrations/pg/012_void_incidents_violations.sql`,
@@ -43,9 +78,9 @@
 
 ---
 
-## Unreleased — Dates are the facility's day, not UTC's (2026-09-28)
+### Dates are the facility's day, not UTC's (2026-09-28)
 
-### Fixed
+#### Fixed
 
 - **New records dated tomorrow in the evening.** From 5 PM Pacific (4 PM in winter) UTC
   is already the next day, and several tabs took "today" from UTC: new **incidents** and
@@ -70,11 +105,11 @@
 
 ---
 
-## Unreleased — The phone keeps working without signal (2026-09-28)
+### The phone keeps working without signal (2026-09-28)
 
 Mobile rewrite step 5: the offline queue.
 
-### Added
+#### Added
 
 - **Rounds and log entries survive dead zones.** On the phone, marking residents on a
   wellness round, finishing the round, recording a "found" follow-up, logging a
@@ -102,7 +137,7 @@ Starting a round still needs signal (the server hands out the round); once it's 
 the rest works without it. Other phone actions (UA requests and draws, infractions, the
 "For you" buttons) still need signal and say so.
 
-### Database
+#### Database
 
 - New table `idempotency_keys` (the first answer to each queued write, kept 48 hours).
   Postgres: `migrations/pg/011_idempotency_keys.sql`, applied before restarting; SQLite
@@ -110,9 +145,9 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
 
 ---
 
-## Unreleased — Staff name on infractions (2026-09-28)
+### Staff name on infractions (2026-09-28)
 
-### Added
+#### Added
 
 - **Logging an infraction takes a staff name**, typed in like a UA's "Conducted by": on
   the Infractions tab, the Report tab's ⚠ Infraction button and the phone. It's required.
@@ -121,23 +156,23 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
   "— by *staff name*". The signed-in account is still recorded, and the audit log is
   unchanged.
 
-### Fixed
+#### Fixed
 
 - **Waiving an infraction on the Infractions tab** failed with "consequence required":
   the dialog sent the wrong request. (The phone's review sheet was fine.)
 - **The Infractions tab's date** defaulted to tomorrow from 5 PM Pacific on (it used the
   UTC date).
 
-### Database
+#### Database
 
 - New column `violations.staff_name`. Postgres: `migrations/pg/010_violation_staff_name.sql`,
   applied before restarting; SQLite adds it itself.
 
 ---
 
-## Unreleased — UA results are voided, never deleted (2026-09-28)
+### UA results are voided, never deleted (2026-09-28)
 
-### Changed
+#### Changed
 
 - **Nobody can delete a UA result.** A mistaken one is **voided**. That takes a reason
   and the new permission **"Void a UA result"** (`ua.void`, Supervisor and Administrator
@@ -162,7 +197,7 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
   because that permission counted as clinical; it no longer does. A non-clinical edit of
   a resident now leaves those fields alone instead of blanking them.
 
-### Database
+#### Database
 
 - New columns on `ua_records` and `log_entries`: `voided_at`, `voided_by_id`,
   `voided_by_name`, `void_reason`. Postgres: `migrations/pg/009_ua_void.sql`, applied
@@ -170,9 +205,9 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
 
 ---
 
-## Unreleased — Permission audit, and what it found (2026-09-28)
+### Permission audit, and what it found (2026-09-28)
 
-### Added
+#### Added
 
 - **`node scripts/perm-audit.cjs`: a permission audit.** A catalog of every action the
   screens offer (`scripts/perm-audit/catalog.cjs`: when the UI shows it, and the exact
@@ -187,7 +222,7 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
   `npm test` runs it too (`tests/permissions.audit.test.js`), so a new mismatch fails the
   suite; so does the Postgres audit.
 
-### Fixed (found by the audit)
+#### Fixed (found by the audit)
 
 - **Report tab › Shift Details** (date, shift, PA on duty) were editable by everyone, but
   saving needed `reports.create`. Case managers' changes silently failed. Now they need
@@ -215,9 +250,9 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
 
 ---
 
-## Unreleased — Anyone can conduct a UA (2026-09-28)
+### Anyone can conduct a UA (2026-09-28)
 
-### Changed
+#### Changed
 
 - **Every role records UA results** (`ua.record`). It is in every role preset, and existing
   installs grant it once to every group, custom ones included, on the first start. An
@@ -233,9 +268,9 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
 
 ---
 
-## Unreleased — Notification bell: Conduct UA, past 24 hours (2026-09-28)
+### Notification bell: Conduct UA, past 24 hours (2026-09-28)
 
-### Added
+#### Added
 
 - **Conduct UA** next to Ack on each UA request in the bell. It acknowledges the request,
   which clears it for everyone, and opens the UA form with that resident filled in and
@@ -247,18 +282,18 @@ the rest works without it. Other phone actions (UA requests and draws, infractio
   each dismissal, never a name, and the row is drawn from current data.
 - `GET /api/ua-requests/recent`: requests acknowledged in the last 24 hours.
 
-### Fixed
+#### Fixed
 
 - The bell showed a UA request's age wrong on SQLite installs: `requested_at` is local time
   there and was read as UTC.
 
 ---
 
-## Unreleased — Mobile app: "For you", quick actions, PIN unlock (2026-09-28)
+### Mobile app: "For you", quick actions, PIN unlock (2026-09-28)
 
 Step 4 of the mobile rewrite.
 
-### Added
+#### Added
 
 - **"For you" on Home.** A list of what this person can act on now, built on the server from
   their permissions: passes due back or late, residents leaving on an approved pass today,
@@ -280,7 +315,7 @@ Step 4 of the mobile rewrite.
   Unlocks share the login rate limit, and setup, unlocks and failures go to the audit log.
   Patterns (`123456`, `111111`, `121212`…) are refused.
 
-### Changed
+#### Changed
 
 - Signing out on purpose (desktop, classic or new mobile) also switches off that phone's PIN.
   The idle sign-out doesn't, so the PIN can be used after it.
@@ -289,18 +324,18 @@ Step 4 of the mobile rewrite.
 - Tests allow 60 seconds per test: each test account is a real 600,000-round password hash,
   and on a busy machine setting several up could pass Jest's 5-second default.
 
-### Database
+#### Database
 
 - New table `device_pins` (one row per phone with a PIN). Postgres:
   `migrations/pg/008_device_pins.sql`, applied before restarting; SQLite creates it itself.
 
 ---
 
-## Unreleased — Mobile app: residents, staff directory, announcements (2026-09-27)
+### Mobile app: residents, staff directory, announcements (2026-09-27)
 
 Step 3 of the mobile rewrite.
 
-### Added
+#### Added
 
 - **Residents tab.** The whole roster with search, status filters and floors; each row shows
   when a resident on a pass is due back and whether a UA has been requested. The census
@@ -320,11 +355,11 @@ Step 3 of the mobile rewrite.
 
 ---
 
-## Unreleased — New mobile app: rounds, install, push alerts (2026-09-27)
+### New mobile app: rounds, install, push alerts (2026-09-27)
 
 Step 2 of the mobile rewrite. The new app runs alongside the classic `/mobile` page.
 
-### Added
+#### Added
 
 - **A new mobile app at `/m`.** Home (the next wellness check on the desktop's schedule,
   census, latest log entries), Rounds (wellness rounds and walkthroughs), Log and More. It
@@ -346,13 +381,13 @@ Step 2 of the mobile rewrite. The new app runs alongside the classic `/mobile` p
 - New permission `rounds.notify_missing` ("Notification — resident not located"), granted
   to Supervisor and Administrator.
 
-### Changed
+#### Changed
 
 - The security policy allows same-origin workers (`worker-src 'self' blob:`); it allowed
   only `blob:`, which blocked the service worker.
 - Login honors `?next=` (same-site paths only), so an installed app returns to where it was.
 
-### Deploy notes
+#### Deploy notes
 
 - Apply `migrations/pg/007_mobile_rounds_push.sql` before restarting.
 - Push keys: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` in `.env`. Without
@@ -361,12 +396,12 @@ Step 2 of the mobile rewrite. The new app runs alongside the classic `/mobile` p
 
 ---
 
-## Unreleased — Postgres audit (2026-09-27)
+### Postgres audit (2026-09-27)
 
 A full audit of the SQLite → Postgres port: production error logs, a column-by-column schema
 diff, a sweep by bug class, and the whole test suite run against a real Postgres database.
 
-### Fixed
+#### Fixed
 
 - **HQ's facility list, facility detail, update reports and rollouts failed on Postgres** —
   `opscentral.facilities` never got the `upd_*` columns SQLite adds at boot.
@@ -393,14 +428,14 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
   database** — indistinguishable from total data loss. Both apps now refuse to start, and the
   boot line names the Postgres database actually in use.
 
-### Security
+#### Security
 
 - **`POST /api/data` no longer accepts a resident list.** Given one, it deleted every resident
   not on it, so a single hand-built request from any account with `residents.edit` could empty
   the roster. No screen has sent a list since May 2026 — residents change through the resident
   and room screens — so a request carrying one is now refused (400) before anything is written.
 
-### Added
+#### Added
 
 - `scripts/pg-audit.sh` — runs the whole suite on Postgres, rebuilding a scratch database from
   `migrations/pg/` before each test file. Refuses any database without verify/test/audit/scratch
@@ -412,9 +447,9 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
 
 ---
 
-## Unreleased — UA test times (2026-09-26)
+### UA test times (2026-09-26)
 
-### Fixed
+#### Fixed
 
 - **UA test times were stored hours early on Postgres** — the same bug as pass times: the
   Conduct UA dialog sent `tested_at` as local text with no timezone, which Postgres reads as
@@ -439,9 +474,9 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
 
 ---
 
-## Unreleased — Pass-extension notifications; pass times fixed on Postgres (2026-09-26)
+### Pass-extension notifications; pass times fixed on Postgres (2026-09-26)
 
-### Added
+#### Added
 
 - **Notification when a pass is extended.** Everyone with the new permission
   `passes.notify_extended` ("Notification — pass extended", under Weekend Passes) gets a
@@ -455,7 +490,7 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
   `extended_from`) alongside the existing note. Postgres: apply
   `migrations/pg/005_pass_extension_stamp.sql` before deploying; SQLite migrates itself.
 
-### Fixed
+#### Fixed
 
 - **Pass times were stored hours early on the Postgres deployment.** The pass forms sent
   `datetime-local` values with no timezone; SQLite kept the text and browsers read it as
@@ -473,9 +508,9 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
 
 ---
 
-## Unreleased — Resident statuses: built-in defaults, Passes owns Weekend Pass (2026-09-26)
+### Resident statuses: built-in defaults, Passes owns Weekend Pass (2026-09-26)
 
-### Changed
+#### Changed
 
 - **A new facility starts with the four built-in statuses only** — In Building, Weekend
   Pass, Hospital and Out / Other, all of which can be renamed and recoloured but not
@@ -493,7 +528,7 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
   chips baked in); they now read `client/src/utils/statuses.js`, so an added, renamed or
   retired status shows up everywhere at once.
 
-### Fixed
+#### Fixed
 
 - **A resident away on pass showed as In Building almost everywhere.** A pass never writes
   a status — it is laid over the stored one — but only the shift report and dashboard
@@ -510,9 +545,9 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
 
 ---
 
-## Unreleased — Session-security hardening for the hosted deployment (2026-09-01)
+### Session-security hardening for the hosted deployment (2026-09-01)
 
-### Security
+#### Security
 
 - **Session cookie now carries `Secure` behind a TLS-terminating proxy.** `cookie.secure`
   was derived at boot from whether *this process* held a certificate. In the hosted
@@ -541,7 +576,7 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
 - **HSTS** is now sent by nginx (`max-age=31536000; includeSubDomains`), closing the
   plaintext first request that the cookie fix alone would still have allowed.
 
-### Changed
+#### Changed
 
 - **Sessions persist in the database** (`server/lib/sessionStore.js`, new `sessions` table)
   instead of express-session's `MemoryStore`, which leaks and empties on every restart —
@@ -550,7 +585,7 @@ diff, a sweep by bug class, and the whole test suite run against a real Postgres
   existing connection primitives, so it adds no dependency, and sessions inherit the
   database's SQLCipher encryption at rest. Expired rows are reaped every 15 minutes.
 
-### Tests
+#### Tests
 
 - `tests/session.security.test.js` — 9 tests covering the `Secure` flag in both deployment
   modes, forwarded-IP attribution in the audit log, and store round-trip / restart-survival /

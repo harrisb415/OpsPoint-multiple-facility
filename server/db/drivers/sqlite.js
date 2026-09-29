@@ -13,7 +13,7 @@
 const Database = require('better-sqlite3-multiple-ciphers');
 const fs       = require('fs');
 const path     = require('path');
-const dbcrypt  = require('../../../dbcrypt');
+const dbcrypt  = require('../dbcrypt');
 
 let _db = null;
 let _dbPath = null;

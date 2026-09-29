@@ -26,7 +26,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const connection = require('./server/db/connection');
+const connection = require('../db/connection');
 
 let _timer   = null;
 let _running = false;

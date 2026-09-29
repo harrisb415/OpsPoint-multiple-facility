@@ -1,5 +1,5 @@
 /**
- * OpsPoint — Server v2.6.1
+ * OpsPoint — Server v2.7.0
  * SQLite + HTTPS + Session Auth + Role-based access
  */
 'use strict';
@@ -12,7 +12,8 @@ const fs      = require('fs');
 const path    = require('path');
 const crypto  = require('crypto');
 const db      = require('./db');
-const backup  = require('./backup');
+// Under server/ so the in-app updater (which copies server/ whole) ships it.
+const backup  = require('./server/lib/backup');
 
 // ── Modular foundation (Part A refactor — see server/ARCHITECTURE.md) ──────
 // Pure, low-coupling pieces extracted from this file. Behaviour is identical;
@@ -621,10 +622,10 @@ if (require.main === module) (async ()=>{
   }, 60 * 60 * 1000);
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
-  await db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.6.1',tls:useTLS});
+  await db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.7.0',tls:useTLS});
   server.listen(PORT,config.BIND_ADDR,()=>{
     console.log('\n══════════════════════════════════════════════');
-    console.log('  OpsPoint v2.6.1');
+    console.log('  OpsPoint v2.7.0');
     console.log('══════════════════════════════════════════════');
     console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
     console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);

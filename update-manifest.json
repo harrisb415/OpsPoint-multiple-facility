@@ -1,21 +1,21 @@
 {
-  "version": "2.6.1",
-  "released": "2026-08-31T05:31:16.693Z",
+  "version": "2.7.0",
+  "released": "2026-09-29T06:12:39.509Z",
   "min_node": "20.0.0",
   "min_from": "2.3.0",
   "mandatory": false,
-  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.6.1/opspoint-2.6.1.tar.gz",
-  "sha256": "f99517adef6209a156fb92e1d6a940d1c7cc6ee7727bfc77b72141f917729511",
-  "size": 983256,
+  "url": "https://github.com/harrisb415/opspoint-releases/releases/download/v2.7.0/opspoint-2.7.0.tar.gz",
+  "sha256": "4796ab8b4f463e1688aa9bf92258b0586f04c383659a9363d9c15bd076bd771b",
+  "size": 1094231,
   "sig_alg": "ed25519",
-  "signature": "06F4iqLIVgF3WEbHDx8ev8iCZJrpmuiLAZl5FBPFj5oLn/4lDEYZCuU9lMRY19NzREUr10Y6JmnWRoJKgEEyBA==",
+  "signature": "fTbwuMBb0/PkaqgklexHFwQht/tn+FapwJ8FvRQ/dXU9gTu8KvI4mbudQSG1n1TLiJ6rLGUf1mV/Aa+ScxvBCQ==",
   "changelog": [
-    "Facility colour themes — pick your brand colour in Admin → Facility → Appearance (six, including Salvation Army). Applies across the whole interface for every user.",
-    "Weekend passes reworked — Approved / Active / Returned, with Mark Departed (unlocks 10 minutes before departure), Mark Returned, and Extend, which records who moved the return and from what.",
-    "Editable resident statuses — rename, recolour, add or retire them in Admin → Facility → Statuses.",
-    "Modals restyled to match the rest of the app and follow the selected theme.",
-    "Fixed: the Clinical sidebar stayed light-coloured in dark mode.",
-    "Fixed: form fields in dark-mode dialogs had no contrast against the panel behind them.",
-    "Security: the release signing key was rotated. Installing this build is required before any later update will verify."
+    "New phone app at /m for every role: rounds, walkthroughs, the shift log, residents, a personal \"For you\" list, push alerts and PIN unlock. It works without signal: entries are saved on the phone and sent when it reconnects.",
+    "UA results, incident reports and infractions are voided with a reason instead of deleted, and stay on file.",
+    "Deleting a log line, a mail record or a shift report asks for a reason, and the audit log records who, when, why and what. Shift reports can be deleted only in their first 24 hours.",
+    "Anyone can conduct a UA; the bell has Conduct UA and a Past 24 hours section; infractions take a staff name.",
+    "Permission audit: every button now works for everyone who can see it.",
+    "Dates follow the facility's day instead of UTC, so evening entries no longer land on tomorrow.",
+    "Postgres support and session-security hardening for hosted deployments."
   ]
 }

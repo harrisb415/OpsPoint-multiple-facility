@@ -1787,7 +1787,7 @@ module.exports = {
   createBroadcast, getBroadcast, getBroadcasts,
   auditLog, getAuditLog, pruneAuditLog,
   statusKeysInUse,
-  // Scheduled backup (backup.js) — VACUUM INTO snapshot + the live DB path.
+  // Scheduled backup (server/lib/backup.js) — VACUUM INTO snapshot + the live DB path.
   backupTo: (dest) => connection.backupTo(dest),
   getDbPath: () => connection.getPath(),
   // ── EHR clinical records ──────────────────────────────────────

@@ -42,7 +42,7 @@ async function snapshot(perms = []) {
       report = {
         id: r.id, report_date: r.report_date, shift: r.shift || '', mod_name: r.mod_name || '',
         is_closed: !!r.is_closed, statuses: parseJson(r.statuses, {}) || {},
-        log_entries: await c.query('SELECT id, time, text FROM log_entries WHERE report_id=? ORDER BY id', [r.id]),
+        log_entries: await c.query('SELECT id, time, text, voided_at, voided_by_name, void_reason FROM log_entries WHERE report_id=? ORDER BY id', [r.id]),
       };
     }
   }
@@ -192,7 +192,7 @@ async function residentCard(id, perms = []) {
     if (m.status === 'approved') mail.to_deliver = m.n;
   }
 
-  const lastUa = await c.query1('SELECT tested_at, result, collection_method FROM ua_records WHERE client_id=? ORDER BY (tested_at IS NULL), tested_at DESC, id DESC LIMIT 1', [id]);
+  const lastUa = await c.query1('SELECT tested_at, result, collection_method FROM ua_records WHERE client_id=? AND voided_at IS NULL ORDER BY (tested_at IS NULL), tested_at DESC, id DESC LIMIT 1', [id]);
   const uaPending = await c.query1('SELECT id FROM ua_requests WHERE client_id=? AND acknowledged=0 LIMIT 1', [id]);
   const infractions = await c.query1("SELECT COUNT(*) AS n FROM violations WHERE client_id=? AND status IN ('pending','assigned')", [id]);
 

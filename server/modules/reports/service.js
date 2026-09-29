@@ -191,12 +191,15 @@ async function patchData(patch = {}, { perms = [] } = {}) {
 }
 
 // DELETE /api/log/:id — returns { label } for the audit.
-// ua.delete (without log.delete) covers UA lines only; nobody edits a sealed report.
-async function deleteLog(id, { perms = [] } = {}) {
+const isUALine = (le) => /\s—\sUA:/i.test(le.text || '') || Number(le.ua_links) > 0;
+
+// DELETE /api/log/:id (log.delete). Nobody deletes a UA line — it is voided,
+// with a reason — and nobody edits a sealed report.
+async function deleteLog(id) {
   const le = await repo.getLogWithReport(id);
   if (!le) throw httpError(404, 'Log entry not found');
   if (le.is_closed) throw httpError(403, 'Report is closed (sealed). Cannot modify.');
-  if (!perms.includes('log.delete') && !/— UA:/i.test(le.text || '')) throw httpError(403, 'Permission denied (log.delete required)');
+  if (isUALine(le)) throw httpError(403, 'UA entries are never deleted. Void it instead, with a reason.');
   await repo.deleteLog(id);
   return { label: String(le.text || '').slice(0, 80) };
 }
@@ -205,6 +208,8 @@ async function deleteLog(id, { perms = [] } = {}) {
 async function deleteReport(id) {
   const rpt = await repo.getReportBrief(id);
   if (!rpt) throw httpError(404, 'Report not found');
+  // Deleting the report would delete its UA lines and their photos.
+  if (await repo.countUALines(id)) throw httpError(409, 'This report has UA results on it, and UA results are never deleted.');
   await repo.deleteLogsForReport(id);
   await repo.deleteReport(id);
   return { label: (rpt.shift || '') + (rpt.report_date ? ' ' + rpt.report_date : '') };
@@ -212,9 +217,12 @@ async function deleteReport(id) {
 
 // POST /api/log/:id/photo — validates + stores a UA photo. Returns { photo }.
 async function saveLogPhoto(id, photo) {
-  const le = await repo.getLogJoinReport(id);
+  const le = await repo.getLogWithReport(id);
   if (!le) throw httpError(404, 'Log entry not found');
   if (le.is_closed) throw httpError(403, 'Cannot modify a closed report');
+  // The photo of the cup is evidence: only on UA lines, and never replaced.
+  if (!isUALine(le)) throw httpError(400, 'Photos go on UA entries');
+  if (le.ua_photo) throw httpError(409, 'This UA already has its photo, and evidence is never replaced. Void the UA and redo it if the photo is wrong.');
   if (!photo) throw httpError(400, 'No photo');
   if (!photo.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,/i)) throw httpError(400, 'Invalid image format');
   if ((photo.split(',')[1] || '').length > 5592406) throw httpError(400, 'Image too large (max 4 MB)');

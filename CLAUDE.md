@@ -135,7 +135,8 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | Self-service | `POST /api/users/me/password`, `GET /api/me` | `requireAuth` |
 | Data | `GET /api/data`, `POST /api/data`, `PATCH /api/data` | `requireAuth` |
 | Reports | `DELETE /api/reports/:id` | `reports.delete` |
-| Log entries | `DELETE /api/log/:id`, `POST /api/log/:id/photo`, `GET /api/log/:id/photo` | `log.delete` or `ua.delete` / `requireAuth` |
+| Log entries | `DELETE /api/log/:id` (never a UA line), `POST /api/log/:id/photo` (UA lines, once), `GET /api/log/:id/photo`, `POST /api/log/:id/void` | `log.delete` / `ua.record` / `requireAuth` / `ua.void` |
+| UA results | `POST /api/ua-records`, `PATCH /api/ua-records/:id`, `POST /api/ua-records/:id/void` — never deleted | `ua.record` / `ua.record` / `ua.void` |
 | Clients | `POST /api/clients`, `PUT /api/clients/:id` | `residents.edit` |
 | Facility settings | `GET /api/facility/settings`, `PUT /api/facility/settings` | `requireAuth` / `admin.settings` |
 | Facility rooms | `GET /api/facility/rooms`, `GET /api/facility/rooms/vacant`, `POST /api/facility/rooms`, `PUT /api/facility/rooms/:id`, `DELETE /api/facility/rooms/:id`, `POST /api/facility/reorder`, `POST /api/facility/reset` | `facility.manage` |
@@ -245,7 +246,8 @@ Boot-time migrations:
 | `passes.edit` | Manage weekend passes and pass notice |
 | `ua.request` | Flag a resident for UA |
 | `ua.acknowledge` | View and dismiss UA banner |
-| `ua.delete` | Delete UA log entries |
+| `ua.record` | Record UA results (every role) |
+| `ua.void` | Void a UA result with a reason — UA results are never deleted |
 | `mail.log` | Log incoming mail |
 | `mail.approve` | Approve mail for delivery |
 | `mail.delete` | Delete mail records |
@@ -254,7 +256,7 @@ Boot-time migrations:
 | `admin.settings` | Facility settings, server restart |
 | `mobile.access` | Mobile shift interface (`/mobile`) |
 
-**Retired permissions (stripped on boot):** `mobile.full`
+**Retired permissions (stripped on boot):** `mobile.full`, `ua.delete` (UA results are voided, never deleted)
 
 ### Mobile page (`Mobile.jsx`)
 

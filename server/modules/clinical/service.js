@@ -100,14 +100,39 @@ async function createUA(b = {}, session) {
 async function updateUA(id, b = {}) {
   const cur = await repo.getUARecord(id);
   if (!cur) throw httpError(404, 'Not found');
+  if (cur.voided_at) throw httpError(409, 'This UA result is void and can no longer be changed');
   const record = await repo.updateUARecord(id, b);
   return { record, clientName: cur.client_name, fields: Object.keys(b) };
 }
-async function deleteUA(id) {
+
+// Void a UA result (it is never deleted): the record and its shift-log line
+// stay, marked void with who, when and why. ua.void, a reason required; sealed
+// records can be voided too — finding a mistake later is the point.
+function voidStamp(reason, session) {
+  const why = String(reason == null ? '' : reason).replace(/[\x00-\x1f\x7f]/g, ' ').trim();
+  if (!why) throw httpError(400, 'Say why this UA result is being voided');
+  return { at: new Date().toISOString(), byId: session.userId, byName: actorName(session), reason: why.slice(0, 500) };
+}
+async function voidUA(id, reason, session) {
   const cur = await repo.getUARecord(id);
   if (!cur) throw httpError(404, 'Not found');
-  await repo.deleteUARecord(id);
-  return { clientName: cur.client_name };
+  if (cur.voided_at) throw httpError(409, 'This UA result is already void');
+  const v = voidStamp(reason, session);
+  await repo.voidUARecord(id, v);
+  if (cur.log_entry_id) await repo.voidLogEntry(cur.log_entry_id, v);
+  return { record: await repo.getUARecord(id), clientName: cur.client_name, logEntryId: cur.log_entry_id || null };
+}
+// The Report tab voids a UA line: its record too, when it has one.
+async function voidUALine(logId, reason, session) {
+  const le = await repo.getLogEntry(logId);
+  if (!le) throw httpError(404, 'Log entry not found');
+  if (le.voided_at) throw httpError(409, 'This UA entry is already void');
+  const rec = await repo.uaRecordForLogEntry(logId);
+  if (rec) return voidUA(rec.id, reason, session);
+  if (!/\s—\sUA:/i.test(le.text || '')) throw httpError(400, 'Only UA entries are voided; other lines are deleted');
+  const v = voidStamp(reason, session);
+  await repo.voidLogEntry(logId, v);
+  return { record: null, clientName: String(le.text || '').split(' — ')[0], logEntryId: logId };
 }
 
 // ── Milestones ──────────────────────────────────────────────────────
@@ -273,7 +298,7 @@ async function unlockRecord(table, id, b = {}, session) {
 }
 
 module.exports = {
-  listUA, getUA, createUA, updateUA, deleteUA,
+  listUA, getUA, createUA, updateUA, voidUA, voidUALine,
   listMilestones, createMilestone, updateMilestone, signoffMilestone, deleteMilestone,
   listIncidents, createIncident, updateIncident, reviewIncident, deleteIncident,
   listDischarges, listDischargesForClient, createDischarge,

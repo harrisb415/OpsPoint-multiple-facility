@@ -53,7 +53,18 @@ async function updateShiftData(id, report_date, shift, mod_name, iso) {
 // ── log entry delete ────────────────────────────────────────────────
 async function getLogText(id) { return await c.query1('SELECT text FROM log_entries WHERE id=?', [id]); }
 async function getLogWithReport(id) {
-  return await c.query1('SELECT le.id, le.text, r.is_closed FROM log_entries le JOIN reports r ON r.id=le.report_id WHERE le.id=?', [id]);
+  return await c.query1(
+    `SELECT le.id, le.text, le.ua_photo, r.is_closed,
+            (SELECT COUNT(*) FROM ua_records u WHERE u.log_entry_id = le.id) AS ua_links
+       FROM log_entries le JOIN reports r ON r.id=le.report_id WHERE le.id=?`, [id]);
+}
+// UA lines on a report: its own text marks them, or a UA record points at them.
+async function countUALines(reportId) {
+  const r = await c.query1(
+    `SELECT COUNT(*) AS n FROM log_entries le
+      WHERE le.report_id=? AND (le.text LIKE ? OR EXISTS (SELECT 1 FROM ua_records u WHERE u.log_entry_id = le.id))`,
+    [reportId, '%— UA:%']);
+  return r ? Number(r.n) : 0;
 }
 async function deleteLog(id) { await c.run('DELETE FROM log_entries WHERE id=?', [id]); }
 
@@ -70,7 +81,7 @@ async function setLogPhoto(id, p) { await c.run('UPDATE log_entries SET ua_photo
 async function resolveLogEntry(id) { return await c.query1('SELECT * FROM log_entries WHERE id=?', [id]) || null; }
 
 module.exports = {
-  getReportRow, getLogWithReport,
+  getReportRow, getLogWithReport, countUALines,
   getAllData, upsertReport, savePhoto, getPhotoB64, getActiveReportId, setActiveReportId,
   isReportClosed,
   getReportField, updateReportField, insertLogEntry, touchReport, updateShiftData,

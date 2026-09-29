@@ -65,16 +65,21 @@ function register(app) {
       res.json({ ok: true, record });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
-  app.delete('/api/ua-records/:id', requireAuth, csrfCheck, requirePermission('ua.delete'),
-    requireUnlocked('ua_records'), async (req, res) => {
+  // UA results are never deleted — voided, with a reason (ua.void). From the UA
+  // tab by record, from the Report tab by its shift-log line; either voids both.
+  const voidRoute = (fn) => async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { clientName } = await service.deleteUA(id);
-      await audit(req, 'ua.record.delete', 'ua_records', id, clientName);
+      const r = await fn(id, req.body && req.body.reason, req.session);
+      await audit(req, 'ua.void', r.record ? 'ua_records' : 'log_entry', r.record ? r.record.id : id, r.clientName,
+        { reason: String(req.body && req.body.reason || '').slice(0, 200), log_entry_id: r.logEntryId });
       broadcast({ type: 'ua_records_updated' });
-      res.json({ ok: true });
+      broadcast({ type: 'data_saved', user: req.session.displayName });
+      res.json({ ok: true, record: r.record });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
-  });
+  };
+  app.post('/api/ua-records/:id/void', requireAuth, csrfCheck, requirePermission('ua.void'), voidRoute(service.voidUA));
+  app.post('/api/log/:id/void', requireAuth, csrfCheck, requirePermission('ua.void'), voidRoute(service.voidUALine));
 
   // ── Milestones (Phase 4) ─────────────────────────────────────────
   app.get('/api/milestones', requireAuth, async (req, res) => {

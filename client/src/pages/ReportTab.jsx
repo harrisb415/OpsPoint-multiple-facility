@@ -14,6 +14,8 @@ import { CARD_HEAD, CARD_HEAD_TITLE } from '../utils/ui.js'
 import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
+import VoidModal from '../components/VoidModal.jsx'
+import { voidNote, lineText } from '../utils/logLines.js'
 import { openPrintWindow, fmtDateFriendly, classifyLogEntry } from '../utils/printLog.js'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
@@ -447,6 +449,16 @@ export default function ReportTab() {
   }, [logTime, logText, activeId, patchData, loadData])
 
   // Delete log entry
+  // Void a UA line (and its record): UA results are never deleted.
+  const handleVoidLog = useCallback(async (entryId, reason) => {
+    const r = await fetch(`/api/log/${entryId}/void`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ reason }),
+    })
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not void it.')
+    await loadData()
+  }, [loadData])
+
   const handleDelLog = useCallback(async (entryId) => {
     if (!await confirm({ title: 'Delete this log entry?', confirmText: 'Delete', color: 'red' })) return
     await fetch(`/api/log/${entryId}`, { method: 'DELETE', credentials: 'include' })
@@ -754,7 +766,8 @@ export default function ReportTab() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                   {logEntries.map(e => (
-                    <LogEntry key={e.id ?? e.time + e.text} entry={e} canDelete={canDelLog} onDelete={handleDelLog} onPhotoSaved={loadData} />
+                    <LogEntry key={e.id ?? e.time + e.text} entry={e} canDelete={canDelLog} onDelete={handleDelLog}
+                      canVoid={hasPerm('ua.void')} onVoid={handleVoidLog} canPhoto={hasPerm('ua.record') && !isClosed} onPhotoSaved={loadData} />
                   ))}
                 </tbody>
               </table>
@@ -1025,7 +1038,7 @@ function printActivityLogReport({ facility, report, entries, rangeLabel, include
     ['Entries',       entries.length],
     ['Wellness',      entries.filter(e => /wellness check/i.test(e.text || '')).length],
     ['Walkthroughs',  entries.filter(e => /walkthrough/i.test(e.text || '')).length],
-    ['UA records',    entries.filter(e => /\s—\sua:/i.test(e.text || '')).length],
+    ['UA records',    entries.filter(e => /\s—\sua:/i.test(e.text || '') && !e.voided_at).length],
     ['Infractions',  entries.filter(e => /violation|infraction/i.test(e.text || '')).length],
   ]
 
@@ -1043,11 +1056,11 @@ function printActivityLogReport({ facility, report, entries, rangeLabel, include
   ]
 
   const rows = entries.map(e => {
-    const isPos = e.text && /POS:/.test(e.text)
+    const isPos = e.text && /POS:/.test(e.text) && !e.voided_at
     const row = {
       time: e.time || '—',
       type: classifyLogEntry(e.text),
-      text: e.text || '',
+      text: lineText(e),
       _flagged: isPos,
     }
     if (includeReportContext) {
@@ -1644,9 +1657,14 @@ function RosterRow({ client: c, status, comment, lastUA, lastRS, isClosed, canSt
   )
 }
 
-function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
-  const isPos   = e.text && /POS:/.test(e.text)
+// A log line. UA lines are never deleted: they are voided (with a reason) by
+// someone holding ua.void, and stay visible struck through. The cup photo goes
+// on once, by anyone who records UAs, and is never replaced.
+function LogEntry({ entry: e, canDelete, onDelete, canVoid, onVoid, canPhoto, onPhotoSaved }) {
+  const voided  = !!e.voided_at
+  const isPos   = e.text && /POS:/.test(e.text) && !voided
   const isUA    = e.text && /— UA:/i.test(e.text)
+  const [voiding, setVoiding] = useState(false)
   const type    = classifyLogEntry(e.text)
   const cls     = LOG_TYPE_CLS[type] || LOG_TYPE_CLS.Note
   const fileRef = useRef(null)
@@ -1700,13 +1718,15 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
           </span>
         </td>
         <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
-          {isPos
-            ? e.text.split(/(POS:[^|<]+)/).map((part, i) =>
-                /^POS:/.test(part)
-                  ? <strong key={i} className="text-red-600">{part}</strong>
-                  : part
-              )
-            : e.text
+          {voided
+            ? <span className="line-through text-gray-400 dark:text-gray-500">{e.text}</span>
+            : isPos
+              ? e.text.split(/(POS:[^|<]+)/).map((part, i) =>
+                  /^POS:/.test(part)
+                    ? <strong key={i} className="text-red-600">{part}</strong>
+                    : part
+                )
+              : e.text
           }
           {isUA && e.id && (
             e.ua_photo
@@ -1714,17 +1734,27 @@ function LogEntry({ entry: e, canDelete, onDelete, onPhotoSaved }) {
                   className="ml-2 px-1.5 py-px text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800">
                   📷 View
                 </button>
-              : <button onClick={() => fileRef.current?.click()} title="Attach UA photo"
+              : canPhoto && !voided && (
+                <button onClick={() => fileRef.current?.click()} title="Attach the photo of the cup (once — it can't be replaced)"
                   disabled={uploading}
                   className="ml-2 px-1.5 py-px text-xs text-gray-400 border border-gray-200 rounded hover:bg-gray-50 dark:border-gray-600 dark:text-gray-500 disabled:opacity-50">
                   {uploading ? '⏳' : '📷 Photo'}
                 </button>
+              )
           )}
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-          {canDelete && e.id && (
+          {isUA && e.id && canVoid && !voided && (
+            <button onClick={() => setVoiding(true)} title="Void this UA result (with a reason)"
+              className="ml-2 px-1.5 py-px text-xs text-red-600 border border-red-200 rounded hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30">
+              Void
+            </button>
+          )}
+          {!isUA && canDelete && e.id && (
             <button onClick={() => onDelete(e.id)} title="Delete"
               className="ml-2 text-gray-400 hover:text-red-500 text-lg leading-none cursor-pointer bg-transparent border-none">&times;</button>
           )}
+          {voided && <span className="block mt-0.5 text-xs font-semibold text-red-700 dark:text-red-400">{voidNote(e)}</span>}
+          {voiding && <VoidModal subject={`${e.time} — ${e.text}`} onClose={() => setVoiding(false)} onVoid={reason => onVoid(e.id, reason)} />}
         </td>
       </tr>
       {showPhoto && photoSrc && (

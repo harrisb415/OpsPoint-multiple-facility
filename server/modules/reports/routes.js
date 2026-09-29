@@ -46,11 +46,11 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  // Delete log entry — log.delete or ua.delete both grant access
-  app.delete('/api/log/:id', requireAuth, csrfCheck, requireAnyPermission('log.delete', 'ua.delete'), async (req, res) => {
+  // Delete a log line (log.delete) — never a UA line: those are voided.
+  app.delete('/api/log/:id', requireAuth, csrfCheck, requirePermission('log.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { label } = await service.deleteLog(id, { perms: await userPerms(req) });
+      const { label } = await service.deleteLog(id);
       await audit(req, 'log.delete', 'log_entry', id, label);
       broadcast({ type: 'data_saved', user: req.session.displayName });
       res.json({ ok: true });
@@ -69,7 +69,8 @@ function register(app) {
   });
 
   // ── UA Photo ──────────────────────────────────────────────────────
-  app.post('/api/log/:id/photo', requireAuth, csrfCheck, async (req, res) => {
+  // The UA cup photo: anyone who records UAs, on a UA line, once.
+  app.post('/api/log/:id/photo', requireAuth, csrfCheck, requirePermission('ua.record'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { photo } = await service.saveLogPhoto(id, req.body.photo);

@@ -3,7 +3,7 @@
 // from the list sent and overwrote statuses, issues and comments on
 // reports.create alone. So a browser holding a stale copy wiped lines others
 // had added just by closing the shift. Also here: roster comments' own PATCH
-// field, ua.delete's scope on log lines, sealed reports, and the master group
+// field, UA lines never being deleted, sealed reports, and the master group
 // list taking clinical.groups. Runs on either driver.
 'use strict';
 const os     = require('os');
@@ -116,9 +116,10 @@ describe('log lines', () => {
     uaLine = (await agents.admin.patch('/api/data').send({ reportId: 2, log_entry: { time: '10:05 AM', text: 'Bulk Resident (Rm. 301) — UA: All NEG — by X [Random, Observed]' } })).body.log_entry_id;
   });
 
-  test('ua.delete without log.delete removes UA lines only', async () => {
+  test('nobody deletes a UA line, not even with log.delete; other lines need log.delete', async () => {
     expect((await agents.uaDeleter.delete(`/api/log/${normal}`)).status).toBe(403);
-    expect((await agents.uaDeleter.delete(`/api/log/${uaLine}`)).status).toBe(200);
+    expect((await agents.admin.delete(`/api/log/${uaLine}`)).status).toBe(403);
+    expect(await db.query1('SELECT id FROM log_entries WHERE id=?', [uaLine])).toBeTruthy();
   });
 
   test('nobody deletes a line from a sealed report', async () => {

@@ -442,6 +442,15 @@ const COLUMN_MIGRATIONS = [
     "ALTER TABLE ua_records ADD COLUMN reason TEXT DEFAULT ''",
     "ALTER TABLE ua_records ADD COLUMN log_entry_id INTEGER DEFAULT NULL",
     "ALTER TABLE ua_records ADD COLUMN is_interview INTEGER DEFAULT 0",
+    // voiding a UA result (it is never deleted), on the record and its log line
+    "ALTER TABLE ua_records ADD COLUMN voided_at TEXT DEFAULT NULL",
+    "ALTER TABLE ua_records ADD COLUMN voided_by_id INTEGER DEFAULT NULL",
+    "ALTER TABLE ua_records ADD COLUMN voided_by_name TEXT DEFAULT ''",
+    "ALTER TABLE ua_records ADD COLUMN void_reason TEXT DEFAULT ''",
+    "ALTER TABLE log_entries ADD COLUMN voided_at TEXT DEFAULT NULL",
+    "ALTER TABLE log_entries ADD COLUMN voided_by_id INTEGER DEFAULT NULL",
+    "ALTER TABLE log_entries ADD COLUMN voided_by_name TEXT DEFAULT ''",
+    "ALTER TABLE log_entries ADD COLUMN void_reason TEXT DEFAULT ''",
     // mail_log — added post-launch
     "ALTER TABLE mail_log ADD COLUMN mail_type TEXT DEFAULT ''",
     // users — is_protected predates the current CREATE TABLE on some installs

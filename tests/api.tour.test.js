@@ -134,16 +134,20 @@ describe('API tour', () => {
       issues: ['a'], med_notes: ['m'], last_ua: { [ctx.clientId]: 'Sep 27, 2026' }, last_room_search: { [ctx.clientId]: 'Sep 27' },
     }, [200]);
     await patch('/api/data', { reportId: 1, shiftData: { report_date: '', mod_name: 'Blank date' } }, [200, 400]);
+    // The cup photo goes on a UA line; ordinary lines can be deleted, UA lines never.
+    await patch('/api/data', { reportId: 1, log_entry: { time: '9:06 AM', text: 'Pat Tour (Rm. 203) — UA: All NEG — by Tour [Random, Observed]' } }, [200]);
     const data = await get('/api/data', [200]);
     const rpt = (data.body.reports || []).find(r => r.id === 1);
     expect(rpt).toBeTruthy();
     const entries = rpt ? rpt.log_entries : [];
-    const photoTarget = entries[entries.length - 1];
+    const photoTarget = entries.find(e => /— UA:/.test(e.text));
     if (photoTarget) {
       await post(`/api/log/${photoTarget.id}/photo`, { photo: PNG }, [200]);
       await get(`/api/log/${photoTarget.id}/photo`, [200]);
+      await del(`/api/log/${photoTarget.id}`, [403]);
     }
-    if (entries[0]) await del(`/api/log/${entries[0].id}`, [200]);
+    const plain = entries.find(e => !/— UA:/.test(e.text));
+    if (plain) await del(`/api/log/${plain.id}`, [200]);
     expect(drain()).toEqual([]);
   });
 
@@ -212,7 +216,7 @@ describe('API tour', () => {
     if (uid) {
       await get(`/api/ua-records/${uid}`, [200]);
       await patch(`/api/ua-records/${uid}`, { result: 'fail', notes: 'edited', panel_results: { THC: 'pos' } }, [200]);
-      await del(`/api/ua-records/${uid}`, [200]);
+      await post(`/api/ua-records/${uid}/void`, { reason: 'tour' }, [200]);   // never deleted
     }
     expect(drain()).toEqual([]);
   });

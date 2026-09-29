@@ -4,7 +4,8 @@
  * SAME order and at the SAME paths as the original inline definitions. The
  * profile-view route keeps its per-IP apiRateCheck and HIPAA read-audit.
  */
-const { requireAuth, requirePermission } = require('../../middleware/auth');
+const { requireAuth, requirePermission, userPerms } = require('../../middleware/auth');
+const db = require('../../../db');
 const { csrfCheck } = require('../../middleware/csrf');
 const { apiRateCheck } = require('../../middleware/rateLimit');
 const { audit } = require('../../middleware/audit');
@@ -25,7 +26,7 @@ function register(app) {
   // ── Direct client update (all authenticated roles) ─────────────
   app.put('/api/clients/:id', requireAuth, csrfCheck, requirePermission('residents.edit'), async (req, res) => {
     try {
-      const r = await service.update(req.params.id, req.body);
+      const r = await service.update(req.params.id, req.body, { clinical: db.hasClinical(await userPerms(req)) });
       await audit(req, 'client.edit', 'client', parseInt(req.params.id, 10), r.label, { fields: Object.keys(req.body) });
       broadcast({ type: 'data_saved', user: req.session.displayName || req.session.username });
       res.json({ ok: true, client: r.client });

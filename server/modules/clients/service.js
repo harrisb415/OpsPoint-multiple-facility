@@ -85,8 +85,10 @@ async function create(body = {}) {
   return { id: resultId, client, label: String(name).trim() + ' Rm.' + String(room) };
 }
 
-// Update a resident. Returns { client, label }.
-async function update(idRaw, body = {}) {
+// Update a resident. Returns { client, label }. `clinical` is false for staff
+// who don't see the intake fields (GET /api/data sends them blank): their edit
+// form sends those blanks back, which must not wipe what clinical staff wrote.
+async function update(idRaw, body = {}, { clinical = true } = {}) {
   const id = parseInt(idRaw, 10);
   if (!await repo.exists(id)) throw httpError(404, 'Not found');
   const { room, name, case_manager, phone, intake_date, discharge_date, photo, is_active,
@@ -112,10 +114,10 @@ async function update(idRaw, body = {}) {
   if (intake_date !== undefined)     fields.intake_date = intake_date || null;
   if (discharge_date !== undefined)  fields.discharge_date = discharge_date || null;
   if (is_active !== undefined)       fields.is_active = is_active ? 1 : 0;
-  if (referral_source !== undefined) fields.referral_source = String(referral_source || '');
-  if (program_track !== undefined)   fields.program_track = String(program_track || '');
+  if (referral_source !== undefined && clinical) fields.referral_source = String(referral_source || '');
+  if (program_track !== undefined && clinical)   fields.program_track = String(program_track || '');
   if (emergency_contacts !== undefined) fields.emergency_contacts = JSON.stringify(Array.isArray(emergency_contacts) ? emergency_contacts : []);
-  if (intake_notes !== undefined)    fields.intake_notes = String(intake_notes || '');
+  if (intake_notes !== undefined && clinical)    fields.intake_notes = String(intake_notes || '');
   if (photo !== undefined)           fields.photo = await processPhoto(photo, id);
   await repo.applyUpdates(id, fields);
 

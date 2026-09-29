@@ -85,7 +85,7 @@ export default function Home() {
               {entries.slice(-3).reverse().map(e => (
                 <div key={e.id} className="flex gap-3 border-b border-gray-200 px-4 py-3 last:border-b-0 dark:border-gray-700">
                   <span className="w-16 shrink-0 pt-0.5 font-mono text-xs font-semibold text-primary-700 dark:text-primary-300">{e.time}</span>
-                  <span className="line-clamp-2 text-sm">{e.text}</span>
+                  <span className={`line-clamp-2 text-sm${e.voided_at ? ' text-gray-400 line-through dark:text-gray-500' : ''}`}>{e.text}</span>
                 </div>
               ))}
               <Link to="/m/log" className="flex items-center justify-between border-t border-gray-200 px-4 py-3 text-sm font-semibold text-primary-700 dark:border-gray-700 dark:text-primary-300">

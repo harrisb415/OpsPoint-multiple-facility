@@ -58,7 +58,7 @@ const PERMISSIONS = [
   'rounds.notify_missing', // push alert when a resident is not located on a wellness round
   'ua.request',       // flag a resident for UA from the roster
   'ua.acknowledge',   // see the UA alert banner and acknowledge requests
-  'ua.delete',        // delete individual UA log entries from the report
+  'ua.void',          // void a UA result, with a reason (UA results are never deleted)
   'mail.log',         // log incoming resident mail
   'mail.approve',     // approve logged mail for delivery to resident
   'mail.deliver',     // mark approved mail as delivered to resident
@@ -118,7 +118,7 @@ const ROLE_PRESETS = {
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'mobile.access', 'rounds.notify_missing',
-    'ua.record', 'milestones.edit', 'incidents.log', 'incidents.review',
+    'ua.record', 'ua.void', 'milestones.edit', 'incidents.log', 'incidents.review',
     'groups.view', 'groups.log',
     'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   ],
@@ -126,7 +126,7 @@ const ROLE_PRESETS = {
     'reports.create', 'reports.close', 'reports.delete',
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.assign', 'chores.log', 'passes.edit', 'passes.status',
-    'ua.request', 'ua.delete', 'mail.log', 'mail.approve', 'mail.deliver', 'mail.delete',
+    'ua.request', 'ua.void', 'mail.log', 'mail.approve', 'mail.deliver', 'mail.delete',
     'violations.log', 'violations.review', 'violations.complete', 'violations.delete',
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
@@ -140,7 +140,7 @@ const ROLE_PRESETS = {
   ],
   case_manager: [
     'residents.edit', 'staff.edit', 'passes.edit',
-    'ua.request', 'ua.delete', 'mail.approve',
+    'ua.request', 'mail.approve',
     'violations.notify_review',
     'broadcast.send', 'broadcast.receive',
     'mobile.access',
@@ -645,8 +645,10 @@ function resolveClientPhoto(photo) {
 // Permissions that grant access to clinical / treatment-record fields.
 // A user without ANY of these is non-clinical (PA, shift lead, front desk) and
 // must not see treatment narratives, medical observations, or intake details.
+// Who counts as clinical staff for the "minimum necessary" fields (intake
+// notes, referral source, program track). Not ua.record: everyone records UAs.
 const CLINICAL_PERMS = [
-  'ua.record', 'milestones.edit', 'milestones.signoff',
+  'milestones.edit', 'milestones.signoff',
   'incidents.log',   'incidents.review',
   'consent.manage',  'disclosures.view',
 ];
@@ -680,7 +682,7 @@ async function getAllData(perms) {
     r.last_ua          = _j(r.last_ua, {});
     r.last_room_search = _j(r.last_room_search, {});
     r.issues           = _j(r.issues, []);
-    r.med_notes        = isClinical ? _j(r.med_notes, []) : [];
+    r.med_notes        = _j(r.med_notes, []);   // everyone: diabetes, allergies, diets
     r.roster_snapshot  = _j(r.roster_snapshot, null);
     // Was ORDER BY rowid. Every SQLite table has an implicit rowid; Postgres
     // has none, so the query errored outright and took GET /api/data with it.
@@ -858,7 +860,16 @@ async function updateUARecord(id, patch) {
   await _run(`UPDATE ua_records SET ${fields.join(',')} WHERE id=?`, vals);
   return await getUARecord(id);
 }
-async function deleteUARecord(id) { await _run('DELETE FROM ua_records WHERE id=?', [id]); }
+// UA results are never deleted. A mistake is voided — the result stays on file
+// with who voided it, when and why — and so is its line in the shift log.
+async function voidUARecord(id, v) {
+  await _run('UPDATE ua_records SET voided_at=?, voided_by_id=?, voided_by_name=?, void_reason=? WHERE id=? AND voided_at IS NULL',
+    [v.at, v.byId, v.byName, v.reason, id]);
+}
+async function voidLogEntry(id, v) {
+  await _run('UPDATE log_entries SET voided_at=?, voided_by_id=?, voided_by_name=?, void_reason=? WHERE id=? AND voided_at IS NULL',
+    [v.at, v.byId, v.byName, v.reason, id]);
+}
 
 // ── Milestones ────────────────────────────────────────────────────────
 async function createMilestone(rec) {
@@ -1715,6 +1726,7 @@ module.exports = {
   getAllData, upsertReport, savePhoto, getPhotoB64,
   DEFAULT_WALK_AREAS, DEFAULT_UA_PANEL,
   PERMISSIONS, ROLE_PRESETS,
+  hasClinical: _hasClinical,   // who sees intake notes, referral source, program track
   getPermissionProfiles, setPermissionProfiles,
   _applyOneTimeGrants,   // tests: a grant never re-applies
   // Groups
@@ -1734,7 +1746,7 @@ module.exports = {
   CLINICAL_TABLES,
   isRecordLocked, unlockRecord, runLockSweep,
   // UA Records
-  createUARecord, getUARecord, getUARecords, updateUARecord, deleteUARecord,
+  createUARecord, getUARecord, getUARecords, updateUARecord, voidUARecord, voidLogEntry,
   // Med Administration Log
   // Milestones
   createMilestone, getMilestones, updateMilestone, signoffMilestone, deleteMilestone,

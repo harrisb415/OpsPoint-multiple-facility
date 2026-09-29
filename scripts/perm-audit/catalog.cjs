@@ -125,10 +125,15 @@ module.exports = [
     run: async (a, fx) => { await a.post('/api/ua-requests', { client_id: fx.resident.id, client_name: fx.resident.name, room: fx.resident.room }); },
   },
   {
-    id: 'report.ua.photo', area: 'Report tab', label: 'Attach a photo to a UA log line',
-    where: 'ReportTab.jsx — "📷 Photo" on UA lines, shown to everyone', show: EVERYONE, reverse: false,
+    id: 'report.ua.photo', area: 'Report tab', label: 'Attach the cup photo to a UA line (once)',
+    where: 'ReportTab.jsx — "📷 Photo" on UA lines (canPhoto = ua.record, report open)', show: [['ua.record']],
     setup: async (h) => ({ rec: await h.uaRecord() }),
     run: async (a, fx) => { await a.post(`/api/log/${fx.rec.logEntryId}/photo`, { photo: PNG }); },
+  },
+  {
+    id: 'report.ua.void', area: 'Report tab', label: 'Void a UA line', where: 'ReportTab.jsx LogEntry — "Void" on UA lines (ua.void)', show: [['ua.void']],
+    setup: async (h) => ({ rec: await h.uaRecord() }),
+    run: async (a, fx) => { await a.post(`/api/log/${fx.rec.logEntryId}/void`, { reason: 'Audit: duplicate entry' }); },
   },
   {
     id: 'report.bulksave.bypass', area: 'Report tab', label: 'The bulk report save cannot delete log entries or change statuses without log.delete / status.edit',
@@ -292,14 +297,14 @@ module.exports = [
     run: async (a, fx, h) => { await a.post('/api/ua-records', h.uaBody(fx.resident)); },
   },
   {
-    id: 'ua.photo', area: 'UA', label: 'Chain-of-custody photo on a UA record', where: 'UARequestsTab.jsx (canRecord)', show: [['ua.record']], reverse: false,
+    id: 'ua.photo', area: 'UA', label: 'Chain-of-custody photo on a UA record', where: 'UARequestsTab.jsx (canRecord)', show: [['ua.record']],
     setup: async (h) => ({ rec: await h.uaRecord() }),
     run: async (a, fx) => { await a.post(`/api/log/${fx.rec.logEntryId}/photo`, { photo: PNG }); },
   },
   {
-    id: 'ua.delete', area: 'UA', label: 'Delete a UA record', where: 'UARequestsTab.jsx (canDelete = ua.delete)', show: [['ua.delete']],
+    id: 'ua.void', area: 'UA', label: 'Void a UA record (they are never deleted)', where: 'UARequestsTab.jsx (canVoid = ua.void) → VoidModal', show: [['ua.void']],
     setup: async (h) => ({ rec: await h.uaRecord() }),
-    run: async (a, fx) => { await a.del(`/api/ua-records/${fx.rec.id}`); },
+    run: async (a, fx) => { await a.post(`/api/ua-records/${fx.rec.id}/void`, { reason: 'Audit: entered for the wrong resident' }); },
   },
   {
     id: 'ua.draw', area: 'UA', label: 'Run a random UA draw', where: 'AppShell.jsx sidebar "UA Draw" (ua.draw)', show: [['ua.draw']],

@@ -31,6 +31,7 @@ import { usePermission } from '../hooks/usePermission.js'
 import { openPrintWindow, classifyLogEntry } from '../utils/printLog.js'
 import { statusLabel, statusBadge, effectiveStatuses } from '../utils/statuses.js'
 import { fmtDay, parseWhen, localDayKey } from '../utils/dates.js'
+import { voidNote } from '../utils/logLines.js'
 
 const LOG_TYPE_CLS = {
   Wellness:      'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
@@ -124,7 +125,7 @@ function computeRisk(clientId, data) {
   // string gave the UTC date.
   const cutoff = new Date(Date.now() - 30 * 86400000).toLocaleDateString('en-CA')
   const posUA = (data.ua_records || []).find(
-    r => r.client_id === clientId && r.result === 'fail' && localDayKey(r.tested_at) >= cutoff
+    r => r.client_id === clientId && r.result === 'fail' && !r.voided_at && localDayKey(r.tested_at) >= cutoff
   )
   if (posUA) return 'amber'
   // Amber: overdue milestone (due date passed, not yet completed)
@@ -410,9 +411,10 @@ function UATab({ client, data, hasPerm }) {
               <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(r.tested_at)} · by {r.witnessed_by_name || '—'}</div>
               {r.collection_method && <div className="text-[11px] text-gray-500 dark:text-gray-400">{r.collection_method}</div>}
               {r.notes && <div className="text-xs text-gray-600 mt-0.5 dark:text-gray-400">{r.notes}</div>}
+              {r.voided_at && <div className="text-xs font-semibold text-red-700 mt-0.5 dark:text-red-400">{voidNote(r)}</div>}
             </div>
-            <span className={`shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${RES_CLS[r.result] || RES_CLS_DEFAULT}`}>
-              {r.result}
+            <span className={`shrink-0 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full ${r.voided_at ? RES_CLS_DEFAULT : (RES_CLS[r.result] || RES_CLS_DEFAULT)}`}>
+              {r.voided_at ? 'void' : r.result}
             </span>
           </div>
         ))

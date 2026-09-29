@@ -12,6 +12,7 @@ import { Button, Modal, ModalHeader, ModalBody, ModalFooter, TextInput } from 'f
 import { Field } from './ui.jsx'
 import { classifyLogEntry } from '../utils/printLog.js'
 import { fmtDay, parseWhen } from '../utils/dates.js'
+import { voidNote } from '../utils/logLines.js'
 
 // ── Pure helpers (no React) ───────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ function buildCard(c, data, sections, limit) {
       .filter(r => r.client_id === c.id)
       .sort((a, b) => (parseWhen(b.tested_at)?.getTime() || 0) - (parseWhen(a.tested_at)?.getTime() || 0))
       .slice(0, limit)
-    const uaResult = r => r.result === 'fail' ? ['pos', 'Positive'] : r.result === 'pass' ? ['neg', 'Negative'] : ['', r.result || '—']
+    const uaResult = r => r.voided_at ? ['', 'Void'] : r.result === 'fail' ? ['pos', 'Positive'] : r.result === 'pass' ? ['neg', 'Negative'] : ['', r.result || '—']
     const uaMethod = r => r.collection_method ? r.collection_method.charAt(0).toUpperCase() + r.collection_method.slice(1) : '—'
     h += `<div class="sec"><div class="slbl">UA Records${recs.length ? ` <span class="sub">(${recs.length} most recent)</span>` : ''}</div>`
     h += recs.length === 0
@@ -125,7 +126,7 @@ function buildCard(c, data, sections, limit) {
             <td>${esc(uaMethod(r))}</td>
             <td class="${uaResult(r)[0]}">${esc(uaResult(r)[1])}</td>
             <td>${esc(r.witnessed_by_name||'—')}</td>
-            <td>${esc(r.notes||'')}</td>
+            <td>${esc([voidNote(r), r.notes || ''].filter(Boolean).join(' — '))}</td>
           </tr>`).join('')}
         </tbody></table>`
     h += `</div>`

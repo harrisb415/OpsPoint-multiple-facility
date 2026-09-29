@@ -2,6 +2,41 @@
 
 ---
 
+## Unreleased — UA results are voided, never deleted (2026-09-28)
+
+### Changed
+
+- **Nobody can delete a UA result.** A mistaken one is **voided**. That takes a reason
+  and the new permission **"Void a UA result"** (`ua.void`, Supervisor and Administrator
+  by default). The result stays on file, and so does its line in the shift log. Both show
+  struck through, with who voided it, when and why: on the Report tab, the UA tab, the
+  resident profile, the resident report, the phone, and in print and the Word export.
+  Voided results don't count in the positive/negative totals, the resident's recent
+  positive flag, or the phone's "last UA".
+  - The Report tab shows **Void** instead of delete on UA lines. The server refuses to
+    delete a UA line for anyone, even with "delete log entries".
+  - The UA tab's delete is gone; `DELETE /api/ua-records/:id` no longer exists.
+  - A shift report with UA results on it can no longer be deleted from the Archive, since
+    that would take its UA lines and photos with it.
+  - `ua.delete` is retired and removed from every account and group on the first start.
+- **The photo of the cup is evidence.** Anyone who records UAs can attach it (the server
+  now checks `ua.record`), only on a UA line, and only once: it is never replaced. If the
+  wrong cup was photographed, void the UA and redo it.
+- **Medical notes on the shift report are for everyone** (diabetes, allergies, diets),
+  whatever their permissions.
+- **Intake notes, referral source and program track** are hidden again from accounts with
+  no clinical permission. Giving everyone "record UA results" had shown them to all,
+  because that permission counted as clinical; it no longer does. A non-clinical edit of
+  a resident now leaves those fields alone instead of blanking them.
+
+### Database
+
+- New columns on `ua_records` and `log_entries`: `voided_at`, `voided_by_id`,
+  `voided_by_name`, `void_reason`. Postgres: `migrations/pg/009_ua_void.sql`, applied
+  before restarting; SQLite adds them itself.
+
+---
+
 ## Unreleased — Permission audit, and what it found (2026-09-28)
 
 ### Added

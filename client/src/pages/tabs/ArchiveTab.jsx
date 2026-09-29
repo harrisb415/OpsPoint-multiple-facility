@@ -75,7 +75,8 @@ export default function ArchiveTab() {
   async function deleteReport(r, e) {
     e.stopPropagation()
     if (!await confirm({ title: `Delete report #${r.id}?`, body: `${r.shift}, ${r.report_date} — this cannot be undone.`, confirmText: 'Delete', color: 'red' })) return
-    await fetch(`/api/reports/${r.id}`, { method: 'DELETE', credentials: 'include' })
+    const res = await fetch(`/api/reports/${r.id}`, { method: 'DELETE', credentials: 'include' })
+    if (!res.ok) alert((await res.json().catch(() => ({}))).error || 'Could not delete this report.')
   }
 
   if (selected) {

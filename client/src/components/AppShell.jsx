@@ -25,6 +25,7 @@ import {
   statusLabel, statusPrint, offSiteStatuses, censusKeys, countStatuses, effectiveStatuses,
 } from '../utils/statuses.js'
 import { parseWhen, fmtWhen, parseServerTime } from '../utils/dates.js'
+import { lineText } from '../utils/logLines.js'
 
 // ── Sidebar group config ──────────────────────────────────────────────
 const SIDEBAR_GROUPS = [
@@ -809,7 +810,7 @@ function Header({ onGoTab, leftClass = 'left-64', search = '', onSearch, showSea
     ])+_ep(140)
     body+=_secHdr('SHIFT ACTIVITY LOG')
     if(!logEntrs.length){body+=_para(_run('No entries recorded.',{sz:10,col:'94A3B8',italic:true}),{sa:40,il:160})}
-    else{const lC=[1000,CW-1000];body+=_tbl(lC,logEntrs.map((e,i)=>_tr(_tc(e.time,lC[0],{bold:true,sz:10,col:'2D6A4F',shade:i%2===0?'FFFFFF':'F4FAF6'})+_tc(e.text,lC[1],{sz:10,col:'111111',shade:i%2===0?'FFFFFF':'F4FAF6'}))))+_ep(140)}
+    else{const lC=[1000,CW-1000];body+=_tbl(lC,logEntrs.map((e,i)=>_tr(_tc(e.time,lC[0],{bold:true,sz:10,col:'2D6A4F',shade:i%2===0?'FFFFFF':'F4FAF6'})+_tc(lineText(e),lC[1],{sz:10,col:'111111',shade:i%2===0?'FFFFFF':'F4FAF6'}))))+_ep(140)}
     body+=_secHdr('ISSUES & CONCERNS')
     if(!issues.length){body+=_para(_run('None.',{sz:10,col:'94A3B8',italic:true}),{sa:40,il:160})}
     else{issues.forEach((v,i)=>{body+=_para([_run('●  ',{sz:10,col:'D4A017',bold:true}),_run(v,{sz:10,col:'111111'})],{sa:60,il:200,shade:i%2===0?'FFFFFF':'FFFBF0'})})}

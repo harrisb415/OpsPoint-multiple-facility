@@ -9,6 +9,8 @@ import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from 
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import ConductUAModal from '../../components/ConductUAModal.jsx'
+import VoidModal from '../../components/VoidModal.jsx'
+import { voidNote } from '../../utils/logLines.js'
 import { openPrintWindow } from '../../utils/printLog.js'
 import { parseWhen } from '../../utils/dates.js'
 import { CARD_HEAD_TITLE, CARD_HEAD_BAND } from '../../utils/ui.js'
@@ -60,7 +62,7 @@ export default function UARequestsTab() {
   const canRequest = hasPerm('ua.request')
   const canAck     = hasPerm('ua.acknowledge')
   const canRecord  = hasPerm('ua.record')
-  const canDelete  = hasPerm('ua.delete')
+  const canVoid    = hasPerm('ua.void')   // UA results are never deleted, only voided
   const { globalSearch = '' } = useOutletContext() || {}
   const confirm = useConfirm()
 
@@ -161,13 +163,14 @@ export default function UARequestsTab() {
         method:       r.collection_method
           ? r.collection_method.charAt(0).toUpperCase() + r.collection_method.slice(1)
           : '—',
-        result:       r.result === 'fail' ? { badge: 'pos', label: 'POSITIVE' }
+        result:       r.voided_at ? 'VOID'
+                    : r.result === 'fail' ? { badge: 'pos', label: 'POSITIVE' }
                     : r.result === 'pass' ? { badge: 'neg', label: 'NEGATIVE' }
                     : r.result || '—',
         substances:   posSubs.length > 0 ? 'POS: ' + posSubs.join(', ') : (r.result === 'pass' ? 'NEG all' : '—'),
         conducted_by: r.witnessed_by_name || '—',
-        notes:        r.notes || '',
-        _fail:        r.result === 'fail',
+        notes:        [voidNote(r), r.notes || ''].filter(Boolean).join(' — '),
+        _fail:        r.result === 'fail' && !r.voided_at,
       }
     })
     const posCount = rows.filter(r => r._fail).length
@@ -181,7 +184,7 @@ export default function UARequestsTab() {
       summary: [
         ['Total records', filteredRecords.length],
         ['Positive',      posCount],
-        ['Negative',      filteredRecords.filter(r => r.result === 'pass').length],
+        ['Negative',      filteredRecords.filter(r => !r.voided_at && r.result === 'pass').length],
         ['Printed',       new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })],
       ],
       columns: [
@@ -200,18 +203,21 @@ export default function UARequestsTab() {
     })
   }
 
-  async function delRecord(r) {
-    if (!await confirm({ title: `Delete UA record for ${r.client_name}?`, body: 'This is audit-logged.', confirmText: 'Delete', color: 'red' })) return
-    const res = await fetch(`/api/ua-records/${r.id}`, { method:'DELETE', credentials:'include' })
-    if (!res.ok) { const j = await res.json().catch(()=>({})); alert(j.error||'Delete failed'); return }
+  const [voiding, setVoiding] = useState(null)   // the record being voided
+  async function voidRecord(r, reason) {
+    const res = await fetch(`/api/ua-records/${r.id}/void`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+      body: JSON.stringify({ reason }),
+    })
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not void it.')
     loadData()
   }
 
   const kpis = [
     { label: 'Pending Requests', value: pending.length, sub: 'awaiting collection', Icon: FlaskConical, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
     { label: 'Records', value: uaRecords.length, sub: 'on file', Icon: FlaskConical, tint: 'bg-sky-100 text-sky-600 dark:bg-sky-900/40 dark:text-sky-300' },
-    { label: 'Negative', value: uaRecords.filter(r => r.result === 'pass').length, sub: 'clear', Icon: CheckCircle, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
-    { label: 'Positive', value: uaRecords.filter(r => r.result === 'fail').length, sub: 'flagged', Icon: XCircle, tint: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' },
+    { label: 'Negative', value: uaRecords.filter(r => !r.voided_at && r.result === 'pass').length, sub: 'clear', Icon: CheckCircle, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
+    { label: 'Positive', value: uaRecords.filter(r => !r.voided_at && r.result === 'fail').length, sub: 'flagged', Icon: XCircle, tint: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' },
   ]
 
   return (
@@ -358,19 +364,21 @@ export default function UARequestsTab() {
             const pr = r.panel_results || {}
             const posSubs = Object.entries(pr).filter(([, v]) => v === 'pos').map(([k]) => k)
             return (
-              <TableRow key={r.id} className={r.result === 'fail' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:border-gray-700 dark:bg-gray-800'}>
+              <TableRow key={r.id} className={r.voided_at ? 'bg-gray-50 text-gray-400 dark:bg-gray-900' : r.result === 'fail' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-white dark:border-gray-700 dark:bg-gray-800'}>
                 <NameCell name={r.client_name} room={r.room} clientId={r.client_id} openProfile={openProfile} photo={(data.clients || []).find(cl => cl.id === r.client_id)?.photo} />
-                <TableCell className="font-mono">{fmtDT(r.tested_at)}</TableCell>
+                <TableCell className={`font-mono${r.voided_at ? ' line-through' : ''}`}>{fmtDT(r.tested_at)}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{REASON_LABEL[r.reason] || r.reason || '—'}</TableCell>
-                <TableCell><StatusBadge color={RESULT_BADGE[r.result] || 'gray'}>{RESULT_LABEL[r.result] || r.result}</StatusBadge></TableCell>
-                <TableCell className="text-gray-500 dark:text-gray-400">{posSubs.length > 0 ? <span className="font-semibold text-red-700 dark:text-red-400">POS: {posSubs.join(', ')}</span> : (r.result === 'pass' ? 'NEG all' : '—')}</TableCell>
+                <TableCell>
+                  {r.voided_at
+                    ? <><StatusBadge color="gray">Void</StatusBadge><div className="mt-1 text-xs text-red-700 dark:text-red-400">{voidNote(r)}</div></>
+                    : <StatusBadge color={RESULT_BADGE[r.result] || 'gray'}>{RESULT_LABEL[r.result] || r.result}</StatusBadge>}
+                </TableCell>
+                <TableCell className={`text-gray-500 dark:text-gray-400${r.voided_at ? ' line-through' : ''}`}>{posSubs.length > 0 ? <span className="font-semibold text-red-700 dark:text-red-400">POS: {posSubs.join(', ')}</span> : (r.result === 'pass' ? 'NEG all' : '—')}</TableCell>
                 <TableCell className="text-gray-500 dark:text-gray-400">{r.witnessed_by_name || '—'}</TableCell>
                 <TableCell className="text-right">
                   <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                    {canRecord && r.log_entry_id && <UAPhotoBtn logEntryId={r.log_entry_id} hasPhoto={!!r.has_log_photo} onSaved={loadData} />}
-                    {canDelete && (r.locked_at
-                      ? <span title="Locked (24h immutability)">🔒</span>
-                      : <Button size="xs" color="light" onClick={() => delRecord(r)} title="Delete"><X className="w-4 h-4" /></Button>)}
+                    {r.log_entry_id && (r.has_log_photo || (canRecord && !r.voided_at)) && <UAPhotoBtn logEntryId={r.log_entry_id} hasPhoto={!!r.has_log_photo} onSaved={loadData} />}
+                    {canVoid && !r.voided_at && <Button size="xs" color="light" onClick={() => setVoiding(r)} title="Void this result (with a reason)">Void</Button>}
                   </div>
                 </TableCell>
               </TableRow>
@@ -420,6 +428,10 @@ export default function UARequestsTab() {
           onClose={() => setConductModal(null)}
           onSaved={async () => { setConductModal(null); await loadData() }}
         />
+      )}
+      {voiding && (
+        <VoidModal subject={`${voiding.client_name} · ${fmtDT(voiding.tested_at)} · ${RESULT_LABEL[voiding.result] || voiding.result}`}
+          onClose={() => setVoiding(null)} onVoid={reason => voidRecord(voiding, reason)} />
       )}
     </div>
   )

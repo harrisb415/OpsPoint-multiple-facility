@@ -14,7 +14,10 @@ const getUARecords = async (f) => await db.getUARecords(f);
 const getUARecord = async (id) => await db.getUARecord(id);
 const createUARecord = async (rec) => await db.createUARecord(rec);
 const updateUARecord = async (id, patch) => await db.updateUARecord(id, patch);
-const deleteUARecord = async (id) => await db.deleteUARecord(id);
+const voidUARecord = async (id, v) => await db.voidUARecord(id, v);
+const voidLogEntry = async (id, v) => await db.voidLogEntry(id, v);
+const uaRecordForLogEntry = async (logId) => await db.query1('SELECT id FROM ua_records WHERE log_entry_id=? ORDER BY id LIMIT 1', [logId]);
+const getLogEntry = async (id) => await db.query1('SELECT id, text, report_id, voided_at FROM log_entries WHERE id=?', [id]);
 
 // ── Med administration log ──────────────────────────────────────────
 
@@ -67,7 +70,7 @@ const unlockRecord = async (table, id, by, reason) => await db.unlockRecord(tabl
 const clinicalDb = db.clinicalDb;
 
 module.exports = {
-  getUARecords, getUARecord, createUARecord, updateUARecord, deleteUARecord,
+  getUARecords, getUARecord, createUARecord, updateUARecord, voidUARecord, voidLogEntry, uaRecordForLogEntry, getLogEntry,
   getMilestones, createMilestone, updateMilestone, signoffMilestone, deleteMilestone,
   getIncidents, createIncident, updateIncident, reviewIncident, deleteIncident,
   getIncidentNotifications,

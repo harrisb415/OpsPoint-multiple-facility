@@ -15,6 +15,7 @@ const c = require('../../db/connection');
 const reportLog = require('../../db/reportLog');
 const { mostRecentLogTime, scheduledStatus, fmtClock } = require('../../lib/schedule');
 const push = require('./service');
+const jobs = require('../../lib/jobs');
 
 const SOON_MS = 10 * 60000;
 const STALE_MS = 3 * 3600000;
@@ -80,7 +81,11 @@ async function tick(now = new Date()) {
 let _timer = null;
 function start() {
   if (_timer) return;
-  _timer = setInterval(() => { tick().catch(e => console.error('[push] scheduler:', e.message)); }, 60000);
+  jobs.register('push-scheduler', 60000, 'Push alert scheduler');
+  _timer = setInterval(async () => {
+    try { await tick(); } catch (e) { console.error('[push] scheduler:', e.message); }
+    jobs.beat('push-scheduler');   // after the run: one that hangs stops beating
+  }, 60000);
   if (_timer.unref) _timer.unref();
 }
 

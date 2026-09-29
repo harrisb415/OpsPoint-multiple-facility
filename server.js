@@ -261,6 +261,13 @@ const updater = createUpdater({
     } catch (e) {}
     return false;
   },
+  // Before anything is downloaded: never replace an install whose database is
+  // unreachable, whose disk is full or whose file storage is broken.
+  preflight: async () => {
+    const r = await doctor.run({ fresh: true, only: ['database', 'disk', 'storage'] });
+    const bad = r.results.find((x) => x.status === 'fail');
+    return bad ? { ok: false, reason: `Not updating: ${bad.label}: ${bad.says}` } : { ok: true };
+  },
 });
 
 // OPSPOINT_UPDATES=platform (the managed and docker profiles): new versions
@@ -301,6 +308,44 @@ app.post('/api/update/rollback', requireAuth, csrfCheck, requirePermission('admi
 
 // Liveness probe for the bootstrap supervisor (unauthenticated — no PHI).
 app.get('/api/health', (req,res)=>{ let v='0.0.0'; try { v=require('./package.json').version; } catch(e){} res.json({ ok:true, version:v }); });
+
+// ── Health check (server/health) ──────────────────────────────────────
+// One set of checks for Admin › System health, GET /healthz, the updater's
+// preflight above, a run at every start, and `opspoint doctor`.
+const health = require('./server/health');
+const instances = require('./server/health/instances');
+const doctor = health.createDoctor({
+  conn: dbConn, settings, config, updater,
+  beforeRun: () => instances.beatNow(),     // so this process's own jobs are current
+});
+
+// For load balancers and platform probes: pass or fail per check, nothing
+// else. 503 only when a critical check fails (the database is unreachable).
+app.get('/healthz', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try { const body = await doctor.healthz(); res.status(body.ok ? 200 : 503).json(body); }
+  catch (e) { res.status(503).json({ ok: false }); }
+});
+app.get('/api/system/health', requireAuth, requirePermission('admin.system'), async (req, res) => {
+  let r = doctor.latest();
+  if (!r || Date.now() - Date.parse(r.at) > 5 * 60 * 1000) r = await doctor.run();
+  res.json(r);
+});
+app.post('/api/system/health/run', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
+  res.json(await doctor.run({ fresh: true }));
+});
+// SQLite: an admin says the .dbkey file is stored somewhere else. Bound to a
+// fingerprint of the key, so a new key needs a new confirmation.
+app.post('/api/system/health/dbkey-confirmed', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
+  if (dbConn.isPg) return res.status(400).json({ error: 'There is no database key on Postgres.' });
+  let key = '';
+  try { key = fs.readFileSync(doctor.dbKeyPath(), 'utf8').trim(); } catch (e) { /* missing */ }
+  if (!key) return res.status(409).json({ error: 'The database key file is missing.' });
+  const by = req.session.displayName || req.session.username || 'admin';
+  await db.setSetting('dbkey_backup_confirmed', { fp: crypto.createHash('sha256').update(key).digest('hex').slice(0, 16), at: nowLocal(), by });
+  await audit(req, 'dbkey.backup_confirmed', 'system', null, 'Database key stored elsewhere', { by });
+  res.json(await doctor.run());
+});
 
 // ── Central / HQ link (Phase 0: connect + check-in) ───────────────
 // Facility node → central HQ server. OUTBOUND only; the facility keeps operating
@@ -631,12 +676,17 @@ if (require.main === module) (async ()=>{
     } else console.log(`  Push alerts: OFF (${push.error})`);
   }
 
-  // Hourly lock sweep — auto-locks clinical records past their 24h grace window
+  // Hourly lock sweep — auto-locks clinical records past their 24h grace window.
+  // Each background job reports to the health check when it has run
+  // (server/lib/jobs.js), so a timer that stopped shows up as stalled.
+  const jobs = require('./server/lib/jobs');
+  jobs.register('lock-sweep', 60 * 60 * 1000, 'Clinical record lock');
   setInterval(async () => {
     try {
       const n = await db.runLockSweep();
       if (n > 0) console.log(`  [lock-sweep] locked ${n} clinical records past 24h grace`);
     } catch(e) {}
+    jobs.beat('lock-sweep');
   }, 60 * 60 * 1000);
 
   const proto=useTLS?'https':'http', ip=getLocalIP();
@@ -660,6 +710,25 @@ if (require.main === module) (async ()=>{
 
   // Multi-facility sync agent — drain the outbox to HQ shortly after boot, then
   // every 20s. No-op (and keeps the outbox bounded) when no central is configured.
-  setTimeout(async () => { await syncTick().catch(() => {}); }, 5000);
-  setInterval(async () => { await syncTick().catch(() => {}); }, 20000);
+  jobs.register('hq-sync', 20000, 'HQ sync');
+  setTimeout(async () => { await syncTick().catch(() => {}); jobs.beat('hq-sync'); }, 5000);
+  setInterval(async () => { await syncTick().catch(() => {}); jobs.beat('hq-sync'); }, 20000);
+
+  // The health check: this process's heartbeat row, then a first run once the
+  // timers have started, its one-line result in the log. After an update, the
+  // result also goes to the audit log, beside the update itself.
+  instances.start(dbConn, { app: 'facility', version: _appVersion });
+  setTimeout(async () => {
+    try {
+      const r = await doctor.run();
+      console.log('  Health: ' + health.summaryLine(r));
+      let applied = null;
+      try { applied = JSON.parse(fs.readFileSync(path.join(DATA, 'updates', 'last-applied.json'), 'utf8')); } catch (e) { /* no update */ }
+      if (applied && applied.to === _appVersion && Date.now() - Date.parse(applied.ts) < 30 * 60 * 1000) {
+        const failing = r.results.filter((x) => x.status === 'fail').map((x) => x.id);
+        await db.auditLog(null, 'system', '127.0.0.1', 'update.health', 'system', null, _appVersion,
+          { summary: health.summaryLine(r), failing });
+      }
+    } catch (e) { console.error('  Health: the check could not run:', e.message); }
+  }, 45 * 1000);
 })();

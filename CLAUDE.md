@@ -37,6 +37,8 @@ node scripts/perm-audit.cjs
 node server/cli/opspoint.js settings [--check] [--app central]
 # Regenerate docs/SETTINGS.md after changing server/settings/schema.js (a test checks it)
 node server/cli/opspoint.js settings docs > docs/SETTINGS.md
+# Health check (the same checks as Admin › System health): exit 1 when one fails
+node server/cli/opspoint.js doctor [--json]
 ```
 
 **Adding a setting?** Declare it in `server/settings/schema.js`, read it with
@@ -102,6 +104,33 @@ deployment plan adds the provider's secret store on top.
 - Tests run with `OPSPOINT_CONFIG=none` (`tests/setup-env.js`, jest `setupFiles`), as do
   `scripts/perm-audit.cjs` and schema-parity's SQLite side, so a developer's settings file can
   never hand them a real database.
+
+### Health check (`server/health/`)
+
+One list of checks (`CHECKS` in `server/health/index.js`), run by Admin › System health
+(`client/src/components/SystemHealth.jsx`), `GET /healthz`, the updater's `preflight`, a run 45 s
+after every start (one `Health:` line in the log; after an update also an `update.health` audit
+row), and `node server/cli/opspoint.js doctor`. Each result: `status` pass | warn | fail | skip,
+`says` (what it found, in words), `fix`, `critical`. Checks: time zone (pg: `SHOW timezone`
+matches), database (reachable — the only CRITICAL one — and on pg schema parity), migrations
+(parity-based until phase 4's ledger), file storage (probe file in the photos folder), secrets,
+encryption key (SQLite: `.dbkey` confirmed stored elsewhere, bound to its fingerprint in the
+`dbkey_backup_confirmed` setting), backups (a `backup.create` audit row < 26 h old and none failed
+since — the in-app SQLite backup and `scripts/opspoint-backup.sh` both write one; or
+`OPSPOINT_BACKUPS=provider`), background jobs, disk (> 20% free, local profiles), certificate
+(> 14 days, when `data/cert.pem` exists), push keys (a real pair), update source (manifest
+reachable + signed, in-app updates only), instance count.
+
+- `/healthz` answers pass/fail per check and nothing else, 503 only on a critical failure (never
+  for a stale backup, which a load balancer can't fix). Cached 15 s; schema parity and the update
+  manifest are cached for an hour (fresh on "Run checks now" and in `doctor`).
+- **Heartbeats**: background jobs call `jobs.register(name, everyMs, label)` when their timer
+  starts and `jobs.beat(name)` after each run (`server/lib/jobs.js`); a new timer must do the same.
+  `server/health/instances.js` writes this process's row in `app_instances` every minute (removed
+  on SIGTERM/SIGINT; rows of dead processes on the same host are cleaned at start), which is how
+  `doctor` in another process sees stalled jobs and a second instance.
+- Schema parity lives in `server/health/schemaParity.js` + `schema-dump.js` (shipped by the
+  updater); `scripts/schema-parity.cjs` is its command-line face.
 
 ### Server (`server.js`)
 
@@ -188,6 +217,7 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | UA requests | `GET /api/ua-requests`, `POST /api/ua-requests`, `POST /api/ua-requests/:id/acknowledge` | `requireAuth` / `ua.request` / `ua.acknowledge` |
 | Mail | `GET /api/mail`, `POST /api/mail`, `PUT /api/mail/:id/approve`, `PUT /api/mail/:id/deliver`, `DELETE /api/mail/:id` (body `{reason}`) | `requireAuth` / `mail.log` / `mail.approve` / `mail.delete` |
 | Admin | `POST /api/admin/restart`, `GET /api/audit-log` | `admin.settings` / `admin.users` |
+| Health | `GET /healthz` (pass/fail per check only), `GET /api/system/health`, `POST /api/system/health/run`, `POST /api/system/health/dbkey-confirmed` (SQLite) | none / `admin.system` |
 | Photos | `GET /photos/:filename` | `requireAuth` |
 
 ### Frontend — React SPA (`client/`)
@@ -373,7 +403,11 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server.js` | All routes, WS logic, auth, CSRF, rate limiting |
 | `server/settings/schema.js` | Every setting and the six deployment profiles, declared once |
 | `server/settings/index.js` | Layered values (`get`), the startup check (`startupCheck`) |
-| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `keys` |
+| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `keys` |
+| `server/health/index.js` | The health checks (`createDoctor`: `run`, `healthz`) |
+| `server/health/instances.js` | This process's heartbeat row in `app_instances` |
+| `server/lib/jobs.js` | Background jobs report each run here (`register`, `beat`) |
+| `client/src/components/SystemHealth.jsx` | Admin › System › System health card |
 | `docs/SETTINGS.md` | Generated from the schema — do not edit by hand |
 | `db.js` | Database layer — schema, migrations, queries, photo storage |
 | `client/src/App.jsx` | Route tree, auth guards, mobile redirect |

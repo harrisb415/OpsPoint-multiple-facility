@@ -20,7 +20,6 @@
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
-const crypto = require('crypto');
 const { PROFILES, SETTINGS, BY_NAME, INTERNAL_ENV } = require('./schema');
 
 const BASE = path.resolve(__dirname, '..', '..');
@@ -490,14 +489,7 @@ function sameDatabase(a, b) {
   const x = dsnParts(a), y = dsnParts(b);
   return !!x && !!y && x.host === y.host && x.port === y.port && x.db === y.db && x.options === y.options;
 }
-// A private key determines its public key; derive it and compare.
-function vapidPairMatches(pub, priv) {
-  try {
-    const ecdh = crypto.createECDH('prime256v1');
-    ecdh.setPrivateKey(Buffer.from(String(priv), 'base64url'));
-    return ecdh.getPublicKey().equals(Buffer.from(String(pub), 'base64url'));
-  } catch (e) { return false; }
-}
+const vapidPairMatches = (pub, priv) => require('../lib/webpush').pairMatches(pub, priv);
 
 // ── This process ────────────────────────────────────────────────────────────
 const _instances = {};
@@ -559,6 +551,6 @@ module.exports = {
   timeZone: () => current().timeZone(),
   check: () => current().check(),
   describe: () => current().describe(),
-  forApp, useApp, createSettings, startupCheck, parseValue, canonicalZone,
+  forApp, useApp, createSettings, startupCheck, parseValue, canonicalZone, parseDsn,
   SettingsError, EX_CONFIG, BASE, CHECKS, WARNING_CHECKS,
 };

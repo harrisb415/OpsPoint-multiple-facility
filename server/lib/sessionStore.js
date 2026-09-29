@@ -16,6 +16,7 @@
  * over the existing connection primitives.
  */
 const session = require('express-session');
+const jobs = require('./jobs');
 
 const PRUNE_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -111,7 +112,9 @@ function createSessionStore(conn, fallbackMs) {
 
   const store = new SqliteStore();
   // unref: a background reaper must never be the reason the process stays up.
-  const timer = setInterval(() => store.prune(), PRUNE_INTERVAL_MS);
+  // Reported to the health check (server/lib/jobs.js) each time it runs.
+  jobs.register('session-prune', PRUNE_INTERVAL_MS, 'Session cleanup');
+  const timer = setInterval(async () => { await store.prune(); jobs.beat('session-prune'); }, PRUNE_INTERVAL_MS);
   if (timer.unref) timer.unref();
   store.pruneTimer = timer;
   return store;

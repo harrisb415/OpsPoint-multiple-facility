@@ -435,6 +435,24 @@ function createSchema(db) {
     PRIMARY KEY (user_id, key)
   )`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_idempotency_keys_created ON idempotency_keys (created_at)');
+  // One row per running server, rewritten every minute: which background jobs
+  // ran when (JSON), so the health check sees stalled timers and a second
+  // instance, even from another process (`opspoint doctor`). Times are ISO
+  // UTC text. server/health/instances.js. Postgres: 013_app_instances.sql.
+  db.exec(`CREATE TABLE IF NOT EXISTS app_instances (
+    instance_id TEXT    PRIMARY KEY,
+    app         TEXT    NOT NULL DEFAULT 'facility',
+    hostname    TEXT    NOT NULL DEFAULT '',
+    pid         INTEGER NOT NULL DEFAULT 0,
+    version     TEXT    NOT NULL DEFAULT '',
+    started_at  TEXT    NOT NULL,
+    last_seen   TEXT    NOT NULL,
+    jobs        TEXT    NOT NULL DEFAULT '{}'
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_app_instances_last_seen ON app_instances (last_seen)');
+  // The health check finds the newest backup.create / backup.failed entry;
+  // without this it walks six years of audit rows backwards to find a rare one.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log (action, id)');
 }
 
 // Backward-compat column additions for DBs that predate the current schema.

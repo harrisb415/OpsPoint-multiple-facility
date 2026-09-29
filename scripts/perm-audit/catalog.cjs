@@ -685,14 +685,16 @@ module.exports = [
     run: async (a) => { await a.get('/api/audit-log?limit=5'); },
   },
   {
-    id: 'admin.system', area: 'Admin', label: 'System: update status, HQ status', where: 'Admin.jsx — System (admin.system); Admin needs admin.users', show: [['admin.users', 'admin.system']],
+    id: 'admin.system', area: 'Admin', label: 'System: health, update status, HQ status', where: 'Admin.jsx — System (admin.system), SystemHealth.jsx; Admin needs admin.users', show: [['admin.users', 'admin.system']],
     run: async (a) => {
+      await a.get('/api/system/health');
       await a.get('/api/update/status');
       await a.get('/api/update/backups');
       await a.get('/api/central/status');
     },
   },
-  ...[['POST', '/api/admin/restart', 'Restart the server'], ['POST', '/api/update/check', 'Check for updates'], ['POST', '/api/update/apply', 'Install an update'],
+  ...[['POST', '/api/system/health/run', 'Run the health checks'], ['POST', '/api/system/health/dbkey-confirmed', 'Confirm the database key is stored elsewhere'],
+    ['POST', '/api/admin/restart', 'Restart the server'], ['POST', '/api/update/check', 'Check for updates'], ['POST', '/api/update/apply', 'Install an update'],
     ['POST', '/api/update/rollback', 'Roll back an update'], ['POST', '/api/central/connect', 'Connect to HQ'], ['POST', '/api/central/disconnect', 'Disconnect from HQ'],
     ['POST', '/api/central/checkin', 'HQ check-in'], ['POST', '/api/central/sync-now', 'HQ sync now'], ['POST', '/api/central/auto-update', 'HQ auto-update setting']].map(([verb, path, name]) => ({
     id: `admin.system.${path}`, area: 'Admin', label: `System: ${name}`, where: 'Admin.jsx — System (admin.system)', show: [['admin.users', 'admin.system']], staticRoute: [verb, path],

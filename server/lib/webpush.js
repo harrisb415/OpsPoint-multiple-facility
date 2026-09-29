@@ -46,6 +46,17 @@ function generateKeys() {
   return { publicKey: b64u.enc(pub), privateKey: jwk.d };
 }
 
+// Whether the two halves belong together. privateKeyObject() accepts any
+// well-formed pair, even halves of two different pairs, and push services then
+// reject every message; a private key determines its public key, so compare.
+function pairMatches(publicKey, privateKey) {
+  try {
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.setPrivateKey(b64u.dec(privateKey));
+    return ecdh.getPublicKey().equals(b64u.dec(publicKey));
+  } catch (e) { return false; }
+}
+
 function privateKeyObject(keys) {
   const pub = b64u.dec(keys.publicKey);
   const d = b64u.dec(keys.privateKey);
@@ -145,4 +156,4 @@ async function send(sub, message, { keys, subject, ttl = 3600, urgency = 'high',
   return { ok: res.status >= 200 && res.status < 300, status: res.status };
 }
 
-module.exports = { loadKeys, generateKeys, encrypt, vapidAuthorization, send, isAllowedEndpoint, _b64u: b64u };
+module.exports = { loadKeys, generateKeys, pairMatches, encrypt, vapidAuthorization, send, isAllowedEndpoint, _b64u: b64u };

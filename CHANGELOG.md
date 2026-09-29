@@ -2,6 +2,39 @@
 
 ---
 
+## Unreleased — Health check: one definition of healthy (2026-09-29)
+
+Roadmap phase 2 of the deployment plan.
+
+- **One set of checks** (`server/health/`), each saying what it found in plain words and how to
+  fix a failure: time zone (on Postgres the database session must agree), database (reachable;
+  on Postgres every table and column the code uses exists), migrations, file storage (a test
+  file written, read back, deleted), secrets, the SQLite encryption key (confirmed stored
+  elsewhere), backups (one recorded in the last 26 hours and none failed since), background jobs,
+  disk space (over 20% free), certificate (over 14 days left), push keys (one real pair), update
+  source (release list reachable and signed), and instance count (exactly one server).
+- **Admin › System › System health** lists them, with **Run checks now** and, on SQLite, **Key
+  stored elsewhere** (audited, and tied to the key: a new key needs a new confirmation).
+- **`GET /healthz`** for load balancers and platform probes: pass or fail per check and nothing
+  else; 503 only when the database can't be reached. HQ has its own (database, time zone).
+  `/api/health` is unchanged.
+- **`node server/cli/opspoint.js doctor [--json]`** runs the same checks from outside the server
+  (exit 1 when one fails); it reads the database and never creates one.
+- **The updater asks first**: it refuses to install while the database, disk space or file
+  storage check fails. The checks run 45 seconds after every start (one `Health:` line in the
+  log); after an update the result is also written to the audit log.
+- **Heartbeats**: background jobs (push scheduler, HQ sync, lock sweep, session cleanup, backup)
+  report each run; each server keeps a row in the new `app_instances` table, so stalled timers
+  and a second instance show up. **Postgres: apply `migrations/pg/013_app_instances.sql`** (the
+  table, plus an audit-log index the backups check needs) before starting this version.
+- New setting `OPSPOINT_BACKUPS`: `recorded` (default) or `provider` (the default on azure, aws
+  and gcp: the platform's point-in-time restore, taken on trust).
+- Schema parity moved to `server/health/schemaParity.js` so installs have it;
+  `scripts/schema-parity.cjs` works as before.
+- Tests: `tests/health.test.js`.
+
+---
+
 ## Unreleased — Settings: one schema, deployment profiles, a startup check (2026-09-29)
 
 Roadmap phase 1 of the deployment plan (OpsPoint on Windows, Linux, Docker and the Azure, AWS

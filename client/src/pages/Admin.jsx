@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeadCell, TableRow } from 
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
+import SystemHealth from '../components/SystemHealth.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
@@ -2194,6 +2195,11 @@ function SystemTab() {
 
   return (
     <div>
+      {/* System health — the checks in server/health, also behind /healthz */}
+      <Section title="System health">
+        <SystemHealth />
+      </Section>
+
       {/* Central / HQ Connection */}
       <Section title="Central / HQ Connection"
         right={central?.connected && !cBusy ? <Button size="xs" color="light" onClick={centralCheckin}>Check in now</Button> : null}>

@@ -27,6 +27,7 @@
 const fs   = require('fs');
 const path = require('path');
 const connection = require('../db/connection');
+const jobs = require('./jobs');
 
 let _timer   = null;
 let _running = false;
@@ -136,8 +137,9 @@ async function start(db) {
   // First backup shortly after boot rather than immediately — lets startup
   // finish and gives an install that crash-loops a chance to be stopped
   // before it churns through the retained generations.
-  setTimeout(async () => { await runOnce(db); }, 90 * 1000);
-  _timer = setInterval(async () => { await runOnce(db); }, ms);
+  jobs.register('backup', ms, 'Scheduled backup');   // the health check watches it
+  setTimeout(async () => { await runOnce(db); jobs.beat('backup'); }, 90 * 1000);
+  _timer = setInterval(async () => { await runOnce(db); jobs.beat('backup'); }, ms);
   if (_timer.unref) _timer.unref();
 
   console.log(`  [backup] scheduled every ${hours}h → ${await _dir(db)}`);

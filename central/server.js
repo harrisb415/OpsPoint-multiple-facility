@@ -421,6 +421,16 @@ app.post('/api/update/manifest-url', requireAdmin, async (req, res) => {
 
 // Liveness probe for the bootstrap supervisor (unauthenticated).
 app.get('/api/health', (req, res) => { let v = '0.0.0'; try { v = require('./package.json').version; } catch (e) {} res.json({ ok: true, version: v }); });
+// For load balancers and platform probes: pass or fail per check, nothing
+// else; 503 only when the database can't be reached (see server/health).
+app.get('/healthz', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const checks = {};
+  try { await require('../server/db/connection').query1('SELECT 1 AS ok'); checks.database = 'pass'; }
+  catch (e) { checks.database = 'fail'; }
+  checks.timezone = settings.check().some((p) => p.level === 'error' && (p.setting === 'TZ' || p.setting === 'PGTZ')) ? 'fail' : 'pass';
+  res.status(checks.database === 'pass' ? 200 : 503).json({ ok: checks.database === 'pass', checks });
+});
 app.post('/api/update/rollback', requireAdmin, async (req, res) => {
   const actor = await db.getUser(req.session.userId);
   try { res.json(await updater.rollback(actor && actor.username)); }

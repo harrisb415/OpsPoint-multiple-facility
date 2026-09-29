@@ -132,7 +132,17 @@ own clock is already in it; a server on UTC files evening entries under the next
 ```bash
 node server/cli/opspoint.js settings           # every value and where it came from (secrets hidden)
 node server/cli/opspoint.js settings --check   # would OpsPoint start? exit 78 and the reasons if not
+node server/cli/opspoint.js doctor             # the health check: exit 1 when a check fails
 ```
+
+### Health check
+
+Admin › System › **System health** shows whether the install is healthy: time zone, database,
+migrations, file storage, secrets, the encryption key (confirm it is stored somewhere else),
+backups, background jobs, disk space, certificate, push keys, the update source and the number
+of running servers, each with what it found and how to fix it. `GET /healthz` gives the same
+checks as pass/fail only, for a load balancer or monitoring (503 only when the database is
+unreachable).
 
 ---
 

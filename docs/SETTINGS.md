@@ -46,9 +46,9 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | --- | --- | --- | --- |
 | `windows-local` | Windows, on-premises. A facility PC or Windows Server; OpsPoint runs its own server. | `OPSPOINT_OPEN_BROWSER`=`yes` | opspoint.config.json or the service environment |
 | `linux-local` | Linux, on-premises. A Linux server, VM or container that OpsPoint runs itself (systemd or PM2). | none | opspoint.config.json or the service environment |
-| `azure` | Azure, managed. App Service or Container Apps, with Azure Database for PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform` | the App Service or Container App settings |
-| `aws` | AWS, managed. ECS Fargate behind an Application Load Balancer, with RDS or Aurora PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform` | the ECS task definition |
-| `gcp` | Google Cloud, managed. Cloud Run (at least one instance, CPU always allocated), with Cloud SQL for PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform` | the Cloud Run service settings |
+| `azure` | Azure, managed. App Service or Container Apps, with Azure Database for PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider` | the App Service or Container App settings |
+| `aws` | AWS, managed. ECS Fargate behind an Application Load Balancer, with RDS or Aurora PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider` | the ECS task definition |
+| `gcp` | Google Cloud, managed. Cloud Run (at least one instance, CPU always allocated), with Cloud SQL for PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider` | the Cloud Run service settings |
 | `docker` | Docker. Docker Compose on any Linux host: a Postgres container (or an external one) and a data volume. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`loopback, uniquelocal`, `OPSPOINT_UPDATES`=`platform` | the compose file or its .env file |
 
 ## Settings
@@ -86,6 +86,12 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | `PGSSLROOTCERT` | — |  | The CA certificate that signed the Postgres server's certificate, when it is not a public one (for example the Amazon RDS bundle). |
 | `PGPOOL_MAX` | `10` |  | The most Postgres connections held open at once. |
 | `PGTZ` | — |  | The Postgres session time zone. Leave it unset so it follows TZ; if set, it must equal TZ. |
+
+### Backups
+
+| Setting | Default | Required | What it is |
+| --- | --- | --- | --- |
+| `OPSPOINT_BACKUPS` | `recorded`; azure, aws, gcp: `provider` |  | How the health check knows backups happen: recorded (a backup.create entry in the audit log in the last 26 hours, written by the in-app SQLite backup or by an external job such as scripts/opspoint-backup.sh) or provider (the platform's point-in-time restore, which OpsPoint cannot see and takes on trust). One of `recorded`, `provider`. |
 
 ### Security
 

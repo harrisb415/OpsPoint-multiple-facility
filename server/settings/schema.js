@@ -48,6 +48,7 @@ const MANAGED_DEFAULTS = {
   OPSPOINT_DB_DRIVER:   'pg',        // the platform's disk is wiped on restart
   OPSPOINT_TRUST_PROXY: '1',         // one load balancer hop in front
   OPSPOINT_UPDATES:     'platform',  // new versions arrive as new deployments
+  OPSPOINT_BACKUPS:     'provider',  // the platform's point-in-time restore
 };
 
 const PROFILES = {
@@ -235,6 +236,17 @@ const SETTINGS = [
     name: 'PGTZ', group: 'Database', scope: 'shared', type: 'timezone',
     noun: 'the Postgres session time zone',
     summary: 'The Postgres session time zone. Leave it unset so it follows TZ; if set, it must equal TZ.',
+  },
+
+  // ── Backups ───────────────────────────────────────────────────────────────
+  {
+    name: 'OPSPOINT_BACKUPS', group: 'Backups', scope: 'facility', type: 'enum', values: ['recorded', 'provider'],
+    default: 'recorded',
+    noun: 'how the health check knows backups happen',
+    summary: 'How the health check knows backups happen: recorded (a backup.create entry in the audit log in the ' +
+             'last 26 hours, written by the in-app SQLite backup or by an external job such as ' +
+             'scripts/opspoint-backup.sh) or provider (the platform\'s point-in-time restore, which OpsPoint cannot ' +
+             'see and takes on trust).',
   },
 
   // ── Security ──────────────────────────────────────────────────────────────

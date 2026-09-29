@@ -210,6 +210,7 @@ function tsStamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
  * @param {function} ctx.broadcast  WS broadcast(msg)
  * @param {function} ctx.restart    performs the spawn-detached + exit restart
  * @param {function} [ctx.log]
+ * @param {function} [ctx.preflight] async () => ({ ok, reason }) — refuses the update when ok is false
  */
 function createUpdater(ctx) {
   const { baseDir, dataDir, dbPath, db, broadcast, restart } = ctx;
@@ -297,6 +298,12 @@ function createUpdater(ctx) {
     setState({});
     let backupPath = null;
     try {
+      // The health check goes first (ctx.preflight, server/health): an install
+      // whose database is unreachable or whose disk is full is not replaced.
+      if (ctx.preflight) {
+        const pf = await ctx.preflight();
+        if (pf && pf.ok === false) throw new Error(pf.reason || 'The health check failed');
+      }
       const cur = currentVersion();
       const m = await fetchManifest();
       const ver = m.version;
@@ -449,7 +456,14 @@ function createUpdater(ctx) {
     });
   }
 
-  return { check, apply, rollback, status, backups, currentVersion };
+  // The release manifest's reachability and signature, for the health check:
+  // no audit row, nothing downloaded beyond the manifest.
+  async function probe() {
+    const m = await fetchManifest();
+    return { current: currentVersion(), latest: m.version, signed: verifyManifestSignature(m) };
+  }
+
+  return { check, probe, apply, rollback, status, backups, currentVersion };
 }
 
 module.exports = { createUpdater, cmpSemver, hostAllowed, verifyManifestSignature, RELEASE_PUBKEY_PEM };

@@ -14,6 +14,8 @@ Commands
   settings --check    Exit 0 if OpsPoint would start, 78 and the reasons if not
   settings --json     The same as JSON
   settings docs       Print docs/SETTINGS.md, generated from the settings schema
+  doctor              Run the health check (the one Admin > System health shows):
+                      exit 0 when nothing fails, 1 when something does (--json)
   keys                Print a new SESSION_SECRET and push key pair, as settings lines
                       (--json for JSON). Keep them secret; never commit them.
 
@@ -56,6 +58,76 @@ function printSettings(d) {
   process.stdout.write(lines.join('\n') + '\n');
 }
 
+// `doctor`: the same checks as Admin › System health, from outside the server
+// (the installers run it at the end). Reads the database; never creates or
+// changes one. Exit 0 = nothing failed, 1 = something failed, 78 = settings.
+async function doctor() {
+  const settings = require('../settings');
+  const bad = settings.check().filter((p) => p.level === 'error');
+  if (bad.length) {
+    for (const p of bad) process.stdout.write(`ERROR    ${p.message}\n`);
+    return settings.EX_CONFIG;
+  }
+  const fs = require('fs');
+  const config = require('../config');
+  const conn = require('../db/connection');
+  const health = require('../health');
+
+  // SQLite would create a missing database file on open; say so instead.
+  let opened = false;
+  const missing = !conn.isPg && !fs.existsSync(config.DB_PATH);
+  if (!missing) { conn.open(conn.isPg ? undefined : config.DB_PATH); opened = true; }
+  const dbConn = missing
+    ? { isPg: false, query: nope, query1: nope, run: nope }
+    : conn;
+  function nope() { return Promise.reject(new Error(`there is no database at ${config.DB_PATH} yet (OpsPoint creates it when it first starts)`)); }
+
+  const readSetting = async (key, def) => {
+    const row = await dbConn.query1('SELECT value FROM settings WHERE key=?', [key]);
+    if (!row) return def;
+    try { return JSON.parse(row.value); } catch (e) { return row.value; }
+  };
+  // The updater's manifest check, with the HQ relay's key when HQ serves it.
+  const { createUpdater } = require('../../updater');
+  const updater = createUpdater({
+    baseDir: config.BASE, dataDir: config.DATA_DIR, dbPath: config.DB_PATH,
+    db: { getSetting: readSetting, auditLog: async () => {} },
+    broadcast: () => {}, restart: () => {},
+    authFor: async (url) => {
+      try {
+        const cu = await readSetting('central_url', ''), key = await readSetting('central_api_key', '');
+        if (cu && key && new URL(url).host === new URL(cu).host) return { 'x-facility-key': key };
+      } catch (e) { /* no relay */ }
+      return {};
+    },
+    insecureFor: async (url) => {
+      try {
+        const cu = await readSetting('central_url', '');
+        return !!(cu && await readSetting('central_insecure_tls', false) && new URL(url).host === new URL(cu).host);
+      } catch (e) { return false; }
+    },
+  });
+
+  const d = health.createDoctor({ conn: dbConn, settings, config, updater });
+  const r = await d.run({ fresh: true });
+  try { if (opened) await conn.close(); } catch (e) { /* exiting anyway */ }
+
+  if (flag('--json')) {
+    process.stdout.write(JSON.stringify(r, null, 2) + '\n');
+  } else {
+    const mark = { pass: 'pass', warn: 'WARN', fail: 'FAIL', skip: 'skip' };
+    const w = Math.max(...r.results.map((x) => x.label.length)) + 2;
+    const lines = ['OpsPoint health check', ''];
+    for (const x of r.results) {
+      lines.push(`  ${mark[x.status].padEnd(6)}${pad(x.label, w)}${x.says}`);
+      if (x.fix && (x.status === 'fail' || x.status === 'warn')) lines.push(`  ${' '.repeat(6 + w)}Fix: ${x.fix}`);
+    }
+    lines.push('', health.summaryLine(r).replace(/^./, (c) => c.toUpperCase()) + '.');
+    process.stdout.write(lines.join('\n') + '\n');
+  }
+  return r.results.some((x) => x.status === 'fail') ? 1 : 0;
+}
+
 function main() {
   const [cmd, sub] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--app');
   const app = arg('--app') || 'facility';
@@ -85,6 +157,8 @@ function main() {
     return d.problems.some((p) => p.level === 'error') ? settings.EX_CONFIG : 0;
   }
 
+  if (cmd === 'doctor') return doctor();
+
   if (cmd === 'keys') {
     const crypto = require('crypto');
     const k = require('../lib/webpush').generateKeys();
@@ -104,6 +178,11 @@ function main() {
   return cmd && cmd !== 'help' && !flag('--help') ? 2 : 0;
 }
 
-if (require.main === module) process.exitCode = main();
+if (require.main === module) {
+  Promise.resolve(main()).then((code) => { process.exitCode = code; }, (e) => {
+    process.stderr.write(`${(e && e.message) || e}\n`);
+    process.exitCode = 1;
+  });
+}
 
 module.exports = { main };

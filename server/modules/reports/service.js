@@ -7,7 +7,25 @@
  * validation, free-text sanitization, photo magic-bytes) are preserved.
  */
 const repo = require('./repository');
-const { sanitizeText, validTime } = require('../../lib/text');
+const { sanitizeText, validTime, reasonText } = require('../../lib/text');
+const { instantMs, localStampAt } = require('../../lib/time');
+
+// A shift report can be deleted this long after it was started; then it is
+// permanent.
+const REPORT_DELETE_WINDOW_MS = 24 * 3600000;
+
+// A deleted report's log lines, for its audit entry, as many as fit.
+function withLines(detail, lines, budget = 12000) {
+  const out = { ...detail, lines: [] };
+  let used = JSON.stringify(out).length;
+  for (const l of lines) {
+    const s = `${l.time || ''} ${l.text || ''}`.trim();
+    if (used + s.length + 4 > budget) { out.lines_not_shown = lines.length - out.lines.length; break; }
+    out.lines.push(s);
+    used += s.length + 4;
+  }
+  return out;
+}
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -195,24 +213,46 @@ const isUALine = (le) => /\s—\sUA:/i.test(le.text || '') || Number(le.ua_links
 
 // DELETE /api/log/:id (log.delete). Nobody deletes a UA line — it is voided,
 // with a reason — and nobody edits a sealed report.
-async function deleteLog(id) {
+// DELETE /api/log/:id — with a reason. Returns { label, detail } for the
+// audit: what the line said, and why it went.
+async function deleteLog(id, { reason } = {}) {
   const le = await repo.getLogWithReport(id);
   if (!le) throw httpError(404, 'Log entry not found');
   if (le.is_closed) throw httpError(403, 'Report is closed (sealed). Cannot modify.');
   if (isUALine(le)) throw httpError(403, 'UA entries are never deleted. Void it instead, with a reason.');
+  const why = reasonText(reason);
+  if (!why) throw httpError(400, 'Say why this log entry is being deleted');
   await repo.deleteLog(id);
-  return { label: String(le.text || '').slice(0, 80) };
+  return {
+    label: String(le.text || '').slice(0, 80),
+    detail: { reason: why, time: le.time || '', text: le.text || '', report: `${le.shift || ''} ${le.report_date || ''}`.trim() },
+  };
 }
 
-// DELETE /api/reports/:id — 404 if missing; cascades log entries.
-async function deleteReport(id) {
+// DELETE /api/reports/:id — with a reason, in the report's first 24 hours,
+// never the shift open now, never one with UA results; cascades its log
+// lines. Returns { label, detail } for the audit: what was deleted, and why.
+async function deleteReport(id, { reason } = {}) {
   const rpt = await repo.getReportBrief(id);
   if (!rpt) throw httpError(404, 'Report not found');
+  if (parseInt(await repo.getActiveReportId()) === id) throw httpError(409, 'This is the shift that is open now. Close it before deleting it.');
+  if (!(Date.now() - instantMs(rpt.created_at) <= REPORT_DELETE_WINDOW_MS)) {
+    throw httpError(403, 'A report can be deleted only in the first 24 hours after it was started. This one is permanent.');
+  }
   // Deleting the report would delete its UA lines and their photos.
   if (await repo.countUALines(id)) throw httpError(409, 'This report has UA results on it, and UA results are never deleted.');
+  const why = reasonText(reason);
+  if (!why) throw httpError(400, 'Say why this report is being deleted');
+  const lines = await repo.logLinesForReport(id);
   await repo.deleteLogsForReport(id);
   await repo.deleteReport(id);
-  return { label: (rpt.shift || '') + (rpt.report_date ? ' ' + rpt.report_date : '') };
+  return {
+    label: (rpt.shift || '') + (rpt.report_date ? ' ' + rpt.report_date : ''),
+    detail: withLines({
+      reason: why, report_date: rpt.report_date || '', shift: rpt.shift || '', mod: rpt.mod_name || '',
+      closed: !!rpt.is_closed, started: localStampAt(instantMs(rpt.created_at)), line_count: lines.length,
+    }, lines),
+  };
 }
 
 // POST /api/log/:id/photo — validates + stores a UA photo. Returns { photo }.

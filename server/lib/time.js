@@ -37,4 +37,22 @@ function localDate(days = 0) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-module.exports = { nowLocal, localShift, timeToMins, localDate };
+// Milliseconds for an instant the database stamped: ISO text (with Z or an
+// offset, as the pg driver returns timestamptz) or SQLite datetime('now') text,
+// which is UTC with no zone marker. NaN when unreadable.
+function instantMs(v) {
+  if (v instanceof Date) return v.getTime();
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return NaN;
+  return Date.parse(/(?:Z|[+-]\d{2}(?::?\d{2})?)$/i.test(s) ? s : s.replace(' ', 'T') + 'Z');
+}
+
+// nowLocal()'s format for an instant (ms): what a person reading the audit
+// log expects, rather than UTC. '' when unreadable.
+function localStampAt(ms) {
+  if (!Number.isFinite(ms)) return '';
+  const d = new Date(ms), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+module.exports = { nowLocal, localShift, timeToMins, localDate, instantMs, localStampAt };

@@ -5,6 +5,7 @@
  */
 const repo = require('./repository');
 const { nowLocal } = require('../../lib/time');
+const { reasonText } = require('../../lib/text');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -78,25 +79,35 @@ async function logMail(body = {}, { actor } = {}) {
 // Approve a logged mail record. Returns its label for the audit.
 async function approve(id, by) {
   if (!await repo.exists(id)) throw httpError(404, 'Not found');
-  const m = await repo.getNameRoom(id);
+  const m = await repo.getById(id);
   await repo.approve(id, by, nowLocal());
   return m ? (m.client_name + ' Rm.' + m.room) : String(id);
 }
 
 // Mark an approved mail record as delivered. Returns its label for the audit.
 async function deliver(id) {
-  const m = await repo.getNameRoom(id);
+  const m = await repo.getById(id);
   if (!m) throw httpError(404, 'Not found');
   await repo.deliver(id, nowLocal());
   return m.client_name + ' Rm.' + m.room;
 }
 
 // Delete a mail record. Returns its label for the audit.
-async function remove(id) {
-  const m = await repo.getNameRoom(id);
+// Delete a mail record, with a reason. Returns { label, detail } for the
+// audit: the record as it was, and why it went.
+async function remove(id, { reason } = {}) {
+  const m = await repo.getById(id);
   if (!m) throw httpError(404, 'Not found');
+  const why = reasonText(reason);
+  if (!why) throw httpError(400, 'Say why this mail record is being deleted');
   await repo.remove(id);
-  return m.client_name + ' Rm.' + m.room;
+  return {
+    label: m.client_name + ' Rm.' + m.room,
+    detail: {
+      reason: why, resident: m.client_name, room: m.room, mail_type: m.mail_type || '', status: m.status,
+      logged_at: m.logged_at, logged_by: m.logged_by || '', notes: m.notes || '',
+    },
+  };
 }
 
 module.exports = { list, logMail, approve, deliver, remove };

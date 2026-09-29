@@ -42,9 +42,9 @@ const DEFAULT_UA_PANEL = ['ETG','THC','K2','FEN','AMP','MDMA','MET','PCP','MOR',
 const PERMISSIONS = [
   'reports.create',   // create / save shift reports
   'reports.close',    // close a shift
-  'reports.delete',   // delete a report
+  'reports.delete',   // delete a report, with a reason, in its first 24 hours
   'log.add',          // add log entries
-  'log.delete',       // delete log entries
+  'log.delete',       // delete log entries, with a reason (never a UA line)
   'issues.edit',      // add / remove issues & concerns and medical notes
   'status.edit',      // change resident status badges (In Building, At Work, etc.)
   'residents.edit',   // edit resident info (room, name, case manager, phone, dates)
@@ -62,11 +62,11 @@ const PERMISSIONS = [
   'mail.log',         // log incoming resident mail
   'mail.approve',     // approve logged mail for delivery to resident
   'mail.deliver',     // mark approved mail as delivered to resident
-  'mail.delete',      // delete mail log records
+  'mail.delete',      // delete mail log records, with a reason
   'violations.log',      // log a new violation
   'violations.review',   // review a violation (assign consequence or waive)
   'violations.complete', // mark a consequence as completed
-  'violations.delete',   // permanently delete violation records
+  'violations.void',     // void an infraction, with a reason (they are never deleted)
   'violations.notify_review',    // receive banner when a violation is pending review
   'violations.notify_consequence', // receive banner when a consequence is assigned
   'facility.manage',  // room and roster management
@@ -87,7 +87,7 @@ const PERMISSIONS = [
   'milestones.signoff',  // sign off on a completed milestone (counselor)
   'incidents.log',       // log a behavioral incident report
   'incidents.review',    // supervisor review of an incident
-  'incidents.delete',    // delete an incident (admin)
+  'incidents.void',      // void an incident report, with a reason (never deleted)
   'consent.manage',      // create / revoke 42 CFR Part 2 consent records
   'disclosures.view',    // view the disclosure audit log
   'records.unlock',      // supervisor override to unlock a record past the 24h immutability window
@@ -127,13 +127,13 @@ const ROLE_PRESETS = {
     'log.add', 'log.delete', 'issues.edit', 'status.edit',
     'residents.edit', 'staff.edit', 'chores.assign', 'chores.log', 'passes.edit', 'passes.status',
     'ua.request', 'ua.void', 'mail.log', 'mail.approve', 'mail.deliver', 'mail.delete',
-    'violations.log', 'violations.review', 'violations.complete', 'violations.delete',
+    'violations.log', 'violations.review', 'violations.complete', 'violations.void',
     'violations.notify_review', 'violations.notify_consequence',
     'broadcast.send', 'broadcast.receive', 'ua.draw',
     'facility.manage', 'admin.users', 'admin.settings', 'admin.audit', 'admin.system',
     'mobile.access', 'rounds.notify_missing',
     'ua.record', 'milestones.edit', 'milestones.signoff',
-    'incidents.log', 'incidents.review', 'incidents.delete',
+    'incidents.log', 'incidents.review', 'incidents.void',
     'consent.manage', 'disclosures.view', 'records.unlock',
     'groups.view', 'groups.log',
     'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
@@ -168,6 +168,15 @@ for (const preset of Object.values(ROLE_PRESETS)) {
 const ONE_TIME_GRANTS = [
   { id: 'ua.record-everyone', perm: 'ua.record' },   // 2026-09-28: anyone can conduct a UA
 ];
+
+// A permission replaced by another that does the same job its new way: whoever
+// held the old one holds the new one. Applied to users, groups and profiles on
+// every boot, before retired permissions are stripped (a no-op once done).
+// 2026-09-28: incidents and infractions are voided with a reason, never deleted.
+const PERM_RENAMES = {
+  'incidents.delete':  'incidents.void',
+  'violations.delete': 'violations.void',
+};
 
 // ── Driver guard ─────────────────────────────────────────────────────
 // The driver defaults to SQLite, and SQLite creates a missing database file
@@ -223,6 +232,7 @@ async function init(dbPath) {
   }
   await _seedDefaults();
   await _seedExistingUserPermissions();
+  await _renamePermissions();
   await _migratePermissions();
   const _bootNewPerms = await _migrateProfiles();
   await _seedGroups();
@@ -383,6 +393,34 @@ async function _seedExistingUserPermissions() {
   }
 }
 
+// PERM_RENAMES: old name -> new name wherever the old one is held.
+function _renamed(perms) {
+  if (!Array.isArray(perms) || !perms.some(p => PERM_RENAMES[p])) return null;
+  const out = [];
+  for (const p of perms) {
+    const q = PERM_RENAMES[p] || p;
+    if (!out.includes(q)) out.push(q);
+  }
+  return out;
+}
+async function _renamePermissions() {
+  for (const u of await _q('SELECT id, permissions FROM users WHERE permissions IS NOT NULL')) {
+    const next = _renamed(_j(u.permissions, []));
+    if (next) await _run('UPDATE users SET permissions=? WHERE id=?', [JSON.stringify(next), u.id]);
+  }
+  for (const g of await _q('SELECT id, permissions FROM groups')) {
+    const next = _renamed(_j(g.permissions, []));
+    if (next) await _run('UPDATE groups SET permissions=? WHERE id=?', [JSON.stringify(next), g.id]);
+  }
+  const profiles = await getPermissionProfiles();
+  let changed = false;
+  for (const p of profiles) {
+    const next = _renamed(p.permissions);
+    if (next) { p.permissions = next; changed = true; }
+  }
+  if (changed) await setSetting('permission_profiles', profiles);
+}
+
 // Strip any retired permissions (no longer in PERMISSIONS) from user rows.
 // New permissions propagate via _migrateGroups — no need to enumerate them here.
 async function _migratePermissions() {
@@ -400,8 +438,10 @@ async function _migratePermissions() {
 async function _migrateProfiles() {
   const knownRaw = await _q1('SELECT value FROM settings WHERE key=?', ['known_permissions']);
   const knownPerms = knownRaw ? JSON.parse(knownRaw.value || '[]') : null;
+  // A rename's new name isn't new: only holders of the old name get it.
+  const renamedTo = Object.values(PERM_RENAMES);
   const newPerms = knownPerms
-    ? PERMISSIONS.filter(p => !knownPerms.includes(p))
+    ? PERMISSIONS.filter(p => !knownPerms.includes(p) && !renamedTo.includes(p))
     : [];
   const knownJson = JSON.stringify(PERMISSIONS);
   if (knownRaw) {
@@ -983,7 +1023,13 @@ async function reviewIncident(id, supervisorId, supervisorName, reviewNotes, new
        [supervisorId, supervisorName||'', nowLocal(), reviewNotes||'', newStatus||'reviewed', id]);
   return await getIncident(id);
 }
-async function deleteIncident(id) { await _run('DELETE FROM incidents WHERE id=?', [id]); }
+// Incident reports are never deleted: a mistaken one is voided, with a reason,
+// and stays on file. False if it was already void.
+async function voidIncident(id, v) {
+  const r = await _run(`UPDATE incidents SET status='voided', voided_at=?, voided_by_id=?, voided_by_name=?, void_reason=?
+    WHERE id=? AND voided_at IS NULL`, [v.at, v.byId, v.byName, v.reason, id]);
+  return !!(r && r.changes);
+}
 
 // ── Discharge Records ─────────────────────────────────────────────────
 async function createDischargeRecord(rec) {
@@ -1171,9 +1217,10 @@ async function auditLog(actorId, actorName, ip, action, targetType, targetId, ta
         String(targetType || '').slice(0, 50),
         String(targetId != null ? targetId : '').slice(0, 50),
         String(targetLabel || '').slice(0, 200),
+        // Room for what a delete removed (a whole log line, a report's lines).
         (typeof detail === 'object' && detail !== null)
-          ? JSON.stringify(detail).slice(0, 2000)
-          : String(detail || '').slice(0, 2000),
+          ? JSON.stringify(detail).slice(0, 16000)
+          : String(detail || '').slice(0, 16000),
       ]
     );
   } catch(e) { /* never let audit failure crash the caller */ }
@@ -1729,6 +1776,7 @@ module.exports = {
   hasClinical: _hasClinical,   // who sees intake notes, referral source, program track
   getPermissionProfiles, setPermissionProfiles,
   _applyOneTimeGrants,   // tests: a grant never re-applies
+  _renamePermissions,    // tests: incidents.delete -> incidents.void and the like
   // Groups
   getGroups, getUserGroups, computeGroupsPermissions,
   getUserEffectivePermissions, recomputeUserPermissions,
@@ -1751,7 +1799,7 @@ module.exports = {
   // Milestones
   createMilestone, getMilestones, updateMilestone, signoffMilestone, deleteMilestone,
   // Incidents
-  createIncident, getIncident, getIncidents, updateIncident, reviewIncident, deleteIncident,
+  createIncident, getIncident, getIncidents, updateIncident, reviewIncident, voidIncident,
   // Discharge records
   createDischargeRecord, getDischargeRecord, getDischargeRecords,
   // Group sessions + attendance

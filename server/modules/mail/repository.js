@@ -18,8 +18,8 @@ async function exists(id) {
   return !!await c.query1('SELECT id FROM mail_log WHERE id=?', [id]);
 }
 
-async function getNameRoom(id) {
-  return await c.query1('SELECT client_name,room FROM mail_log WHERE id=?', [id]);
+async function getById(id) {
+  return await c.query1('SELECT * FROM mail_log WHERE id=?', [id]);
 }
 
 async function insert({ client_id, client_name, room, logged_by, logged_at, notes, mail_type }) {
@@ -52,6 +52,6 @@ const insertLogEntry = reportLog.insertLogEntry;
 const touchReport = reportLog.touchReport;
 
 module.exports = {
-  list, exists, getNameRoom, insert, approve, deliver, remove,
+  list, exists, getById, insert, approve, deliver, remove,
   getClientBrief, getActiveReportId, insertLogEntry, touchReport,
 };

@@ -57,11 +57,15 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  app.delete('/api/violations/:id', requireAuth, csrfCheck, requirePermission('violations.delete'), async (req, res) => {
+  // Infractions are never deleted: voided with a reason, they stay on file.
+  app.post('/api/violations/:id/void', requireAuth, csrfCheck, requirePermission('violations.void'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { clientName } = await service.remove(id);
-      await audit(req, 'violation.delete', 'violation', id, clientName);
+      const { clientName, detail } = await service.voidViolation(id, {
+        reason: req.body && req.body.reason,
+        actorId: req.session.userId, actorName: req.session.displayName || req.session.username,
+      });
+      await audit(req, 'violation.void', 'violation', id, clientName, detail);
       broadcast({ type: 'violations_updated', ...await service.counts() });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

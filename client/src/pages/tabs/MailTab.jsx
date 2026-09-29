@@ -11,7 +11,9 @@ import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
 import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
-import { ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
+import { ColoredAvatar, StatusBadge, FilterChip } from '../../components/ui.jsx'
+import ReasonModal from '../../components/ReasonModal.jsx'
+import { sendWithReason } from '../../utils/reason.js'
 import { parseWhen, localDayKey } from '../../utils/dates.js'
 
 const PAGE_SIZE = 30
@@ -35,7 +37,7 @@ export default function MailTab() {
   const canDeliver = hasPerm('mail.deliver')
   const canDelete  = hasPerm('mail.delete')
   const { globalSearch = '' } = useOutletContext() || {}
-  const confirm = useConfirm()
+  const [deleting, setDeleting] = useState(null)
 
   const mail = data?.mail || []
   const clients = data?.clients || []
@@ -151,11 +153,7 @@ export default function MailTab() {
     await loadData()
   }
 
-  async function del(m) {
-    if (!await confirm({ title: `Delete mail record for ${m.client_name}?`, confirmText: 'Delete', color: 'red' })) return
-    await fetch(`/api/mail/${m.id}`, { method: 'DELETE', credentials: 'include' })
-    await loadData()
-  }
+  function del(m) { setDeleting(m) }
 
   const FILTERS = [
     { key: 'all', label: 'All' },
@@ -264,6 +262,18 @@ export default function MailTab() {
         <div className="flex justify-center mt-3">
           <Pagination currentPage={page + 1} totalPages={totalPages} onPageChange={pg => setPage(pg - 1)} />
         </div>
+      )}
+
+      {deleting && (
+        <ReasonModal
+          title={`Delete mail record for ${deleting.client_name}?`}
+          subject={[deleting.room && `Rm. ${deleting.room}`, deleting.mail_type, fmtDT(deleting.logged_at)].filter(Boolean).join(' · ')}
+          explain="It's removed. The audit log keeps the record, who deleted it, when, and this reason."
+          placeholder="Reason (required), e.g. logged for the wrong resident"
+          confirmText="Delete"
+          onClose={() => setDeleting(null)}
+          onConfirm={async reason => { await sendWithReason('DELETE', `/api/mail/${deleting.id}`, reason); await loadData() }}
+        />
       )}
 
       <PrintScopeModal

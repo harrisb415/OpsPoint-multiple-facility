@@ -15,6 +15,8 @@ import { usePermission } from '../hooks/usePermission.js'
 import PrintScopeModal from '../components/PrintScopeModal.jsx'
 import ConductUAModal from '../components/ConductUAModal.jsx'
 import VoidModal from '../components/VoidModal.jsx'
+import ReasonModal from '../components/ReasonModal.jsx'
+import { sendWithReason } from '../utils/reason.js'
 import { voidNote, lineText } from '../utils/logLines.js'
 import { openPrintWindow, fmtDateFriendly, classifyLogEntry } from '../utils/printLog.js'
 
@@ -459,9 +461,9 @@ export default function ReportTab() {
     await loadData()
   }, [loadData])
 
-  const handleDelLog = useCallback(async (entryId) => {
-    if (!await confirm({ title: 'Delete this log entry?', confirmText: 'Delete', color: 'red' })) return
-    await fetch(`/api/log/${entryId}`, { method: 'DELETE', credentials: 'include' })
+  // With a reason; the audit log keeps what the line said.
+  const handleDelLog = useCallback(async (entryId, reason) => {
+    await sendWithReason('DELETE', `/api/log/${entryId}`, reason)
     await loadData()
   }, [loadData])
 
@@ -1668,6 +1670,7 @@ function LogEntry({ entry: e, canDelete, onDelete, canVoid, onVoid, canPhoto, on
   const isPos   = e.text && /POS:/.test(e.text) && !voided
   const isUA    = e.text && /— UA:/i.test(e.text)
   const [voiding, setVoiding] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const type    = classifyLogEntry(e.text)
   const cls     = LOG_TYPE_CLS[type] || LOG_TYPE_CLS.Note
   const fileRef = useRef(null)
@@ -1753,8 +1756,19 @@ function LogEntry({ entry: e, canDelete, onDelete, canVoid, onVoid, canPhoto, on
             </button>
           )}
           {!isUA && canDelete && e.id && (
-            <button onClick={() => onDelete(e.id)} title="Delete"
+            <button onClick={() => setDeleting(true)} title="Delete (with a reason)"
               className="ml-2 text-gray-400 hover:text-red-500 text-lg leading-none cursor-pointer bg-transparent border-none">&times;</button>
+          )}
+          {deleting && (
+            <ReasonModal
+              title="Delete this log entry?"
+              subject={`${e.time} — ${e.text}`}
+              explain="It comes off the report. The audit log keeps what it said, who deleted it, when, and this reason."
+              placeholder="Reason (required), e.g. written on the wrong report"
+              confirmText="Delete"
+              onClose={() => setDeleting(false)}
+              onConfirm={reason => onDelete(e.id, reason)}
+            />
           )}
           {voided && <span className="block mt-0.5 text-xs font-semibold text-red-700 dark:text-red-400">{voidNote(e)}</span>}
           {voiding && <VoidModal subject={`${e.time} — ${e.text}`} onClose={() => setVoiding(false)} onVoid={reason => onVoid(e.id, reason)} />}

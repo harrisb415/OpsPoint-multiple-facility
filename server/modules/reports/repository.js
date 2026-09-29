@@ -54,7 +54,7 @@ async function updateShiftData(id, report_date, shift, mod_name, iso) {
 async function getLogText(id) { return await c.query1('SELECT text FROM log_entries WHERE id=?', [id]); }
 async function getLogWithReport(id) {
   return await c.query1(
-    `SELECT le.id, le.text, le.ua_photo, r.is_closed,
+    `SELECT le.id, le.time, le.text, le.ua_photo, r.is_closed, r.shift, r.report_date,
             (SELECT COUNT(*) FROM ua_records u WHERE u.log_entry_id = le.id) AS ua_links
        FROM log_entries le JOIN reports r ON r.id=le.report_id WHERE le.id=?`, [id]);
 }
@@ -69,7 +69,12 @@ async function countUALines(reportId) {
 async function deleteLog(id) { await c.run('DELETE FROM log_entries WHERE id=?', [id]); }
 
 // ── report delete ───────────────────────────────────────────────────
-async function getReportBrief(id) { return await c.query1('SELECT shift,report_date FROM reports WHERE id=?', [id]); }
+async function getReportBrief(id) {
+  return await c.query1('SELECT id, shift, report_date, mod_name, is_closed, created_at FROM reports WHERE id=?', [id]);
+}
+async function logLinesForReport(id) {
+  return await c.query('SELECT time, text FROM log_entries WHERE report_id=? ORDER BY id', [id]);
+}
 async function deleteLogsForReport(id) { await c.run('DELETE FROM log_entries WHERE report_id=?', [id]); }
 async function deleteReport(id) { await c.run('DELETE FROM reports WHERE id=?', [id]); }
 
@@ -86,6 +91,6 @@ module.exports = {
   isReportClosed,
   getReportField, updateReportField, insertLogEntry, touchReport, updateShiftData,
   getLogText, deleteLog,
-  getReportBrief, deleteLogsForReport, deleteReport,
+  getReportBrief, logLinesForReport, deleteLogsForReport, deleteReport,
   getLogJoinReport, setLogPhoto, resolveLogEntry,
 };

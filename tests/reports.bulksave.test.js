@@ -125,7 +125,7 @@ describe('log lines', () => {
   test('nobody deletes a line from a sealed report', async () => {
     const sealed = (await db.query1('SELECT id FROM log_entries WHERE report_id=1 ORDER BY id LIMIT 1')).id;
     expect((await agents.admin.delete(`/api/log/${sealed}`)).status).toBe(403);
-    expect((await agents.admin.delete(`/api/log/${normal}`)).status).toBe(200);
+    expect((await agents.admin.delete(`/api/log/${normal}`).send({ reason: 'Wrong report' })).status).toBe(200);
   });
 });
 

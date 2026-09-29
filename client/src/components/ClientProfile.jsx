@@ -82,6 +82,7 @@ const VIOL_STATUS = {
   assigned:  { cls: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',     label: 'Assigned' },
   completed: { cls: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', label: 'Completed' },
   waived:    { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',        label: 'Waived' },
+  voided:    { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',        label: 'Voided' },
 }
 const VIOL_STATUS_DEFAULT = { cls: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400', label: '' }
 
@@ -462,7 +463,7 @@ function MilestonesTab({ client, data }) {
 function IncidentsTab({ client, data }) {
   const incidents = (data?.incidents || [])
     .filter(i => i.client_id === client.id)
-    .sort((a, b) => (b.logged_at || '').localeCompare(a.logged_at || ''))
+    .sort((a, b) => (b.incident_date || '').localeCompare(a.incident_date || '') || b.id - a.id)
 
   if (incidents.length === 0) return (
     <p className="py-7 text-center text-sm text-gray-400 italic dark:text-gray-500">No incident reports for this resident.</p>
@@ -487,8 +488,9 @@ function IncidentsTab({ client, data }) {
               )}
             </div>
           </div>
-          <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(inc.logged_at)} · by {inc.logged_by}</div>
-          {inc.narrative && <div className="text-xs text-gray-600 mt-1.5 leading-snug dark:text-gray-400">{inc.narrative}</div>}
+          <div className="text-[11px] text-gray-400 mt-0.5">{fmtDate(inc.incident_date)}{inc.incident_time ? ` ${inc.incident_time}` : ''}{inc.logged_by_name ? ` · by ${inc.logged_by_name}` : ''}</div>
+          {inc.narrative && <div className={`text-xs mt-1.5 leading-snug ${inc.voided_at ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-600 dark:text-gray-400'}`}>{inc.narrative}</div>}
+          {inc.voided_at && <div className="text-xs font-semibold text-red-700 mt-1 dark:text-red-400">{voidNote(inc)}</div>}
         </div>
       ))}
     </div>
@@ -759,7 +761,8 @@ function ViolationsProfileTab({ client }) {
           <div key={v.id || i} className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700">
             <div className="flex justify-between items-start gap-2">
               <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm text-gray-900 leading-snug dark:text-gray-100">{v.description || 'Infraction'}</div>
+                <div className={`font-bold text-sm leading-snug ${v.voided_at ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-gray-100'}`}>{v.description || 'Infraction'}</div>
+                {v.voided_at && <div className="text-xs font-semibold text-red-700 mt-0.5 dark:text-red-400">{voidNote(v)}</div>}
                 <div className="text-[11px] text-gray-400 mt-0.5">
                   {fmtDate(v.violation_date)}{(v.staff_name || v.logged_by) ? ` · by ${v.staff_name || v.logged_by}` : ''}
                 </div>

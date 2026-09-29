@@ -123,7 +123,7 @@ describe('voiding a UA result', () => {
     expect((await agents.admin.delete('/api/reports/1')).status).toBe(409);
     const empty = { id: 2, report_date: TODAY, shift: 'Swing Shift', mod_name: '', is_closed: true, statuses: {}, comments: {}, last_ua: {}, last_room_search: {}, issues: [], med_notes: [], log_entries: [] };
     expect((await agents.admin.post('/api/data').send({ reports: [empty] })).status).toBe(200);
-    expect((await agents.admin.delete('/api/reports/2')).status).toBe(200);
+    expect((await agents.admin.delete('/api/reports/2').send({ reason: 'Started by mistake' })).status).toBe(200);
     const open = { ...empty, id: 3, is_closed: false };
     expect((await agents.admin.post('/api/data').send({ reports: [open], active_report_id: 3 })).status).toBe(200);
   });

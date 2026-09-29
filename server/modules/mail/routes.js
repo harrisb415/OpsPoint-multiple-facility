@@ -52,8 +52,8 @@ function register(app) {
   app.delete('/api/mail/:id', requireAuth, csrfCheck, requirePermission('mail.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const label = await service.remove(id);
-      await audit(req, 'mail.delete', 'mail', id, label);
+      const { label, detail } = await service.remove(id, { reason: req.body && req.body.reason });
+      await audit(req, 'mail.delete', 'mail', id, label, detail);
       broadcast({ type: 'mail_updated', user: req.session.displayName || req.session.username });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

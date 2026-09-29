@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { CARD_HEAD_TITLE } from '../../utils/ui.js'
 import { useOutletContext } from 'react-router-dom'
-import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2 } from 'lucide-react'
+import { Archive, CheckCircle, FileText, ChevronLeft, Printer, Trash2, Lock } from 'lucide-react'
 import {
   Breadcrumb, BreadcrumbItem, Button, Pagination, Select,
 } from 'flowbite-react'
@@ -9,7 +9,10 @@ import { FilterChip } from '../../components/ui.jsx'
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { StatusBadge, useConfirm } from '../../components/ui.jsx'
+import { StatusBadge } from '../../components/ui.jsx'
+import ReasonModal from '../../components/ReasonModal.jsx'
+import { sendWithReason } from '../../utils/reason.js'
+import { parseServerTime } from '../../utils/dates.js'
 import { statusLabel, statusBadge, censusKeys } from '../../utils/statuses.js'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
@@ -41,6 +44,14 @@ function parseTimeMins(t) {
   return h * 60 + mn
 }
 
+// A report can be deleted this long after it was started; then it is
+// permanent (the server enforces it too).
+const DELETE_WINDOW_MS = 24 * 3600000
+function deletable(r) {
+  const t = parseServerTime(r.created_at)
+  return !!t && Date.now() - t.getTime() <= DELETE_WINDOW_MS
+}
+
 export default function ArchiveTab() {
   const { data } = useData()
   const { hasPerm } = usePermission()
@@ -50,7 +61,7 @@ export default function ArchiveTab() {
   const [shiftFilter, setShiftFilter] = useState('')
   const canDelete = hasPerm('reports.delete')
   const { globalSearch = '' } = useOutletContext() || {}
-  const confirm = useConfirm()
+  const [deleting, setDeleting] = useState(null)
 
   const shiftOptions = useMemo(() => {
     const names = new Set((data?.reports || []).filter(r => r.id !== data?.active_report_id).map(r => r.shift).filter(Boolean))
@@ -72,11 +83,9 @@ export default function ArchiveTab() {
   const totalPages = Math.ceil(sorted.length / PAGE_SIZE)
   const paged = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
 
-  async function deleteReport(r, e) {
+  function deleteReport(r, e) {
     e.stopPropagation()
-    if (!await confirm({ title: `Delete report #${r.id}?`, body: `${r.shift}, ${r.report_date} — this cannot be undone.`, confirmText: 'Delete', color: 'red' })) return
-    const res = await fetch(`/api/reports/${r.id}`, { method: 'DELETE', credentials: 'include' })
-    if (!res.ok) alert((await res.json().catch(() => ({}))).error || 'Could not delete this report.')
+    setDeleting(r)
   }
 
   if (selected) {
@@ -158,9 +167,9 @@ export default function ArchiveTab() {
                     <TableCell className="text-right">
                       <div className="inline-flex items-center justify-end gap-1">
                         <Button size="xs" color="light" onClick={e => { e.stopPropagation(); setSelected(r) }}>View</Button>
-                        {canDelete && (
-                          <Button size="xs" color="light" className="text-red-600" onClick={e => deleteReport(r, e)} title="Delete report"><Trash2 className="w-4 h-4" /></Button>
-                        )}
+                        {canDelete && (deletable(r)
+                          ? <Button size="xs" color="light" className="text-red-600" onClick={e => deleteReport(r, e)} title="Delete report (with a reason — possible for 24 hours after it was started)"><Trash2 className="w-4 h-4" /></Button>
+                          : <span className="p-1.5 text-gray-300 dark:text-gray-600" title="Permanent: a report can be deleted only in the first 24 hours after it was started"><Lock className="w-4 h-4" /></span>)}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -174,6 +183,17 @@ export default function ArchiveTab() {
             </div>
           )}
         </>
+      )}
+      {deleting && (
+        <ReasonModal
+          title={`Delete report #${deleting.id}?`}
+          subject={`${deleting.shift || 'Shift'}, ${deleting.report_date || ''}`}
+          explain="The report and its log lines are removed. The audit log keeps what it said, who deleted it, when, and this reason. After 24 hours a report can't be deleted."
+          placeholder="Reason (required), e.g. started by mistake — duplicate of the day shift"
+          confirmText="Delete"
+          onClose={() => setDeleting(null)}
+          onConfirm={reason => sendWithReason('DELETE', `/api/reports/${deleting.id}`, reason)}
+        />
       )}
     </div>
   )

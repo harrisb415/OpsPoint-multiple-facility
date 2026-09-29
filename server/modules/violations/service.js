@@ -2,10 +2,12 @@
 /**
  * Violations service — business logic for the violations domain.
  * No SQL, no req/res. Validation failures throw an Error carrying `.status`.
- * Lifecycle: pending -> (assigned | waived); assigned -> completed.
+ * Lifecycle: pending -> (assigned | waived); assigned -> completed. Any of
+ * them can be voided, with a reason — infractions are never deleted.
  */
 const repo = require('./repository');
 const { nowLocal } = require('../../lib/time');
+const { reasonText } = require('../../lib/text');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -69,12 +71,23 @@ async function complete(id, { actor } = {}) {
   return { clientName: v.client_name };
 }
 
-// Delete a violation. Returns { clientName } for the audit.
-async function remove(id) {
-  const v = await repo.getClientName(id);
+// Void an infraction, with a reason. Returns { clientName, detail } for the
+// audit: what it was, and why it was voided.
+async function voidViolation(id, { reason, actorId, actorName } = {}) {
+  const v = await repo.getById(id);
   if (!v) throw httpError(404, 'Not found');
-  await repo.remove(id);
-  return { clientName: v.client_name };
+  if (v.voided_at) throw httpError(409, 'This infraction is already void');
+  const why = reasonText(reason);
+  if (!why) throw httpError(400, 'Say why this infraction is being voided');
+  const done = await repo.voidRow(id, { at: new Date().toISOString(), byId: actorId || null, byName: actorName || '', reason: why });
+  if (!done) throw httpError(409, 'This infraction is already void');
+  return {
+    clientName: v.client_name,
+    detail: {
+      reason: why, description: v.description, violation_date: v.violation_date || '',
+      staff: v.staff_name || v.logged_by || '', status_before: v.status, consequence: v.consequence || '',
+    },
+  };
 }
 
-module.exports = { counts, list, create, review, complete, remove };
+module.exports = { counts, list, create, review, complete, voidViolation };

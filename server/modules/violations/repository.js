@@ -26,9 +26,6 @@ async function getById(id) {
   return await c.query1('SELECT * FROM violations WHERE id=?', [id]);
 }
 
-async function getClientName(id) {
-  return await c.query1('SELECT client_name FROM violations WHERE id=?', [id]);
-}
 
 async function insert({ client_id, client_name, room, violation_date, description, notes, staff_name, logged_by }) {
   const info = await c.run(
@@ -50,8 +47,12 @@ async function complete(id, by, at) {
   await c.run('UPDATE violations SET status=?,completed_by=?,completed_at=? WHERE id=?', ['completed', by, at, id]);
 }
 
-async function remove(id) {
-  await c.run('DELETE FROM violations WHERE id=?', [id]);
+// Infractions are never deleted: voided, they stay on file with who, when and
+// why. False if it was already void.
+async function voidRow(id, v) {
+  const r = await c.run(`UPDATE violations SET status='voided', voided_at=?, voided_by_id=?, voided_by_name=?, void_reason=?
+    WHERE id=? AND voided_at IS NULL`, [v.at, v.byId, v.byName, v.reason, id]);
+  return !!(r && r.changes);
 }
 
-module.exports = { counts, listFiltered, getById, getClientName, insert, waive, assign, complete, remove };
+module.exports = { counts, listFiltered, getById, insert, waive, assign, complete, voidRow };

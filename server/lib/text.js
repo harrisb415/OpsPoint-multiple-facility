@@ -18,4 +18,10 @@ function sanitizeText(s, max) {
   return String(s == null ? '' : s).replace(/[\x00-\x1f\x7f]/g, '').slice(0, max);
 }
 
-module.exports = { validTime, sanitizeText, TIME_RE };
+// The reason given for voiding or deleting something: control characters
+// become spaces, trimmed, at most 500 characters. '' when none was given.
+function reasonText(v) {
+  return String(v == null ? '' : v).replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, 500);
+}
+
+module.exports = { validTime, sanitizeText, reasonText, TIME_RE };

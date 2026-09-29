@@ -50,7 +50,7 @@ const get  = (u, ok)    => call('get', u, undefined, ok);
 const post = (u, b, ok) => call('post', u, b, ok);
 const put  = (u, b, ok) => call('put', u, b, ok);
 const patch = (u, b, ok) => call('patch', u, b, ok);
-const del  = (u, ok)    => call('delete', u, undefined, ok);
+const del  = (u, ok, b) => call('delete', u, b, ok);
 const drain = () => { const p = problems; problems = []; return p; };
 const idOf = (r, ...keys) => { for (const k of keys) { const v = k.split('.').reduce((o, p) => o && o[p], r.body); if (v != null) return v; } return undefined; };
 
@@ -147,7 +147,10 @@ describe('API tour', () => {
       await del(`/api/log/${photoTarget.id}`, [403]);
     }
     const plain = entries.find(e => !/— UA:/.test(e.text));
-    if (plain) await del(`/api/log/${plain.id}`, [200]);
+    if (plain) {
+      await del(`/api/log/${plain.id}`, [400]);                                   // a reason is required
+      await del(`/api/log/${plain.id}`, [200], { reason: 'Tour: wrong report' });
+    }
     expect(drain()).toEqual([]);
   });
 
@@ -230,11 +233,14 @@ describe('API tour', () => {
       await put(`/api/mail/${rows[0].id}/approve`, {}, [200]);
       await put(`/api/mail/${rows[0].id}/deliver`, {}, [200]);
     }
-    if (rows[1]) await del(`/api/mail/${rows[1].id}`, [200]);
+    if (rows[1]) {
+      await del(`/api/mail/${rows[1].id}`, [400]);
+      await del(`/api/mail/${rows[1].id}`, [200], { reason: 'Tour: logged twice' });
+    }
     expect(drain()).toEqual([]);
   });
 
-  test('violations — log (blank date), assign, complete, waive, delete', async () => {
+  test('violations — log (blank date), assign, complete, waive, void', async () => {
     const v1 = await post('/api/violations', { client_id: ctx.clientId, client_name: 'Pat Tour', room: '203', violation_date: '', description: 'Late', staff_name: 'Sam Staff', notes: '' }, [200]);
     const vid = idOf(v1, 'id', 'violation.id');
     // The staff name is typed in and required; the account that saved it stays in logged_by.
@@ -254,12 +260,15 @@ describe('API tour', () => {
     }
     if (vid2) {
       await put(`/api/violations/${vid2}/review`, { action: 'waive' }, [200]);
-      await del(`/api/violations/${vid2}`, [200]);
+      await post(`/api/violations/${vid2}/void`, {}, [400]);
+      await post(`/api/violations/${vid2}/void`, { reason: 'Tour: wrong resident' }, [200]);
+      await post(`/api/violations/${vid2}/void`, { reason: 'again' }, [409]);
+      await del(`/api/violations/${vid2}`, [404]);                                // never deleted
     }
     expect(drain()).toEqual([]);
   });
 
-  test('incidents — create, edit, review, delete', async () => {
+  test('incidents — create, edit, review, void', async () => {
     const i = await post('/api/incidents', {
       client_id: ctx.clientId, incident_date: TODAY, incident_time: '', narrative: 'Tour incident',
       severity: 'low', incident_type: 'Behavior', corrective_action: '', notifications_required: [],
@@ -269,7 +278,10 @@ describe('API tour', () => {
     if (iid) {
       await put(`/api/incidents/${iid}`, { narrative: 'edited', incident_time: '10:00', corrective_action: '' }, [200]);
       await put(`/api/incidents/${iid}/review`, { status: 'reviewed', review_notes: 'ok' }, [200]);
-      await del(`/api/incidents/${iid}`, [200, 403]);
+      await post(`/api/incidents/${iid}/void`, {}, [400]);
+      await post(`/api/incidents/${iid}/void`, { reason: 'Tour: wrong resident' }, [200]);
+      await put(`/api/incidents/${iid}`, { narrative: 'after the void' }, [409]);
+      await del(`/api/incidents/${iid}`, [404]);                                  // never deleted
     }
     expect(drain()).toEqual([]);
   });
@@ -398,7 +410,7 @@ describe('API tour', () => {
     await post('/api/data', { reports: [{ report_date: TODAY, shift: 'Swing Shift', mod_name: '', is_closed: false, statuses: {}, comments: {}, last_ua: {}, last_room_search: {}, issues: [], med_notes: [], log_entries: [] }] }, [200]);
     const after = await get('/api/data', [200]);
     const extra = (after.body.reports || []).find(r => r.id !== 1);
-    if (extra) await del(`/api/reports/${extra.id}`, [200]);
+    if (extra) await del(`/api/reports/${extra.id}`, [200], { reason: 'Tour: duplicate report' });
     if (ctx.vacantRoomId) await del(`/api/facility/rooms/${ctx.vacantRoomId}`, [200, 400]);
     await post('/api/facility/reset', { rooms: [{ room: '301' }, { room: '302', name: 'VACANT' }] }, [200, 409]);   // 409: residents have records on file
     expect(drain()).toEqual([]);

@@ -17,7 +17,7 @@ export const CLINICAL_NAV = [
   { key: 'clinical_milestones', path: '/clinical/milestones',      label: 'Milestones',          perms: ['milestones.edit', 'milestones.signoff'], icon: Award },
   { key: 'clinical_assessments',path: '/clinical/assessments',     label: 'Assessments',         perm: 'clinical.assessments', icon: ClipboardList },
   { key: 'clinical_groups',     path: '/clinical/group-notes',     label: 'Group Notes',         perm: 'clinical.groups',      icon: Users },
-  { key: 'clinical_incidents',  path: '/clinical/incidents',       label: 'Incident Reports',    perms: ['incidents.log', 'incidents.review', 'incidents.delete'], icon: Siren },
+  { key: 'clinical_incidents',  path: '/clinical/incidents',       label: 'Incident Reports',    perms: ['incidents.log', 'incidents.review', 'incidents.void'], icon: Siren },
   { key: 'clinical_discharge',  path: '/clinical/discharge',       label: 'Discharge Summaries', perm: 'clinical.discharge',   icon: DoorOpen },
 ]
 
@@ -37,7 +37,7 @@ export function clinicalSectionEnabled(vis) {
 export const CLINICAL_SECTION_PERMS = [
   'clinical.notes', 'clinical.treatment', 'clinical.assessments', 'clinical.groups', 'clinical.discharge',
   'milestones.edit', 'milestones.signoff',
-  'incidents.log', 'incidents.review', 'incidents.delete',
+  'incidents.log', 'incidents.review', 'incidents.void',
 ]
 
 // True if a permission-check fn (hasPerm) grants any clinical-section access.

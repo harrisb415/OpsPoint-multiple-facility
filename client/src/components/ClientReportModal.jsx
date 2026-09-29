@@ -159,18 +159,18 @@ function buildCard(c, data, sections, limit) {
   if (sections.incidents) {
     const recs = (data?.incidents || [])
       .filter(i => i.client_id === c.id)
-      .sort((a, b) => (b.logged_at||'').localeCompare(a.logged_at||''))
+      .sort((a, b) => (b.incident_date||'').localeCompare(a.incident_date||'') || b.id - a.id)
       .slice(0, limit)
     h += `<div class="sec"><div class="slbl">Incident Reports${recs.length ? ` <span class="sub">(${recs.length} most recent)</span>` : ''}</div>`
     h += recs.length === 0
       ? `<div class="empty">No incidents</div>`
       : `<table class="dt"><thead><tr><th>Date</th><th>Type</th><th>Severity</th><th>Status</th><th>Narrative</th></tr></thead><tbody>
           ${recs.map(i => `<tr>
-            <td class="mo">${esc(fd(i.logged_at))}</td>
+            <td class="mo">${esc(fd(i.incident_date))}</td>
             <td>${esc(i.incident_type||'—')}</td>
             <td>${esc(i.severity||'—')}</td>
             <td>${esc(i.status||'—')}</td>
-            <td>${esc(i.narrative||'')}</td>
+            <td>${esc(i.narrative||'')}${i.voided_at ? ` <strong>[${esc(voidNote(i))}]</strong>` : ''}</td>
           </tr>`).join('')}
         </tbody></table>`
     h += `</div>`

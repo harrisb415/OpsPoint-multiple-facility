@@ -135,8 +135,10 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | Auth | `POST /login`, `POST /logout`, `GET/POST /change-password` | none / `requireAuth` |
 | Self-service | `POST /api/users/me/password`, `GET /api/me` | `requireAuth` |
 | Data | `GET /api/data`, `POST /api/data`, `PATCH /api/data` | `requireAuth` |
-| Reports | `DELETE /api/reports/:id` | `reports.delete` |
-| Log entries | `DELETE /api/log/:id` (never a UA line), `POST /api/log/:id/photo` (UA lines, once), `GET /api/log/:id/photo`, `POST /api/log/:id/void` | `log.delete` / `ua.record` / `requireAuth` / `ua.void` |
+| Reports | `DELETE /api/reports/:id` — body `{reason}`; only in the report's first 24 hours, never the open shift or one with UA results; audit keeps its lines | `reports.delete` |
+| Log entries | `DELETE /api/log/:id` (body `{reason}`; never a UA line; audit keeps the text), `POST /api/log/:id/photo` (UA lines, once), `GET /api/log/:id/photo`, `POST /api/log/:id/void` | `log.delete` / `ua.record` / `requireAuth` / `ua.void` |
+| Infractions | `POST /api/violations/:id/void` (body `{reason}`) — never deleted; status becomes `voided` | `violations.void` |
+| Incident reports | `POST /api/incidents/:id/void` (body `{reason}`) — never deleted; status `voided`; audit log only (clinical, no shift-log line) | `incidents.void` |
 | UA results | `POST /api/ua-records`, `PATCH /api/ua-records/:id`, `POST /api/ua-records/:id/void` — never deleted | `ua.record` / `ua.record` / `ua.void` |
 | Clients | `POST /api/clients`, `PUT /api/clients/:id` | `residents.edit` |
 | Facility settings | `GET /api/facility/settings`, `PUT /api/facility/settings` | `requireAuth` / `admin.settings` |
@@ -147,7 +149,7 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 | Chores | `GET /api/master-chores`, `PUT /api/master-chores`, `PATCH /api/clients/:id/chore`, `GET /api/chore-log`, `PUT /api/chore-log` | `requireAuth` / `chores.edit` |
 | Passes | `GET /api/passes`, `POST /api/passes`, `PUT /api/passes/:id`, `DELETE /api/passes/:id`, `GET /api/pass-notice`, `PUT /api/pass-notice` | `requireAuth` / `passes.edit` |
 | UA requests | `GET /api/ua-requests`, `POST /api/ua-requests`, `POST /api/ua-requests/:id/acknowledge` | `requireAuth` / `ua.request` / `ua.acknowledge` |
-| Mail | `GET /api/mail`, `POST /api/mail`, `PUT /api/mail/:id/approve`, `PUT /api/mail/:id/deliver`, `DELETE /api/mail/:id` | `requireAuth` / `mail.log` / `mail.approve` / `mail.delete` |
+| Mail | `GET /api/mail`, `POST /api/mail`, `PUT /api/mail/:id/approve`, `PUT /api/mail/:id/deliver`, `DELETE /api/mail/:id` (body `{reason}`) | `requireAuth` / `mail.log` / `mail.approve` / `mail.delete` |
 | Admin | `POST /api/admin/restart`, `GET /api/audit-log` | `admin.settings` / `admin.users` |
 | Photos | `GET /photos/:filename` | `requireAuth` |
 
@@ -235,10 +237,10 @@ Boot-time migrations:
 |------------|---------------|
 | `reports.create` | Create and save shift reports |
 | `reports.close` | Close/lock a shift |
-| `reports.delete` | Delete a report |
+| `reports.delete` | Delete a report, with a reason, in its first 24 hours |
 | `reminders.view` | See wellness/walkthrough reminder timers |
 | `log.add` | Add log entries |
-| `log.delete` | Delete log entries |
+| `log.delete` | Delete log entries, with a reason (never UA lines) |
 | `issues.edit` | Add/remove issues and medical notes |
 | `status.edit` | Change resident statuses |
 | `residents.edit` | Edit resident info |
@@ -251,13 +253,19 @@ Boot-time migrations:
 | `ua.void` | Void a UA result with a reason — UA results are never deleted |
 | `mail.log` | Log incoming mail |
 | `mail.approve` | Approve mail for delivery |
-| `mail.delete` | Delete mail records |
+| `mail.delete` | Delete mail records, with a reason |
+| `violations.void` | Void an infraction with a reason — infractions are never deleted |
+| `incidents.void` | Void an incident report with a reason — never deleted |
 | `facility.manage` | Room and roster management |
 | `admin.users` | User management and permission profiles |
 | `admin.settings` | Facility settings, server restart |
 | `mobile.access` | Mobile shift interface (`/mobile`) |
 
 **Retired permissions (stripped on boot):** `mobile.full`, `ua.delete` (UA results are voided, never deleted)
+
+**Renamed permissions (`PERM_RENAMES` in db.js, applied on boot before stripping):** `incidents.delete` → `incidents.void`, `violations.delete` → `violations.void` — whoever held the old one holds the new one.
+
+Every delete or void takes a reason (`ReasonModal` on the client, `reasonText()` on the server), and its audit entry's detail records the reason and what was removed or voided.
 
 ### Mobile page (`Mobile.jsx`)
 

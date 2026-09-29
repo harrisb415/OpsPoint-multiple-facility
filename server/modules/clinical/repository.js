@@ -33,7 +33,8 @@ const getIncidents = async (f) => await db.getIncidents(f);
 const createIncident = async (rec) => await db.createIncident(rec);
 const updateIncident = async (id, patch) => await db.updateIncident(id, patch);
 const reviewIncident = async (id, uid, name, notes, status) => await db.reviewIncident(id, uid, name, notes, status);
-const deleteIncident = async (id) => await db.deleteIncident(id);
+const getIncident = async (id) => await db.getIncident(id);
+const voidIncident = async (id, v) => await db.voidIncident(id, v);
 
 // severity-based required-notification policy (settings k/v)
 const getIncidentNotifications = async () => await db.getSetting('incident_notifications', {});
@@ -72,7 +73,7 @@ const clinicalDb = db.clinicalDb;
 module.exports = {
   getUARecords, getUARecord, createUARecord, updateUARecord, voidUARecord, voidLogEntry, uaRecordForLogEntry, getLogEntry,
   getMilestones, createMilestone, updateMilestone, signoffMilestone, deleteMilestone,
-  getIncidents, createIncident, updateIncident, reviewIncident, deleteIncident,
+  getIncidents, getIncident, createIncident, updateIncident, reviewIncident, voidIncident,
   getIncidentNotifications,
   getDischargeRecords, createDischargeRecord, getClientById, dischargeClient,
   insertVacantRoom, getActiveReportId, insertLogEntry, touchReport,

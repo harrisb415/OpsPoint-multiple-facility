@@ -467,6 +467,16 @@ const COLUMN_MIGRATIONS = [
     // violations — the staff member named on the infraction, typed in by hand
     // (logged_by stays the signed-in account). Postgres: 010_violation_staff_name.sql.
     "ALTER TABLE violations ADD COLUMN staff_name TEXT DEFAULT ''",
+    // infractions and incident reports are voided with a reason, never deleted
+    // (status becomes 'voided'). Postgres: 012_void_incidents_violations.sql.
+    "ALTER TABLE violations ADD COLUMN voided_at TEXT DEFAULT NULL",
+    "ALTER TABLE violations ADD COLUMN voided_by_id INTEGER DEFAULT NULL",
+    "ALTER TABLE violations ADD COLUMN voided_by_name TEXT DEFAULT ''",
+    "ALTER TABLE violations ADD COLUMN void_reason TEXT DEFAULT ''",
+    "ALTER TABLE incidents ADD COLUMN voided_at TEXT DEFAULT NULL",
+    "ALTER TABLE incidents ADD COLUMN voided_by_id INTEGER DEFAULT NULL",
+    "ALTER TABLE incidents ADD COLUMN voided_by_name TEXT DEFAULT ''",
+    "ALTER TABLE incidents ADD COLUMN void_reason TEXT DEFAULT ''",
     // mail_log — added post-launch
     "ALTER TABLE mail_log ADD COLUMN mail_type TEXT DEFAULT ''",
     // users — is_protected predates the current CREATE TABLE on some installs

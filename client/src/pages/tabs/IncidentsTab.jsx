@@ -7,11 +7,14 @@ import {
 import { Table, TableHead, TableHeadCell, TableBody, TableRow, TableCell } from '../../components/table'
 import { useData } from '../../contexts/DataContext.jsx'
 import { usePermission } from '../../hooks/usePermission.js'
-import { Field, ColoredAvatar, StatusBadge, useConfirm } from '../../components/ui.jsx'
+import { Field, ColoredAvatar, StatusBadge } from '../../components/ui.jsx'
+import ReasonModal from '../../components/ReasonModal.jsx'
+import { sendWithReason } from '../../utils/reason.js'
+import { voidNote } from '../../utils/logLines.js'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 const SEV_BADGE = { low: 'info', medium: 'warning', high: 'pink', critical: 'failure' }
-const STATUS_BADGE = { open: 'warning', reviewed: 'info', closed: 'success' }
+const STATUS_BADGE = { open: 'warning', reviewed: 'info', closed: 'success', voided: 'gray' }
 
 // Local date, not UTC's: from 5 PM Pacific (4 PM in winter) UTC is already tomorrow.
 function todayStr() { return new Date().toLocaleDateString('en-CA') }
@@ -38,9 +41,9 @@ export default function IncidentsTab() {
   const { hasPerm } = usePermission()
   const canLog    = hasPerm('incidents.log')
   const canReview = hasPerm('incidents.review')
-  const canDelete = hasPerm('incidents.delete')
+  const canVoid   = hasPerm('incidents.void')
   const canUnlock = hasPerm('records.unlock')
-  const confirm = useConfirm()
+  const [voiding, setVoiding] = useState(null)
 
   const incidents = data?.incidents || []
   const clients = useMemo(() =>
@@ -140,10 +143,9 @@ export default function IncidentsTab() {
     setReviewModal(null); setReviewNotes(''); loadData()
   }
 
-  async function del(i) {
-    if (!await confirm({ title: 'Delete incident report?', body: 'This is audit-logged.', confirmText: 'Delete', color: 'red' })) return
-    const res = await fetch(`/api/incidents/${i.id}`, { method:'DELETE', credentials:'include' })
-    if (!res.ok) { const j = await res.json().catch(()=>({})); alert(j.error||'Delete failed'); return }
+  // Incident reports are never deleted: voided, they stay on file.
+  async function voidIncident(i, reason) {
+    await sendWithReason('POST', `/api/incidents/${i.id}/void`, reason)
     loadData()
   }
 
@@ -197,6 +199,7 @@ export default function IncidentsTab() {
           <option value="open">Open</option>
           <option value="reviewed">Reviewed</option>
           <option value="closed">Closed</option>
+          <option value="voided">Voided</option>
         </Select>
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
       </div>
@@ -231,7 +234,8 @@ export default function IncidentsTab() {
                   </TableCell>
                   <TableCell><StatusBadge color={SEV_BADGE[i.severity] || 'gray'}>{SEVERITY_LABEL[i.severity] || i.severity}</StatusBadge></TableCell>
                   <TableCell className="text-gray-500 dark:text-gray-400 max-w-[340px]">
-                    <div className="overflow-hidden whitespace-nowrap text-ellipsis">{i.narrative}</div>
+                    <div className={`overflow-hidden whitespace-nowrap text-ellipsis ${i.voided_at ? 'line-through text-gray-400 dark:text-gray-500' : ''}`}>{i.narrative}</div>
+                    {i.voided_at && <div className="mt-1 text-xs font-semibold text-red-700 whitespace-normal dark:text-red-400">{voidNote(i)}</div>}
                     {i.notifications_required?.length > 0 && (
                       <div className="mt-1 text-xs text-gray-400">Notify: {i.notifications_required.join(', ')}</div>
                     )}
@@ -240,7 +244,10 @@ export default function IncidentsTab() {
                   <TableCell className="text-gray-500 dark:text-gray-400">{i.supervisor_name || '—'}</TableCell>
                   <TableCell className="text-right">
                     <div className="inline-flex items-center justify-end gap-1">
-                      {i.locked_at
+                      {!i.voided_at && canVoid && (
+                        <Button size="xs" color="light" className="text-red-600" onClick={()=>setVoiding(i)} title="Void (with a reason) — incident reports are never deleted">Void</Button>
+                      )}
+                      {i.voided_at ? null : i.locked_at
                         ? (canUnlock
                             ? <Button size="xs" color="light" onClick={()=>{setUnlockReason(''); setUnlockModal(i)}} title="Unlock"><Lock className="w-4 h-4" /></Button>
                             : <span title="Locked" className="p-1.5 text-gray-300"><Lock className="w-4 h-4" /></span>)
@@ -251,7 +258,6 @@ export default function IncidentsTab() {
                                 {i.status === 'open' ? 'Review' : 'Close'}
                               </Button>
                             )}
-                            {canDelete && <Button size="xs" color="light" className="text-red-600" onClick={()=>del(i)}>Delete</Button>}
                           </>
                       }
                     </div>
@@ -332,6 +338,18 @@ export default function IncidentsTab() {
             <Button onClick={submitReview}>Submit Review</Button>
           </ModalFooter>
         </Modal>
+      )}
+
+      {voiding && (
+        <ReasonModal
+          title="Void this incident report?"
+          subject={`${voiding.client_name} · ${fmtDate(voiding.incident_date)} · ${SEVERITY_LABEL[voiding.severity] || voiding.severity}`}
+          explain="Incident reports are never deleted. This one stays on file, marked void, with your name, the time and this reason, and the audit log records it."
+          placeholder="Reason (required), e.g. filed for the wrong resident"
+          confirmText="Void"
+          onClose={() => setVoiding(null)}
+          onConfirm={reason => voidIncident(voiding, reason)}
+        />
       )}
 
       {unlockModal && (

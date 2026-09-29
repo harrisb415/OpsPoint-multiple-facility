@@ -47,23 +47,25 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  // Delete a log line (log.delete) — never a UA line: those are voided.
+  // Delete a log line (log.delete), with a reason — never a UA line: those
+  // are voided. The audit entry keeps what it said.
   app.delete('/api/log/:id', requireAuth, csrfCheck, requirePermission('log.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { label } = await service.deleteLog(id);
-      await audit(req, 'log.delete', 'log_entry', id, label);
+      const { label, detail } = await service.deleteLog(id, { reason: req.body && req.body.reason });
+      await audit(req, 'log.delete', 'log_entry', id, label, detail);
       broadcast({ type: 'data_saved', user: req.session.displayName });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
   // ── Delete report ────────────────────────────────────────────────
+  // With a reason, in its first 24 hours; the audit entry keeps its lines.
   app.delete('/api/reports/:id', requireAuth, csrfCheck, requirePermission('reports.delete'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { label } = await service.deleteReport(id);
-      await audit(req, 'report.delete', 'report', id, label);
+      const { label, detail } = await service.deleteReport(id, { reason: req.body && req.body.reason });
+      await audit(req, 'report.delete', 'report', id, label, detail);
       broadcast({ type: 'data_saved', user: req.session.displayName });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

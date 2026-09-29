@@ -75,9 +75,9 @@ module.exports = [
   },
   {
     id: 'report.log.delete', area: 'Report tab', label: 'Delete a log entry',
-    where: 'ReportTab.jsx — log entry delete (canDelLog)', show: [['log.delete']],
+    where: 'ReportTab.jsx — log entry delete (canDelLog), with a reason', show: [['log.delete']],
     setup: async (h) => ({ entry: await h.logEntry() }),
-    run: async (a, fx) => { await a.del(`/api/log/${fx.entry}`); },
+    run: async (a, fx) => { await a.del(`/api/log/${fx.entry}`, { reason: 'Audit: wrong report' }); },
   },
   {
     id: 'report.issues', area: 'Report tab', label: 'Add or remove an issue / medical note',
@@ -151,10 +151,10 @@ module.exports = [
 
   // ── Archive (ArchiveTab.jsx) ──
   {
-    id: 'archive.delete', area: 'Archive', label: 'Delete a closed report',
+    id: 'archive.delete', area: 'Archive', label: 'Delete a closed report (first 24 hours, with a reason)',
     where: 'ArchiveTab.jsx (canDelete = reports.delete)', show: [['reports.delete']],
     setup: async (h) => ({ id: await h.closedReport() }),
-    run: async (a, fx) => { await a.del(`/api/reports/${fx.id}`); },
+    run: async (a, fx) => { await a.del(`/api/reports/${fx.id}`, { reason: 'Audit: duplicate report' }); },
   },
 
   // ── Residents (ClientsTab.jsx) ──
@@ -260,9 +260,9 @@ module.exports = [
     run: async (a, fx) => { await a.put(`/api/mail/${fx.m.id}/deliver`, {}); },
   },
   {
-    id: 'mail.delete', area: 'Mail', label: 'Delete a mail record', where: 'MailTab.jsx (canDelete = mail.delete)', show: [['mail.delete']],
+    id: 'mail.delete', area: 'Mail', label: 'Delete a mail record (with a reason)', where: 'MailTab.jsx (canDelete = mail.delete)', show: [['mail.delete']],
     setup: async (h) => ({ m: await h.mail('pending') }),
-    run: async (a, fx) => { await a.del(`/api/mail/${fx.m.id}`); },
+    run: async (a, fx) => { await a.del(`/api/mail/${fx.m.id}`, { reason: 'Audit: logged twice' }); },
   },
 
   // ── UA (UARequestsTab.jsx) and the sidebar UA draw (AppShell.jsx) ──
@@ -358,9 +358,9 @@ module.exports = [
     run: async (a, fx) => { await a.put(`/api/violations/${fx.v.id}/complete`, {}); },
   },
   {
-    id: 'violations.delete', area: 'Infractions', label: 'Delete an infraction', where: 'ViolationsTab.jsx (canDelete = violations.delete)', show: [['violations.delete']],
+    id: 'violations.void', area: 'Infractions', label: 'Void an infraction (with a reason)', where: 'ViolationsTab.jsx (canVoid = violations.void)', show: [['violations.void']],
     setup: async (h) => ({ v: await h.violation('pending') }),
-    run: async (a, fx) => { await a.del(`/api/violations/${fx.v.id}`); },
+    run: async (a, fx) => { await a.post(`/api/violations/${fx.v.id}/void`, { reason: 'Audit: wrong resident' }); },
   },
 
   // ── Chores (ChoresTab.jsx) ──
@@ -448,14 +448,14 @@ module.exports = [
     run: async (a, fx) => { await a.put(`/api/incidents/${fx.id}/review`, { status: 'reviewed', review_notes: 'ok' }); },
   },
   {
-    id: 'incidents.delete', area: 'Clinical', label: 'Delete an incident', where: 'IncidentsTab.jsx (canDelete = incidents.delete)', show: [['incidents.delete']],
+    id: 'incidents.void', area: 'Clinical', label: 'Void an incident report (with a reason)', where: 'IncidentsTab.jsx (canVoid = incidents.void)', show: [['incidents.void']],
     setup: async (h) => ({ id: await h.incident() }),
-    run: async (a, fx) => { await a.del(`/api/incidents/${fx.id}`); },
+    run: async (a, fx) => { await a.post(`/api/incidents/${fx.id}/void`, { reason: 'Audit: wrong resident' }); },
   },
   {
     id: 'incidents.unlock', area: 'Clinical', label: 'Unlock a sealed incident',
     where: 'IncidentsTab.jsx — page needs an incidents permission; button needs records.unlock',
-    show: [['incidents.log', 'records.unlock'], ['incidents.review', 'records.unlock'], ['incidents.delete', 'records.unlock']],
+    show: [['incidents.log', 'records.unlock'], ['incidents.review', 'records.unlock'], ['incidents.void', 'records.unlock']],
     setup: async (h) => ({ id: await h.incident({ locked: true }) }),
     run: async (a, fx) => { await a.post(`/api/incidents/${fx.id}/unlock`, { reason: 'Audit correction' }); },
   },

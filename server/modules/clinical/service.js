@@ -8,7 +8,7 @@
  */
 const repo = require('./repository');
 const reportLog = require('../../db/reportLog');
-const { sanitizeText, validTime } = require('../../lib/text');
+const { sanitizeText, validTime, reasonText } = require('../../lib/text');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -189,19 +189,45 @@ async function createIncident(b = {}, session) {
   });
   return { record, severity: sev, merged };
 }
+// A voided incident report is kept as it was: no edits, no review.
+async function notVoided(id) {
+  const cur = await repo.getIncident(id);
+  if (!cur) throw httpError(404, 'Not found');
+  if (cur.voided_at) throw httpError(409, 'This incident report was voided and can no longer be changed.');
+  return cur;
+}
 async function updateIncident(id, b = {}) {
+  await notVoided(id);
   const record = await repo.updateIncident(id, b);
   if (!record) throw httpError(404, 'Not found');
   return { record, clientName: record.client_name };
 }
 async function reviewIncident(id, b = {}, session) {
+  await notVoided(id);
   const newStatus = ['reviewed', 'closed'].includes(b.status) ? b.status : 'reviewed';
   const record = await repo.reviewIncident(id, session.userId, actorName(session), b.review_notes || '', newStatus);
   if (!record) throw httpError(404, 'Not found');
   return { record, clientName: record.client_name, status: newStatus };
 }
-async function deleteIncident(id) {
-  await repo.deleteIncident(id); // mirrors original: no 404 check
+// Incident reports are never deleted: a mistaken one is voided, with a
+// reason, and stays on file. Allowed after the 24-hour edit lock too, since
+// voiding changes nothing the report says. Returns { clientName, detail } for
+// the audit — the audit log only: incidents are clinical, so nothing goes in
+// the shift log.
+async function voidIncident(id, b = {}, session) {
+  const cur = await repo.getIncident(id);
+  if (!cur) throw httpError(404, 'Not found');
+  if (cur.voided_at) throw httpError(409, 'This incident report is already void');
+  const why = reasonText(b.reason);
+  if (!why) throw httpError(400, 'Say why this incident report is being voided');
+  const done = await repo.voidIncident(id, { at: new Date().toISOString(), byId: session.userId, byName: actorName(session), reason: why });
+  if (!done) throw httpError(409, 'This incident report is already void');
+  // The API takes a client_id alone, so the stored name can be blank.
+  const clientName = cur.client_name || ((await repo.getClientById(cur.client_id)) || {}).name || '';
+  return {
+    clientName,
+    detail: { reason: why, resident: clientName, incident_date: cur.incident_date, severity: cur.severity, status_before: cur.status },
+  };
 }
 
 // ── Discharge records ───────────────────────────────────────────────
@@ -300,7 +326,7 @@ async function unlockRecord(table, id, b = {}, session) {
 module.exports = {
   listUA, getUA, createUA, updateUA, voidUA, voidUALine,
   listMilestones, createMilestone, updateMilestone, signoffMilestone, deleteMilestone,
-  listIncidents, createIncident, updateIncident, reviewIncident, deleteIncident,
+  listIncidents, createIncident, updateIncident, reviewIncident, voidIncident,
   listDischarges, listDischargesForClient, createDischarge,
   listConsents, createConsent, revokeConsent,
   listDisclosures, logDisclosure, unlockRecord,

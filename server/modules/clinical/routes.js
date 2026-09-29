@@ -164,12 +164,12 @@ function register(app) {
       res.json({ ok: true, record });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
-  app.delete('/api/incidents/:id', requireAuth, csrfCheck, requirePermission('incidents.delete'),
-    requireUnlocked('incidents'), async (req, res) => {
+  // Never deleted: voided with a reason, it stays on file (audit log only).
+  app.post('/api/incidents/:id/void', requireAuth, csrfCheck, requirePermission('incidents.void'), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
-      await service.deleteIncident(id);
-      await audit(req, 'incident.delete', 'incidents', id, '');
+      const { clientName, detail } = await service.voidIncident(id, req.body || {}, req.session);
+      await audit(req, 'incident.void', 'incidents', id, clientName, detail);
       broadcast({ type: 'incidents_updated' });
       res.json({ ok: true });
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

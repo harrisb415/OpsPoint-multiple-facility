@@ -2,6 +2,47 @@
 
 ---
 
+## Unreleased — Deletes ask why; incidents and infractions are voided (2026-09-28)
+
+### Changed
+
+- **Every delete asks for a reason**, and the audit log records who did it, when, why and
+  what was removed:
+  - **Log entries** (Report tab): the audit entry keeps the line's time and full text.
+  - **Mail records** (Mail tab): the audit entry keeps the resident, type, status, when
+    it was logged and by whom, and the notes.
+  - **Shift reports** (Archive): the audit entry keeps the date, shift, MOD and its log
+    lines. A report can be deleted **only in the first 24 hours after it was started**.
+    After that it's permanent: the Archive shows a lock instead of the delete button, and
+    the server refuses. The shift that's open now can't be deleted either (close it
+    first). Reports with UA results still can't be deleted at all.
+- **Incident reports are never deleted.** A mistaken one is **voided**, with a reason, like
+  a UA result: it stays on file, struck through, with who voided it, when and why (in the
+  audit log too; nothing goes in the shift log, since incidents are clinical). A voided
+  report can't be edited or reviewed. Voiding works after the 24-hour edit lock too, since
+  it changes nothing the report says. Permission: **"Void an incident report"**
+  (`incidents.void`).
+- **Infractions are never deleted either**: voided with a reason, shown struck through with
+  the void note on the Infractions tab, the resident profile and the print-out. They drop
+  out of the totals, the review queue and the bell. Permission: **"Void an infraction"**
+  (`violations.void`).
+- `incidents.delete` and `violations.delete` are replaced by the void permissions. Every
+  account and group that had the old one has the new one after the first start.
+- Admin › Audit Log has **Infractions** and **Incidents** filters.
+
+### Fixed
+
+- The resident profile and the resident report showed incident dates as "—" and no author:
+  they read fields incidents don't have. They show the incident date and who logged it now.
+
+### Database
+
+- New columns on `incidents` and `violations`: `voided_at`, `voided_by_id`,
+  `voided_by_name`, `void_reason`. Postgres: `migrations/pg/012_void_incidents_violations.sql`,
+  applied before restarting; SQLite adds them itself.
+
+---
+
 ## Unreleased — Dates are the facility's day, not UTC's (2026-09-28)
 
 ### Fixed

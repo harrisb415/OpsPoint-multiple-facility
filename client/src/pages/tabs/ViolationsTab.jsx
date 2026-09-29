@@ -12,6 +12,9 @@ import PrintScopeModal from '../../components/PrintScopeModal.jsx'
 import { openPrintWindow, fmtDateFriendly } from '../../utils/printLog.js'
 import { Field, ColoredAvatar, StatusBadge, FilterChip, useConfirm } from '../../components/ui.jsx'
 import { parseServerTime, localDayKey } from '../../utils/dates.js'
+import ReasonModal from '../../components/ReasonModal.jsx'
+import { sendWithReason } from '../../utils/reason.js'
+import { voidNote } from '../../utils/logLines.js'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
@@ -29,9 +32,9 @@ function VioStatusBadge({ status }) {
 }
 
 const BLANK = { client_id: '', client_name: '', room: '', violation_date: todayStr(), description: '', staff_name: '', notes: '' }
-const VIO_BADGE = { pending: 'warning', assigned: 'info', waived: 'gray', completed: 'success' }
-const VIO_LABEL = { pending: 'Pending Review', assigned: 'Consequence Assigned', waived: 'Waived', completed: 'Completed' }
-const VIO_STATUS_KEYS = [null, 'pending', 'assigned', 'waived', 'completed']
+const VIO_BADGE = { pending: 'warning', assigned: 'info', waived: 'gray', completed: 'success', voided: 'gray' }
+const VIO_LABEL = { pending: 'Pending Review', assigned: 'Consequence Assigned', waived: 'Waived', completed: 'Completed', voided: 'Voided' }
+const VIO_STATUS_KEYS = [null, 'pending', 'assigned', 'waived', 'completed', 'voided']
 
 export default function ViolationsTab() {
   const { data, openProfile }   = useData()
@@ -40,7 +43,8 @@ export default function ViolationsTab() {
   const canLog      = hasPerm('violations.log')
   const canReview   = hasPerm('violations.review')
   const canComplete = hasPerm('violations.complete')
-  const canDelete   = hasPerm('violations.delete')
+  const canVoid     = hasPerm('violations.void')
+  const [voiding, setVoiding] = useState(null)
   const { globalSearch = '' } = useOutletContext() || {}
   const confirm = useConfirm()
 
@@ -205,11 +209,8 @@ export default function ViolationsTab() {
     await loadViolations()
   }
 
-  async function del(v) {
-    if (!await confirm({ title: `Delete this violation record for ${v.client_name}?`, body: 'This cannot be undone.', confirmText: 'Delete', color: 'red' })) return
-    await fetch(`/api/violations/${v.id}`, { method: 'DELETE', credentials: 'include' })
-    await loadViolations()
-  }
+  // Infractions are never deleted: voided, they stay on file.
+  function del(v) { setVoiding(v) }
 
   // Unique clients in current violation list (for filter dropdown)
   const clientOptions = useMemo(() => {
@@ -241,7 +242,7 @@ export default function ViolationsTab() {
       {/* KPIs */}
       <div className="grid gap-4 mb-4 sm:grid-cols-2 xl:grid-cols-3">
         {[
-          { label: 'Total', value: violations.length, sub: 'logged', Icon: Ban, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
+          { label: 'Total', value: violations.filter(v => v.status !== 'voided').length, sub: 'logged', Icon: Ban, tint: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300' },
           { label: 'Pending Review', value: violations.filter(v => v.status === 'pending').length, sub: 'awaiting review', Icon: Flame, tint: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300' },
           { label: 'Resolved', value: violations.filter(v => v.status === 'completed' || v.status === 'waived').length, sub: 'completed or waived', Icon: CheckCircle, tint: 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300' },
         ].map(k => (
@@ -260,7 +261,7 @@ export default function ViolationsTab() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        {['All', 'Pending', 'Assigned', 'Waived', 'Completed'].map((f, i) => (
+        {['All', 'Pending', 'Assigned', 'Waived', 'Completed', 'Voided'].map((f, i) => (
           <FilterChip key={f} active={i === statusFilter} onClick={() => setStatusFilter(i)}>{f}</FilterChip>
         ))}
         <span className="ml-auto text-sm text-gray-400">{filtered.length} records</span>
@@ -322,16 +323,19 @@ export default function ViolationsTab() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono">{fmtDate(v.violation_date)}</TableCell>
-                    <TableCell className="text-gray-500 dark:text-gray-400">{v.description}</TableCell>
+                    <TableCell className="text-gray-500 dark:text-gray-400">
+                      <span className={v.voided_at ? 'line-through text-gray-400 dark:text-gray-500' : ''}>{v.description}</span>
+                      {v.voided_at && <span className="block text-xs font-semibold text-red-700 dark:text-red-400">{voidNote(v)}</span>}
+                    </TableCell>
                     <TableCell><StatusBadge color={VIO_BADGE[v.status] || 'gray'}>{VIO_LABEL[v.status] || v.status}</StatusBadge></TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.consequence || (v.status === 'waived' ? '—' : '')}{v.completed_at && <span className="block text-xs text-green-600 dark:text-green-400">✓ {fmtDate(localDayKey(v.completed_at))}</span>}</TableCell>
                     <TableCell className="text-gray-500 dark:text-gray-400">{v.staff_name || v.logged_by || '—'}</TableCell>
                     <TableCell className="text-right">
-                      {(canReview || canComplete || canDelete) && (
+                      {!v.voided_at && (canReview || canComplete || canVoid) && (
                         <Dropdown arrowIcon={false} inline label={<MoreHorizontal className="w-4 h-4 text-gray-400" />}>
                           {canReview && v.status === 'pending' && <DropdownItem onClick={() => openReview(v)}>Review</DropdownItem>}
                           {canComplete && v.status === 'assigned' && <DropdownItem className="text-green-700 dark:text-green-400" onClick={() => markComplete(v)}>Mark Complete</DropdownItem>}
-                          {canDelete && <DropdownItem className="text-red-600" onClick={() => del(v)}>Delete</DropdownItem>}
+                          {canVoid && !v.voided_at && <DropdownItem className="text-red-600" onClick={() => del(v)}>Void</DropdownItem>}
                         </Dropdown>
                       )}
                     </TableCell>
@@ -377,17 +381,17 @@ export default function ViolationsTab() {
                               <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Description</th>
                               <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Status</th>
                               <th className="px-3.5 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400">Consequence</th>
-                              {(canReview || canComplete || canDelete) && <th className="px-3.5 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>}
+                              {(canReview || canComplete || canVoid) && <th className="px-3.5 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400">Actions</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                             {cg.rows.slice().sort((a,b) => b.id - a.id).map(v => (
                               <ViolationRow
                                 key={v.id} v={v} compact
-                                canReview={canReview} canComplete={canComplete} canDelete={canDelete}
+                                canReview={canReview} canComplete={canComplete} canVoid={canVoid}
                                 onReview={() => openReview(v)}
                                 onComplete={() => markComplete(v)}
-                                onDelete={() => del(v)}
+                                onVoid={() => del(v)}
                               />
                             ))}
                           </tbody>
@@ -455,6 +459,18 @@ export default function ViolationsTab() {
         </Modal>
       )}
 
+      {voiding && (
+        <ReasonModal
+          title="Void this infraction?"
+          subject={`${voiding.client_name} · ${fmtDate(voiding.violation_date)} · ${voiding.description}`}
+          explain="Infractions are never deleted. This one stays on file, marked void, with your name, the time and this reason, and the audit log records it."
+          placeholder="Reason (required), e.g. logged for the wrong resident"
+          confirmText="Void"
+          onClose={() => setVoiding(null)}
+          onConfirm={async reason => { await sendWithReason('POST', `/api/violations/${voiding.id}/void`, reason); await loadViolations() }}
+        />
+      )}
+
       <PrintScopeModal
         open={printOpen}
         title="Print Infractions Log"
@@ -484,11 +500,11 @@ export default function ViolationsTab() {
 
 // ── Print report ──────────────────────────────────────────────────────
 function printViolationsReport({ facility, subtitle, entries }) {
-  const counts = { pending: 0, assigned: 0, waived: 0, completed: 0 }
+  const counts = { pending: 0, assigned: 0, waived: 0, completed: 0, voided: 0 }
   entries.forEach(v => { if (counts[v.status] !== undefined) counts[v.status]++ })
 
   const summary = [
-    ['Total',     entries.length],
+    ['Total',     entries.length - counts.voided],
     ['Pending',   counts.pending],
     ['Assigned',  counts.assigned],
     ['Completed', counts.completed],
@@ -510,6 +526,7 @@ function printViolationsReport({ facility, subtitle, entries }) {
     if (s === 'assigned')  return { badge: 'pending', label: 'ASSIGNED' }
     if (s === 'waived')    return { badge: 'pending', label: 'WAIVED' }
     if (s === 'pending')   return { badge: 'pending', label: 'PENDING' }
+    if (s === 'voided')    return { badge: 'pending', label: 'VOIDED' }
     return String(s || '—')
   }
 
@@ -523,7 +540,7 @@ function printViolationsReport({ facility, subtitle, entries }) {
     date:        fmt(v.violation_date),
     room:        v.room || '—',
     resident:    v.client_name || '—',
-    description: v.description || '',
+    description: v.voided_at ? `${v.description || ''} [${voidNote(v)}]` : (v.description || ''),
     status:      statusBadge(v.status),
     consequence: v.consequence || (v.status === 'waived' ? 'Waived — no consequence' : '—'),
     staff:       v.staff_name || v.logged_by || '—',
@@ -542,13 +559,16 @@ function printViolationsReport({ facility, subtitle, entries }) {
   })
 }
 
-function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview, onComplete, onDelete }) {
+function ViolationRow({ v, compact, canReview, canComplete, canVoid, onReview, onComplete, onVoid }) {
   return (
     <tr className="bg-white dark:bg-gray-800">
       {!compact && <td className="px-3.5 py-2 font-mono text-xs text-center text-gray-500 dark:text-gray-400">{v.room}</td>}
       {!compact && <td className="px-3.5 py-2 font-semibold text-sm text-gray-900 dark:text-white">{v.client_name}</td>}
       <td className="px-3.5 py-2 font-mono text-xs whitespace-nowrap text-gray-500 dark:text-gray-400">{fmtDate(v.violation_date)}</td>
-      <td className="px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">{v.description}</td>
+      <td className="px-3.5 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[220px]">
+        <span className={v.voided_at ? 'line-through text-gray-400 dark:text-gray-500' : ''}>{v.description}</span>
+        {v.voided_at && <span className="block text-[0.7rem] font-semibold text-red-700 dark:text-red-400">{voidNote(v)}</span>}
+      </td>
       <td className="px-3.5 py-2"><VioStatusBadge status={v.status} /></td>
       <td className="px-3.5 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[180px]">
         {v.consequence || (v.status === 'waived' ? '—' : '')}
@@ -560,7 +580,7 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
         )}
       </td>
       {!compact && <td className="px-3.5 py-2 text-[0.78rem] text-gray-500 dark:text-gray-400">{v.staff_name || v.logged_by}</td>}
-      {(canReview || canComplete || canDelete) && (
+      {(canReview || canComplete || canVoid) && (
         <td className="px-3.5 py-2 text-center whitespace-nowrap">
           {canReview && v.status === 'pending' && (
             <Button size="xs" className="mr-1" onClick={onReview}>Review</Button>
@@ -568,8 +588,8 @@ function ViolationRow({ v, compact, canReview, canComplete, canDelete, onReview,
           {canComplete && v.status === 'assigned' && (
             <Button size="xs" color="success" className="mr-1" onClick={onComplete}>Complete</Button>
           )}
-          {canDelete && (
-            <Button size="xs" color="failure" onClick={onDelete}>✕</Button>
+          {canVoid && !v.voided_at && (
+            <Button size="xs" color="failure" onClick={onVoid} title="Void (with a reason) — infractions are never deleted">Void</Button>
           )}
         </td>
       )}

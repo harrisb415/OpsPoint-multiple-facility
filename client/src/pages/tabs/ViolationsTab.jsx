@@ -93,7 +93,7 @@ export default function ViolationsTab() {
   // Date range filter
   function inRange(v) {
     if (dateRange === 'all') return true
-    const d = v?.violation_date || v?.logged_at?.slice(0, 10)
+    const d = v?.violation_date || localDayKey(parseServerTime(v?.logged_at))   // logged_at: database-stamped
     if (!d) return false
     const now   = new Date()
     const dt    = new Date(d + 'T12:00:00')

@@ -13,7 +13,8 @@ const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:bord
 const SEV_BADGE = { low: 'info', medium: 'warning', high: 'pink', critical: 'failure' }
 const STATUS_BADGE = { open: 'warning', reviewed: 'info', closed: 'success' }
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+// Local date, not UTC's: from 5 PM Pacific (4 PM in winter) UTC is already tomorrow.
+function todayStr() { return new Date().toLocaleDateString('en-CA') }
 function nowTime()  { const d = new Date(); return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` }
 
 function fmtDate(d) {
@@ -67,7 +68,8 @@ export default function IncidentsTab() {
   const [unlockReason, setUnlockReason] = useState('')
 
   function openAdd() {
-    setForm({ ...BLANK, notifications_required: policy['low'] || [] })
+    // Now, not when the module loaded: BLANK's date and time go stale over a shift
+    setForm({ ...BLANK, incident_date: todayStr(), incident_time: nowTime(), notifications_required: policy['low'] || [] })
     setErr(''); setModal('add')
   }
   function openEdit(i) {

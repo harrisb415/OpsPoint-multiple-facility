@@ -14,7 +14,8 @@ const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:bord
 const MS_BADGE = { in_progress: 'warning', completed: 'success', waived: 'gray' }
 const MS_LABEL = { in_progress: 'In Progress', completed: 'Completed', waived: 'Waived' }
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+// Local date, not UTC's: from 5 PM Pacific (4 PM in winter) UTC is already tomorrow.
+function todayStr() { return localDayKey(new Date()) }
 function fmtDate(d) {
   if (!d) return '—'
   try { return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
@@ -26,7 +27,7 @@ function fmtDate(d) {
 // Date-only fields parse at local noon.
 function fmtLogged(ts) {
   if (!ts) return '—'
-  const d = /^d{4}-d{2}-d{2}$/.test(String(ts)) ? new Date(ts + 'T12:00:00') : parseServerTime(ts)
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(ts)) ? new Date(ts + 'T12:00:00') : parseServerTime(ts)
   return !d || isNaN(d.getTime()) ? String(ts) : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 // signed_off_at is written by nowLocal() — its local day, not the UTC date

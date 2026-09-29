@@ -5,6 +5,7 @@
 // ════════════════════════════════════════════════════════════════════════
 import { NotebookPen, Target, Award, ClipboardList, Users, Siren, DoorOpen } from 'lucide-react'
 import { Modal as FbModal, ModalHeader, ModalBody, ModalFooter } from 'flowbite-react'
+import { parseWhen } from '../../utils/dates.js'
 
 // Navigation entries for the clinical section. `perm` (single) or `perms`
 // (any-of) controls visibility. `icon` is a lucide-react component.
@@ -64,10 +65,9 @@ export function clinicalApi(seg) {
 // ── Formatting / lookup ──────────────────────────────────────────────────
 export function fmtDate(d) {
   if (!d) return '—'
-  // Accept 'YYYY-MM-DD' or full timestamps
-  const iso = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + 'T12:00:00' : d
-  const dt = new Date(iso)
-  if (isNaN(dt.getTime())) return d
+  // 'YYYY-MM-DD' (at local noon) or a timestamp — see utils/dates.js
+  const dt = parseWhen(d)
+  if (!dt) return d
   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 

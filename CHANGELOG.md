@@ -2,6 +2,33 @@
 
 ---
 
+## Unreleased — Dates are the facility's day, not UTC's (2026-09-28)
+
+### Fixed
+
+- **New records dated tomorrow in the evening.** From 5 PM Pacific (4 PM in winter) UTC
+  is already the next day, and several tabs took "today" from UTC: new **incidents** and
+  **consents** defaulted to tomorrow, a **milestone** marked completed got tomorrow's
+  completion date, and the **Groups** tab opened on tomorrow, so attendance was taken for
+  the wrong day. They use the local day now. Incidents and consents
+  also stamp the date (and the incident's time) when the form opens, not when the page
+  loaded, so a page left open overnight doesn't default to yesterday.
+- **Milestone sign-off** dated the milestone completed tomorrow in the evening, on SQLite
+  installs (the server used the database's UTC date).
+- **Admin › Users "Created"** read the database's UTC time as local time: an account made
+  in the evening showed tomorrow's date. The same kind of mistake is fixed in the Mail
+  print-out and the clinical records' dates and "Signed" line. On iPhone, those showed
+  "Invalid Date" or the raw text.
+- **Infractions › This week / This month** placed an infraction with no date by its UTC
+  logging day.
+- **Milestones' "Logged" date** checked for a plain date with a broken pattern; it only
+  worked by accident.
+- **Phone › For you**: a pass return time an iPhone can't read was never shown as late.
+- The chore week and the audit-log CSV file name use the local day too. Pacific keys don't
+  move, but zones far from UTC did.
+
+---
+
 ## Unreleased — The phone keeps working without signal (2026-09-28)
 
 Mobile rewrite step 5: the offline queue.

@@ -16,7 +16,7 @@ import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
 import { THEMES, DEFAULT_THEME, applyTheme } from '../utils/themes.js'
-import { parseWhen, localStamp } from '../utils/dates.js'
+import { parseWhen, parseServerTime, localStamp, localDayKey, fmtDay } from '../utils/dates.js'
 
 // ── Shared card section wrapper ───────────────────────────────────
 function Section({ title, right, noPad = false, className = '', children }) {
@@ -374,11 +374,8 @@ function CurrentStaff({ users, groups, reload }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  function fmtDate(s) {
-    if (!s) return '—'
-    try { return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }
-    catch { return s }
-  }
+  // created_at is database-stamped (SQLite: UTC with no zone marker).
+  const fmtDate = (s) => fmtDay(parseServerTime(s))
 
   function openGroups(u) {
     setMemberOf((u.groups || []).map(g => g.id))
@@ -1923,7 +1920,7 @@ function AuditLogTab() {
     const csv = csvRows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    a.download = `opspoint_audit_${new Date().toISOString().slice(0, 10)}.csv`
+    a.download = `opspoint_audit_${localDayKey(new Date())}.csv`
     a.click()
   }
 

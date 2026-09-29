@@ -11,7 +11,8 @@ import { Field, useConfirm } from '../../components/ui.jsx'
 
 const CARD = 'p-4 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 sm:p-5 dark:bg-gray-800'
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+// Local date, not UTC's: from 5 PM Pacific (4 PM in winter) UTC is already tomorrow.
+function todayStr() { return new Date().toLocaleDateString('en-CA') }
 
 function fmtDateHeading(d) {
   const dt = new Date(d + 'T12:00:00')
@@ -22,7 +23,7 @@ function fmtDateHeading(d) {
 function offsetDate(d, delta) {
   const dt = new Date(d + 'T12:00:00')
   dt.setDate(dt.getDate() + delta)
-  return dt.toISOString().slice(0, 10)
+  return dt.toLocaleDateString('en-CA')
 }
 
 // Attendance entry feeds the SAME record the clinician finishes in the Clinical

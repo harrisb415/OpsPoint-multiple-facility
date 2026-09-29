@@ -922,9 +922,9 @@ async function updateMilestone(id, patch) {
 async function signoffMilestone(id, counselorId, counselorName) {
   await _run(`UPDATE milestones SET counselor_id=?, counselor_name=?,
         signed_off_at=?, status='completed',
-        completion_date=COALESCE(completion_date, date('now'))
+        completion_date=COALESCE(completion_date, ?)
         WHERE id=?`,
-       [counselorId, counselorName||'', nowLocal(), id]);
+       [counselorId, counselorName||'', nowLocal(), localDate(), id]);   // local day: SQLite's date('now') is UTC's
   return await _q1('SELECT * FROM milestones WHERE id=?', [id]);
 }
 async function deleteMilestone(id) { await _run('DELETE FROM milestones WHERE id=?', [id]); }

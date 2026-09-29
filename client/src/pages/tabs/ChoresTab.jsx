@@ -77,6 +77,8 @@ function printChoreAssignments(clients, weekStart) {
 }
 
 // ── Week helpers ──────────────────────────────────────────────────────
+// Day keys are local YYYY-MM-DD. Not toISOString(): that is the UTC day, and
+// chore_log rows are keyed by (client_id, log_date).
 function todayStr() { return new Date().toLocaleDateString('en-CA') }
 
 function getWeekStart(dateStr) {
@@ -85,21 +87,21 @@ function getWeekStart(dateStr) {
   const day = d.getDay() // 0=Sun
   const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA')
 }
 
 function getWeekDays(weekStartStr) {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStartStr + 'T12:00:00')
     d.setDate(d.getDate() + i)
-    return d.toISOString().slice(0, 10)
+    return d.toLocaleDateString('en-CA')
   })
 }
 
 function offsetWeek(weekStartStr, delta) {
   const d = new Date(weekStartStr + 'T12:00:00')
   d.setDate(d.getDate() + delta * 7)
-  return d.toISOString().slice(0, 10)
+  return d.toLocaleDateString('en-CA')
 }
 
 function fmtDayHeader(dateStr) {

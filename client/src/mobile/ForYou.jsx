@@ -53,7 +53,7 @@ export default function ForYou() {
 
   const rows = []
   for (const p of todo.pass_due || []) {
-    const late = Date.parse(p.return_date) < now
+    const late = (parseWhen(p.return_date)?.getTime() ?? Infinity) < now
     rows.push({
       key: `pd${p.id}`, Icon: Ticket, tone: late ? 'red' : 'amber', to: `/m/residents/${p.client_id}`,
       title: late ? `${p.name} is late back` : `${p.name} due back ${fmtBack(p.return_date)}`,

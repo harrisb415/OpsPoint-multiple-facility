@@ -380,12 +380,10 @@ function printMailLogReport({ facility, subtitle, entries }) {
   }
 
   const fmt = (s) => {
-    if (!s) return '—'
-    try {
-      const d = new Date(s)
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
-             d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    } catch { return s }
+    const d = parseWhen(s)
+    if (!d) return s || '—'
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   }
 
   const rows = entries.map(m => ({

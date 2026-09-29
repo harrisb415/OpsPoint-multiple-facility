@@ -13,7 +13,8 @@ import { parseServerTime, localDayKey } from '../../utils/dates.js'
 
 const CARD = 'p-8 bg-white border border-gray-200 shadow-sm rounded-xl dark:border-gray-700 dark:bg-gray-800'
 
-function todayStr() { return new Date().toISOString().slice(0, 10) }
+// Local date, not UTC's: from 5 PM Pacific (4 PM in winter) UTC is already tomorrow.
+function todayStr() { return localDayKey(new Date()) }
 // disclosed_at is stamped by the database (SQLite datetime('now') — UTC with
 // no zone marker; Postgres — an instant). Slicing the text showed UTC as if it
 // were local: seven hours off in the evening, and on the wrong day.
@@ -147,7 +148,7 @@ export default function ConsentTab() {
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">42 CFR Part 2 — consent &amp; disclosure tracking</p>
         </div>
         {canManage && selectedClient && (
-          <Button onClick={() => { setForm(BLANK); setModalErr(''); setModal(true) }}><Plus className="w-4 h-4 mr-2" /> New Consent</Button>
+          <Button onClick={() => { setForm({ ...BLANK, effective_date: todayStr() }); setModalErr(''); setModal(true) }}><Plus className="w-4 h-4 mr-2" /> New Consent</Button>
         )}
       </div>
 

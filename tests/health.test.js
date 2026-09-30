@@ -32,8 +32,12 @@ const STUB_UPDATES = { probe: async () => ({ current: '2.7.0', latest: '2.7.0', 
 const onPg = conn.isPg;
 const sqliteOnly = onPg ? test.skip : test;
 
+const { wrap } = require('../server/storage');
+const localStorage = require('../server/storage/local');
+const scratchStorage = (dir = scratch) => wrap(localStorage({ dir }));
+
 function doctor(over = {}) {
-  return health.createDoctor({ conn, settings, config: CONFIG, updater: STUB_UPDATES, ...over });
+  return health.createDoctor({ conn, settings, config: CONFIG, updater: STUB_UPDATES, storage: scratchStorage(), ...over });
 }
 async function check(id, over) {
   const r = await doctor(over).run({ only: [id] });
@@ -75,7 +79,8 @@ describe('each check says what it found', () => {
       ? /^Postgres \(.+\) answers in \d+ ms; every table and column this version uses exists\.$/
       : /^SQLite \(.+\) answers in \d+ ms/);
     if (onPg) expect(r.results.find(x => x.id === 'timezone').says).toMatch(/the database session agrees\.$/);
-    expect(r.results.find(x => x.id === 'storage').says).toContain(photos);
+    expect(r.results.find(x => x.id === 'storage').says).toMatch(/^A test file wrote, read back and deleted in the folder .+ \(\d+ ms\)\.$/);
+    expect(r.results.find(x => x.id === 'storage').says).toContain(scratch);
     expect(fs.readdirSync(photos)).toEqual([]);            // the test file is gone again
     expect(r.ok).toBe(true);
   });
@@ -91,11 +96,21 @@ describe('each check says what it found', () => {
   });
 
   test('file storage that is missing or unwritable fails', async () => {
-    expect((await check('storage', { config: { ...CONFIG, PHOTOS_DIR: path.join(scratch, 'nope') } })).says).toMatch(/doesn't exist\.$/);
-    const notADir = path.join(scratch, 'a-file');
-    fs.writeFileSync(notADir, 'x');
-    const r = await check('storage', { config: { ...CONFIG, PHOTOS_DIR: notADir } });
+    expect((await check('storage', { storage: scratchStorage(path.join(scratch, 'nope')) })).says).toMatch(/doesn't exist\.$/);
+    const odd = path.join(scratch, 'odd');                 // its "photos" is a file, not a folder
+    fs.mkdirSync(odd);
+    fs.writeFileSync(path.join(odd, 'photos'), 'x');
+    const r = await check('storage', { storage: scratchStorage(odd) });
     expect(r.status).toBe('fail');
+    expect(r.says).toMatch(/^Photos can't be saved in the folder /);
+  });
+
+  test('a cloud backend that refuses says so, with a fix for that service', async () => {
+    const refusing = wrap({ kind: 's3', put: async () => { throw new Error('S3 refused it (HTTP 403 AccessDenied): Access Denied'); },
+      get: async () => null, remove: async () => {}, list: async () => [], describe: () => 'the S3 bucket photos-b in us-west-2' });
+    const r = await check('storage', { storage: refusing });
+    expect(r).toMatchObject({ status: 'fail', says: "Photos can't be saved in the S3 bucket photos-b in us-west-2: S3 refused it (HTTP 403 AccessDenied): Access Denied." });
+    expect(r.fix).toMatch(/bucket exists in that region/);
   });
 
   test('no session key at all fails', async () => {

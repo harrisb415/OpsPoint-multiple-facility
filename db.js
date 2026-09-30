@@ -659,28 +659,12 @@ async function setSetting(key, val) {
 async function setSettingAndSave(key, val) { await setSetting(key, val); }
 
 // ── Photo helpers ─────────────────────────────────────────────────────
-function savePhoto(b64, fname) {
-  if (!b64 || !b64.startsWith('data:')) return b64;
-  const dir = path.join(path.dirname(_dbPath), 'photos');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, fname), Buffer.from(b64.split(',')[1], 'base64'));
-  return 'photos/' + fname;
-}
-function getPhotoB64(p) {
-  if (!p) return null;
-  if (p.startsWith('data:')) return p;
-  const photosDir = path.resolve(path.dirname(_dbPath), 'photos');
-  const full = path.resolve(path.dirname(_dbPath), p);
-  if (!full.startsWith(photosDir + path.sep) && !full.startsWith(photosDir + '/')) return null;
-  if (!fs.existsSync(full)) return null;
-  const ext = path.extname(full).slice(1).toLowerCase();
-  return `data:${ext === 'gif' ? 'image/gif' : 'image/jpeg'};base64,${fs.readFileSync(full).toString('base64')}`;
-}
-function resolveClientPhoto(photo) {
-  if (!photo) return null;
-  if (photo.startsWith('data:')) return photo;
-  return getPhotoB64(photo);
-}
+// Through the storage port (server/storage): a local folder, Azure Blob, S3 or
+// Cloud Storage, whichever OPSPOINT_STORAGE names. The reference kept in the
+// database is unchanged: 'photos/<file name>'.
+const photos = require('./server/storage/photos');
+async function savePhoto(b64, fname) { return photos.savePhoto(b64, fname); }
+async function getPhotoB64(p) { return photos.photoDataUri(p); }
 
 // ── Full data (legacy JSON shape) ─────────────────────────────────────
 // Permissions that grant access to clinical / treatment-record fields.
@@ -703,9 +687,10 @@ async function getAllData(perms) {
   const isClinical = _hasClinical(perms);
 
   const clients = await _q(`SELECT * FROM clients ORDER BY sort_order, ${connection.roomOrder()}, room`);
-  clients.forEach(c => {
+  const clientPhotos = await photos.photoDataUris(clients.map(c => c.photo));
+  clients.forEach((c, i) => {
     c.is_special = !!c.is_special; c.is_active = !!c.is_active;
-    c.photo = resolveClientPhoto(c.photo);
+    c.photo = clientPhotos[i];
     c.emergency_contacts = _j(c.emergency_contacts, []);
     // Strip treatment-record fields for non-clinical staff (HIPAA minimum necessary)
     if (!isClinical) {
@@ -1674,10 +1659,12 @@ async function getSyncBatch(limit = 50) {
     if (o.op !== 'upsert') return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'delete', data: null };
     const row = await _q1(`SELECT * FROM ${o.table_name} WHERE id=?`, [o.row_id]);
     if (!row) return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'delete', data: null }; // gone → delete
-    const cols = SYNC_PHOTO_COLS[o.table_name];
-    if (cols) cols.forEach(c => {
-      if (row[c] && typeof row[c] === 'string' && !row[c].startsWith('data:')) { const b = getPhotoB64(row[c]); if (b) row[c] = b; }
-    });
+    for (const c of SYNC_PHOTO_COLS[o.table_name] || []) {
+      if (row[c] && typeof row[c] === 'string' && !row[c].startsWith('data:')) {
+        const b = await getPhotoB64(row[c]).catch(() => null);
+        if (b) row[c] = b;
+      }
+    }
     return { id: o.id, table_name: o.table_name, row_id: o.row_id, op: 'upsert', data: row };
   }));
 }

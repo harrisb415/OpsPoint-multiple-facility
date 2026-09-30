@@ -80,7 +80,7 @@ const serveSPA = (res) => {
 };
 
 fs.mkdirSync(DATA,             { recursive:true });
-fs.mkdirSync(config.PHOTOS_DIR,{ recursive:true });
+if (settings.get('OPSPOINT_STORAGE') === 'local') fs.mkdirSync(config.PHOTOS_DIR,{ recursive:true });
 
 // Password helpers (hashPw/verifyPw/validatePw), time helpers (nowLocal/
 // timeToMins), getLocalIP, and broadcast now live in ./server/lib +

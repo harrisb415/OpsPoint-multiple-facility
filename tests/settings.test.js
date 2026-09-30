@@ -33,7 +33,7 @@ describe('the schema', () => {
   test('declares every setting once, with what the docs and checks need', () => {
     const names = SETTINGS.map((s) => s.name);
     expect(new Set(names).size).toBe(names.length);
-    const types = ['enum', 'int', 'bool', 'string', 'path', 'timezone', 'pgurl', 'trustProxy', 'host', 'size'];
+    const types = ['enum', 'int', 'bool', 'string', 'path', 'timezone', 'pgurl', 'trustProxy', 'host', 'size', 'url'];
     for (const s of SETTINGS) {
       expect(types).toContain(s.type);
       expect(['shared', 'facility', 'central', 'per-app']).toContain(s.scope);
@@ -218,6 +218,7 @@ describe('each problem is one plain sentence', () => {
   test('a bare aws deployment is told exactly what it needs', () => {
     expect(errors(make({ env: { OPSPOINT_PROFILE: 'aws' }, zone: 'UTC' }))).toEqual([
       "OPSPOINT_DB_DRIVER=pg needs DATABASE_URL, the facility's Postgres connection string: set it in the ECS task definition.",
+      'OPSPOINT_STORAGE=s3 needs S3_BUCKET, the S3 bucket: set it in the ECS task definition.',
       'Profile aws needs SESSION_SECRET, the key that signs sign-in cookies (at least 32 random characters): set it in the ECS task definition.',
       'Profile aws needs VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, the push alert keys (make a pair with `node server/cli/opspoint.js keys`): set them in the ECS task definition, since keys made on the fly change at every restart and cut off every phone.',
       "Profile aws needs TZ, the facility's time zone (for example America/Chicago): set it in the ECS task definition.",
@@ -227,10 +228,11 @@ describe('each problem is one plain sentence', () => {
   test('a complete aws deployment starts', () => {
     const s = make({ zone: 'America/Chicago', env: {
       OPSPOINT_PROFILE: 'aws', TZ: 'America/Chicago', DATABASE_URL: 'postgresql://app:pw@db.cluster.rds.amazonaws.com:5432/opspoint',
-      SESSION_SECRET: 'x'.repeat(64), ...pairEnv(),
+      SESSION_SECRET: 'x'.repeat(64), S3_BUCKET: 'sunrise-opspoint', ...pairEnv(),
     } });
     expect(errors(s)).toEqual([]);
-    expect(warnings(s)).toEqual([expect.stringMatching(/^Photos are still saved in the data folder/)]);
+    expect(warnings(s)).toEqual([]);
+    expect(s.get('OPSPOINT_STORAGE')).toBe('s3');
   });
 
   test('every message is a single sentence ending in a full stop', () => {
@@ -250,7 +252,7 @@ describe('each problem is one plain sentence', () => {
 describe('what a profile cannot use', () => {
   test('SQLite, the in-app updater and a loopback address on a managed platform', () => {
     const e = errors(make({ zone: 'America/Chicago', env: {
-      OPSPOINT_PROFILE: 'azure', TZ: 'America/Chicago', OPSPOINT_DB_DRIVER: 'sqlite', OPSPOINT_UPDATES: 'in-app',
+      OPSPOINT_PROFILE: 'azure', TZ: 'America/Chicago', OPSPOINT_DB_DRIVER: 'sqlite', OPSPOINT_UPDATES: 'in-app', AZURE_STORAGE_ACCOUNT: 'sunrisephotos',
       OPSPOINT_BIND: '127.0.0.1', SESSION_SECRET: 'y'.repeat(40), ...pairEnv(),
     } }));
     expect(e).toEqual([
@@ -266,7 +268,7 @@ describe('what a profile cannot use', () => {
   });
 
   test('a managed platform never talks to Postgres unencrypted, except over a local socket', () => {
-    const base = { OPSPOINT_PROFILE: 'gcp', TZ: 'America/New_York', SESSION_SECRET: 'z'.repeat(32), PGSSLMODE: 'disable', ...pairEnv() };
+    const base = { OPSPOINT_PROFILE: 'gcp', TZ: 'America/New_York', SESSION_SECRET: 'z'.repeat(32), PGSSLMODE: 'disable', GCS_BUCKET: 'sunrise-photos', ...pairEnv() };
     expect(errors(make({ zone: 'America/New_York', env: { ...base, DATABASE_URL: 'postgresql://u:p@10.1.2.3:5432/opspoint' } }))).toEqual([
       'Profile gcp needs an encrypted database connection, because its Postgres is reached over the network: set PGSSLMODE=require or verify-full.',
     ]);

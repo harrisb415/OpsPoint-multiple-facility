@@ -101,7 +101,7 @@ test('`keys` makes a session secret and one matching push key pair', () => {
   const k = JSON.parse(execFileSync(process.execPath, ['server/cli/opspoint.js', 'keys', '--json'], { cwd: ROOT, env: childEnv(), encoding: 'utf8' }));
   expect(k.SESSION_SECRET).toMatch(/^[0-9a-f]{64}$/);
   const s = createSettings({
-    env: { ...k, OPSPOINT_PROFILE: 'gcp', TZ: 'America/Chicago', DATABASE_URL: 'postgresql://u:p@10.0.0.5/opspoint' },
+    env: { ...k, OPSPOINT_PROFILE: 'gcp', TZ: 'America/Chicago', DATABASE_URL: 'postgresql://u:p@10.0.0.5/opspoint', GCS_BUCKET: 'sunrise-photos' },
     processZone: () => 'America/Chicago',
     readFile: () => { const e = new Error('none'); e.code = 'ENOENT'; throw e; },
   });

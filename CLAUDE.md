@@ -354,11 +354,21 @@ Optimistic PATCH writes to `/api/data`. Deduplicates own log entries when WS ech
 .mob-submit-bar { flex-shrink: 0 }   /* NOT position: fixed */
 ```
 
-### Client photo flow
+### Client photo flow (the storage port, `server/storage/`)
 
-1. `db.savePhoto(b64, fname)` writes to `data/photos/`; stores filename in DB
-2. `getAllData()` → `resolveClientPhoto(c)` reads the file and returns a `data:image/…;base64,…` string
-3. React state holds the data URI directly — `src={c.photo}` with **no** path prefix
+1. `db.savePhoto(b64, fname)` → `server/storage/photos.js` → the storage port puts `photos/<fname>`
+   in the backend `OPSPOINT_STORAGE` names — `local` (`<OPSPOINT_STORAGE_DIR>/photos/`, default the
+   data folder), `azure-blob`, `s3` or `gcs` — and the DB keeps the reference `photos/<fname>`.
+2. `getAllData()` → `photos.photoDataUris()` returns `data:image/…;base64,…` strings (type sniffed
+   from the bytes; cloud reads cached in memory up to 64 MB, rewrites replace the cached copy).
+3. React state holds the data URI directly — `src={c.photo}` with **no** path prefix.
+4. `GET /photos/:filename` streams one through the port (the client doesn't use it today).
+
+The cloud backends speak each service's REST API with Node's fetch + crypto (no SDKs): S3 with
+Signature V4 (keys, ECS task role or EC2 instance role), Azure Blob with Shared Key (connection
+string) or a managed-identity token, Cloud Storage with a service-account JWT or the metadata
+server (none against an emulator). Keys are validated (`assertKey`: one folder word, one plain
+name). `probe()` (write/read/delete a test object) is what the health check's file storage runs.
 
 ### TLS
 
@@ -407,6 +417,9 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server/health/index.js` | The health checks (`createDoctor`: `run`, `healthz`) |
 | `server/health/instances.js` | This process's heartbeat row in `app_instances` |
 | `server/lib/jobs.js` | Background jobs report each run here (`register`, `beat`) |
+| `server/storage/index.js` | The storage port (`storage()`, `put/get/remove/list/probe`) |
+| `server/storage/photos.js` | Photos through the port: `savePhoto`, `photoDataUri(s)`, `readPhoto` |
+| `server/storage/{local,s3,azureBlob,gcs}.js` | The four backends |
 | `client/src/components/SystemHealth.jsx` | Admin › System › System health card |
 | `docs/SETTINGS.md` | Generated from the schema — do not edit by hand |
 | `db.js` | Database layer — schema, migrations, queries, photo storage |

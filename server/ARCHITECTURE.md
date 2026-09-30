@@ -32,7 +32,7 @@ server/
                   disclosures, unlock, + Structured Clinical Lite notes/treatment/
                   assessments/discharge-summaries/group-notes)   ALL DOMAINS DONE
   storage/
-    photoStore.js        ← put/getUrl interface (cloud seam → swap local disk for S3/GCS)   ⬜
+    index.js + photos.js ← the storage port: local folder, Azure Blob, S3, Cloud Storage      ✅ DONE
   app.js                 ← express wiring / composition root (was the top of server.js)     ⬜
 ```
 
@@ -52,8 +52,8 @@ server/
   `settings/schema.js` (its default is the old hard-coded value, so single-box
   installs are unchanged), layered from the deployment profile, the settings
   file and env, and checked at startup. See docs/SETTINGS.md.
-- (planned) `storage/photoStore.js` — local-disk photo I/O behind an interface so
-  blobs can move to object storage.
+- `storage/` — photos go through one port (put/get/remove/list/probe) with a
+  local, Azure Blob, S3 or Cloud Storage backend (OPSPOINT_STORAGE).
 
 ## Migration order (incremental, each independently shippable + verified)
 
@@ -98,7 +98,8 @@ server/
    fallback). Cross-domain SQL (e.g. consolidated active-report log entries) and
    already-abstracted db.js helpers sit in the consuming module's repo, isolated +
    commented, until their own domain is extracted.
-5. ⬜ **storage/photoStore** — interface + local impl (cloud impl later).
+5. ✅ **storage/** — the port + local, Azure Blob, S3 and Cloud Storage backends
+   (deployment plan phase 3).
 6. ⬜ **Frontend** — `client/src/api/*` client layer; consider TanStack Query to
    retire the manual DataContext + WebSocket merge.
 7. ⬜ **Monorepo workspaces** — dedupe the auth/csrf/session/WS/updater currently

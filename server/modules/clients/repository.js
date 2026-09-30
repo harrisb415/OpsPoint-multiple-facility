@@ -3,7 +3,7 @@
  * Clients repository — the ONLY place that runs SQL for the clients domain.
  * Rooms and residents share the clients table (see CLAUDE.md room/client model).
  * All access via server/db/connection.js, except the photo disk-write which is
- * delegated to db.savePhoto for now (moves to storage/photoStore later) and the
+ * delegated to db.savePhoto (which goes through the storage port, server/storage) and the
  * consolidated active-report intake log entry (cross-domain, temporary home).
  */
 const c = require('../../db/connection');

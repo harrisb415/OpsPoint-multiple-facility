@@ -122,27 +122,23 @@ const CHECKS = [
   {
     id: 'storage', label: 'File storage',
     async run(ctx) {
-      const dir = ctx.config.PHOTOS_DIR;
-      if (!fs.existsSync(dir)) {
-        return { status: 'fail', says: `The photos folder ${dir} doesn't exist.`, fix: 'Start OpsPoint (it creates the folder), or check OPSPOINT_DATA.' };
+      const st = ctx.storage();
+      const where = st.describe();
+      if (st.kind === 'local' && !st.backend.hasFolder('photos/x')) {
+        return { status: 'fail', says: `The photos folder in ${where} doesn't exist.`, fix: 'Start OpsPoint (it creates the folder), or check OPSPOINT_STORAGE_DIR.' };
       }
-      const file = path.join(dir, `.health-${process.pid}-${Date.now()}.tmp`);
-      const data = crypto.randomBytes(32);
-      try {
-        fs.writeFileSync(file, data);
-        const back = fs.readFileSync(file);
-        fs.unlinkSync(file);
-        if (!back.equals(data)) throw new Error('what came back differs from what was written');
-      } catch (e) {
-        try { fs.unlinkSync(file); } catch (e2) { /* never written */ }
-        return { status: 'fail', says: `Photos can't be saved in ${dir}: ${oneLine(e.code || e.message)}.`,
-          fix: 'Make sure the folder exists and the account OpsPoint runs as can write to it.' };
+      let ms;
+      try { ms = await st.probe(); }
+      catch (e) {
+        const fix = {
+          local: 'Make sure the folder exists and the account OpsPoint runs as can write to it.',
+          'azure-blob': 'Check that the container exists and that the managed identity (or the connection string) may write to it.',
+          s3: 'Check that the bucket exists in that region and that the role or keys may put, get and delete objects in it.',
+          gcs: 'Check that the bucket exists and that the service account may create, read and delete objects in it.',
+        }[st.kind];
+        return { status: 'fail', says: `Photos can't be saved in ${where}: ${oneLine(e.code === 'EACCES' || e.code === 'EPERM' ? e.code : e.message)}.`, fix };
       }
-      if (ctx.profile.kind === 'managed') {
-        return { status: 'warn', says: 'A test file wrote, read back and deleted in the photos folder, but this platform wipes that folder on restart.',
-          fix: "Photos move to the provider's storage in roadmap phase 3; until then they don't survive a restart here." };
-      }
-      return { status: 'pass', says: `A test file wrote, read back and deleted in the photos folder (${dir}).` };
+      return { status: 'pass', says: `A test file wrote, read back and deleted in ${where} (${ms} ms).` };
     },
   },
   {
@@ -331,7 +327,8 @@ const CHECKS = [
  * opts:
  *   conn          the database connection (query/query1/run, isPg)
  *   settings      a settings instance (server/settings forApp('facility'))
- *   config        { DATA_DIR, PHOTOS_DIR, DB_PATH, SECRET_FILE, BASE }
+ *   config        { DATA_DIR, DB_PATH, SECRET_FILE, BASE }
+ *   storage       optional: a server/storage instance (default: this process's)
  *   updater       optional: { probe() } — the release manifest
  *   beforeRun     optional async fn run first (the server writes its heartbeat)
  *   timeoutMs     per check (default 20 s; the schema comparison gets 120 s)
@@ -363,6 +360,7 @@ function createDoctor(opts) {
     const ctx = {
       now, conn, settings, config, fresh, readSetting,
       profile: PROFILES[settings.profile().name],
+      storage: () => opts.storage || require('../storage').storage(),
       settingsProblems: () => (_problems ||= settings.check()),
       instances: () => (_instances ||= instances.list(conn, 'facility', now)),
       parity: () => (_parity ||= cached('parity', fresh, async () => {

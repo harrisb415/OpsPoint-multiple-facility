@@ -24,7 +24,9 @@ const config = {
   DB_PATH:        settings.get('OPSPOINT_DB'),
   LEGACY_DB_PATH: path.join(DATA_DIR, 'shift.db'),
   REACT_DIST:     path.join(BASE, 'client', 'dist'),
-  PHOTOS_DIR:     path.join(DATA_DIR, 'photos'),
+  // Local file storage only (OPSPOINT_STORAGE=local); a cloud backend keeps
+  // photos in its bucket or container instead (server/storage).
+  PHOTOS_DIR:     path.join(settings.get('OPSPOINT_STORAGE_DIR'), 'photos'),
   SECRET_FILE:    settings.get('OPSPOINT_SECRET_FILE'),
   SESSION_IDLE_DEFAULT_MINS: settings.get('OPSPOINT_IDLE_MINS'),
   SESSION_MAX_AGE_MS:        12 * 60 * 60 * 1000,

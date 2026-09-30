@@ -125,6 +125,10 @@ committed; the environment wins over the file). `OPSPOINT_PROFILE` picks the def
 deployment: `windows-local`, `linux-local`, `azure`, `aws`, `gcp` or `docker`. Every setting, its
 default and the profiles that require it are listed in [`docs/SETTINGS.md`](./docs/SETTINGS.md).
 
+Photos are kept in `data/photos/` unless `OPSPOINT_STORAGE` says otherwise: `azure-blob`, `s3`
+(or an S3-compatible service) or `gcs` store them in the provider's storage instead, which the
+managed cloud profiles require.
+
 A missing or contradictory setting stops the server with one sentence saying what to fix. The
 facility's time zone is required: set `TZ` (for example `TZ=America/Chicago`) unless the machine's
 own clock is already in it; a server on UTC files evening entries under the next day.

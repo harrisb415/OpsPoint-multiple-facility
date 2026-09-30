@@ -6,9 +6,8 @@
  * them here (rather than at their three original inline locations) does not
  * change Express matching.
  */
-const fs = require('fs');
 const path = require('path');
-const config = require('../../config');
+const photos = require('../../storage/photos');
 const { requireAuth, requirePermission } = require('../../middleware/auth');
 const { csrfCheck } = require('../../middleware/csrf');
 const { audit } = require('../../middleware/audit');
@@ -76,12 +75,13 @@ function register(app) {
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
   });
 
-  // ── Serve data photos (auth-protected) ───────────────────────────
-  app.get('/photos/:filename', requireAuth, (req, res) => {
+  // ── Serve stored photos (auth-protected), from whichever storage backend ──
+  app.get('/photos/:filename', requireAuth, async (req, res) => {
     const fname = path.basename(req.params.filename); // prevent traversal
-    const full = path.join(config.DATA_DIR, 'photos', fname);
-    if (!fs.existsSync(full)) return res.status(404).json({ error: 'Not found' });
-    res.sendFile(full);
+    let p = null;
+    try { p = await photos.readPhoto('photos/' + fname); } catch (e) { return res.status(502).json({ error: 'Photo storage is unavailable' }); }
+    if (!p) return res.status(404).json({ error: 'Not found' });
+    res.set('Cache-Control', 'private, no-cache').type(p.contentType).send(p.bytes);
   });
 
   // ── Facility settings extension — program tracks / phases / etc. ──

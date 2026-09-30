@@ -5,7 +5,7 @@
  * tests/settings.test.js fails when the committed file and this output differ,
  * so the doc cannot drift from what the code accepts.
  */
-const { PROFILES, PROFILE_NAMES, SETTINGS, INTERNAL_ENV } = require('./schema');
+const { PROFILES, PROFILE_NAMES, SETTINGS, INTERNAL_ENV, PLATFORM_ENV } = require('./schema');
 const { CHECKS, WARNING_CHECKS } = require('./index');
 
 const code = (s) => `\`${s}\``;
@@ -146,6 +146,9 @@ function renderDocs() {
   w();
   w("These environment variables are how OpsPoint's own pieces talk to each other, or release tooling. They are " +
     "not settings, and the check doesn't mistake them for typos: " + INTERNAL_ENV.map(code).join(', ') + '.');
+  w();
+  w('These are set by the platform itself, so that the app can reach its storage without a key (an ECS task ' +
+    'role, an Azure managed identity), and are read where they are used: ' + PLATFORM_ENV.map(code).join(', ') + '.');
   w();
   return out.join('\n');
 }

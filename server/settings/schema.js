@@ -68,24 +68,24 @@ const PROFILES = {
   },
   azure: {
     label: 'Azure, managed',
-    summary: 'App Service or Container Apps, with Azure Database for PostgreSQL.',
+    summary: 'App Service or Container Apps, with Azure Database for PostgreSQL and Blob Storage.',
     kind: 'managed',
     where: 'the App Service or Container App settings',
-    defaults: MANAGED_DEFAULTS,
+    defaults: { ...MANAGED_DEFAULTS, OPSPOINT_STORAGE: 'azure-blob' },
   },
   aws: {
     label: 'AWS, managed',
-    summary: 'ECS Fargate behind an Application Load Balancer, with RDS or Aurora PostgreSQL.',
+    summary: 'ECS Fargate behind an Application Load Balancer, with RDS or Aurora PostgreSQL and S3.',
     kind: 'managed',
     where: 'the ECS task definition',
-    defaults: MANAGED_DEFAULTS,
+    defaults: { ...MANAGED_DEFAULTS, OPSPOINT_STORAGE: 's3' },
   },
   gcp: {
     label: 'Google Cloud, managed',
-    summary: 'Cloud Run (at least one instance, CPU always allocated), with Cloud SQL for PostgreSQL.',
+    summary: 'Cloud Run (at least one instance, CPU always allocated), with Cloud SQL for PostgreSQL and Cloud Storage.',
     kind: 'managed',
     where: 'the Cloud Run service settings',
-    defaults: MANAGED_DEFAULTS,
+    defaults: { ...MANAGED_DEFAULTS, OPSPOINT_STORAGE: 'gcs' },
   },
   docker: {
     label: 'Docker',
@@ -238,6 +238,127 @@ const SETTINGS = [
     summary: 'The Postgres session time zone. Leave it unset so it follows TZ; if set, it must equal TZ.',
   },
 
+  // ── File storage (server/storage) ─────────────────────────────────────────
+  {
+    name: 'OPSPOINT_STORAGE', group: 'File storage', scope: 'facility', type: 'enum',
+    values: ['local', 'azure-blob', 's3', 'gcs'], default: 'local',
+    noun: 'where photos are stored',
+    summary: 'Where photos (residents, UA cups) are stored: local (a folder on this machine), azure-blob (Azure Blob ' +
+             'Storage), s3 (Amazon S3, or an S3-compatible service) or gcs (Google Cloud Storage).',
+    onlyIn: {
+      profiles: MANAGED, values: ['azure-blob', 's3', 'gcs'], suggest: { azure: 'azure-blob', aws: 's3', gcp: 'gcs' },
+      because: 'the platform wipes its disk on every restart or redeploy, and the photos with it',
+    },
+    ask: { question: 'Where should photos be stored?', example: 'local' },
+  },
+  {
+    name: 'OPSPOINT_STORAGE_DIR', group: 'File storage', scope: 'facility', type: 'path',
+    default: (ctx) => path.dirname(ctx.get('OPSPOINT_DB')),
+    defaultText: 'the folder the SQLite database is in (the data folder)',
+    noun: 'the folder for stored files',
+    summary: 'For local storage: the folder whose photos/ subfolder holds the photos.',
+  },
+  {
+    name: 'OPSPOINT_STORAGE_PREFIX', group: 'File storage', scope: 'facility', type: 'string',
+    pattern: /^[A-Za-z0-9][A-Za-z0-9._-]*(\/[A-Za-z0-9][A-Za-z0-9._-]*)*\/?$/,
+    patternText: 'a name such as sunrise/ (letters, digits, dot, dash, underscore and /)',
+    noun: 'the prefix for stored file names',
+    summary: 'For cloud storage: a prefix for every object name, so several facilities can share one bucket or ' +
+             'container (for example sunrise/).',
+  },
+  {
+    name: 'AZURE_STORAGE_ACCOUNT', group: 'File storage', scope: 'facility', type: 'string',
+    pattern: /^[a-z0-9]{3,24}$/, patternText: '3 to 24 lowercase letters and digits',
+    noun: 'the Azure storage account',
+    summary: "For azure-blob: the storage account's name, reached with the app's managed identity (which needs the " +
+             'Storage Blob Data Contributor role on the account).',
+  },
+  {
+    name: 'AZURE_STORAGE_CONNECTION_STRING', group: 'File storage', scope: 'facility', type: 'string', secret: true,
+    noun: 'the Azure storage connection string',
+    summary: "For azure-blob without a managed identity: the account's connection string (AccountName and " +
+             "AccountKey), or Azurite's when testing.",
+  },
+  {
+    name: 'AZURE_CLIENT_ID', group: 'File storage', scope: 'facility', type: 'string',
+    pattern: /^[0-9a-fA-F-]{36}$/, patternText: 'a client ID (a GUID)',
+    noun: 'the user-assigned managed identity',
+    summary: "For azure-blob with a user-assigned managed identity: that identity's client ID. Unset: the app's " +
+             'system-assigned identity.',
+  },
+  {
+    name: 'AZURE_STORAGE_CONTAINER', group: 'File storage', scope: 'facility', type: 'string', default: 'opspoint',
+    pattern: /^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/, patternText: '3 to 63 lowercase letters, digits and single hyphens',
+    noun: 'the blob container',
+    summary: 'For azure-blob: the container that holds the files. It must already exist.',
+  },
+  {
+    name: 'S3_BUCKET', group: 'File storage', scope: 'facility', type: 'string', requiredWhen: ['OPSPOINT_STORAGE', 's3'],
+    pattern: /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/, patternText: 'a bucket name (3 to 63 lowercase letters, digits, dots and hyphens)',
+    noun: 'the S3 bucket',
+    summary: 'For s3: the bucket that holds the files. It must already exist.',
+  },
+  {
+    name: 'S3_REGION', group: 'File storage', scope: 'facility', type: 'string',
+    default: (ctx) => ctx.get('AWS_REGION') || 'us-east-1', defaultText: 'AWS_REGION, else us-east-1',
+    pattern: /^[a-z0-9-]{2,32}$/, patternText: 'a region such as us-west-2',
+    noun: 'the S3 region',
+    summary: "For s3: the bucket's region.",
+  },
+  {
+    name: 'S3_ENDPOINT', group: 'File storage', scope: 'facility', type: 'url',
+    noun: 'the S3-compatible endpoint',
+    summary: 'For s3 on an S3-compatible service (MinIO, for example): its address, such as http://127.0.0.1:9000. ' +
+             'Unset: Amazon S3.',
+  },
+  {
+    name: 'S3_FORCE_PATH_STYLE', group: 'File storage', scope: 'facility', type: 'bool',
+    default: (ctx) => !!ctx.get('S3_ENDPOINT'), defaultText: 'yes when S3_ENDPOINT is set',
+    noun: 'path-style S3 addresses',
+    summary: 'For s3: address objects as endpoint/bucket/name rather than bucket.endpoint/name (most S3-compatible ' +
+             'services need this).',
+  },
+  {
+    name: 'AWS_REGION', group: 'File storage', scope: 'facility', type: 'string',
+    pattern: /^[a-z0-9-]{2,32}$/, patternText: 'a region such as us-west-2',
+    noun: 'the AWS region',
+    summary: 'The AWS region (ECS sets it). S3_REGION follows it.',
+  },
+  {
+    name: 'AWS_ACCESS_KEY_ID', group: 'File storage', scope: 'facility', type: 'string',
+    noun: 'the AWS access key',
+    summary: 'For s3 without an ECS task role or EC2 instance role (or on MinIO): the access key, set together with ' +
+             'AWS_SECRET_ACCESS_KEY. Unset: the role the platform provides.',
+  },
+  {
+    name: 'AWS_SECRET_ACCESS_KEY', group: 'File storage', scope: 'facility', type: 'string', secret: true,
+    noun: 'the AWS secret key',
+    summary: 'The secret that goes with AWS_ACCESS_KEY_ID.',
+  },
+  {
+    name: 'AWS_SESSION_TOKEN', group: 'File storage', scope: 'facility', type: 'string', secret: true,
+    noun: 'the AWS session token',
+    summary: 'The session token that goes with temporary AWS keys.',
+  },
+  {
+    name: 'GCS_BUCKET', group: 'File storage', scope: 'facility', type: 'string', requiredWhen: ['OPSPOINT_STORAGE', 'gcs'],
+    pattern: /^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/, patternText: 'a bucket name (lowercase letters, digits, dots, dashes, underscores)',
+    noun: 'the Cloud Storage bucket',
+    summary: 'For gcs: the bucket that holds the files. It must already exist.',
+  },
+  {
+    name: 'GOOGLE_APPLICATION_CREDENTIALS', group: 'File storage', scope: 'facility', type: 'path',
+    noun: 'the Google service-account key file',
+    summary: "For gcs outside Google Cloud: a service-account key file. Unset: the Cloud Run service's own service " +
+             'account (from the metadata server).',
+  },
+  {
+    name: 'GCS_ENDPOINT', group: 'File storage', scope: 'facility', type: 'url',
+    noun: 'the Cloud Storage emulator',
+    summary: 'For gcs against an emulator (fake-gcs-server): its address, such as http://127.0.0.1:4443. Unset: ' +
+             'Google Cloud Storage.',
+  },
+
   // ── Backups ───────────────────────────────────────────────────────────────
   {
     name: 'OPSPOINT_BACKUPS', group: 'Backups', scope: 'facility', type: 'enum', values: ['recorded', 'provider'],
@@ -338,8 +459,20 @@ const INTERNAL_ENV = [
   'OPSPOINT_BOOTSTRAP_DATA',
   'OPSPOINT_RELEASE_KEY',        // scripts/release.mjs (build machine only)
   'OPSPOINT_RELEASE_KEY_FILE',
+  // and any OPSPOINT_TEST_* (tests/storage.emulators.test.js: where the emulators are)
+];
+
+// What the platform itself hands a container so it can reach its storage
+// without a key (an ECS task role, an Azure managed identity). OpsPoint reads
+// these where they are used (server/storage); nobody sets them by hand.
+const PLATFORM_ENV = [
+  'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',   // ECS task role
+  'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+  'AWS_CONTAINER_AUTHORIZATION_TOKEN',
+  'IDENTITY_ENDPOINT',                        // Azure App Service / Container Apps managed identity
+  'IDENTITY_HEADER',
 ];
 
 const BY_NAME = Object.fromEntries(SETTINGS.map((s) => [s.name, s]));
 
-module.exports = { PROFILES, PROFILE_NAMES, MANAGED, SETTINGS, BY_NAME, INTERNAL_ENV };
+module.exports = { PROFILES, PROFILE_NAMES, MANAGED, SETTINGS, BY_NAME, INTERNAL_ENV, PLATFORM_ENV };

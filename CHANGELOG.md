@@ -2,6 +2,39 @@
 
 ---
 
+## Unreleased — File storage: photos through one port, four backends (2026-09-29)
+
+Roadmap phase 3 of the deployment plan: photos no longer have to live on the server's own disk.
+
+- **The storage port** (`server/storage/`): resident photos and UA cup photos are written, read,
+  listed and deleted through one interface, with the backend chosen by the new setting
+  `OPSPOINT_STORAGE`: `local` (the default: the same `photos/` folder as before), `azure-blob`,
+  `s3` (Amazon S3 or an S3-compatible service such as MinIO) or `gcs`. The references in the
+  database are unchanged, so existing installs carry on exactly as they were.
+- **No SDKs**: each cloud backend speaks its service's REST API with Node's own fetch and
+  crypto — S3 with Signature V4 (checked against AWS's published example signatures), Azure with
+  Shared Key or a managed-identity token, Cloud Storage with a service-account token or the
+  metadata server — so an on-premises install downloads nothing extra. Credentials can come
+  from the platform (ECS task role, EC2 instance role, Azure managed identity, Cloud Run's
+  service account) instead of keys.
+- The managed profiles default to their provider's storage (azure: `azure-blob`, aws: `s3`, gcp:
+  `gcs`) and refuse `local`, whose disk the platform wipes. New settings: `OPSPOINT_STORAGE_DIR`,
+  `OPSPOINT_STORAGE_PREFIX` (share a bucket between facilities), `AZURE_STORAGE_ACCOUNT`,
+  `AZURE_STORAGE_CONNECTION_STRING`, `AZURE_STORAGE_CONTAINER`, `AZURE_CLIENT_ID`, `S3_BUCKET`,
+  `S3_REGION`, `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`,
+  `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `GCS_BUCKET`, `GOOGLE_APPLICATION_CREDENTIALS`,
+  `GCS_ENDPOINT` (docs/SETTINGS.md); the startup check names what each backend is missing.
+- Photos from a cloud backend are cached in memory (up to 64 MB), since every reload sends all
+  residents' photos. The image type now comes from the bytes (a PNG UA photo used to be sent as
+  JPEG). Local writes are atomic (a temporary file renamed into place).
+- The health check's file storage test goes through the port: a test object written, read back
+  and deleted in whichever backend is configured, with a fix for that service when it fails.
+- Tests: `tests/storage.test.js` (every backend against fake services that check signatures,
+  headers and tokens, plus AWS's example signatures) and `tests/storage.emulators.test.js`
+  (MinIO, Azurite, fake-gcs-server; runs when they are named, skipped otherwise).
+
+---
+
 ## Unreleased — Health check: one definition of healthy (2026-09-29)
 
 Roadmap phase 2 of the deployment plan.

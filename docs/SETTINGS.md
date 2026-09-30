@@ -23,10 +23,11 @@ The facility server (`server.js`) and HQ (`central/server.js`) check their setti
 
 - The settings file is readable, valid JSON, one object, and holds only settings OpsPoint knows; a misspelt one stops startup with a suggestion.
 - Every setting the profile requires is set (on azure, aws and gcp: SESSION_SECRET and the push keys), and every setting another one requires (DATABASE_URL with OPSPOINT_DB_DRIVER=pg; HQ's CENTRAL_DATABASE_URL likewise).
-- No setting has a value its profile can't use: SQLite on azure, aws or gcp, or the in-app updater on those and docker.
+- No setting has a value its profile can't use: SQLite or photos on the local disk on azure, aws or gcp, or the in-app updater on those and docker.
 - TZ is a zone Node knows (an unknown one silently becomes UTC), it is set on the managed and docker profiles, and when it is unset the machine's own zone is not UTC; the process's clock runs in TZ, and PGTZ, if set, equals it.
 - The push keys are both set or both unset, and are one key pair.
 - PGSSLROOTCERT exists; a managed profile never connects to Postgres unencrypted (except over a local socket); HQ's database is not the facility's.
+- File storage has what it needs: an account or a connection string for azure-blob, a bucket for s3 and gcs, AWS keys in pairs, and an existing Google key file if one is named.
 - On a managed or docker profile the app listens on every interface, not on 127.0.0.1, which the platform can't reach.
 
 It warns, and starts anyway, on:
@@ -36,7 +37,6 @@ It warns, and starts anyway, on:
 - PGSSLMODE=disable to a database on another host.
 - DATABASE_URL set while the driver is sqlite (it is ignored).
 - An abbreviated TZ such as EST, which may ignore daylight saving.
-- Photos kept in the data folder on a managed platform, until the file storage port (roadmap phase 3).
 
 ## Profiles
 
@@ -46,9 +46,9 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | --- | --- | --- | --- |
 | `windows-local` | Windows, on-premises. A facility PC or Windows Server; OpsPoint runs its own server. | `OPSPOINT_OPEN_BROWSER`=`yes` | opspoint.config.json or the service environment |
 | `linux-local` | Linux, on-premises. A Linux server, VM or container that OpsPoint runs itself (systemd or PM2). | none | opspoint.config.json or the service environment |
-| `azure` | Azure, managed. App Service or Container Apps, with Azure Database for PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider` | the App Service or Container App settings |
-| `aws` | AWS, managed. ECS Fargate behind an Application Load Balancer, with RDS or Aurora PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider` | the ECS task definition |
-| `gcp` | Google Cloud, managed. Cloud Run (at least one instance, CPU always allocated), with Cloud SQL for PostgreSQL. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider` | the Cloud Run service settings |
+| `azure` | Azure, managed. App Service or Container Apps, with Azure Database for PostgreSQL and Blob Storage. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider`, `OPSPOINT_STORAGE`=`azure-blob` | the App Service or Container App settings |
+| `aws` | AWS, managed. ECS Fargate behind an Application Load Balancer, with RDS or Aurora PostgreSQL and S3. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider`, `OPSPOINT_STORAGE`=`s3` | the ECS task definition |
+| `gcp` | Google Cloud, managed. Cloud Run (at least one instance, CPU always allocated), with Cloud SQL for PostgreSQL and Cloud Storage. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`1`, `OPSPOINT_UPDATES`=`platform`, `OPSPOINT_BACKUPS`=`provider`, `OPSPOINT_STORAGE`=`gcs` | the Cloud Run service settings |
 | `docker` | Docker. Docker Compose on any Linux host: a Postgres container (or an external one) and a data volume. | `OPSPOINT_DB_DRIVER`=`pg`, `OPSPOINT_TRUST_PROXY`=`loopback, uniquelocal`, `OPSPOINT_UPDATES`=`platform` | the compose file or its .env file |
 
 ## Settings
@@ -86,6 +86,29 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | `PGSSLROOTCERT` | — |  | The CA certificate that signed the Postgres server's certificate, when it is not a public one (for example the Amazon RDS bundle). |
 | `PGPOOL_MAX` | `10` |  | The most Postgres connections held open at once. |
 | `PGTZ` | — |  | The Postgres session time zone. Leave it unset so it follows TZ; if set, it must equal TZ. |
+
+### File storage
+
+| Setting | Default | Required | What it is |
+| --- | --- | --- | --- |
+| `OPSPOINT_STORAGE` | `local`; azure: `azure-blob`; aws: `s3`; gcp: `gcs` |  | Where photos (residents, UA cups) are stored: local (a folder on this machine), azure-blob (Azure Blob Storage), s3 (Amazon S3, or an S3-compatible service) or gcs (Google Cloud Storage). One of `local`, `azure-blob`, `s3`, `gcs`. azure, aws, gcp accept only `azure-blob`, `s3`, `gcs`. |
+| `OPSPOINT_STORAGE_DIR` | the folder the SQLite database is in (the data folder) |  | For local storage: the folder whose photos/ subfolder holds the photos. |
+| `OPSPOINT_STORAGE_PREFIX` | — |  | For cloud storage: a prefix for every object name, so several facilities can share one bucket or container (for example sunrise/). |
+| `AZURE_STORAGE_ACCOUNT` | — |  | For azure-blob: the storage account's name, reached with the app's managed identity (which needs the Storage Blob Data Contributor role on the account). |
+| `AZURE_STORAGE_CONNECTION_STRING` | — |  | **Secret.** For azure-blob without a managed identity: the account's connection string (AccountName and AccountKey), or Azurite's when testing. |
+| `AZURE_CLIENT_ID` | — |  | For azure-blob with a user-assigned managed identity: that identity's client ID. Unset: the app's system-assigned identity. |
+| `AZURE_STORAGE_CONTAINER` | `opspoint` |  | For azure-blob: the container that holds the files. It must already exist. |
+| `S3_BUCKET` | — | when OPSPOINT_STORAGE=s3 | For s3: the bucket that holds the files. It must already exist. |
+| `S3_REGION` | AWS_REGION, else us-east-1 |  | For s3: the bucket's region. |
+| `S3_ENDPOINT` | — |  | For s3 on an S3-compatible service (MinIO, for example): its address, such as http://127.0.0.1:9000. Unset: Amazon S3. |
+| `S3_FORCE_PATH_STYLE` | yes when S3_ENDPOINT is set |  | For s3: address objects as endpoint/bucket/name rather than bucket.endpoint/name (most S3-compatible services need this). |
+| `AWS_REGION` | — |  | The AWS region (ECS sets it). S3_REGION follows it. |
+| `AWS_ACCESS_KEY_ID` | — |  | For s3 without an ECS task role or EC2 instance role (or on MinIO): the access key, set together with AWS_SECRET_ACCESS_KEY. Unset: the role the platform provides. |
+| `AWS_SECRET_ACCESS_KEY` | — |  | **Secret.** The secret that goes with AWS_ACCESS_KEY_ID. |
+| `AWS_SESSION_TOKEN` | — |  | **Secret.** The session token that goes with temporary AWS keys. |
+| `GCS_BUCKET` | — | when OPSPOINT_STORAGE=gcs | For gcs: the bucket that holds the files. It must already exist. |
+| `GOOGLE_APPLICATION_CREDENTIALS` | — |  | For gcs outside Google Cloud: a service-account key file. Unset: the Cloud Run service's own service account (from the metadata server). |
+| `GCS_ENDPOINT` | — |  | For gcs against an emulator (fake-gcs-server): its address, such as http://127.0.0.1:4443. Unset: Google Cloud Storage. |
 
 ### Backups
 
@@ -147,3 +170,5 @@ On Linux, keep it readable only by the account OpsPoint runs as (`chmod 600`); t
 ## Not settings
 
 These environment variables are how OpsPoint's own pieces talk to each other, or release tooling. They are not settings, and the check doesn't mistake them for typos: `OPSPOINT_BOOTSTRAP`, `OPSPOINT_BOOTSTRAP_BASE`, `OPSPOINT_BOOTSTRAP_ENTRY`, `OPSPOINT_BOOTSTRAP_DATA`, `OPSPOINT_RELEASE_KEY`, `OPSPOINT_RELEASE_KEY_FILE`.
+
+These are set by the platform itself, so that the app can reach its storage without a key (an ECS task role, an Azure managed identity), and are read where they are used: `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`, `AWS_CONTAINER_CREDENTIALS_FULL_URI`, `AWS_CONTAINER_AUTHORIZATION_TOKEN`, `IDENTITY_ENDPOINT`, `IDENTITY_HEADER`.

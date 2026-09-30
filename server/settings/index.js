@@ -128,6 +128,11 @@ function parseValue(def, raw) {
         ? { value: s } : { error: 'must be an address such as 0.0.0.0 or 127.0.0.1' };
     case 'size':
       return /^\d+(\.\d+)?\s*(b|kb|mb|gb)?$/i.test(s) ? { value: s } : { error: 'must be a size such as 50mb' };
+    case 'url': {
+      let ok = /^https?:\/\/[^/\s]+/i.test(s);
+      if (ok) { try { new URL(s); } catch (e) { ok = false; } }
+      return ok ? { value: s.replace(/\/+$/, '') } : { error: 'must be an address such as http://127.0.0.1:9000' };
+    }
     default:
       throw new Error(`settings schema: ${def.name} has unknown type ${def.type}`);
   }
@@ -195,10 +200,11 @@ function loadFile({ env, base, readFile, statFile, platform }) {
 const CHECKS = [
   'The settings file is readable, valid JSON, one object, and holds only settings OpsPoint knows; a misspelt one stops startup with a suggestion.',
   'Every setting the profile requires is set (on azure, aws and gcp: SESSION_SECRET and the push keys), and every setting another one requires (DATABASE_URL with OPSPOINT_DB_DRIVER=pg; HQ\'s CENTRAL_DATABASE_URL likewise).',
-  "No setting has a value its profile can't use: SQLite on azure, aws or gcp, or the in-app updater on those and docker.",
+  "No setting has a value its profile can't use: SQLite or photos on the local disk on azure, aws or gcp, or the in-app updater on those and docker.",
   "TZ is a zone Node knows (an unknown one silently becomes UTC), it is set on the managed and docker profiles, and when it is unset the machine's own zone is not UTC; the process's clock runs in TZ, and PGTZ, if set, equals it.",
   'The push keys are both set or both unset, and are one key pair.',
   "PGSSLROOTCERT exists; a managed profile never connects to Postgres unencrypted (except over a local socket); HQ's database is not the facility's.",
+  'File storage has what it needs: an account or a connection string for azure-blob, a bucket for s3 and gcs, AWS keys in pairs, and an existing Google key file if one is named.',
   "On a managed or docker profile the app listens on every interface, not on 127.0.0.1, which the platform can't reach.",
 ];
 const WARNING_CHECKS = [
@@ -207,7 +213,6 @@ const WARNING_CHECKS = [
   'PGSSLMODE=disable to a database on another host.',
   'DATABASE_URL set while the driver is sqlite (it is ignored).',
   'An abbreviated TZ such as EST, which may ignore daylight saving.',
-  'Photos kept in the data folder on a managed platform, until the file storage port (roadmap phase 3).',
 ];
 
 // ── One app's settings ──────────────────────────────────────────────────────
@@ -343,7 +348,8 @@ function createSettings(opts = {}) {
     for (const def of defs) {
       if (!def.onlyIn || !def.onlyIn.profiles.includes(p) || val[def.name] == null) continue;
       if (!def.onlyIn.values.includes(val[def.name])) {
-        error(def.name, `Profile ${p} can't use ${def.name}=${val[def.name]}, because ${def.onlyIn.because}: set ${def.name}=${def.onlyIn.values[0]}.`);
+        const instead = (def.onlyIn.suggest && def.onlyIn.suggest[p]) || def.onlyIn.values[0];
+        error(def.name, `Profile ${p} can't use ${def.name}=${val[def.name]}, because ${def.onlyIn.because}: set ${def.name}=${instead}.`);
       }
     }
 
@@ -412,16 +418,29 @@ function createSettings(opts = {}) {
       error(bindName, `Profile ${p} must listen on every interface (${bindName}=0.0.0.0): on ${val[bindName]} the platform can't reach the app.`);
     }
 
-    // Until the file storage port lands (roadmap phase 3), photos live in the
-    // data folder, which a managed platform wipes.
-    if (P.kind === 'managed' && app === 'facility') {
-      warning(null, 'Photos are still saved in the data folder, which this platform wipes on restart; storing them in the provider\'s storage arrives in a later version.');
+    // File storage (server/storage): what each cloud backend needs to reach its
+    // bucket or container.
+    if (app === 'facility') {
+      const storage = val.OPSPOINT_STORAGE;
+      if (storage === 'azure-blob' && !val.AZURE_STORAGE_ACCOUNT && !val.AZURE_STORAGE_CONNECTION_STRING && !bad.AZURE_STORAGE_ACCOUNT && !bad.AZURE_STORAGE_CONNECTION_STRING) {
+        error('AZURE_STORAGE_ACCOUNT', `OPSPOINT_STORAGE=azure-blob needs AZURE_STORAGE_ACCOUNT (reached with the app's managed identity) or AZURE_STORAGE_CONNECTION_STRING: set it in ${where}.`);
+      }
+      if (storage === 'azure-blob' && val.AZURE_STORAGE_CONNECTION_STRING && !/AccountName=[^;]+/i.test(val.AZURE_STORAGE_CONNECTION_STRING)) {
+        error('AZURE_STORAGE_CONNECTION_STRING', "AZURE_STORAGE_CONNECTION_STRING doesn't name an account (AccountName=…): copy it again from the storage account's Access keys.");
+      }
+      if (!!val.AWS_ACCESS_KEY_ID !== !!val.AWS_SECRET_ACCESS_KEY && !bad.AWS_ACCESS_KEY_ID && !bad.AWS_SECRET_ACCESS_KEY) {
+        const [set, unset] = val.AWS_ACCESS_KEY_ID ? ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] : ['AWS_SECRET_ACCESS_KEY', 'AWS_ACCESS_KEY_ID'];
+        error(unset, `${set} is set without ${unset}: set both, or neither to use the role the platform provides.`);
+      }
+      if (storage === 'gcs' && val.GOOGLE_APPLICATION_CREDENTIALS && !exists(val.GOOGLE_APPLICATION_CREDENTIALS)) {
+        error('GOOGLE_APPLICATION_CREDENTIALS', `GOOGLE_APPLICATION_CREDENTIALS points at ${val.GOOGLE_APPLICATION_CREDENTIALS}, which doesn't exist.`);
+      }
     }
 
     // A variable that looks like ours but isn't one: a typo would otherwise be
     // ignored without a word.
     for (const k of Object.keys(env)) {
-      if (!/^(OPSPOINT|CENTRAL)_/.test(k) || has(BY_NAME, k) || INTERNAL_ENV.includes(k)) continue;
+      if (!/^(OPSPOINT|CENTRAL)_/.test(k) || /^OPSPOINT_TEST_/.test(k) || has(BY_NAME, k) || INTERNAL_ENV.includes(k)) continue;
       warning(null, `${k} isn't a setting OpsPoint knows, so it is ignored${meant(k, ALL_NAMES)}.`);
     }
     return problems;

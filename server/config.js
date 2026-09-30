@@ -9,9 +9,9 @@
  * before. This is the ONE module that knows where things live on disk.
  */
 const path     = require('path');
-const fs       = require('fs');
 const crypto   = require('crypto');
 const settings = require('./settings');
+const secrets  = require('./secrets');
 
 const BASE     = settings.BASE;                              // project root
 const DATA_DIR = settings.get('OPSPOINT_DATA');
@@ -60,18 +60,17 @@ const config = {
 
 /**
  * Load (or first-time create) the session signing secret. Prefers the
- * SESSION_SECRET setting (cloud / 12-factor); otherwise reads the on-disk key
- * file, creating it with 0600 perms on first run (single-box install).
+ * SESSION_SECRET setting (the environment or the secret store); otherwise, on
+ * premises, the key file, created with 0600 perms on first run. A cloud
+ * profile requires the setting, and server/secrets refuses the file there.
  */
 config.loadSessionSecret = function loadSessionSecret() {
   const fromSettings = settings.get('SESSION_SECRET');
   if (fromSettings) return fromSettings;
   const f = config.SECRET_FILE;
-  if (!fs.existsSync(f)) {
-    fs.writeFileSync(f, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
-    try { fs.chmodSync(f, 0o600); } catch (e) {}
-  }
-  return fs.readFileSync(f, 'utf8').trim();
+  const about = { what: `the session key file ${f}`, setting: 'SESSION_SECRET' };
+  if (!secrets.exists(f, about)) secrets.writeFile(f, crypto.randomBytes(32).toString('hex'), about);
+  return secrets.readFile(f, about).trim();
 };
 
 module.exports = config;

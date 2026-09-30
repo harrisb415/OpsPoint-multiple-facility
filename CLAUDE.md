@@ -85,8 +85,9 @@ Every setting the facility app, HQ and `bootstrap.js` read from their environmen
 once in `server/settings/schema.js` (type, default, secret, scope, per-profile default or
 requirement); `docs/SETTINGS.md` is generated from it. Values come from layers, later wins:
 built-in default → the profile's default → `opspoint.config.json` (app folder, or the file
-`OPSPOINT_CONFIG` names; `none` ignores it) → environment variables (read live). Phase 5 of the
-deployment plan adds the provider's secret store on top.
+`OPSPOINT_CONFIG` names; `none` ignores it) → environment variables (read live; for a secret
+also `NAME_FILE`) → the provider's secret store (`OPSPOINT_SECRETS`, read once at start — see
+Secrets below).
 
 - **Profiles** (`OPSPOINT_PROFILE`): `windows-local`, `linux-local` (inferred from the platform
   when unset, with the historical defaults), `azure`, `aws`, `gcp` (managed: Postgres, trust 1
@@ -106,6 +107,31 @@ deployment plan adds the provider's secret store on top.
 - Tests run with `OPSPOINT_CONFIG=none` (`tests/setup-env.js`, jest `setupFiles`), as do
   `scripts/perm-audit.cjs` and schema-parity's SQLite side, so a developer's settings file can
   never hand them a real database.
+
+### Secrets (`server/secrets/`)
+
+A secret is a setting marked `secret` in the schema (read with `settings.get` like any other), or
+a key an on-premises install makes for itself: the session key file (`OPSPOINT_SECRET_FILE`),
+`vapid.json`, `.dbkey`, `data/key.pem`, and a Google key file.
+
+- **`NAME_FILE`**: for a secret, the environment may name a file holding it (a Docker secret).
+- **The secret store** (`server/secrets/store.js`): `OPSPOINT_SECRETS=azure-key-vault` (one secret
+  per setting, `session-secret`, via the managed identity), `aws-secrets-manager` (one JSON secret,
+  SigV4 with the task role or keys) or `gcp-secret-manager` (one per setting, the service's
+  account) — REST, no SDKs. `settings.startupCheck()` calls `loadSecrets()`, which runs
+  store.js as a **child process** (`execFileSync`) so every `settings.get` stays synchronous; the
+  values come back over a pipe and live only in the settings instance (never `process.env`).
+  A store that refuses → exit 78; unreachable → exit 1 (the platform retries). The CLI's
+  `settings`, `doctor` and `migrate` read it the same way. Only `STORE_NAMES` (schema.js) can
+  come from a store: the secrets, minus the cloud credentials that reach it.
+- **On a cloud profile no secret is read from disk**: a secret in the settings file, a
+  `NAME_FILE` or `GOOGLE_APPLICATION_CREDENTIALS` stops startup; the generated key files are read
+  and written only through `server/secrets/index.js` (`readFile`/`writeFile`/`exists`/`tlsFiles`),
+  which refuses on azure/aws/gcp. `tests/secrets.test.js` fails on a direct read or write of one
+  of those files anywhere else — go through `server/secrets`.
+- `OPSPOINT_DB_KEY` (SQLite): the key from the environment or the store instead of `.dbkey`; no
+  key file is made, and a leftover one that differs stops startup (`dbcrypt.currentKey()` is what
+  the health check and the "key stored elsewhere" route read).
 
 ### Health check (`server/health/`)
 
@@ -391,7 +417,7 @@ name). `probe()` (write/read/delete a test object) is what the health check's fi
 
 ### TLS
 
-If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/WSS. Generate with `node generate_cert.js`.
+If `data/cert.pem` and `data/key.pem` exist, the server auto-switches to HTTPS/WSS (never on a cloud profile, whose platform handles HTTPS: `server/secrets` `tlsFiles()`). Generate with `node generate_cert.js`.
 
 ---
 
@@ -432,7 +458,7 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server.js` | All routes, WS logic, auth, CSRF, rate limiting |
 | `server/settings/schema.js` | Every setting and the six deployment profiles, declared once |
 | `server/settings/index.js` | Layered values (`get`), the startup check (`startupCheck`) |
-| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `keys` |
+| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `migrate`, `keys` |
 | `server/health/index.js` | The health checks (`createDoctor`: `run`, `healthz`) |
 | `server/health/instances.js` | This process's heartbeat row in `app_instances` |
 | `server/lib/jobs.js` | Background jobs report each run here (`register`, `beat`) |
@@ -440,6 +466,8 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server/storage/index.js` | The storage port (`storage()`, `put/get/remove/list/probe`) |
 | `server/storage/photos.js` | Photos through the port: `savePhoto`, `photoDataUri(s)`, `readPhoto` |
 | `server/storage/{local,s3,azureBlob,gcs}.js` | The four backends |
+| `server/secrets/index.js` | The only reader/writer of secret files; refuses on a cloud profile |
+| `server/secrets/store.js` | Key Vault, Secrets Manager, Secret Manager (run as a child by `settings.loadSecrets()`) |
 | `client/src/components/SystemHealth.jsx` | Admin › System › System health card |
 | `docs/SETTINGS.md` | Generated from the schema — do not edit by hand |
 | `db.js` | Database layer — schema, migrations, queries, photo storage |
@@ -457,4 +485,4 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `client/src/utils/themes.js` | Facility theme list + `applyTheme`/`setTheme`; nothing else writes `data-theme` |
 | `client/src/utils/ui.js` | Shared class strings — `CARD_HEAD*`, `RAIL_*`; edit here, not at call sites |
 | `scripts/gen-themes.cjs` | Generates the `:root[data-theme]` blocks in `index.css` and asserts their contrast + hue rules |
-| `data/opspoint.db` | The only file that needs backing up |
+| `data/opspoint.db` | The only file that needs backing up (with its key: `data/.dbkey` or `OPSPOINT_DB_KEY`) |

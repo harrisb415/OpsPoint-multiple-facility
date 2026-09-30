@@ -33,6 +33,9 @@ server/
                   assessments/discharge-summaries/group-notes)   ALL DOMAINS DONE
   storage/
     index.js + photos.js ← the storage port: local folder, Azure Blob, S3, Cloud Storage      ✅ DONE
+  secrets/
+    index.js + store.js  ← secret files (refused on a cloud profile) + Key Vault / Secrets
+                           Manager / Secret Manager, read at start                           ✅ DONE
   app.js                 ← express wiring / composition root (was the top of server.js)     ⬜
 ```
 
@@ -54,6 +57,9 @@ server/
   file and env, and checked at startup. See docs/SETTINGS.md.
 - `storage/` — photos go through one port (put/get/remove/list/probe) with a
   local, Azure Blob, S3 or Cloud Storage backend (OPSPOINT_STORAGE).
+- `secrets/` — the provider's secret store (OPSPOINT_SECRETS) is the settings'
+  top layer, and every secret file goes through one guard that refuses on a
+  cloud profile.
 
 ## Migration order (incremental, each independently shippable + verified)
 
@@ -99,7 +105,7 @@ server/
    already-abstracted db.js helpers sit in the consuming module's repo, isolated +
    commented, until their own domain is extracted.
 5. ✅ **storage/** — the port + local, Azure Blob, S3 and Cloud Storage backends
-   (deployment plan phase 3).
+   (deployment plan phase 3). **secrets/** — the secrets port (phase 5).
 6. ⬜ **Frontend** — `client/src/api/*` client layer; consider TanStack Query to
    retire the manual DataContext + WebSocket merge.
 7. ⬜ **Monorepo workspaces** — dedupe the auth/csrf/session/WS/updater currently

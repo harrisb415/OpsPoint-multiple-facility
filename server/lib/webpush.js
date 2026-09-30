@@ -11,7 +11,6 @@
  * phone has made, so once issued it has to stay put.
  */
 const crypto = require('crypto');
-const fs = require('fs');
 const path = require('path');
 
 const b64u = {
@@ -68,20 +67,26 @@ function privateKeyObject(keys) {
 }
 
 // { publicKey, privateKey, source } — or throws when a configured pair is
-// unusable. Generates and saves a pair on first use when none is configured.
+// unusable. Generates and saves a pair on first use when none is configured
+// (on premises: server/secrets refuses the file on a cloud profile, which must
+// set both keys).
 function loadKeys(dataDir, env = process.env) {
   let keys;
   if (env.VAPID_PUBLIC_KEY || env.VAPID_PRIVATE_KEY) {
     keys = { publicKey: String(env.VAPID_PUBLIC_KEY || '').trim(), privateKey: String(env.VAPID_PRIVATE_KEY || '').trim(), source: 'environment' };
   } else {
+    const secrets = require('../secrets');
     const file = path.join(dataDir, 'vapid.json');
-    try {
-      const k = JSON.parse(fs.readFileSync(file, 'utf8'));
-      keys = { publicKey: k.publicKey, privateKey: k.privateKey, source: file };
-    } catch (e) {
+    const about = { what: `the push keys file ${file}`, setting: 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY' };
+    let saved = null;
+    if (secrets.exists(file, about)) {
+      try { saved = JSON.parse(secrets.readFile(file, about)); } catch (e) { saved = null; }
+    }
+    if (saved) {
+      keys = { publicKey: saved.publicKey, privateKey: saved.privateKey, source: file };
+    } else {
       keys = { ...generateKeys(), source: file, generated: true };
-      fs.mkdirSync(dataDir, { recursive: true });
-      fs.writeFileSync(file, JSON.stringify({ publicKey: keys.publicKey, privateKey: keys.privateKey }), { mode: 0o600 });
+      secrets.writeFile(file, JSON.stringify({ publicKey: keys.publicKey, privateKey: keys.privateKey }), about);
     }
   }
   privateKeyObject(keys);   // throws on a bad pair, so a typo in .env fails at boot, not at first alert

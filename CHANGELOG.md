@@ -2,6 +2,50 @@
 
 ---
 
+## Unreleased — Secrets: one port, and none on a cloud server's disk (2026-09-29)
+
+Roadmap phase 5 of the deployment plan: every secret comes through one place, and on a cloud
+profile none is read from disk.
+
+- **The provider's secret store**, read once as OpsPoint starts, with the new setting
+  `OPSPOINT_SECRETS`: `azure-key-vault` (one secret per setting, named like the setting in
+  lowercase with dashes — `session-secret` — read with the app's managed identity),
+  `aws-secrets-manager` (one secret holding a JSON object of settings, read with the task role)
+  or `gcp-secret-manager` (one secret per setting, read with the service's own account). Its
+  values win over the environment. Like file storage, it speaks each service's REST API — no
+  SDKs. New settings: `OPSPOINT_SECRETS_PREFIX` (facilities sharing one vault or project),
+  `AZURE_KEY_VAULT_URL`, `AWS_SECRETS_MANAGER_ID`, `GCP_PROJECT`. A store that refuses (no
+  access, no such secret) stops startup with one sentence and the role to grant (exit 78); one
+  that is out of reach exits 1, so the platform starts the app again. The default, `local`, is
+  what every install does today, and also covers platforms that hand their store to the app as
+  environment variables (App Service Key Vault references, ECS task secrets, Cloud Run secrets).
+- **Docker secrets**: any secret can be given as `NAME_FILE`, naming a file that holds it
+  (`SESSION_SECRET_FILE=/run/secrets/session_secret`).
+- **No secret from disk on azure, aws or gcp**: a secret in `opspoint.config.json`, a
+  `NAME_FILE` or a Google key file (`GOOGLE_APPLICATION_CREDENTIALS`) stops startup, saying where
+  to put it instead; the keys an on-premises install makes for itself (the session key file,
+  `vapid.json`, `.dbkey`) are never made or read there, nor `data/key.pem` (the platform handles
+  HTTPS). The code reads those files only through `server/secrets`, and a test fails on any
+  other read.
+- **`OPSPOINT_DB_KEY`**: the SQLite encryption key can live in the environment, a Docker secret
+  or the secret store instead of `data/.dbkey`, so a copied data folder is unreadable on its own.
+  Set it before the first start, or to the contents of the existing `.dbkey`; OpsPoint refuses
+  to start while the two differ, and doesn't make a key file when it is set. A key kept in the
+  secret store passes the health check's encryption-key row without the "stored elsewhere"
+  confirmation.
+- The health check's Secrets row says where each secret came from (never its value), and on a
+  cloud profile that none is read from disk; the push alerts line and row name their keys'
+  source. `node server/cli/opspoint.js settings` shows the store and what it held.
+- The cloud credential settings (`AWS_*`, `AZURE_CLIENT_ID`, `GOOGLE_APPLICATION_CREDENTIALS`)
+  moved to their own group, "Cloud credentials", shared by file storage and the secret store.
+- **Updating**: nothing to do; without `OPSPOINT_SECRETS` everything reads as before.
+- Tests: `tests/secrets.test.js` (the three stores against fakes that check the identity token,
+  the Signature V4 and the bearer token; the child-process read against a fake Key Vault in its
+  own process; `NAME_FILE`; the cloud-profile refusals without a disk touch; `OPSPOINT_DB_KEY`
+  on a real encrypted SQLite file; no secret-file read outside `server/secrets`).
+
+---
+
 ## Unreleased — Migrations: OpsPoint applies its own Postgres schema (2026-09-29)
 
 Roadmap phase 4 of the deployment plan: no more hand-applied Postgres SQL.

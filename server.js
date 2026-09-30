@@ -334,15 +334,15 @@ app.get('/api/system/health', requireAuth, requirePermission('admin.system'), as
 app.post('/api/system/health/run', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
   res.json(await doctor.run({ fresh: true }));
 });
-// SQLite: an admin says the .dbkey file is stored somewhere else. Bound to a
-// fingerprint of the key, so a new key needs a new confirmation.
+// SQLite: an admin says the database key (the .dbkey file, or OPSPOINT_DB_KEY)
+// is stored somewhere else. Bound to a fingerprint of the key, so a new key
+// needs a new confirmation.
 app.post('/api/system/health/dbkey-confirmed', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
   if (dbConn.isPg) return res.status(400).json({ error: 'There is no database key on Postgres.' });
-  let key = '';
-  try { key = fs.readFileSync(doctor.dbKeyPath(), 'utf8').trim(); } catch (e) { /* missing */ }
-  if (!key) return res.status(409).json({ error: 'The database key file is missing.' });
+  const k = require('./server/db/dbcrypt').currentKey(DB_PATH);
+  if (!k) return res.status(409).json({ error: 'The database key file is missing.' });
   const by = req.session.displayName || req.session.username || 'admin';
-  await db.setSetting('dbkey_backup_confirmed', { fp: crypto.createHash('sha256').update(key).digest('hex').slice(0, 16), at: nowLocal(), by });
+  await db.setSetting('dbkey_backup_confirmed', { fp: k.fingerprint, at: nowLocal(), by });
   await audit(req, 'dbkey.backup_confirmed', 'system', null, 'Database key stored elsewhere', { by });
   res.json(await doctor.run());
 });
@@ -645,10 +645,11 @@ if (require.main === module) (async ()=>{
     }
   }
 
-  const CERT=path.join(DATA,'cert.pem'), KEY=path.join(DATA,'key.pem');
-  const useTLS=fs.existsSync(CERT)&&fs.existsSync(KEY);
+  // data/cert.pem + data/key.pem switch on HTTPS — never on a cloud profile,
+  // whose platform handles HTTPS in front of the app (server/secrets).
+  const tls=require('./server/secrets').tlsFiles(DATA);
   let server;
-  if(useTLS){ server=https.createServer({cert:fs.readFileSync(CERT),key:fs.readFileSync(KEY)},app); console.log('  TLS: HTTPS enabled'); }
+  if(tls){ server=https.createServer(tls,app); console.log('  TLS: HTTPS enabled'); }
   else { server=http.createServer(app); }
 
   // No session rebuild here any more: cookie.secure is 'auto', so it resolves
@@ -695,8 +696,8 @@ if (require.main === module) (async ()=>{
     jobs.beat('lock-sweep');
   }, 60 * 60 * 1000);
 
-  const proto=useTLS?'https':'http', ip=getLocalIP();
-  await db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.7.0',tls:useTLS});
+  const proto=tls?'https':'http', ip=getLocalIP();
+  await db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.7.0',tls:!!tls});
   server.listen(PORT,config.BIND_ADDR,()=>{
     console.log('\n══════════════════════════════════════════════');
     console.log('  OpsPoint v2.7.0');

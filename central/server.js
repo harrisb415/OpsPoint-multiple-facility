@@ -568,16 +568,18 @@ app.get('*', (req, res) => {
 });
 
 // ── Boot (HTTP, or HTTPS if certs present) ───────────────────────────────
-const certPath = path.join(DATA_DIR, 'cert.pem');
-const keyPath  = path.join(DATA_DIR, 'key.pem');
+// Never on a cloud profile, whose platform handles HTTPS in front of HQ and
+// where no key is read from disk (server/secrets).
+const secrets = require('../server/secrets');
+const tls = secrets.tlsFiles(DATA_DIR, { settings });
 let server, scheme;
-if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
-  server = https.createServer({ cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) }, app);
+if (tls) {
+  server = https.createServer(tls, app);
   scheme = 'https';
 } else {
   server = http.createServer(app);
   scheme = 'http';
-  console.log('  ⚠  No TLS certs in', DATA_DIR, '— running plain HTTP (dev only).');
+  if (!secrets.onCloud(settings)) console.log('  ⚠  No TLS certs in', DATA_DIR, '— running plain HTTP (dev only).');
 }
 // Same reasoning as the facility server: default to every interface so an
 // on-premise HQ is reachable on its LAN, but let a hosted box behind nginx set

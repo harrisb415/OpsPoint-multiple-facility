@@ -46,6 +46,8 @@ function keys() {
       VAPID_PUBLIC_KEY: settings.get('VAPID_PUBLIC_KEY') || undefined,
       VAPID_PRIVATE_KEY: settings.get('VAPID_PRIVATE_KEY') || undefined,
     });
+    // Set keys: say where they were set (the environment, a NAME_FILE, the secret store).
+    if (_keys.source === 'environment') _keys.source = settings.source('VAPID_PRIVATE_KEY');
   }
   catch (e) { _keys = null; _keyError = e.message; }
   return _keys;

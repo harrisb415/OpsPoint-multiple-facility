@@ -53,12 +53,15 @@ function sharedKey({ account, key, method, path, query = {}, headers }) {
   return `SharedKey ${account}:${sig}`;
 }
 
-// A token for https://storage.azure.com/ from the platform's managed identity.
-function managedIdentity({ clientId = null, env = process.env }) {
+// A token for an Azure resource (Blob Storage by default; Key Vault uses
+// https://vault.azure.net) from the platform's managed identity. `missing` is
+// the sentence for a machine that has none.
+function managedIdentity({ clientId = null, env = process.env, resource: forResource = 'https://storage.azure.com/',
+  missing = 'no managed identity here: set AZURE_STORAGE_CONNECTION_STRING, or give the app a managed identity' }) {
   let cached = null;
   return async function token() {
     if (cached && cached.expires - Date.now() > 5 * 60 * 1000) return cached.value;
-    const resource = encodeURIComponent('https://storage.azure.com/');
+    const resource = encodeURIComponent(forResource);
     const cid = clientId ? `&client_id=${encodeURIComponent(clientId)}` : '';
     let r;
     if (env.IDENTITY_ENDPOINT && env.IDENTITY_HEADER) {            // App Service, Container Apps (the platform's variables)
@@ -69,10 +72,14 @@ function managedIdentity({ clientId = null, env = process.env }) {
         r = await request('GET', `http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=${resource}${cid}`,
           { headers: { metadata: 'true' }, timeoutMs: 3000 });
       } catch (e) {
-        throw new Error('no managed identity here: set AZURE_STORAGE_CONNECTION_STRING, or give the app a managed identity');
+        throw new Error(missing);
       }
     }
-    if (r.status !== 200) throw new Error(`the managed identity gave no token (HTTP ${r.status}: ${r.body.toString('utf8').slice(0, 200)})`);
+    if (r.status !== 200) {
+      const err = new Error(`the managed identity gave no token (HTTP ${r.status}: ${r.body.toString('utf8').slice(0, 200)})`);
+      err.status = r.status;
+      throw err;
+    }
     const j = JSON.parse(r.body.toString('utf8'));
     const expires = j.expires_on ? Number(j.expires_on) * 1000 : Date.now() + Number(j.expires_in || 3600) * 1000;
     cached = { value: j.access_token, expires };
@@ -138,3 +145,4 @@ function unxml(s) { return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
 module.exports.sharedKey = sharedKey;
 module.exports.parseConnectionString = parseConnectionString;
+module.exports.managedIdentity = managedIdentity;

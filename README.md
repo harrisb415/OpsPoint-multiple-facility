@@ -134,6 +134,13 @@ On Postgres (`OPSPOINT_DB_DRIVER=pg`), OpsPoint applies its own schema changes f
 `OPSPOINT_MIGRATE=off` and run `node server/cli/opspoint.js migrate` (and `--app central` for HQ)
 before starting.
 
+Secrets (the session key, push keys, database connection strings, the SQLite key) can also come
+from a file the environment names as `NAME_FILE` (a Docker secret), or from the provider's secret
+store read once at start: `OPSPOINT_SECRETS=azure-key-vault`, `aws-secrets-manager` or
+`gcp-secret-manager` (see "Secrets" in [`docs/SETTINGS.md`](./docs/SETTINGS.md)). On the `azure`,
+`aws` and `gcp` profiles no secret is read from disk. `OPSPOINT_DB_KEY` keeps the SQLite key out
+of the data folder, so a copy of that folder alone is unreadable.
+
 A missing or contradictory setting stops the server with one sentence saying what to fix. The
 facility's time zone is required: set `TZ` (for example `TZ=America/Chicago`) unless the machine's
 own clock is already in it; a server on UTC files evening entries under the next day.
@@ -256,10 +263,10 @@ Run `bootstrap.js` (not `server.js`) so a failed update can health-check and rol
 | Path | Contents |
 |------|----------|
 | `data/opspoint.db` | All reports, residents, users, staff, passes, logs — encrypted at rest |
-| `data/.dbkey` | Encryption key — **back up separately; loss is unrecoverable** |
+| `data/.dbkey` | Encryption key — **back up separately; loss is unrecoverable** (not made when `OPSPOINT_DB_KEY` is set) |
 | `data/backups/scheduled/` | Dated online backups (encrypted with the same key) |
 | `data/photos/` | Client and UA photos |
-| `data/secret.key` | Session secret (auto-generated; regenerated if deleted) |
+| `data/secret.key` | Session secret (auto-generated unless `SESSION_SECRET` is set; regenerated if deleted) |
 | `data/cert.pem` / `data/key.pem` | TLS certificate / key (local deployments only) |
 
 Backups are scheduled automatically (default every 6 hours, keeping 28 generations). Configure via

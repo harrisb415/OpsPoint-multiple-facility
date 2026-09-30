@@ -24,10 +24,12 @@
  *                        opspoint.config.json is the facility's, its "central"
  *                        object HQ's
  *   type      how the value is read: enum, int, bool, string, path, timezone,
- *             pgurl, trustProxy, host, size
+ *             pgurl, trustProxy, host, size, url
  *   default   a value, { facility, central } for per-app, or ctx => value
  *   defaultText  how the docs show a default computed by a function
- *   secret    never printed, logged or returned by any endpoint
+ *   secret    never printed, logged or returned by any endpoint. It may also
+ *             come from a file named by NAME_FILE (a Docker secret) and, unless
+ *             it is a cloud credential, from the secret store (STORE_NAMES)
  *   envOnly   only the environment may set it (not the settings file)
  *   noun      what it is, as it reads inside "needs NAME, <noun>"
  *   summary   one or two sentences for the docs
@@ -198,7 +200,8 @@ const SETTINGS = [
     default: (ctx) => path.join(ctx.get('OPSPOINT_DATA'), 'opspoint.db'),
     defaultText: 'opspoint.db, in the data folder',
     noun: 'the SQLite database file',
-    summary: 'The SQLite database file (driver sqlite). Its encryption key is the .dbkey file beside it.',
+    summary: 'The SQLite database file (driver sqlite). Its encryption key is OPSPOINT_DB_KEY, or else the .dbkey ' +
+             'file beside it.',
   },
   {
     name: 'OPSPOINT_ENCRYPT', group: 'Database', scope: 'shared', type: 'bool', tokens: { 1: true, 0: false },
@@ -206,6 +209,14 @@ const SETTINGS = [
     noun: 'whether the SQLite file is encrypted',
     summary: 'Encrypt the SQLite database file: 1 (the default) or 0. With 0 an already encrypted database will ' +
              'not open; decrypt it deliberately instead.',
+  },
+  {
+    name: 'OPSPOINT_DB_KEY', group: 'Database', scope: 'facility', type: 'string', minLength: 32, secret: true,
+    noun: 'the SQLite encryption key',
+    summary: 'The key the SQLite database is encrypted with, kept away from the data folder (a secret store, or ' +
+             'a Docker secret through OPSPOINT_DB_KEY_FILE), so a copy of that folder alone reads as noise. Unset: ' +
+             'the .dbkey file beside the database, made on first start. Set it before the first start, or to the ' +
+             'contents of the existing .dbkey; OpsPoint refuses to start while the two differ.',
   },
   {
     name: 'DATABASE_URL', group: 'Database', scope: 'facility', type: 'pgurl', secret: true,
@@ -287,13 +298,6 @@ const SETTINGS = [
              "AccountKey), or Azurite's when testing.",
   },
   {
-    name: 'AZURE_CLIENT_ID', group: 'File storage', scope: 'facility', type: 'string',
-    pattern: /^[0-9a-fA-F-]{36}$/, patternText: 'a client ID (a GUID)',
-    noun: 'the user-assigned managed identity',
-    summary: "For azure-blob with a user-assigned managed identity: that identity's client ID. Unset: the app's " +
-             'system-assigned identity.',
-  },
-  {
     name: 'AZURE_STORAGE_CONTAINER', group: 'File storage', scope: 'facility', type: 'string', default: 'opspoint',
     pattern: /^[a-z0-9](?!.*--)[a-z0-9-]{1,61}[a-z0-9]$/, patternText: '3 to 63 lowercase letters, digits and single hyphens',
     noun: 'the blob container',
@@ -326,44 +330,93 @@ const SETTINGS = [
              'services need this).',
   },
   {
-    name: 'AWS_REGION', group: 'File storage', scope: 'facility', type: 'string',
-    pattern: /^[a-z0-9-]{2,32}$/, patternText: 'a region such as us-west-2',
-    noun: 'the AWS region',
-    summary: 'The AWS region (ECS sets it). S3_REGION follows it.',
-  },
-  {
-    name: 'AWS_ACCESS_KEY_ID', group: 'File storage', scope: 'facility', type: 'string',
-    noun: 'the AWS access key',
-    summary: 'For s3 without an ECS task role or EC2 instance role (or on MinIO): the access key, set together with ' +
-             'AWS_SECRET_ACCESS_KEY. Unset: the role the platform provides.',
-  },
-  {
-    name: 'AWS_SECRET_ACCESS_KEY', group: 'File storage', scope: 'facility', type: 'string', secret: true,
-    noun: 'the AWS secret key',
-    summary: 'The secret that goes with AWS_ACCESS_KEY_ID.',
-  },
-  {
-    name: 'AWS_SESSION_TOKEN', group: 'File storage', scope: 'facility', type: 'string', secret: true,
-    noun: 'the AWS session token',
-    summary: 'The session token that goes with temporary AWS keys.',
-  },
-  {
     name: 'GCS_BUCKET', group: 'File storage', scope: 'facility', type: 'string', requiredWhen: ['OPSPOINT_STORAGE', 'gcs'],
     pattern: /^[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]$/, patternText: 'a bucket name (lowercase letters, digits, dots, dashes, underscores)',
     noun: 'the Cloud Storage bucket',
     summary: 'For gcs: the bucket that holds the files. It must already exist.',
   },
   {
-    name: 'GOOGLE_APPLICATION_CREDENTIALS', group: 'File storage', scope: 'facility', type: 'path',
-    noun: 'the Google service-account key file',
-    summary: "For gcs outside Google Cloud: a service-account key file. Unset: the Cloud Run service's own service " +
-             'account (from the metadata server).',
-  },
-  {
     name: 'GCS_ENDPOINT', group: 'File storage', scope: 'facility', type: 'url',
     noun: 'the Cloud Storage emulator',
     summary: 'For gcs against an emulator (fake-gcs-server): its address, such as http://127.0.0.1:4443. Unset: ' +
              'Google Cloud Storage.',
+  },
+
+  // ── Secrets (server/settings/secretStore.js) ──────────────────────────────
+  {
+    name: 'OPSPOINT_SECRETS', group: 'Secrets', scope: 'shared', type: 'enum',
+    values: ['local', 'azure-key-vault', 'aws-secrets-manager', 'gcp-secret-manager'], default: 'local',
+    noun: 'where secrets come from',
+    summary: 'Where the secret settings come from: local (the environment, or a file it names as NAME_FILE such as ' +
+             'a Docker secret, or on premises opspoint.config.json), or read at start from azure-key-vault, ' +
+             'aws-secrets-manager or gcp-secret-manager, which then win over those. Platforms that hand their ' +
+             'secret store to the app as environment variables (Key Vault references, ECS task secrets, Cloud Run ' +
+             'secrets) work with local. On azure, aws and gcp no secret is ever read from disk.',
+  },
+  {
+    name: 'OPSPOINT_SECRETS_PREFIX', group: 'Secrets', scope: 'shared', type: 'string',
+    pattern: /^[a-z0-9][a-z0-9-]*$/, patternText: 'lowercase letters, digits and dashes (for example sunrise-)',
+    noun: 'the prefix of secret names',
+    summary: 'For azure-key-vault and gcp-secret-manager: a prefix for every secret name, so facilities can share ' +
+             'one vault or project (sunrise- makes SESSION_SECRET the secret sunrise-session-secret).',
+  },
+  {
+    name: 'AZURE_KEY_VAULT_URL', group: 'Secrets', scope: 'shared', type: 'url', requiredWhen: ['OPSPOINT_SECRETS', 'azure-key-vault'],
+    noun: 'the Key Vault address',
+    summary: "For azure-key-vault: the vault's address, such as https://sunrise-kv.vault.azure.net. Each secret " +
+             'setting is a secret named after it in lowercase with dashes (SESSION_SECRET is session-secret), read ' +
+             "with the app's managed identity (it needs the Key Vault Secrets User role).",
+  },
+  {
+    name: 'AWS_SECRETS_MANAGER_ID', group: 'Secrets', scope: 'shared', type: 'string', requiredWhen: ['OPSPOINT_SECRETS', 'aws-secrets-manager'],
+    pattern: /^[A-Za-z0-9/_+=.@:-]{1,2048}$/, patternText: 'a secret name or ARN',
+    noun: 'the Secrets Manager secret',
+    summary: 'For aws-secrets-manager: the name or ARN of one secret whose value is a JSON object of settings, ' +
+             'such as {"DATABASE_URL": "…", "SESSION_SECRET": "…"}, read in AWS_REGION with the task role.',
+  },
+  {
+    name: 'GCP_PROJECT', group: 'Secrets', scope: 'shared', type: 'string',
+    pattern: /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/, patternText: 'a Google Cloud project ID',
+    noun: 'the Google Cloud project',
+    summary: 'For gcp-secret-manager: the project that holds the secrets. Unset: the project the service runs in ' +
+             '(from the metadata server). Secrets are named like azure-key-vault\'s.',
+  },
+
+  // ── Cloud credentials (file storage and the secret store) ─────────────────
+  {
+    name: 'AWS_REGION', group: 'Cloud credentials', scope: 'shared', type: 'string',
+    pattern: /^[a-z0-9-]{2,32}$/, patternText: 'a region such as us-west-2',
+    noun: 'the AWS region',
+    summary: 'The AWS region (ECS sets it). S3_REGION and Secrets Manager follow it.',
+  },
+  {
+    name: 'AWS_ACCESS_KEY_ID', group: 'Cloud credentials', scope: 'shared', type: 'string',
+    noun: 'the AWS access key',
+    summary: 'Without an ECS task role or EC2 instance role (or on MinIO): the access key, set together with ' +
+             'AWS_SECRET_ACCESS_KEY. Unset: the role the platform provides.',
+  },
+  {
+    name: 'AWS_SECRET_ACCESS_KEY', group: 'Cloud credentials', scope: 'shared', type: 'string', secret: true,
+    noun: 'the AWS secret key',
+    summary: 'The secret that goes with AWS_ACCESS_KEY_ID.',
+  },
+  {
+    name: 'AWS_SESSION_TOKEN', group: 'Cloud credentials', scope: 'shared', type: 'string', secret: true,
+    noun: 'the AWS session token',
+    summary: 'The session token that goes with temporary AWS keys.',
+  },
+  {
+    name: 'AZURE_CLIENT_ID', group: 'Cloud credentials', scope: 'shared', type: 'string',
+    pattern: /^[0-9a-fA-F-]{36}$/, patternText: 'a client ID (a GUID)',
+    noun: 'the user-assigned managed identity',
+    summary: "With a user-assigned managed identity: that identity's client ID. Unset: the app's system-assigned " +
+             'identity.',
+  },
+  {
+    name: 'GOOGLE_APPLICATION_CREDENTIALS', group: 'Cloud credentials', scope: 'shared', type: 'path',
+    noun: 'the Google service-account key file',
+    summary: "Outside Google Cloud: a service-account key file. Unset: the Cloud Run service's own service account " +
+             '(from the metadata server).',
   },
 
   // ── Backups ───────────────────────────────────────────────────────────────
@@ -382,8 +435,8 @@ const SETTINGS = [
     name: 'SESSION_SECRET', group: 'Security', scope: 'facility', type: 'string', minLength: 32, secret: true,
     requiredIn: MANAGED,
     noun: 'the key that signs sign-in cookies (at least 32 random characters)',
-    summary: 'The key that signs sign-in cookies. Unset: generated once into OPSPOINT_SECRET_FILE. Managed ' +
-             'platforms must set it, because their disk is wiped on restart and everyone would be signed out.',
+    summary: 'The key that signs sign-in cookies. Unset: generated once into OPSPOINT_SECRET_FILE (on premises). ' +
+             'Managed platforms must set it, because their disk is wiped on restart and everyone would be signed out.',
   },
   {
     name: 'OPSPOINT_SECRET_FILE', group: 'Security', scope: 'facility', type: 'path',
@@ -482,4 +535,11 @@ const PLATFORM_ENV = [
 
 const BY_NAME = Object.fromEntries(SETTINGS.map((s) => [s.name, s]));
 
-module.exports = { PROFILES, PROFILE_NAMES, MANAGED, SETTINGS, BY_NAME, INTERNAL_ENV, PLATFORM_ENV };
+// What the secret store (OPSPOINT_SECRETS) may hold: every secret except the
+// cloud credentials that reach the store in the first place, plus the push
+// public key, so the pair lives together.
+const STORE_NAMES = SETTINGS
+  .filter((s) => (s.secret && s.group !== 'Cloud credentials') || (s.pairWith && BY_NAME[s.pairWith].secret))
+  .map((s) => s.name);
+
+module.exports = { PROFILES, PROFILE_NAMES, MANAGED, SETTINGS, BY_NAME, INTERNAL_ENV, PLATFORM_ENV, STORE_NAMES };

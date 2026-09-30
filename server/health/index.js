@@ -22,6 +22,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { PROFILES, BY_NAME } = require('../settings/schema');
 const { canonicalZone, parseDsn } = require('../settings');
+const secrets = require('../secrets');
 const instances = require('./instances');
 const parity = require('./schemaParity');
 
@@ -153,21 +154,34 @@ const CHECKS = [
   {
     id: 'secrets', label: 'Secrets',
     async run(ctx) {
-      const bad = ctx.settingsProblems().find((p) => p.level === 'error' && p.setting && BY_NAME[p.setting] && BY_NAME[p.setting].secret);
+      const s = ctx.settings;
+      const bad = ctx.settingsProblems().find((p) => p.level === 'error' && p.setting && BY_NAME[p.setting] &&
+        (BY_NAME[p.setting].secret || BY_NAME[p.setting].group === 'Secrets'));
       if (bad) return { status: 'fail', says: bad.message };
+      // Where each one came from, in words (never its value).
+      const from = (name) => { const src = s.source(name); return /_FILE$/.test(src) ? `the file ${src} names` : src; };
       const parts = [];
-      if (ctx.settings.get('SESSION_SECRET')) parts.push('session key (from the settings)');
+      if (s.get('SESSION_SECRET')) parts.push(`session key (${from('SESSION_SECRET')})`);
       else {
         let ok = false;
-        try { ok = fs.readFileSync(ctx.config.SECRET_FILE, 'utf8').trim().length > 0; } catch (e) { /* missing */ }
+        try { ok = secrets.readFile(ctx.config.SECRET_FILE, { what: 'the session key file', setting: 'SESSION_SECRET', settings: s }).trim().length > 0; }
+        catch (e) { if (e.name === 'SecretOnDiskError') return { status: 'fail', says: e.message }; }
         if (!ok) {
           return { status: 'fail', says: `There is no session key: SESSION_SECRET is unset and ${ctx.config.SECRET_FILE} doesn't exist.`,
             fix: 'Start OpsPoint once (it makes the file), or set SESSION_SECRET.' };
         }
-        parts.push('session key (in the data folder)');
+        parts.push('session key (the data folder)');
       }
-      if (ctx.conn.isPg) parts.push('database connection string');
-      return { status: 'pass', says: `Present: ${parts.join(', ')}.` };
+      if (ctx.conn.isPg) parts.push(`database connection string (${from('DATABASE_URL')})`);
+      else if (s.get('OPSPOINT_ENCRYPT') && s.get('OPSPOINT_DB_KEY')) parts.push(`database key (${from('OPSPOINT_DB_KEY')})`);
+      if (s.get('VAPID_PRIVATE_KEY')) parts.push(`push keys (${from('VAPID_PRIVATE_KEY')})`);
+      if (s.get('AZURE_STORAGE_CONNECTION_STRING')) parts.push(`storage connection string (${from('AZURE_STORAGE_CONNECTION_STRING')})`);
+      if (s.get('AWS_SECRET_ACCESS_KEY')) parts.push(`AWS keys (${from('AWS_SECRET_ACCESS_KEY')})`);
+      const st = s.storeInfo ? s.storeInfo() : { kind: 'local' };
+      const store = st.kind === 'local' ? '' : st.loaded
+        ? ` ${st.names.length} came from ${st.label} at start.` : ` ${st.label} wasn't read in this process.`;
+      const cloud = ctx.profile.kind === 'managed' ? ` None is read from disk (profile ${s.profile().name}).` : '';
+      return { status: 'pass', says: `Present: ${parts.join(', ')}.${store}${cloud}` };
     },
   },
   {
@@ -180,13 +194,19 @@ const CHECKS = [
       }
       const key = ctx.dbKey();
       if (!key) return { status: 'fail', says: `The database key is missing: ${ctx.dbKeyPath()} doesn't exist.`, fix: 'Restore the .dbkey file that belongs to this database.' };
+      // Kept in the secret store: off this machine by definition.
+      const st = ctx.settings.storeInfo ? ctx.settings.storeInfo() : {};
+      if (key.fromSetting && st.loaded && key.source === st.label) {
+        return { status: 'pass', says: `Kept in ${st.label} (OPSPOINT_DB_KEY), not on this machine.` };
+      }
       const c = await ctx.readSetting('dbkey_backup_confirmed', null);
       if (c && c.fp === key.fingerprint) {
         return { status: 'pass', says: `Stored somewhere else: confirmed by ${c.by || 'an admin'} on ${c.at || 'an earlier date'}.` };
       }
       const why = c && c.fp ? `The key changed after it was confirmed on ${c.at}` : 'Nobody has confirmed the key is stored somewhere else';
+      const what = key.fromSetting ? 'a copy of OPSPOINT_DB_KEY' : ctx.dbKeyPath();
       return { status: 'fail', says: `${why}; without it the database and every backup of it are unreadable.`,
-        fix: `Copy ${ctx.dbKeyPath()} somewhere off this machine (a password manager, or a USB key kept apart from the backups), then press "Key stored elsewhere".`,
+        fix: `Keep ${what} somewhere off this machine (a password manager, or a USB key kept apart from the backups), then press "Key stored elsewhere".`,
         action: 'dbkey-confirm' };
     },
   },
@@ -271,7 +291,7 @@ const CHECKS = [
     id: 'certificate', label: 'Certificate',
     async run(ctx) {
       const certFile = path.join(ctx.config.DATA_DIR, 'cert.pem');
-      if (!fs.existsSync(certFile)) return { status: 'skip', says: "OpsPoint has no certificate of its own: HTTPS is handled in front of it." };
+      if (ctx.profile.kind === 'managed' || !fs.existsSync(certFile)) return { status: 'skip', says: "OpsPoint has no certificate of its own: HTTPS is handled in front of it." };
       let cert;
       try { cert = new crypto.X509Certificate(fs.readFileSync(certFile)); }
       catch (e) { return { status: 'fail', says: `data/cert.pem can't be read as a certificate: ${oneLine(e.message)}.`, fix: 'Replace it (node generate_cert.js makes a self-signed one).' }; }
@@ -286,11 +306,18 @@ const CHECKS = [
     id: 'push', label: 'Push alerts',
     async run(ctx) {
       const webpush = require('../lib/webpush');
-      let pub = ctx.settings.get('VAPID_PUBLIC_KEY'), priv = ctx.settings.get('VAPID_PRIVATE_KEY'), from = 'the settings';
+      let pub = ctx.settings.get('VAPID_PUBLIC_KEY'), priv = ctx.settings.get('VAPID_PRIVATE_KEY');
+      const src = priv ? ctx.settings.source('VAPID_PRIVATE_KEY') : 'the settings';
+      let from = src === 'environment' ? 'the environment' : /_FILE$/.test(src) ? `the file ${src} names` : src;
       if (!pub && !priv) {
         const file = path.join(ctx.config.DATA_DIR, 'vapid.json');
-        try { const k = JSON.parse(fs.readFileSync(file, 'utf8')); pub = k.publicKey; priv = k.privateKey; from = 'the data folder'; }
-        catch (e) { return { status: 'warn', says: 'No push keys yet: the server makes them at its next start.' }; }
+        try {
+          const k = JSON.parse(secrets.readFile(file, { what: 'the push keys file', setting: 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY', settings: ctx.settings }));
+          pub = k.publicKey; priv = k.privateKey; from = 'the data folder';
+        } catch (e) {
+          if (e.name === 'SecretOnDiskError') return { status: 'fail', says: e.message };
+          return { status: 'warn', says: 'No push keys yet: the server makes them at its next start.' };
+        }
       }
       if (!pub || !priv || !webpush.pairMatches(pub, priv)) {
         return { status: 'fail', says: `The push keys in ${from} are not one valid key pair, so no phone gets alerts.`,
@@ -389,12 +416,7 @@ function createDoctor(opts) {
         catch (e) { return 'unknown'; }
       },
       dbKeyPath,
-      dbKey: () => {
-        try {
-          const key = fs.readFileSync(dbKeyPath(), 'utf8').trim();
-          return key ? { fingerprint: crypto.createHash('sha256').update(key).digest('hex').slice(0, 16) } : null;
-        } catch (e) { return null; }
-      },
+      dbKey: () => require('../db/dbcrypt').currentKey(config.DB_PATH, settings),
       backupDir: async () => (await readSetting('backup_dir', null)) || path.join(path.dirname(config.DB_PATH), 'backups', 'scheduled'),
     };
 

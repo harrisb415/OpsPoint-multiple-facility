@@ -5,8 +5,8 @@
  * tests/settings.test.js fails when the committed file and this output differ,
  * so the doc cannot drift from what the code accepts.
  */
-const { PROFILES, PROFILE_NAMES, SETTINGS, INTERNAL_ENV, PLATFORM_ENV } = require('./schema');
-const { CHECKS, WARNING_CHECKS } = require('./index');
+const { PROFILES, PROFILE_NAMES, SETTINGS, BY_NAME, INTERNAL_ENV, PLATFORM_ENV, STORE_NAMES } = require('./schema');
+const { CHECKS, WARNING_CHECKS, secretName } = require('./index');
 
 const code = (s) => `\`${s}\``;
 const cell = (s) => String(s).replace(/\|/g, '\\|').replace(/\n/g, ' ');
@@ -70,8 +70,8 @@ function renderDocs() {
   w('1. The built-in default (below).');
   w("2. The profile's default (`OPSPOINT_PROFILE`, below).");
   w('3. `opspoint.config.json` in the app folder, or the file `OPSPOINT_CONFIG` names.');
-  w('4. Environment variables.');
-  w("5. The provider's secret store (Key Vault, Secrets Manager, Secret Manager): roadmap phase 5.");
+  w('4. Environment variables. For a secret also `NAME_FILE`, naming a file that holds it (a Docker secret).');
+  w("5. The provider's secret store (`OPSPOINT_SECRETS`: Key Vault, Secrets Manager, Secret Manager), read once as the app starts.");
   w();
   w('`node server/cli/opspoint.js settings` lists every value and where it came from, with secrets hidden ' +
     "(`--app central` for HQ's). `--check` runs the startup check without starting anything: exit 0 when " +
@@ -142,12 +142,45 @@ function renderDocs() {
     "A `TZ` given only in the file is applied to the server's process when it starts, since Node takes its time " +
     'zone from `TZ`.');
   w();
+  w('## Secrets');
+  w();
+  w('A setting marked **Secret.** is never printed, logged or returned by any endpoint. Besides the usual layers it can ' +
+    'come from:');
+  w();
+  w('- **A file**: `NAME_FILE` in the environment names a file holding the value, such as a Docker secret ' +
+    '(`SESSION_SECRET_FILE=/run/secrets/session_secret`). Whitespace around the value (a final newline) is ignored; setting both `NAME` and ' +
+    '`NAME_FILE` is an error.');
+  w('- **The secret store** named by `OPSPOINT_SECRETS`, read once as the app starts; its values win over every ' +
+    'other layer. A store that refuses (no such vault, no access) stops startup with exit code 78; one that is out of ' +
+    'reach exits 1, so the platform starts the app again. Platforms that hand their store to the app as environment ' +
+    'variables (App Service Key Vault references, ECS task secrets, Cloud Run secrets) need only ' +
+    '`OPSPOINT_SECRETS=local`.');
+  w();
+  w('| `OPSPOINT_SECRETS` | Where each secret is | Read with |');
+  w('| --- | --- | --- |');
+  w("| `azure-key-vault` | One secret per setting in the vault at `AZURE_KEY_VAULT_URL`, named below | The app's managed identity, with the Key Vault Secrets User role |");
+  w("| `aws-secrets-manager` | One secret, `AWS_SECRETS_MANAGER_ID`, whose value is a JSON object of settings by their own names | The task or instance role (or keys), with `secretsmanager:GetSecretValue` |");
+  w("| `gcp-secret-manager` | One secret per setting in `GCP_PROJECT` (default: the service's own project), named below, its latest version | The service's own account, with the Secret Manager Secret Accessor role |");
+  w();
+  w('A store holds only these settings (not the cloud credentials that reach it). The names in Key Vault and Secret ' +
+    'Manager are the setting in lowercase with dashes, after `OPSPOINT_SECRETS_PREFIX` when one is set:');
+  w();
+  w('| Setting | Name in Key Vault and Secret Manager |');
+  w('| --- | --- |');
+  for (const n of STORE_NAMES) w(`| ${code(n)}${BY_NAME[n].scope === 'central' ? ' (HQ)' : ''} | ${code(secretName(n))} |`);
+  w();
+  w('On a cloud profile (`azure`, `aws`, `gcp`) no secret is read from disk: a secret in `opspoint.config.json`, ' +
+    'a `NAME_FILE` or `GOOGLE_APPLICATION_CREDENTIALS` stops startup, and the keys an on-premises install makes for ' +
+    'itself (the session key file, `vapid.json`, `.dbkey`) are never made or read, nor `data/key.pem`: the ' +
+    'platform handles HTTPS. `server/secrets` is the one place those files are read, and `tests/secrets.test.js` ' +
+    'holds the code to it.');
+  w();
   w('## Not settings');
   w();
   w("These environment variables are how OpsPoint's own pieces talk to each other, or release tooling. They are " +
     "not settings, and the check doesn't mistake them for typos: " + INTERNAL_ENV.map(code).join(', ') + '.');
   w();
-  w('These are set by the platform itself, so that the app can reach its storage without a key (an ECS task ' +
+  w('These are set by the platform itself, so that the app can reach its storage and secret store without a key (an ECS task ' +
     'role, an Azure managed identity), and are read where they are used: ' + PLATFORM_ENV.map(code).join(', ') + '.');
   w();
   return out.join('\n');

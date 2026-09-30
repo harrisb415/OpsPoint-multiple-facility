@@ -7,8 +7,11 @@
  *   1. the built-in default         (schema.js)
  *   2. the profile's default        (schema.js PROFILES)
  *   3. opspoint.config.json         (the app folder, or the file OPSPOINT_CONFIG names)
- *   4. environment variables        (read live, so a test that sets one sees it)
- *   (5. the provider's secret store — roadmap phase 5)
+ *   4. environment variables        (read live, so a test that sets one sees it);
+ *                                   for a secret also NAME_FILE, a file holding
+ *                                   the value (a Docker secret)
+ *   5. the provider's secret store  (OPSPOINT_SECRETS: Key Vault, Secrets Manager,
+ *                                   Secret Manager), read once by startupCheck()
  *
  * Read a value with settings.get('NAME'), never process.env directly. A value
  * that does not parse throws rather than falling back to a default: refusing to
@@ -16,11 +19,14 @@
  *
  * Entry points call startupCheck() before anything else, so a bad setting stops
  * the server with one sentence before it creates a folder, a key or a database.
+ * On a cloud profile (azure, aws, gcp) no secret comes from disk: a secret in
+ * the settings file or a NAME_FILE stops startup instead (server/secrets holds
+ * the rest of the app to the same rule).
  */
 const fs = require('fs');
 const path = require('path');
 const net = require('net');
-const { PROFILES, SETTINGS, BY_NAME, INTERNAL_ENV } = require('./schema');
+const { PROFILES, SETTINGS, BY_NAME, INTERNAL_ENV, STORE_NAMES } = require('./schema');
 
 const BASE = path.resolve(__dirname, '..', '..');
 const EX_CONFIG = 78;   // sysexits.h: configuration error — bootstrap.js stops relaunching on it
@@ -140,7 +146,8 @@ function parseValue(def, raw) {
 
 // The sentence for a value that didn't parse. Secrets never echo their value.
 function parseProblem(def, layer, error) {
-  const where = layer.kind === 'file' ? ` in ${layer.source}` : '';
+  const where = layer.kind === 'file' || layer.kind === 'store' ? ` in ${layer.source}`
+    : layer.kind === 'envfile' ? ` (from the file ${layer.source} names)` : '';
   let got = '';
   if (!def.secret) {
     const shown = typeof layer.raw === 'object' ? JSON.stringify(layer.raw) : String(layer.raw);
@@ -206,14 +213,47 @@ const CHECKS = [
   "PGSSLROOTCERT exists; a managed profile never connects to Postgres unencrypted (except over a local socket); HQ's database is not the facility's.",
   'File storage has what it needs: an account or a connection string for azure-blob, a bucket for s3 and gcs, AWS keys in pairs, and an existing Google key file if one is named.',
   "On a managed or docker profile the app listens on every interface, not on 127.0.0.1, which the platform can't reach.",
+  'On azure, aws and gcp no secret comes from disk: not from opspoint.config.json, not from a NAME_FILE, and no Google key file.',
+  'A secret is set as NAME or as NAME_FILE, not both, and the file NAME_FILE names can be read and is not empty.',
+  'The secret store has what it needs: a Key Vault address (https://<name>.vault.azure.net) for azure-key-vault, a secret name and a region for aws-secrets-manager; and it can be read at start (a store that refuses stops startup, one that is unreachable exits 1 so the platform retries).',
 ];
 const WARNING_CHECKS = [
   'An OPSPOINT_ or CENTRAL_ environment variable that is not a setting (probably a typo).',
   'A settings file holding secrets that other accounts can read (Linux and macOS).',
   'PGSSLMODE=disable to a database on another host.',
-  'DATABASE_URL set while the driver is sqlite (it is ignored).',
+  'DATABASE_URL set while the driver is sqlite (it is ignored), or OPSPOINT_DB_KEY while it is pg or encryption is off.',
+  'A Key Vault address or Secrets Manager secret set while OPSPOINT_SECRETS is local (it is ignored).',
   'An abbreviated TZ such as EST, which may ignore daylight saving.',
 ];
+
+// ── The secret store's words ────────────────────────────────────────────────
+// A setting's name in Key Vault and Secret Manager: lowercase with dashes
+// (neither allows an underscore everywhere), after an optional prefix.
+const secretName = (name, prefix = '') => `${prefix || ''}${name.toLowerCase().replace(/_/g, '-')}`;
+const STORE_LABELS = {
+  'azure-key-vault': 'Azure Key Vault', 'aws-secrets-manager': 'AWS Secrets Manager', 'gcp-secret-manager': 'Google Secret Manager',
+};
+// Where a secret would go in the configured store, for "set it in …, or …".
+function storeWhere(kind, names, val) {
+  const n = names.map((x) => secretName(x, val.OPSPOINT_SECRETS_PREFIX));
+  const one = names.length === 1;
+  if (kind === 'azure-key-vault') return `as the secret${one ? '' : 's'} ${orAnd(n)} in Azure Key Vault`;
+  if (kind === 'gcp-secret-manager') return `as the secret${one ? '' : 's'} ${orAnd(n)} in Secret Manager`;
+  if (kind === 'aws-secrets-manager') return `as ${orAnd(names)} in the Secrets Manager secret ${val.AWS_SECRETS_MANAGER_ID || 'AWS_SECRETS_MANAGER_ID names'}`;
+  return '';
+}
+function orAnd(items) { return items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`; }
+// A Key Vault address: https://<name>.vault.azure.net (or a sovereign cloud's),
+// or a test double on this machine. The managed identity's token goes there.
+const VAULT_HOST = /^[a-z0-9-]{3,24}\.vault\.(azure\.net|azure\.cn|usgovcloudapi\.net|microsoftazure\.de)$/i;
+function vaultProblem(url) {
+  let u;
+  try { u = new URL(url); } catch (e) { return true; }
+  if (isLoopbackHost(u.hostname.replace(/^\[|\]$/g, ''))) return false;
+  return u.protocol !== 'https:' || !VAULT_HOST.test(u.hostname) || (u.pathname !== '/' && u.pathname !== '');
+}
+// The region an ARN names (arn:aws:secretsmanager:us-west-2:…), or null.
+const arnRegion = (id) => { const m = /^arn:aws[a-z-]*:secretsmanager:([a-z0-9-]+):/.exec(String(id || '')); return m ? m[1] : null; };
 
 // ── One app's settings ──────────────────────────────────────────────────────
 function createSettings(opts = {}) {
@@ -230,10 +270,33 @@ function createSettings(opts = {}) {
   // Values this module copied from the settings file into process.env (TZ), so
   // they are still reported as coming from the file.
   const copied = opts.copiedFromFile || {};
+  // The secret store's values once loadSecrets() has read them:
+  // { kind, label, values } — or { kind, label, failed: true }.
+  let store = opts.store || null;
 
   let _file;
   const file = () => (_file === undefined ? (_file = loadFile({ env, base, readFile, statFile, platform })) : _file);
   const inApp = (def) => def.scope === 'shared' || def.scope === 'per-app' || def.scope === app;
+  const onCloud = () => PROFILES[profile().name].kind === 'managed';
+
+  // A secret named by NAME_FILE: read once (a Docker secret doesn't change
+  // while the process runs), never on a cloud profile.
+  const _secretFiles = {};
+  function secretFileLayer(def) {
+    const named = envRaw(`${def.name}_FILE`);
+    if (named === undefined) return null;
+    const source = `${def.name}_FILE`, p = path.resolve(String(named).trim());
+    if (onCloud()) return { kind: 'envfile', source, path: p, refused: true };
+    if (!has(_secretFiles, def.name) || _secretFiles[def.name].path !== p) {
+      let raw, error = null;
+      try {
+        raw = String(readFile(p));
+        if (!raw.trim()) { error = 'is empty'; raw = undefined; }
+      } catch (e) { error = `can't be read (${(e && (e.code || e.message)) || 'error'})`; }
+      _secretFiles[def.name] = { kind: 'envfile', source, path: p, raw, error };
+    }
+    return _secretFiles[def.name];
+  }
 
   function envRaw(name) {
     const v = env[name];
@@ -271,13 +334,18 @@ function createSettings(opts = {}) {
     if (fv !== undefined) out.push({ kind: 'file', source: file().label, raw: fv });
     const ev = envRaw(def.name);
     if (ev !== undefined) out.push({ kind: 'env', source: 'environment', raw: ev });
+    if (def.secret) { const sf = secretFileLayer(def); if (sf) out.push(sf); }
+    if (store && store.values && has(store.values, def.name) && !blank(store.values[def.name])) {
+      out.push({ kind: 'store', source: store.label, raw: store.values[def.name] });
+    }
     return out;
   }
 
   function resolve(name) {
     const def = BY_NAME[name];
     if (!def) throw new Error(`settings: unknown setting ${name}`);
-    const layers = layersOf(def);
+    // A NAME_FILE that was refused or can't be read gives no value (check() says why).
+    const layers = layersOf(def).filter((l) => l.raw !== undefined);
     const top = layers[layers.length - 1];
     if (!top) return { value: null, source: 'unset' };
     const r = parseValue(def, top.raw);
@@ -312,35 +380,58 @@ function createSettings(opts = {}) {
     const p = profile().name, P = PROFILES[p], where = P.where;
     const defs = SETTINGS.filter(inApp);
 
+    const cloud = P.kind === 'managed';
     const val = {}, bad = {};
     for (const def of defs) {
       let layers = [];
       try { layers = layersOf(def); } catch (e) { /* a default that leans on a bad setting: reported there */ }
       for (const layer of layers) {
-        if (layer.kind !== 'file' && layer.kind !== 'env') continue;
+        if (layer.kind === 'envfile' && (layer.refused || layer.error)) {
+          error(def.name, layer.refused
+            ? `Profile ${p} reads no secret from disk, so ${layer.source} can't be used: set ${def.name} in ${where}${STORE_NAMES.includes(def.name) ? " or the provider's secret store" : ''} instead.`
+            : `${layer.source} names ${layer.path}, which ${layer.error}.`);
+          bad[def.name] = true;
+          continue;
+        }
+        if (layer.kind === 'default' || layer.kind === 'profile') continue;
         const r = parseValue(def, layer.raw);
         if (r.error) { error(def.name, parseProblem(def, layer, r.error)); bad[def.name] = true; }
+      }
+      if (layers.some((l) => l.kind === 'env') && layers.some((l) => l.kind === 'envfile')) {
+        error(def.name, `${def.name} and ${def.name}_FILE are both set: keep one.`);
+        bad[def.name] = true;
+      }
+      // The settings file is on the server's disk; a cloud profile keeps no secret there.
+      if (cloud && def.secret && layers.some((l) => l.kind === 'file')) {
+        error(def.name, `Profile ${p} keeps no secret on disk, so ${def.name} can't be in ${f.label}: move it to ${where}${STORE_NAMES.includes(def.name) ? " or the provider's secret store" : ''}.`);
+        bad[def.name] = true;
       }
       try { val[def.name] = resolve(def.name).value; } catch (e) { val[def.name] = null; bad[def.name] = true; }
     }
     const missing = (name) => val[name] == null && !bad[name];
 
-    // Required settings.
+    // Required settings. With a secret store configured, a secret may live
+    // there instead; while the store couldn't be read, its secrets are not
+    // reported missing on top of that.
+    const kind = val.OPSPOINT_SECRETS && val.OPSPOINT_SECRETS !== 'local' ? val.OPSPOINT_SECRETS : null;
+    const inStore = (name) => kind && STORE_NAMES.includes(name);
+    const orStore = (names) => (names.every(inStore) ? `, or ${storeWhere(kind, names, val)}` : '');
     for (const def of defs) {
       if (!missing(def.name)) continue;
+      if (store && store.failed && inStore(def.name)) continue;
       if (def.requiredIn && def.requiredIn.includes(p)) {
         if (def.pairWith && missing(def.pairWith)) {
           if (ALL_NAMES.indexOf(def.name) < ALL_NAMES.indexOf(def.pairWith)) {   // one sentence for the pair
             const other = BY_NAME[def.pairWith];
-            error(def.name, `Profile ${p} needs ${def.name} and ${other.name}, the push alert keys (make a pair with \`node server/cli/opspoint.js keys\`): set them in ${where}, since keys made on the fly change at every restart and cut off every phone.`);
+            error(def.name, `Profile ${p} needs ${def.name} and ${other.name}, the push alert keys (make a pair with \`node server/cli/opspoint.js keys\`): set them in ${where}${orStore([def.name, other.name])}, since keys made on the fly change at every restart and cut off every phone.`);
           }
         } else {
-          error(def.name, `Profile ${p} needs ${def.name}, ${def.noun}: set it in ${where}.`);
+          error(def.name, `Profile ${p} needs ${def.name}, ${def.noun}: set it in ${where}${orStore([def.name])}.`);
         }
       }
       if (def.requiredWhen) {
         const [other, value] = def.requiredWhen;
-        if (val[other] === value) error(def.name, `${other}=${value} needs ${def.name}, ${def.noun}: set it in ${where}.`);
+        if (val[other] === value) error(def.name, `${other}=${value} needs ${def.name}, ${def.noun}: set it in ${where}${orStore([def.name])}.`);
       }
     }
 
@@ -428,19 +519,43 @@ function createSettings(opts = {}) {
       if (storage === 'azure-blob' && val.AZURE_STORAGE_CONNECTION_STRING && !/AccountName=[^;]+/i.test(val.AZURE_STORAGE_CONNECTION_STRING)) {
         error('AZURE_STORAGE_CONNECTION_STRING', "AZURE_STORAGE_CONNECTION_STRING doesn't name an account (AccountName=…): copy it again from the storage account's Access keys.");
       }
-      if (!!val.AWS_ACCESS_KEY_ID !== !!val.AWS_SECRET_ACCESS_KEY && !bad.AWS_ACCESS_KEY_ID && !bad.AWS_SECRET_ACCESS_KEY) {
-        const [set, unset] = val.AWS_ACCESS_KEY_ID ? ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] : ['AWS_SECRET_ACCESS_KEY', 'AWS_ACCESS_KEY_ID'];
-        error(unset, `${set} is set without ${unset}: set both, or neither to use the role the platform provides.`);
-      }
-      if (storage === 'gcs' && val.GOOGLE_APPLICATION_CREDENTIALS && !exists(val.GOOGLE_APPLICATION_CREDENTIALS)) {
+    }
+
+    // Cloud credentials (file storage and the secret store both use them).
+    if (!!val.AWS_ACCESS_KEY_ID !== !!val.AWS_SECRET_ACCESS_KEY && !bad.AWS_ACCESS_KEY_ID && !bad.AWS_SECRET_ACCESS_KEY) {
+      const [set, unset] = val.AWS_ACCESS_KEY_ID ? ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'] : ['AWS_SECRET_ACCESS_KEY', 'AWS_ACCESS_KEY_ID'];
+      error(unset, `${set} is set without ${unset}: set both, or neither to use the role the platform provides.`);
+    }
+    if (val.GOOGLE_APPLICATION_CREDENTIALS) {
+      if (cloud) {
+        error('GOOGLE_APPLICATION_CREDENTIALS', `Profile ${p} reads no secret from disk, so GOOGLE_APPLICATION_CREDENTIALS (a key file) can't be used: remove it, and let the service use its own service account.`);
+      } else if ((val.OPSPOINT_STORAGE === 'gcs' || val.OPSPOINT_SECRETS === 'gcp-secret-manager') && !exists(val.GOOGLE_APPLICATION_CREDENTIALS)) {
         error('GOOGLE_APPLICATION_CREDENTIALS', `GOOGLE_APPLICATION_CREDENTIALS points at ${val.GOOGLE_APPLICATION_CREDENTIALS}, which doesn't exist.`);
       }
+    }
+
+    // The secret store (server/secrets/store.js).
+    if (val.OPSPOINT_SECRETS === 'azure-key-vault' && val.AZURE_KEY_VAULT_URL && vaultProblem(val.AZURE_KEY_VAULT_URL)) {
+      error('AZURE_KEY_VAULT_URL', `AZURE_KEY_VAULT_URL must be a Key Vault's address, such as https://sunrise-kv.vault.azure.net (got '${val.AZURE_KEY_VAULT_URL}').`);
+    }
+    if (val.OPSPOINT_SECRETS === 'aws-secrets-manager' && val.AWS_SECRETS_MANAGER_ID && !val.AWS_REGION && !arnRegion(val.AWS_SECRETS_MANAGER_ID) && !bad.AWS_REGION) {
+      error('AWS_REGION', `OPSPOINT_SECRETS=aws-secrets-manager needs AWS_REGION, ${BY_NAME.AWS_REGION.noun} (ECS sets it), or the secret's full ARN in AWS_SECRETS_MANAGER_ID: set it in ${where}.`);
+    }
+    if (val.OPSPOINT_SECRETS === 'local') {
+      for (const n of ['AZURE_KEY_VAULT_URL', 'AWS_SECRETS_MANAGER_ID']) {
+        if (val[n]) warning(n, `${n} is set but OPSPOINT_SECRETS is local, so it is ignored.`);
+      }
+    }
+    if (app === 'facility' && val.OPSPOINT_DB_KEY && (pg || !val.OPSPOINT_ENCRYPT)) {
+      warning('OPSPOINT_DB_KEY', `OPSPOINT_DB_KEY is set but ${pg ? 'the database driver is pg' : 'encryption is off (OPSPOINT_ENCRYPT=0)'}, so it is ignored.`);
     }
 
     // A variable that looks like ours but isn't one: a typo would otherwise be
     // ignored without a word.
     for (const k of Object.keys(env)) {
       if (!/^(OPSPOINT|CENTRAL)_/.test(k) || /^OPSPOINT_TEST_/.test(k) || has(BY_NAME, k) || INTERNAL_ENV.includes(k)) continue;
+      const fileOf = /_FILE$/.test(k) && BY_NAME[k.slice(0, -5)];
+      if (fileOf && fileOf.secret) continue;                           // CENTRAL_ADMIN_PW_FILE and the like
       warning(null, `${k} isn't a setting OpsPoint knows, so it is ignored${meant(k, ALL_NAMES)}.`);
     }
     return problems;
@@ -464,6 +579,7 @@ function createSettings(opts = {}) {
       profile: profile(),
       file: f.disabled ? { disabled: true } : { path: f.path, label: f.label, found: !!f.path && !f.error },
       timeZone: timeZone(),
+      secrets: storeInfo(),
       settings: rows,
       problems: check(),
     };
@@ -473,7 +589,19 @@ function createSettings(opts = {}) {
   // process.env before anything computes a local date).
   function fileValue(name) { return fileRaw(name); }
 
-  return { app, get, source, profile, timeZone, check, describe, fileValue };
+  // The secret store's layer (loadSecrets() sets it), and what it holds in
+  // words: { kind, label, loaded, failed, names } — names only, never a value.
+  function setStore(st) { store = st || null; }
+  function storeInfo() {
+    let kind = 'local';
+    try { kind = get('OPSPOINT_SECRETS') || 'local'; } catch (e) { /* check() reports it */ }
+    if (kind === 'local') return { kind };
+    if (!store) return { kind, label: STORE_LABELS[kind], loaded: false };
+    return { kind, label: store.label, loaded: !store.failed, failed: !!store.failed,
+      names: store.values ? Object.keys(store.values).sort() : [] };
+  }
+
+  return { app, get, source, profile, timeZone, check, describe, fileValue, setStore, storeInfo };
 }
 
 function isLoopbackHost(h) {
@@ -542,24 +670,74 @@ const current = () => forApp(_app);
 
 function writeStderr(text) { try { fs.writeSync(2, text); } catch (e) { /* nothing better to do */ } }
 
+// ── The secret store ────────────────────────────────────────────────────────
+const FETCHER = path.join(__dirname, '..', 'secrets', 'store.js');
+// The settings that reach the store (they can't come from it).
+const STORE_SETTINGS = SETTINGS.filter((d) => d.group === 'Secrets' || d.group === 'Cloud credentials').map((d) => d.name);
+
 /**
- * Run the check for this process and stop on an error: one sentence per
- * problem, exit code 78. Warnings print and startup carries on. Written with
- * fs.writeSync so the reason survives process.exit on a Windows pipe.
+ * Read the secret store OPSPOINT_SECRETS names, once, into this app's settings
+ * as their top layer. It runs in a child process (server/secrets/store.js) so
+ * that everything reading settings can stay synchronous; the values come back
+ * over a pipe and are held in memory only — never in process.env, so a child
+ * this process starts doesn't inherit them.
+ * Returns { ok: true, kind, label, count } or { ok: false, message, exitCode }:
+ * 78 when the store refused (a missing secret, no access), 1 when it couldn't
+ * be reached, so the platform starts the app again later.
+ */
+function loadSecrets(s = current(), { env = process.env, timeoutMs = 60000 } = {}) {
+  let kind;
+  try { kind = s.get('OPSPOINT_SECRETS'); } catch (e) { return { ok: true, kind: null }; }   // check() reports the value
+  if (!kind || kind === 'local') return { ok: true, kind: 'local' };
+  const label = STORE_LABELS[kind];
+  // What reaches the store is itself wrong or missing: check() says what, and
+  // the secrets the store would have held aren't reported missing on top.
+  if (s.check().some((p) => p.level === 'error' && STORE_SETTINGS.includes(p.setting))) {
+    s.setStore({ kind, label, failed: true });
+    return { ok: true, kind, skipped: true };
+  }
+  let out;
+  try {
+    out = require('child_process').execFileSync(process.execPath, [FETCHER, '--app', s.app], {
+      env, timeout: timeoutMs, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1 << 20,
+    });
+  } catch (e) {
+    s.setStore({ kind, label, failed: true });
+    const why = e.status == null ? `no answer in ${Math.round(timeoutMs / 1000)} seconds` : `its reader stopped (exit code ${e.status})`;
+    return { ok: false, kind, message: `${label} can't be read: ${why}.`, exitCode: 1 };
+  }
+  let r;
+  try { r = JSON.parse(String(out)); } catch (e) { r = { ok: false, error: `${label} can't be read: its reader gave no answer.` }; }
+  if (!r.ok) {
+    s.setStore({ kind, label: r.label || label, failed: true });
+    return { ok: false, kind, message: r.error, exitCode: r.config ? EX_CONFIG : 1 };
+  }
+  s.setStore({ kind, label: r.label, values: r.values });
+  return { ok: true, kind, label: r.label, count: Object.keys(r.values).length };
+}
+
+/**
+ * Read the secret store, run the check for this process and stop on an error:
+ * one sentence per problem, exit code 78 (or 1 when only the store was out of
+ * reach). Warnings print and startup carries on. Written with fs.writeSync so
+ * the reason survives process.exit on a Windows pipe.
  */
 function startupCheck(s = current()) {
+  const loaded = loadSecrets(s);
   const problems = s.check();
   for (const w of problems.filter((x) => x.level === 'warning')) writeStderr(`  Settings: ${w.message}\n`);
   const errors = problems.filter((x) => x.level === 'error');
+  if (!loaded.ok) errors.unshift({ level: 'error', setting: 'OPSPOINT_SECRETS', message: loaded.message });
   if (errors.length) {
     const who = s.app === 'central' ? 'OpsPoint HQ' : 'OpsPoint';
     writeStderr(`\n  ${who} can't start: ${errors[0].message}\n` +
       errors.slice(1).map((e) => `  Also: ${e.message}\n`).join('') + '\n');
-    process.exit(EX_CONFIG);
+    process.exit(!loaded.ok && errors.length === 1 ? loaded.exitCode : EX_CONFIG);
   }
   const prof = s.profile(), tz = s.timeZone();
+  const secrets = loaded.label ? `; ${loaded.count} secret${loaded.count === 1 ? '' : 's'} from ${loaded.label}` : '';
   process.stdout.write(`  Settings: profile ${prof.name}${prof.inferred ? ' (inferred)' : ''}, time zone ${tz.name}` +
-    `${tz.explicit ? '' : " (this machine's)"}\n`);
+    `${tz.explicit ? '' : " (this machine's)"}${secrets}\n`);
   return problems;
 }
 
@@ -570,6 +748,7 @@ module.exports = {
   timeZone: () => current().timeZone(),
   check: () => current().check(),
   describe: () => current().describe(),
-  forApp, useApp, createSettings, startupCheck, parseValue, canonicalZone, parseDsn,
-  SettingsError, EX_CONFIG, BASE, CHECKS, WARNING_CHECKS,
+  storeInfo: () => current().storeInfo(),
+  forApp, useApp, createSettings, startupCheck, loadSecrets, parseValue, canonicalZone, parseDsn, secretName, meant,
+  SettingsError, EX_CONFIG, BASE, CHECKS, WARNING_CHECKS, STORE_LABELS,
 };

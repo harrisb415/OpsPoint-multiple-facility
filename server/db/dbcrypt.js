@@ -11,7 +11,9 @@
 //    boot without a human typing a passphrase. Anyone who takes the WHOLE
 //    VOLUME takes both. Full-disk encryption (BitLocker) is what covers
 //    that case, and remains necessary — these are complementary, not
-//    alternatives.
+//    alternatives. OPSPOINT_DB_KEY (the environment, a Docker secret or the
+//    secret store) keeps the key off that volume instead: then the .dbkey
+//    file is not made, and one left over must hold the same key.
 //
 //  KEY LOSS = TOTAL DATA LOSS. There is no recovery path, by design.
 //  The key file must be backed up separately from the database backups,
@@ -25,6 +27,7 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
+const secrets = require('../secrets');
 
 const SQLITE_MAGIC = Buffer.from('SQLite format 3\0', 'utf8');
 
@@ -48,20 +51,56 @@ function isPlaintextDb(dbPath) {
   }
 }
 
-// Load the key, generating one on first run. Mirrors the session-secret
-// pattern already used in server.js: 32 random bytes, hex, mode 0600.
+// Load the key file, generating one on first run. Mirrors the session-secret
+// pattern: 32 random bytes, hex, mode 0600 — through server/secrets, which
+// refuses a key file on a cloud profile.
+const aboutKeyFile = (kp) => ({ what: `the database key file ${kp}`, setting: 'OPSPOINT_DB_KEY' });
 function loadOrCreateKey(dbPath) {
   const kp = keyPathFor(dbPath);
-  if (fs.existsSync(kp)) {
-    const key = fs.readFileSync(kp, 'utf8').trim();
+  if (secrets.exists(kp, aboutKeyFile(kp))) {
+    const key = secrets.readFile(kp, aboutKeyFile(kp)).trim();
     if (!key) throw new Error(`Encryption key file is empty: ${kp}`);
     return { key, created: false, keyPath: kp };
   }
-  fs.mkdirSync(path.dirname(kp), { recursive: true });
   const key = crypto.randomBytes(32).toString('hex');
-  fs.writeFileSync(kp, key, { mode: 0o600 });
-  try { fs.chmodSync(kp, 0o600); } catch (e) {}
+  secrets.writeFile(kp, key, aboutKeyFile(kp));
   return { key, created: true, keyPath: kp };
+}
+
+/**
+ * The key for this database and where it is, without making one: the
+ * OPSPOINT_DB_KEY setting when set, else the .dbkey file. Null when neither.
+ * { key, fingerprint, fromSetting, source } — source is the file's path or the
+ * setting's source ('environment', 'OPSPOINT_DB_KEY_FILE', a secret store).
+ * `settings`: whose OPSPOINT_DB_KEY (default this process's).
+ */
+function currentKey(dbPath, settings = require('../settings')) {
+  const fp = (k) => crypto.createHash('sha256').update(k).digest('hex').slice(0, 16);
+  const fromSetting = settings.get('OPSPOINT_DB_KEY');
+  if (fromSetting) return { key: fromSetting, fingerprint: fp(fromSetting), fromSetting: true, source: settings.source('OPSPOINT_DB_KEY') };
+  const kp = keyPathFor(dbPath);
+  let key = '';
+  const about = { ...aboutKeyFile(kp), settings };
+  try { if (secrets.exists(kp, about)) key = secrets.readFile(kp, about).trim(); } catch (e) { /* unreadable: missing */ }
+  return key ? { key, fingerprint: fp(key), fromSetting: false, source: kp } : null;
+}
+
+// The key to open with: OPSPOINT_DB_KEY, which a leftover key file must agree
+// with (two keys means one of them is wrong, and guessing could lock the data
+// away), or else the key file, made on first run.
+function resolveKey(dbPath) {
+  const fromSetting = require('../settings').get('OPSPOINT_DB_KEY');
+  if (!fromSetting) return loadOrCreateKey(dbPath);
+  const kp = keyPathFor(dbPath);
+  if (secrets.exists(kp, aboutKeyFile(kp))) {
+    const onDisk = secrets.readFile(kp, aboutKeyFile(kp)).trim();
+    if (onDisk && onDisk !== fromSetting) {
+      const e = new Error(`OPSPOINT_DB_KEY is not the key in ${kp}: keep the one this database was encrypted with, and remove the other.`);
+      e.code = 'EX_CONFIG';
+      throw e;
+    }
+  }
+  return { key: fromSetting, created: false, keyPath: 'OPSPOINT_DB_KEY' };
 }
 
 function _announceNewKey(keyPath) {
@@ -130,7 +169,7 @@ function openEncrypted(Database, dbPath) {
     return new Database(dbPath);
   }
 
-  const { key, created, keyPath } = loadOrCreateKey(dbPath);
+  const { key, created, keyPath } = resolveKey(dbPath);
   if (created) _announceNewKey(keyPath);
 
   if (exists && isPlaintextDb(dbPath)) {
@@ -147,8 +186,8 @@ function openEncrypted(Database, dbPath) {
   } catch (e) {
     try { conn.close(); } catch (e2) {}
     throw new Error(
-      `Cannot open the database with the key at ${keyPath}. ` +
-      `If the key was lost or replaced, restore the matching key file — ` +
+      `Cannot open the database with the key in ${keyPath}. ` +
+      `If the key was lost or replaced, restore the matching key — ` +
       `the data cannot be recovered without it. (${e.message})`
     );
   }
@@ -156,4 +195,4 @@ function openEncrypted(Database, dbPath) {
   return conn;
 }
 
-module.exports = { openEncrypted, isPlaintextDb, loadOrCreateKey, keyPathFor };
+module.exports = { openEncrypted, isPlaintextDb, loadOrCreateKey, keyPathFor, currentKey };

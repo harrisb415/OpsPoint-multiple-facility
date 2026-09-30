@@ -4,30 +4,31 @@
  *
  * A token, first that applies:
  *   GOOGLE_APPLICATION_CREDENTIALS: a service-account key file, exchanged for
- *     a token with a signed JWT (RS256);
+ *     a token with a signed JWT (RS256) — on premises only;
  *   the metadata server: the Cloud Run service's (or VM's) own account;
  *   none at all against an emulator (GCS_ENDPOINT, fake-gcs-server).
  * Tokens are cached until five minutes before they expire.
  */
-const fs = require('fs');
 const crypto = require('crypto');
 const { request, serviceError } = require('./http');
 
 const SCOPE = 'https://www.googleapis.com/auth/devstorage.read_write';
 const b64u = (b) => Buffer.from(b).toString('base64url');
 
-function googleToken({ keyFile = null, emulator = false }) {
+function googleToken({ keyFile = null, emulator = false, scope = SCOPE }) {
   if (emulator && !keyFile) return async () => null;
   let cached = null;
   return async function token() {
     if (cached && cached.expires - Date.now() > 5 * 60 * 1000) return cached.value;
     let r;
     if (keyFile) {
-      const key = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+      // A key file is a secret on disk: server/secrets refuses it on a cloud profile.
+      const secrets = require('../secrets');
+      const key = JSON.parse(secrets.readFile(keyFile, { what: 'the Google key file GOOGLE_APPLICATION_CREDENTIALS names' }));
       if (!key.client_email || !key.private_key) throw new Error(`${keyFile} is not a service-account key file`);
       const aud = key.token_uri || 'https://oauth2.googleapis.com/token';
       const now = Math.floor(Date.now() / 1000);
-      const unsigned = `${b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${b64u(JSON.stringify({ iss: key.client_email, scope: SCOPE, aud, iat: now, exp: now + 3600 }))}`;
+      const unsigned = `${b64u(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${b64u(JSON.stringify({ iss: key.client_email, scope, aud, iat: now, exp: now + 3600 }))}`;
       const jwt = `${unsigned}.${b64u(crypto.sign('RSA-SHA256', Buffer.from(unsigned), key.private_key))}`;
       r = await request('POST', aud, {
         headers: { 'content-type': 'application/x-www-form-urlencoded' },

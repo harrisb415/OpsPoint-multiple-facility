@@ -21,7 +21,8 @@ const enc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => '%' + c.char
 /**
  * Sign one request (AWS Signature Version 4). Returns the headers to send,
  * Authorization included. `path` is the already-encoded path; `query` an
- * object of plain values.
+ * object of plain values. S3 also wants the payload's hash as a header; other
+ * services (Secrets Manager) take it only inside the signature.
  */
 function signV4({ method, host, path, query = {}, headers = {}, payloadHash, creds, region, service = 's3', now = new Date() }) {
   const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
@@ -30,7 +31,7 @@ function signV4({ method, host, path, query = {}, headers = {}, payloadHash, cre
   for (const [k, v] of Object.entries(headers)) h[k.toLowerCase()] = String(v).trim().replace(/\s+/g, ' ');
   h.host = host;
   h['x-amz-date'] = amzDate;
-  h['x-amz-content-sha256'] = payloadHash;
+  if (service === 's3') h['x-amz-content-sha256'] = payloadHash;
   if (creds.sessionToken) h['x-amz-security-token'] = creds.sessionToken;
   const names = Object.keys(h).sort();
   const canonicalHeaders = names.map((n) => `${n}:${h[n]}\n`).join('');
@@ -146,3 +147,4 @@ function unxml(s) { return String(s).replace(/&lt;/g, '<').replace(/&gt;/g, '>')
 
 module.exports.signV4 = signV4;
 module.exports.awsCredentials = awsCredentials;
+module.exports.sha256hex = sha256hex;

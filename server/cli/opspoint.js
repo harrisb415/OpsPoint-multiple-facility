@@ -43,6 +43,9 @@ function printSettings(d) {
   else if (d.file.path) lines.push(`  File       ${d.file.path} (not usable: see below)`);
   else lines.push('  File       none (no opspoint.config.json in the app folder)');
   lines.push(`  Time zone  ${d.timeZone.name}${d.timeZone.explicit ? ` (from ${d.timeZone.source})` : " (this machine's)"}`);
+  const st = d.secrets;
+  if (st.kind === 'local') lines.push('  Secrets    the environment and this machine (OPSPOINT_SECRETS=local)');
+  else lines.push(`  Secrets    ${st.label}${st.loaded ? `: ${st.names.length ? st.names.join(', ') : 'none of them there'}` : ' (not read: see below)'}`);
   const w = Math.max(...d.settings.map((s) => s.name.length)) + 2;
   const vw = Math.min(46, Math.max(...d.settings.map((s) => s.value.length)) + 2);
   let group = null;
@@ -63,8 +66,19 @@ function printSettings(d) {
 // `doctor`: the same checks as Admin › System health, from outside the server
 // (the installers run it at the end). Reads the database; never creates or
 // changes one. Exit 0 = nothing failed, 1 = something failed, 78 = settings.
+// The secret store, read the way the server reads it as it starts. Returns
+// the exit code for a failure (printed), or null.
+function readStore(s) {
+  const r = require('../settings').loadSecrets(s);
+  if (r.ok) return null;
+  process.stdout.write(`ERROR    ${r.message}\n`);
+  return r.exitCode;
+}
+
 async function doctor() {
   const settings = require('../settings');
+  const stop = readStore(settings.useApp('facility'));
+  if (stop !== null) return stop;
   const bad = settings.check().filter((p) => p.level === 'error');
   if (bad.length) {
     for (const p of bad) process.stdout.write(`ERROR    ${p.message}\n`);
@@ -137,6 +151,8 @@ async function doctor() {
 async function migrateCmd(app) {
   const settingsModule = require('../settings');
   const s = settingsModule.useApp(app);
+  const stop = readStore(s);
+  if (stop !== null) return stop;
   const bad = s.check().filter((p) => p.level === 'error');
   if (bad.length) {
     for (const p of bad) process.stdout.write(`ERROR    ${p.message}\n`);
@@ -194,17 +210,21 @@ function main() {
     }
     if (sub) { process.stderr.write(USAGE); return 2; }
     const s = settings.useApp(app);
+    const loaded = settings.loadSecrets(s);          // as the server does, first
+    const storeProblem = loaded.ok ? [] : [{ level: 'error', setting: 'OPSPOINT_SECRETS', message: loaded.message }];
     if (flag('--check')) {
-      const problems = s.check();
+      const problems = [...storeProblem, ...s.check()];
       const errors = problems.filter((p) => p.level === 'error');
       for (const p of errors) process.stdout.write(`ERROR    ${p.message}\n`);
       for (const p of problems.filter((x) => x.level === 'warning')) process.stdout.write(`warning  ${p.message}\n`);
-      if (errors.length) return settings.EX_CONFIG;
+      if (errors.length) return !loaded.ok && errors.length === 1 ? loaded.exitCode : settings.EX_CONFIG;
       const prof = s.profile(), tz = s.timeZone();
-      process.stdout.write(`OK: ${app === 'central' ? 'HQ' : 'OpsPoint'} would start (profile ${prof.name}, time zone ${tz.name}).\n`);
+      const from = loaded.label ? `, ${loaded.count} secret${loaded.count === 1 ? '' : 's'} from ${loaded.label}` : '';
+      process.stdout.write(`OK: ${app === 'central' ? 'HQ' : 'OpsPoint'} would start (profile ${prof.name}, time zone ${tz.name}${from}).\n`);
       return 0;
     }
     const d = s.describe();
+    d.problems = [...storeProblem, ...d.problems];
     if (flag('--json')) process.stdout.write(JSON.stringify(d, null, 2) + '\n');
     else printSettings(d);
     return d.problems.some((p) => p.level === 'error') ? settings.EX_CONFIG : 0;

@@ -101,9 +101,11 @@ node generate_cert.js
 node server.js
 ```
 
-Open `https://localhost:3000`. **On first run**, the server generates random credentials and prints
-them to the console. Copy them before closing — they are shown once only. All accounts require a
-password change on first login.
+Open `https://localhost:3000`. **On first run** there are no accounts: the server prints a one-time
+setup code (valid 24 hours) and the address of the setup page. Open it, enter the code and create the
+first administrator; the setup wizard then covers the facility, shifts, rooms, care defaults,
+features, staff (each gets an invite link or QR code to set their own password), security and the
+phone app. Lost the code? `node server/cli/opspoint.js setup-code` makes a new one.
 
 **Also on first run**, the database is encrypted and a key is written to `data/.dbkey` (mode 0600).
 An existing plaintext database is converted in place, keeping a `*.pre-encryption-*.bak` safety copy.

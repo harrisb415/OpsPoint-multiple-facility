@@ -13,6 +13,7 @@ import { useAuth } from '../contexts/AuthContext.jsx'
 import { usePermission } from '../hooks/usePermission.js'
 import { useConfirm } from '../components/ui.jsx'
 import SystemHealth from '../components/SystemHealth.jsx'
+import InviteLink from '../components/InviteLink.jsx'
 import { CLINICAL_NAV } from './clinical/clinicalShared.jsx'
 import { STATUS_TONES, TONE_BADGE, TONE_DOT, DEFAULT_STATUSES, isSystemStatus } from '../utils/statuses.js'
 import { CARD_HEAD, CARD_HEAD_TITLE, RAIL_SHELL, RAIL_ITEM_ON, RAIL_ITEM_OFF, RAIL_ICON_OFF } from '../utils/ui.js'
@@ -374,9 +375,19 @@ function CurrentStaff({ users, groups, reload }) {
   const [memberOf, setMemberOf] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [invite, setInvite] = useState(null)      // { name, link, expiresAt } | { name, error }
 
   // created_at is database-stamped (SQLite: UTC with no zone marker).
   const fmtDate = (s) => fmtDay(parseServerTime(s))
+
+  // A new one-time link for an account whose invite is unused; the old link stops working.
+  async function newInvite(u) {
+    const name = u.displayName || u.display_name || u.username
+    const r = await apiFetch(`/api/users/${u.id}/invite`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    const j = await r.json().catch(() => ({}))
+    setInvite(r.ok ? { name, link: j.link, expiresAt: j.expiresAt } : { name, error: j.error || 'Could not make a new link' })
+    if (r.ok) reload()
+  }
 
   function openGroups(u) {
     setMemberOf((u.groups || []).map(g => g.id))
@@ -428,7 +439,9 @@ function CurrentStaff({ users, groups, reload }) {
                   <TableCell className="font-mono text-xs text-gray-700 dark:text-gray-300 whitespace-nowrap">
                     {u.username}
                     {u.is_protected && <span title="Protected" className="ml-1.5 text-amber-500">🔒</span>}
-                    {u.must_change_pw && <span className="ml-1.5 text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-px rounded-full dark:bg-red-900/30 dark:text-red-400">pw reset</span>}
+                    {u.must_change_pw && !u.invitePendingUntil && !u.inviteExpired && <span className="ml-1.5 text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-px rounded-full dark:bg-red-900/30 dark:text-red-400">pw reset</span>}
+                    {u.invitePendingUntil && <span className="ml-1.5 text-[10px] font-bold bg-amber-100 text-amber-800 px-1.5 py-px rounded-full dark:bg-amber-900/30 dark:text-amber-300">invite sent</span>}
+                    {u.inviteExpired && <span className="ml-1.5 text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-px rounded-full dark:bg-red-900/30 dark:text-red-400">invite expired</span>}
                   </TableCell>
                   <TableCell className="font-semibold text-gray-800 dark:text-white">{u.displayName || u.display_name}</TableCell>
                   <TableCell>
@@ -445,6 +458,9 @@ function CurrentStaff({ users, groups, reload }) {
                   <TableCell className="text-center whitespace-nowrap">
                     <div className="flex items-center justify-center gap-1.5">
                       <Button size="xs" color="light" onClick={() => openGroups(u)}>Groups</Button>
+                      {(u.invitePendingUntil || u.inviteExpired) && (
+                        <Button size="xs" color="light" onClick={() => newInvite(u)}>New link</Button>
+                      )}
                       {u.id !== session?.id && (
                         <Button size="xs" color="light" onClick={() => toggleProtect(u)}>
                           {u.is_protected ? 'Unprotect' : 'Protect'}
@@ -495,6 +511,18 @@ function CurrentStaff({ users, groups, reload }) {
           </ModalFooter>
         </Modal>
       )}
+
+      {invite && (
+        <Modal show size="lg" onClose={() => setInvite(null)}>
+          <ModalHeader>Invite link — {invite.name}</ModalHeader>
+          <ModalBody>
+            {invite.error ? <Alert color="failure">{invite.error}</Alert> : <InviteLink name={invite.name} link={invite.link} expiresAt={invite.expiresAt} />}
+          </ModalBody>
+          <ModalFooter className="justify-end">
+            <Button color="light" onClick={() => setInvite(null)}>Close</Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -506,21 +534,28 @@ function AddStaff({ groups, reload }) {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [saving, setSaving] = useState(false)
+  // An invite link (server/modules/users/invites.js) instead of a password
+  // the admin chooses and hands over.
+  const [byInvite, setByInvite] = useState(true)
+  const [invite, setInvite] = useState(null)
 
   async function submit(e) {
     e.preventDefault()
     if (!form.username.trim()) { setError('Username required.'); return }
-    if (!form.password) { setError('Password required.'); return }
-    if (form.password !== form.confirm) { setError('Passwords do not match.'); return }
-    setSaving(true); setError(''); setSuccess('')
+    if (!byInvite && !form.password) { setError('Password required.'); return }
+    if (!byInvite && form.password !== form.confirm) { setError('Passwords do not match.'); return }
+    setSaving(true); setError(''); setSuccess(''); setInvite(null)
     try {
+      const name = form.displayName.trim() || form.username.trim()
+      const body = { username: form.username.trim(), displayName: name, role: 'pa', groupIds: form.groupIds }
+      if (byInvite) body.invite = true; else body.password = form.password
       const r = await apiFetch('/api/users', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: form.username.trim(), displayName: form.displayName.trim() || form.username.trim(), password: form.password, role: 'pa', groupIds: form.groupIds }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       const j = await r.json()
       if (!r.ok) { setError(j.error || 'Save failed'); return }
-      setSuccess(`Account "${form.username}" created. They must set a new password on first login.`)
+      if (byInvite) setInvite({ name, link: j.invite.link, expiresAt: j.invite.expiresAt })
+      else setSuccess(`Account "${form.username}" created. They must set a new password on first login.`)
       setForm({ username: '', displayName: '', password: '', confirm: '', groupIds: [] })
       reload()
     } catch { setError('Network error') }
@@ -532,7 +567,16 @@ function AddStaff({ groups, reload }) {
       <Section title="Add Staff Member">
         {error && <Alert color="failure" className="mb-3">{error}</Alert>}
         {success && <Alert color="success" className="mb-3">{success}</Alert>}
+        {invite && (
+          <div className="p-4 mb-3 border border-green-200 rounded-xl bg-green-50 dark:bg-green-900/10 dark:border-green-800">
+            <InviteLink name={invite.name} link={invite.link} expiresAt={invite.expiresAt} />
+          </div>
+        )}
         <form onSubmit={submit}>
+          <div className="flex items-center gap-2 mb-3">
+            <Checkbox id="as-invite" checked={byInvite} onChange={e => setByInvite(e.target.checked)} />
+            <Label htmlFor="as-invite">Send them an invite link to set their own password</Label>
+          </div>
           <div className="grid grid-cols-2 gap-3 mb-3">
             <div>
               <Label htmlFor="as-username" className="mb-1 block">Username</Label>
@@ -542,14 +586,16 @@ function AddStaff({ groups, reload }) {
               <Label htmlFor="as-display" className="mb-1 block">Display Name</Label>
               <TextInput id="as-display" value={form.displayName} onChange={e => setForm(f => ({ ...f, displayName: e.target.value }))} placeholder="e.g. Jane Smith" />
             </div>
-            <div>
-              <Label htmlFor="as-pw" className="mb-1 block">Password</Label>
-              <TextInput id="as-pw" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" />
-            </div>
-            <div>
-              <Label htmlFor="as-pw2" className="mb-1 block">Confirm Password</Label>
-              <TextInput id="as-pw2" type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} placeholder="Repeat password" />
-            </div>
+            {!byInvite && <>
+              <div>
+                <Label htmlFor="as-pw" className="mb-1 block">Password</Label>
+                <TextInput id="as-pw" type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" />
+              </div>
+              <div>
+                <Label htmlFor="as-pw2" className="mb-1 block">Confirm Password</Label>
+                <TextInput id="as-pw2" type="password" value={form.confirm} onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))} placeholder="Repeat password" />
+              </div>
+            </>}
           </div>
           {groups.length > 0 && (
             <div className="mb-3">
@@ -576,10 +622,12 @@ function AddStaff({ groups, reload }) {
             </div>
           )}
           <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3.5 py-2.5 mb-3 dark:bg-gray-700/50 dark:border-gray-600 dark:text-gray-400">
-            <strong>Password requirements:</strong> 8+ characters · Uppercase · Lowercase · Number · Symbol (!@#$%^&amp;*)
+            {byInvite
+              ? <>They get a one-time link (and its QR code) that works for 7 days; nobody but them knows their password.</>
+              : <><strong>Password requirements:</strong> 8+ characters · Uppercase · Lowercase · Number · Symbol (!@#$%^&amp;*)</>}
           </p>
           <Button type="submit" className="w-full max-w-xs" isProcessing={saving} disabled={saving}>
-            {saving ? 'Creating…' : 'Create Account'}
+            {saving ? 'Creating…' : byInvite ? 'Create and get the link' : 'Create Account'}
           </Button>
         </form>
       </Section>

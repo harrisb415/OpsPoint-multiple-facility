@@ -29,7 +29,7 @@ for (const k of ['DATABASE_URL', 'CENTRAL_DATABASE_URL', 'OPSPOINT_PROFILE']) de
 (async () => {
   let q;
   const log = console.log;
-  console.log = () => {};          // boot banners and the scratch database's first-run passwords
+  console.log = () => {};          // boot banners (and HQ's first-run password on its scratch database)
   if (which === 'facility') {
     const { db, ready } = require(path.join(REPO, 'server.js'));
     await ready;

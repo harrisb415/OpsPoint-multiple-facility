@@ -149,4 +149,7 @@ function stop() {
   if (_timer) { clearInterval(_timer); _timer = null; }
 }
 
-module.exports = { start, stop, runOnce };
+// Where backups go (backup_dir, or backups/scheduled beside the database).
+const dirFor = (db) => _dir(db);
+
+module.exports = { start, stop, runOnce, dirFor };

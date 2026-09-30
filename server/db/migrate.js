@@ -453,6 +453,20 @@ function createSchema(db) {
   // The health check finds the newest backup.create / backup.failed entry;
   // without this it walks six years of audit rows backwards to find a rare one.
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_action ON audit_log (action, id)');
+  // One-time invite links: a new account sets its own password from a link
+  // (or its QR code) instead of being handed one. Only the token's SHA-256 is
+  // kept; used_at marks it spent. Times are ISO UTC text.
+  // server/modules/users/invites.js. Postgres: 014_user_invites.sql.
+  db.exec(`CREATE TABLE IF NOT EXISTS user_invites (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT    NOT NULL UNIQUE,
+    created_by INTEGER,
+    created_at TEXT    NOT NULL,
+    expires_at TEXT    NOT NULL,
+    used_at    TEXT
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_user_invites_user ON user_invites (user_id)');
 }
 
 // Backward-compat column additions for DBs that predate the current schema.

@@ -161,6 +161,32 @@ reachable + signed, in-app updates only), instance count.
 - Schema parity lives in `server/health/schemaParity.js` + `schema-dump.js` (shipped by the
   updater); `scripts/schema-parity.cjs` is its command-line face.
 
+### First-run setup (`server/modules/setup/`)
+
+State is the `setup` setting: **code** (no account yet: only the one-time code — PBKDF2-hashed,
+24 h, login rate limit — can create the first admin, who is then signed in), **wizard** (that
+admin, or anyone with `admin.settings`, walks the steps), **done** (finished for good; an install
+that had accounts before this existed is marked done as `legacy` at start). While in `code`,
+`/` and `/login` redirect to `/setup`.
+
+- Steps (`STEPS` in `service.js`): account, facility, shifts, rooms, care, features, staff,
+  security, phone, hq (optional), review. Each is marked done/skipped via
+  `PUT /api/setup/steps/:id` (audited `setup.step`); the data itself is saved through the app's own
+  endpoints (facility settings, `POST /api/setup/rooms` in bulk, users…). The security step
+  differs by profile (`securityPlan()`: SQLite key download + "stored elsewhere", backup folder
+  or the provider's restore window, HTTPS, updates).
+- Finish (`POST /api/setup/finish`) needs the compliance tick — `baa` on azure/aws/gcp,
+  `offsite` backups otherwise — runs the health check, and closes setup. Afterwards the
+  dashboard's `SetupChecklist` card lists what was skipped or still needs doing until dismissed.
+- **Invites** (`server/modules/users/invites.js`, table `user_invites`): a 256-bit token (only
+  its SHA-256 stored), 7 days, one use; the account has an unusable random password until the
+  owner sets theirs at `/invite/:token` and is signed in. `POST /api/users` with `invite: true`,
+  `POST /api/users/:id/invite` for a new link. Links and the phone app's QR use
+  `reachableOrigin(req)` (`server/lib/net.js`): the LAN address when the browser is on the
+  server's own localhost. QR codes come from `client/src/utils/qr.js` (no dependency; checked by
+  `tests/qr.test.js`).
+- Updates: `update_auto_check` (chosen in setup) runs `updater.check()` daily — it never installs.
+
 ### Server (`server.js`)
 
 Express + `ws` WebSocket server. Handles auth, all API routes, and real-time broadcast. Route middleware:
@@ -185,7 +211,7 @@ GET /about     → requireAuth → serveSPA
 
 **Security:** PBKDF2-SHA512 (600k iterations; legacy SHA-256/100k accepted and re-hashed on next login). CSRF: `Origin` validated on all state-changing routes. Rate limits: 10 login attempts/15 min per IP, 300 API requests/min per IP (implemented manually — no rate-limit package). `X-Powered-By` suppressed.
 
-**First-run credentials:** Empty DB creates three accounts with cryptographically random 16-character passwords, printed once to the console. No hardcoded defaults.
+**First run:** an empty database gets no accounts. The server prints a one-time setup code (24 hours; `node server/cli/opspoint.js setup-code` makes a new one) and the first admin is created at `/setup` in the browser — see First-run setup below. No password is ever printed or hardcoded.
 
 ### Database (`db.js`)
 
@@ -262,7 +288,9 @@ path) before every test file.
 | UA requests | `GET /api/ua-requests`, `POST /api/ua-requests`, `POST /api/ua-requests/:id/acknowledge` | `requireAuth` / `ua.request` / `ua.acknowledge` |
 | Mail | `GET /api/mail`, `POST /api/mail`, `PUT /api/mail/:id/approve`, `PUT /api/mail/:id/deliver`, `DELETE /api/mail/:id` (body `{reason}`) | `requireAuth` / `mail.log` / `mail.approve` / `mail.delete` |
 | Admin | `POST /api/admin/restart`, `GET /api/audit-log` | `admin.settings` / `admin.users` |
-| Health | `GET /healthz` (pass/fail per check only), `GET /api/system/health`, `POST /api/system/health/run`, `POST /api/system/health/dbkey-confirmed` (SQLite) | none / `admin.system` |
+| Health | `GET /healthz` (pass/fail per check only), `GET /api/system/health`, `POST /api/system/health/run`, `POST /api/system/health/dbkey-confirmed` (SQLite), `GET /api/system/dbkey` (download the SQLite key; audited) | none / `admin.system` |
+| Setup | `GET /api/setup/status` (anyone: the state; admins: the steps), `POST /api/setup/account` (the code + the first admin), `PUT /api/setup/steps/:id`, `POST /api/setup/rooms`, `PUT /api/setup/backup-dir`, `PUT /api/setup/updates`, `POST /api/setup/finish`, `GET /api/setup/checklist`, `POST /api/setup/checklist/dismiss` | none / `admin.settings` (rooms: `facility.manage`; backup-dir, updates: `admin.system`) |
+| Invites | `POST /api/users/:id/invite`, `GET /api/invites/:token`, `POST /api/invites/:token` (sets the password, signs in) | `admin.users` / none |
 | Photos | `GET /photos/:filename` | `requireAuth` |
 
 ### Frontend — React SPA (`client/`)
@@ -309,7 +337,9 @@ client/
 
 **Routing (`App.jsx`):**
 ```
-/login                → Login (public)
+/login                → Login (public; a new install's first visit goes to /setup)
+/setup                → Setup (public: the code, then the wizard for admins)
+/invite/:token        → Invite (public: set your own password)
 /change-password      → ChangePassword (ChangePasswordGuard)
 /mobile               → MobileGuard → Mobile (requireAuth + mobile.access)
 /about                → About (AuthGuard — authenticated users only)
@@ -468,6 +498,12 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server/storage/{local,s3,azureBlob,gcs}.js` | The four backends |
 | `server/secrets/index.js` | The only reader/writer of secret files; refuses on a cloud profile |
 | `server/secrets/store.js` | Key Vault, Secrets Manager, Secret Manager (run as a child by `settings.loadSecrets()`) |
+| `server/modules/setup/` | First-run setup: the code, the steps, the finish, the checklist |
+| `server/modules/users/invites.js` | One-time invite links (`user_invites`) |
+| `client/src/pages/Setup.jsx` + `pages/setup/` | The setup wizard (first admin, steps, review) |
+| `client/src/pages/Invite.jsx` | `/invite/:token`: set your own password |
+| `client/src/components/SetupChecklist.jsx` | Dashboard card: unfinished setup, or what it left |
+| `client/src/utils/qr.js`, `components/QrCode.jsx` | QR codes (invites, the phone app), no dependency |
 | `client/src/components/SystemHealth.jsx` | Admin › System › System health card |
 | `docs/SETTINGS.md` | Generated from the schema — do not edit by hand |
 | `db.js` | Database layer — schema, migrations, queries, photo storage |

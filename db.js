@@ -255,12 +255,6 @@ async function init(dbPath) {
   try { await runLockSweep(); } catch(e) {}
 }
 
-function _hashPw(pw) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.pbkdf2Sync(pw, salt, 600000, 64, 'sha512').toString('hex');
-  return { hash, salt };
-}
-
 function _defaultProfiles() {
   return [
     { key: 'pa',           label: 'Program Assistant', permissions: ROLE_PRESETS.pa.slice() },
@@ -361,30 +355,9 @@ async function _seedDefaults() {
   // Seed permission profiles if not yet stored
   if (!await _q1('SELECT key FROM settings WHERE key=?', ['permission_profiles']))
     await _run('INSERT INTO settings (key,value) VALUES (?,?)', ['permission_profiles', JSON.stringify(_defaultProfiles())]);
-  const cnt = await _q1('SELECT COUNT(*) as c FROM users');
-  if (!cnt || cnt.c === 0) {
-    function _randPw() {
-      const upper='ABCDEFGHJKLMNPQRSTUVWXYZ', lower='abcdefghjkmnpqrstuvwxyz';
-      const digits='23456789', syms='!@#$%^&*';
-      const all=upper+lower+digits+syms;
-      const bytes=require('crypto').randomBytes(16);
-      let pw=upper[bytes[0]%upper.length]+lower[bytes[1]%lower.length]+digits[bytes[2]%digits.length]+syms[bytes[3]%syms.length];
-      for(let i=4;i<16;i++) pw+=all[bytes[i]%all.length];
-      return pw.split('').sort(()=>Math.random()-.5).join('');
-    }
-    const adminPw=_randPw(), supPw=_randPw(), paPw=_randPw();
-    const a=_hashPw(adminPw), s=_hashPw(supPw), p=_hashPw(paPw);
-    console.log('\n  ╔══════════════════════════════════════════════╗');
-    console.log('  ║  FIRST-RUN CREDENTIALS (change on login)     ║');
-    console.log('  ╠══════════════════════════════════════════════╣');
-    console.log('  ║  admin      / ' + adminPw.padEnd(32) + '║');
-    console.log('  ║  supervisor / ' + supPw.padEnd(32) + '║');
-    console.log('  ║  pa         / ' + paPw.padEnd(32) + '║');
-    console.log('  ╚══════════════════════════════════════════════╝\n');
-    await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions,is_protected) VALUES ('admin','Administrator','admin',?,?,1,?,1)`,[a.hash,a.salt,JSON.stringify(ROLE_PRESETS.admin)]);
-    await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('supervisor','Supervisor','supervisor',?,?,1,?)`,[s.hash,s.salt,JSON.stringify(ROLE_PRESETS.supervisor)]);
-    await _run(`INSERT INTO users (username,display_name,role,hash,salt,must_change_pw,permissions) VALUES ('pa','Program Assistant','pa',?,?,1,?)`,[p.hash,p.salt,JSON.stringify(ROLE_PRESETS.pa)]);
-  }
+  // No accounts are made here: a new install gets a one-time setup code
+  // instead (server/modules/setup, at start) and its first admin is made in
+  // the browser at /setup, so no password is ever printed to a log.
 }
 
 // Seed permissions for existing users that predate the permission system

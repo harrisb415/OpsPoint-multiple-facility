@@ -24,6 +24,8 @@ const GroupNotes         = lazy(() => import('./pages/clinical/GroupNotes.jsx'))
 const DischargeSummaries = lazy(() => import('./pages/clinical/DischargeSummaries.jsx'))
 const IncidentsTab       = lazy(() => import('./pages/tabs/IncidentsTab.jsx'))
 const MilestonesTab      = lazy(() => import('./pages/tabs/MilestonesTab.jsx'))
+const Setup              = lazy(() => import('./pages/Setup.jsx'))
+const Invite             = lazy(() => import('./pages/Invite.jsx'))
 
 function LoadingScreen() {
   return (
@@ -84,7 +86,7 @@ function MobileAutoRedirect() {
     const url = new URL(window.location.href)
     if (url.searchParams.get('desktop') === '1') return
     const p = location.pathname
-    if (p === '/mobile' || p === '/m' || p.startsWith('/m/') || p === '/login' || p === '/change-password' || p === '/admin' || p === '/about') return
+    if (p === '/mobile' || p === '/m' || p.startsWith('/m/') || p === '/login' || p === '/change-password' || p === '/admin' || p === '/about' || p === '/setup' || p.startsWith('/invite/')) return
     if (!session.permissions?.includes('mobile.access')) return // no access → stay on desktop
     navigate(mobileHome(), { replace: true })
   }, [session, location.pathname, navigate])
@@ -123,6 +125,9 @@ export default function App() {
       <Suspense fallback={<LoadingScreen />}>
       <Routes>
         <Route path="/login" element={<Login />} />
+        {/* No session needed: the page and the server decide what they allow. */}
+        <Route path="/setup" element={<Setup />} />
+        <Route path="/invite/:token" element={<Invite />} />
 
         <Route element={<ChangePasswordGuard />}>
           <Route path="/change-password" element={<ChangePassword />} />

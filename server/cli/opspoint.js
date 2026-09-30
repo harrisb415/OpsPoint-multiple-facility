@@ -20,6 +20,8 @@ Commands
                       step when OPSPOINT_MIGRATE=off). --status only lists them.
   keys                Print a new SESSION_SECRET and push key pair, as settings lines
                       (--json for JSON). Keep them secret; never commit them.
+  setup-code          A new one-time code for /setup, while no account exists yet
+                      (the one printed at first start expired or was lost)
 
 Options
   --app central       HQ's settings instead of the facility app's
@@ -197,6 +199,45 @@ async function migrateCmd(app) {
   }
 }
 
+// `setup-code`: a new one-time setup code while no account exists yet (the
+// one printed at first start expired, or the log is gone). The old code stops
+// working. Exit 0 with the link and the code; 1 once setup is past the code.
+async function setupCode() {
+  const fs = require('fs');
+  const settings = require('../settings');
+  const stop = readStore(settings.useApp('facility'));
+  if (stop !== null) return stop;
+  const bad = settings.check().filter((p) => p.level === 'error');
+  if (bad.length) {
+    for (const p of bad) process.stdout.write(`ERROR    ${p.message}\n`);
+    return settings.EX_CONFIG;
+  }
+  const config = require('../config');
+  const conn = require('../db/connection');
+  if (!conn.isPg && !fs.existsSync(config.DB_PATH)) {
+    process.stdout.write('There is no database yet: start OpsPoint, and it prints a setup code as it starts.\n');
+    return 1;
+  }
+  conn.open(conn.isPg ? undefined : config.DB_PATH);
+  try {
+    const setup = require('../modules/setup/service');
+    const { state } = await setup.current();
+    if (state !== 'code') {
+      process.stdout.write(state === 'done' ? 'Setup is finished, so there is no setup code any more.\n'
+        : 'The admin account exists already: sign in, then open /setup to finish.\n');
+      return 1;
+    }
+    const r = await setup.newCode();
+    const proto = require('../secrets').tlsFiles(config.DATA_DIR) ? 'https' : 'http';
+    const until = new Date(r.expiresAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    process.stdout.write(`Open ${proto}://localhost:${config.PORT}/setup (or this server's own address)\n` +
+      `Setup code: ${r.code} (works once, until ${until}; the previous code no longer works)\n`);
+    return 0;
+  } finally {
+    await conn.close().catch(() => {});
+  }
+}
+
 function main() {
   const [cmd, sub] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--app');
   const app = arg('--app') || 'facility';
@@ -232,6 +273,7 @@ function main() {
 
   if (cmd === 'doctor') return doctor();
   if (cmd === 'migrate') return migrateCmd(app);
+  if (cmd === 'setup-code') return setupCode();
 
   if (cmd === 'keys') {
     const crypto = require('crypto');

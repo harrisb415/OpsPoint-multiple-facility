@@ -703,6 +703,40 @@ module.exports = [
     id: `admin.system.${path}`, area: 'Admin', label: `System: ${name}`, where: 'Admin.jsx — System panel (admin.system)', show: [['admin.users', 'admin.system']], staticRoute: [verb, path],
   })),
 
+  {
+    id: 'admin.users.invite', area: 'Admin', label: 'Accounts: a new invite link for someone who has not used theirs', where: 'Admin.jsx — Current Staff "New link" (admin.users)', show: [['admin.users']],
+    staticRoute: ['POST', '/api/users/:id/invite'],
+  },
+
+  // ── First-run setup (pages/Setup.jsx, pages/setup/SetupSteps.jsx) — the wizard
+  // shows to admin.settings while setup runs; a step hides or disables what
+  // needs another permission. Static: setup is over in the audit's database.
+  ...[
+    ['PUT', '/api/setup/steps/:id', 'Save or skip a step', [['admin.settings']]],
+    ['PUT', '/api/facility/settings', 'Facility, shifts, care defaults, features', [['admin.settings']]],
+    ['POST', '/api/setup/rooms', 'Add rooms (a range or a list)', [['admin.settings', 'facility.manage']]],
+    ['GET', '/api/permission-profiles', 'Staff: the roles to pick from', [['admin.settings', 'admin.users']]],
+    ['POST', '/api/users', 'Staff: invite someone', [['admin.settings', 'admin.users']]],
+    ['GET', '/api/system/dbkey', 'Security: download the database key', [['admin.settings', 'admin.system']]],
+    ['POST', '/api/system/health/dbkey-confirmed', 'Security: the key is stored elsewhere', [['admin.settings', 'admin.system']]],
+    ['PUT', '/api/setup/backup-dir', 'Security: the backup folder', [['admin.settings', 'admin.system']]],
+    ['PUT', '/api/setup/updates', 'Security: automatic update checks', [['admin.settings', 'admin.system']]],
+    ['POST', '/api/central/connect', 'HQ: join', [['admin.settings', 'admin.system']]],
+    ['POST', '/api/system/health/run', 'Review: run the health check', [['admin.settings', 'admin.system']]],
+    ['POST', '/api/setup/finish', 'Review: finish setup', [['admin.settings']]],
+  ].map(([verb, path, name, show]) => ({
+    id: `setup.${verb}.${path}`, area: 'Setup', label: `Setup: ${name}`, where: 'Setup.jsx / setup/SetupSteps.jsx', show, staticRoute: [verb, path],
+  })),
+  // ── The setup checklist card (components/SetupChecklist.jsx, on the dashboard) ──
+  {
+    id: 'setup.checklist', area: 'Dashboard', label: 'Setup checklist card', where: 'SetupChecklist.jsx (admin.settings)', show: [['admin.settings']],
+    run: async (a) => { await a.get('/api/setup/checklist'); },
+  },
+  {
+    id: 'setup.checklist.dismiss', area: 'Dashboard', label: 'Dismiss the setup checklist', where: 'SetupChecklist.jsx — "Dismiss" (admin.settings)', show: [['admin.settings']],
+    staticRoute: ['POST', '/api/setup/checklist/dismiss'],
+  },
+
   // ── Your own account ──
   {
     id: 'account.password', area: 'Account', label: 'Change your own password', where: 'Admin.jsx / settings — "Change password"', show: EVERYONE, freshUser: true, reverse: false,

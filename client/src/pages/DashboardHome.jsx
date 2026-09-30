@@ -10,6 +10,7 @@ import { usePermission } from '../hooks/usePermission.js'
 import { useIsDark } from '../hooks/useIsDark.js'
 import { classifyLogEntry } from '../utils/printLog.js'
 import { ColoredAvatar } from '../components/ui.jsx'
+import SetupChecklist from '../components/SetupChecklist.jsx'
 import {
   MapPin, DoorOpen, HeartPulse, AlertTriangle, FileText, Footprints,
 } from 'lucide-react'
@@ -189,6 +190,9 @@ const cardCls = 'bg-white border border-gray-200 shadow-sm rounded-2xl dark:bg-g
           <FileText className="w-4 h-4 mr-2" /> Open Report
         </Button>
       </div>
+
+      {/* Setup: unfinished, or what it left to do (admins only) */}
+      <SetupChecklist />
 
       {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">

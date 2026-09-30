@@ -38,6 +38,16 @@ export default function Login() {
     return () => mq.removeEventListener('change', apply)
   }, [])
 
+  // A new install has no accounts yet: its first visit belongs on /setup.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/setup/status', { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(s => { if (!cancelled && s?.state === 'code') navigate('/setup', { replace: true }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [navigate])
+
   useEffect(() => {
     let cancelled = false
     fetch('/api/auth/pin/status', { credentials: 'include' })

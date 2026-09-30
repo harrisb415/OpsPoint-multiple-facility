@@ -86,9 +86,9 @@ function withSessionTimeZone(dsn) {
 //
 // node-postgres returns bigint as a string by default to protect values above
 // 2^53, and COUNT(*) is bigint. Left as a string it breaks silently rather than
-// loudly: `cnt.c === 0` is false for "0", so the first-run seed blocks in
-// db.js and central/db.js never fire and the app comes up with no accounts and
-// no printed credentials. Sums like `a + (b.k || 0)` concatenate instead of
+// loudly: `cnt.c === 0` is false for "0", so first-run checks that count
+// accounts (HQ's seed in central/db.js) never fire and the app comes up with
+// no way in. Sums like `a + (b.k || 0)` concatenate instead of
 // adding. SQLite returns a number here, so a string is also simply wrong.
 //
 // Safe because every bigint in this schema is small: counts, SQLite-derived
@@ -111,7 +111,7 @@ const IDENTITY_TABLES = new Set([
   'discharge_records', 'consent_records', 'disclosures', 'group_sessions',
   'group_attendance', 'sync_outbox', 'clinical_notes', 'treatment_plans',
   'assessments', 'group_notes', 'discharge_summaries',
-  'wellness_rounds', 'push_subscriptions', 'device_pins',
+  'wellness_rounds', 'push_subscriptions', 'device_pins', 'user_invites',
   // central
   'central_users', 'audit',
 ]);

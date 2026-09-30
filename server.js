@@ -26,7 +26,6 @@ const backup  = require('./server/lib/backup');
 const config = require('./server/config');
 const { hashPw, verifyPw, validatePw } = require('./server/lib/crypto');
 const { nowLocal, timeToMins }         = require('./server/lib/time');
-const { getLocalIP }                   = require('./server/lib/net');
 const { sanitizeText: _sanitizeText, validTime: _validTime } = require('./server/lib/text');
 const { broadcast, setWss }            = require('./server/realtime/broadcast');
 const { securityHeaders, cors }        = require('./server/middleware/security');
@@ -147,6 +146,9 @@ app.use(requireForceChangePw);  // forced-password-change gate — server/middle
 // audit / csrfCheck / loginRateCheck / loginRateClear now live in
 // ./server/middleware (audit.js, csrf.js, rateLimit.js) — required up top.
 
+// ── First-run setup: the one-time code and the wizard (modular: server/modules/setup) ──
+// Before the auth routes: while no account exists, / and /login lead to /setup.
+require('./server/modules/setup/routes').register(app, { doctor: () => doctor });
 // ── Auth: login / logout / me / change-password (modular: server/modules/auth) ─────────
 require('./server/modules/auth/routes').register(app, { serveSPA });
 // ── Quick unlock: the mobile app's PIN after the idle sign-out (modular: server/modules/quickunlock) ──
@@ -333,6 +335,19 @@ app.get('/api/system/health', requireAuth, requirePermission('admin.system'), as
 });
 app.post('/api/system/health/run', requireAuth, csrfCheck, requirePermission('admin.system'), async (req, res) => {
   res.json(await doctor.run({ fresh: true }));
+});
+// SQLite: the key file itself, to keep somewhere else (the setup wizard's
+// "download the key"). admin.system only, and recorded. Never on Postgres, nor
+// with OPSPOINT_DB_KEY, whose key isn't on this server to hand out.
+app.get('/api/system/dbkey', requireAuth, requirePermission('admin.system'), async (req, res) => {
+  if (dbConn.isPg) return res.status(400).json({ error: 'There is no database key on Postgres.' });
+  const k = require('./server/db/dbcrypt').currentKey(DB_PATH);
+  if (!k) return res.status(409).json({ error: 'The database key file is missing.' });
+  if (k.fromSetting) return res.status(409).json({ error: 'The key comes from OPSPOINT_DB_KEY, not from a file on this server: keep your own copy of that.' });
+  await audit(req, 'dbkey.download', 'system', null, 'Database key', { by: req.session.displayName || req.session.username, fingerprint: k.fingerprint });
+  res.set('Cache-Control', 'no-store');
+  res.set('Content-Disposition', 'attachment; filename="opspoint.dbkey"');
+  res.type('text/plain').send(k.key);
 });
 // SQLite: an admin says the database key (the .dbkey file, or OPSPOINT_DB_KEY)
 // is stored somewhere else. Bound to a fingerprint of the key, so a new key
@@ -696,7 +711,17 @@ if (require.main === module) (async ()=>{
     jobs.beat('lock-sweep');
   }, 60 * 60 * 1000);
 
-  const proto=tls?'https':'http', ip=getLocalIP();
+  // The address phones use: this machine's LAN address, never a self-assigned
+  // 169.254 one (server/lib/net.js).
+  const proto=tls?'https':'http', ip=require('./server/lib/net').lanAddress();
+  // Where to open setup from: the LAN address when the server listens on the
+  // network, else this machine (a proxy in front has its own address).
+  const setupHost=['127.0.0.1','localhost','::1'].includes(config.BIND_ADDR)?'localhost':ip;
+  // First run: no account yet, so a one-time setup code instead of printed
+  // passwords (server/modules/setup). An install with accounts is untouched.
+  let setupCode=null;
+  try { setupCode=await require('./server/modules/setup/service').atStart(); }
+  catch(e){ console.error('  Setup: could not make a setup code:', e.message); }
   await db.auditLog(null,'system','127.0.0.1','server.start','server',null,'OpsPoint',{version:'2.7.0',tls:!!tls});
   server.listen(PORT,config.BIND_ADDR,()=>{
     console.log('\n══════════════════════════════════════════════');
@@ -705,6 +730,16 @@ if (require.main === module) (async ()=>{
     console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
     console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);
     console.log(`  Admin:    ${proto}://localhost:${PORT}/admin`);
+    if (setupCode && setupCode.code) {
+      console.log('──────────────────────────────────────────────');
+      console.log(`  Setup:    open ${proto}://${setupHost}:${PORT}/setup`);
+      console.log(`            code ${setupCode.code} (works once, for 24 hours)`);
+    } else if (setupCode && setupCode.existing) {
+      console.log('──────────────────────────────────────────────');
+      console.log(`  Setup:    open ${proto}://${setupHost}:${PORT}/setup with the code shown`);
+      console.log('            when OpsPoint first started, or make a new one:');
+      console.log('            node server/cli/opspoint.js setup-code');
+    }
     console.log('══════════════════════════════════════════════');
     console.log('══════════════════════════════════════════════\n');
     // A browser on this machine (windows-local's default): pointless on a
@@ -714,6 +749,21 @@ if (require.main === module) (async ()=>{
       setTimeout(()=>exec(`start ${proto}://localhost:${PORT}`),1200);
     }
   });
+
+  // Automatic update checks (update_auto_check, chosen during setup): the
+  // release list once a day, so Admin › System shows a new version without
+  // anyone pressing Check. It never installs one. In-app updates only.
+  if (!UPDATES_BY_PLATFORM) {
+    const DAY = 24 * 60 * 60 * 1000;
+    jobs.register('update-check', DAY, 'Update check');
+    const updateTick = async () => {
+      try { if ([true, 'true'].includes(await db.getSetting('update_auto_check', true))) await updater.check(); }
+      catch (e) { /* offline or refused: tomorrow */ }
+      jobs.beat('update-check');
+    };
+    setTimeout(updateTick, 2 * 60 * 1000);
+    setInterval(updateTick, DAY);
+  }
 
   // Multi-facility sync agent — drain the outbox to HQ shortly after boot, then
   // every 20s. No-op (and keeps the outbox bounded) when no central is configured.

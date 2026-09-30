@@ -2,6 +2,41 @@
 
 ---
 
+## Unreleased — First-run setup: a setup code, the wizard, invites (2026-09-30)
+
+Roadmap phase 6 of the deployment plan: a new install goes from a setup link to a working facility
+in the browser, with no console step and no password in any log.
+
+- **No more printed passwords.** A new, empty install creates no accounts. It prints a one-time
+  setup code (8 characters, 24 hours) and the setup address instead; whoever has the code creates
+  the first administrator with their own password. `node server/cli/opspoint.js setup-code` makes
+  a new code while no account exists. Existing installs are untouched: setup is closed for good the
+  first time this version starts on them.
+- **The setup wizard** (`/setup`): admin account, facility (name, time zone, colours with a live
+  preview), shifts and reminders, rooms and residents (a range such as "Floor 2: 201–220", or a
+  pasted or uploaded CSV with a preview), care defaults (statuses, UA panel, walkthrough areas),
+  features, staff, security and records, the phone app (a QR code and install steps) and HQ. Each
+  step saves as it goes, can be skipped with the defaults, and resumes after signing in again. The
+  security step follows the install: the SQLite key's download and "stored elsewhere", the backup
+  folder (warned when it is on the database's drive) or the provider's restore window, HTTPS, and
+  daily update checks. Finishing needs a tick — the provider's BAA is signed (azure, aws, gcp) or
+  backups leave the building — and runs the health check. Every step is in the audit log.
+- **Setup checklist**: afterwards, a dismissible dashboard card lists what was skipped or still needs
+  doing ("No backup destination set", "2 staff haven't accepted invites", health check failures).
+- **Invite links**: a new account can get a one-time link (and its QR code), valid 7 days, to set its
+  own password, instead of a password the admin picks — in the wizard's staff step and in Admin ›
+  Users (the default there now; "New link" for an unused one). Only the token's hash is stored.
+  Links made on the server's own localhost carry its LAN address, so a phone can open them.
+- **Daily update checks** when chosen in setup (`update_auto_check`): Admin › System then shows a new
+  version without anyone pressing Check. Nothing installs by itself.
+- The console's phone address skips self-assigned 169.254 addresses.
+- **Updating**: Postgres gets migration `014_user_invites` (applied at start). SQLite needs nothing.
+- Tests: `tests/setup.test.js` (code, account, steps, finish, checklist, invites, key download,
+  the CLI), `tests/qr.test.js` (the QR encoder against the standard's published values, every
+  symbol read back by an independent reader).
+
+---
+
 ## Unreleased — Secrets: one port, and none on a cloud server's disk (2026-09-29)
 
 Roadmap phase 5 of the deployment plan: every secret comes through one place, and on a cloud

@@ -111,27 +111,23 @@ node server.js
 pm2 start bootstrap.js --name opspoint
 ```
 
-**On the very first run**, OpsPoint detects an empty database and creates three accounts with randomly-generated passwords. These are printed to the console in a box like this:
+**On the very first run**, OpsPoint finds an empty database and creates no accounts. Instead it prints a one-time setup code in the console, at the end of its startup banner:
 
 ```
-╔══════════════════════════════════════════╗
-║        OpsPoint — First Run            ║
-║  Default credentials (save these now):   ║
-║                                          ║
-║  admin      :  xK9#mPqL2rVw!nZs         ║
-║  supervisor :  Bj7@cYtN5hXe^kRm         ║
-║  pa         :  Wq3&dFuA8sGp$oHj         ║
-║                                          ║
-║  All accounts require a password change  ║
-║  on first login.                         ║
-╚══════════════════════════════════════════╝
+──────────────────────────────────────────────
+  Setup:    open http://192.168.1.40:3000/setup
+            code 4F7K-92QX (works once, for 24 hours)
 ```
 
-**Copy these passwords before closing the window.** They are only displayed once.
+Open that address (from this machine, `http://localhost:3000/setup` works too), enter the code, and create the first administrator account with your own password. The setup wizard then walks through the facility name and time zone, colours, shifts and reminders, rooms and residents, care defaults, features, staff, security and records, the phone app and (optionally) HQ. Each step saves as it goes, can be skipped, and can be finished later: sign in again and open `/setup`. Staff get a one-time invite link, or its QR code, to set their own password.
 
-Open Chrome and go to `http://localhost:3000`. Log in with the `admin` account and set your permanent password when prompted.
+If the code expired or the console output is gone, make a new one on the server:
 
-> If you lose all admin credentials, stop the server, delete `data/opspoint.db`, and restart. This resets the database — all data will be lost.
+```
+node server/cli/opspoint.js setup-code
+```
+
+> If every administrator account is lost, stop the server, delete `data/opspoint.db`, and restart: a fresh database prints a new setup code. This resets the database — all data will be lost.
 
 ---
 
@@ -427,7 +423,7 @@ Expected for self-signed certificates. Click **Advanced** → **Proceed** once p
 
 ### Lost admin password
 
-Stop the server. Delete `data/opspoint.db`. Restart — a fresh database is created with new random credentials printed to the console. **All data will be lost.** Restore from backup if needed.
+Another administrator can reset it in Admin › Users. If none is left: stop the server, delete `data/opspoint.db` and restart — a fresh database prints a new setup code. **All data will be lost.** Restore from backup if needed.
 
 ### Photos not showing
 
@@ -596,13 +592,13 @@ sudo ufw enable
 
 ### 11.10 First run
 
-On first start OpsPoint prints credentials to the console:
+On first start OpsPoint prints a one-time setup code in its log:
 
 ```bash
 pm2 logs opspoint --lines 50
 ```
 
-Look for the credential box (same format as local — see [Section 3](#3-first-run-and-credential-setup)). Open `https://opspoint.duckdns.org` in a browser and log in with the `admin` account to set your permanent password.
+Look for the `Setup:` lines (see [Section 3](#3-first-run-and-credential-setup)). Open `https://opspoint.duckdns.org/setup` in a browser, enter the code and create the first administrator. No code in the log (it expired, or the log rotated)? Run `node server/cli/opspoint.js setup-code` in the app folder.
 
 ### 11.11 Updating (cloud)
 

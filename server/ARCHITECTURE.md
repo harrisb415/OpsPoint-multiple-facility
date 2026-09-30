@@ -28,6 +28,7 @@ server/
   modules/               ← one folder per domain; each = routes.js + service.js + repository.js
     staff/ ✅  passes/ ✅  mail/ ✅  chores/ ✅  ua/ ✅  violations/ ✅  groups/ ✅
     broadcasts/ ✅  clients/ ✅  reports/ ✅  facility/ ✅  users/ ✅  admin/ ✅  auth/ ✅
+    setup/ ✅  (first-run setup: the code, the wizard's steps, the checklist)
     clinical/ ✅  (UA records, med log, milestones, incidents, discharge, consent,
                   disclosures, unlock, + Structured Clinical Lite notes/treatment/
                   assessments/discharge-summaries/group-notes)   ALL DOMAINS DONE

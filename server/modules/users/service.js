@@ -8,6 +8,7 @@
 const repo = require('./repository');
 const { hashPw, validatePw, verifyPw } = require('../../lib/crypto');
 const quickUnlock = require('../quickunlock/service');
+const invites = require('./invites');
 
 function httpError(status, message) {
   const e = new Error(message);
@@ -28,21 +29,26 @@ async function asyncFilter(arr, pred) {
 }
 
 async function list() {
+  const pendingInvites = await invites.pending();
+  const neverUsed = new Set(await invites.unaccepted());
   return Promise.all((await repo.listUsersRaw()).map(async u => {
     let perms = null;
     try { perms = u.permissions ? JSON.parse(u.permissions) : await repo.rolePreset(u.role); } catch (e) { perms = await repo.rolePreset(u.role); }
     const groups = (await repo.getUserGroups(u.id)).map(g => ({ id: g.id, key: g.key, label: g.label }));
-    return { id: u.id, username: u.username, displayName: u.display_name, role: u.role, createdAt: u.created_at, permissions: perms, is_protected: !!u.is_protected, must_change_pw: !!u.must_change_pw, groups };
+    return { id: u.id, username: u.username, displayName: u.display_name, role: u.role, createdAt: u.created_at, permissions: perms, is_protected: !!u.is_protected, must_change_pw: !!u.must_change_pw, groups,
+      invitePendingUntil: pendingInvites[u.id] || null, inviteExpired: !pendingInvites[u.id] && neverUsed.has(u.id) };
   }));
 }
 
-// Create a user. Returns { id, displayName, username, role, groupIds } for audit.
+// Create a user, with a temporary password or (invite: true) none: the route
+// then issues an invite link for them to set their own. Returns { id,
+// displayName, username, role, groupIds } for the audit.
 async function create(body = {}) {
-  const { username, displayName, password, role, groupIds } = body;
-  if (!username || !password || !role) throw httpError(400, 'Missing fields');
-  const err = validatePw(password); if (err) throw httpError(400, err);
+  const { username, displayName, password, role, groupIds, invite } = body;
+  if (!username || !role || (!password && !invite)) throw httpError(400, 'Missing fields');
+  if (password) { const err = validatePw(password); if (err) throw httpError(400, err); }
   if (await repo.findByUsername(username)) throw httpError(409, 'Username already exists');
-  const { hash, salt } = hashPw(password);
+  const { hash, salt } = password ? hashPw(password) : invites.unusablePassword();
   const validGroupIds = Array.isArray(groupIds) ? await asyncFilter(groupIds, async gid => await repo.groupExists(gid)) : [];
   const perms = validGroupIds.length > 0 ? await repo.computeGroupsPermissions(validGroupIds) : await repo.rolePreset(role);
   await repo.insertUser({ username, display_name: displayName || username, role, hash, salt, permissions: JSON.stringify(perms) });

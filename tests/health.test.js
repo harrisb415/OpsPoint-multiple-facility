@@ -1,7 +1,8 @@
 // The health check (roadmap phase 2): every check says what it found in plain
 // words, /healthz says pass or fail and nothing more, Admin gets the detail,
 // and only an unreachable database is critical. Runs against a throwaway
-// database; the update source uses a stub, never the network.
+// database on either driver (scripts/pg-audit.sh runs it on Postgres); the
+// update source uses a stub, never the network.
 'use strict';
 const os     = require('os');
 const path   = require('path');
@@ -28,6 +29,8 @@ fs.mkdirSync(photos);
 fs.writeFileSync(path.join(scratch, 'secret.key'), 'x'.repeat(64));
 const CONFIG = { BASE: path.join(__dirname, '..'), DATA_DIR: scratch, PHOTOS_DIR: photos, DB_PATH: TMP_DB, SECRET_FILE: path.join(scratch, 'secret.key') };
 const STUB_UPDATES = { probe: async () => ({ current: '2.7.0', latest: '2.7.0', signed: true }) };
+const onPg = conn.isPg;
+const sqliteOnly = onPg ? test.skip : test;
 
 function doctor(over = {}) {
   return health.createDoctor({ conn, settings, config: CONFIG, updater: STUB_UPDATES, ...over });
@@ -65,10 +68,13 @@ afterAll(() => {
 });
 
 describe('each check says what it found', () => {
-  test('a working SQLite install: time zone, database, migrations, storage and secrets pass', async () => {
+  test('a working install: time zone, database, migrations, storage and secrets pass', async () => {
     const r = await doctor().run({ only: ['timezone', 'database', 'migrations', 'storage', 'secrets'] });
     for (const x of r.results) expect(x).toMatchObject({ status: 'pass', critical: false });
-    expect(r.results.find(x => x.id === 'database').says).toMatch(/^SQLite \(.+\) answers in \d+ ms/);
+    expect(r.results.find(x => x.id === 'database').says).toMatch(onPg
+      ? /^Postgres \(.+\) answers in \d+ ms; every table and column this version uses exists\.$/
+      : /^SQLite \(.+\) answers in \d+ ms/);
+    if (onPg) expect(r.results.find(x => x.id === 'timezone').says).toMatch(/the database session agrees\.$/);
     expect(r.results.find(x => x.id === 'storage').says).toContain(photos);
     expect(fs.readdirSync(photos)).toEqual([]);            // the test file is gone again
     expect(r.ok).toBe(true);
@@ -120,7 +126,11 @@ describe('only an unreachable database is critical', () => {
 });
 
 describe('encryption key', () => {
-  test('unconfirmed fails with the confirm action; a confirmation of this key passes; a new key needs a new one', async () => {
+  test('is not part of a Postgres install', async () => {
+    if (onPg) expect(await check('dbkey')).toMatchObject({ status: 'skip' });
+  });
+
+  sqliteOnly('unconfirmed fails with the confirm action; a confirmation of this key passes; a new key needs a new one', async () => {
     await db.setSetting('dbkey_backup_confirmed', '');
     let r = await check('dbkey');
     expect(r).toMatchObject({ status: 'fail', action: 'dbkey-confirm' });
@@ -148,10 +158,10 @@ describe('backups', () => {
     expect(await check('backups')).toMatchObject({ status: 'fail', says: 'No backup has been recorded yet.' });
   });
 
-  test('recent passes (a warning while it sits on the database\'s drive); old or failed since fails', async () => {
+  test('recent passes (on SQLite a warning while it sits on the database\'s drive); old or failed since fails', async () => {
     await record('backup.create', 3);
     await db.setSetting('backup_same_volume_ack', false);
-    expect((await check('backups')).status).toBe('warn');                  // the scratch folder shares the drive
+    expect((await check('backups')).status).toBe(onPg ? 'pass' : 'warn');  // SQLite: the scratch folder shares the drive
     await db.setSetting('backup_same_volume_ack', true);
     expect(await check('backups')).toMatchObject({ status: 'pass', says: 'Last backup 3 hours ago.' });
     await record('backup.failed', 2, JSON.stringify({ error: 'disk full' }));   // recorded after the success
@@ -215,7 +225,7 @@ describe('background jobs and instances, from the heartbeat table', () => {
     await heartbeat({ host: 'other-machine', pid: 2147483000 });          // can't tell from here: kept
     await instances.cleanup(conn);
     list = await instances.list(conn);
-    expect(list.map(i => i.hostname).sort()).toEqual([os.hostname(), 'other-machine']);
+    expect(list.map(i => i.hostname).sort()).toEqual([os.hostname(), 'other-machine'].sort());
     expect(list.find(i => i.hostname === os.hostname()).self).toBe(true);
   });
 });
@@ -236,6 +246,9 @@ describe('certificate, push keys, update source', () => {
   });
 
   test('push keys: missing is a warning, a mismatched pair fails, a good pair passes', async () => {
+    // As if no VAPID_* were set (web-hestia's environment has a pair): keys come from the data folder.
+    const noEnvKeys = { ...settings, get: (n) => (n.startsWith('VAPID_') ? null : settings.get(n)) };
+    const check = async (id) => (await doctor({ settings: noEnvKeys }).run({ only: [id] })).results[0];
     expect((await check('push')).status).toBe('warn');                    // no vapid.json in the scratch folder
     const a = webpush.generateKeys(), b = webpush.generateKeys();
     fs.writeFileSync(path.join(scratch, 'vapid.json'), JSON.stringify({ publicKey: a.publicKey, privateKey: b.privateKey }));
@@ -273,7 +286,14 @@ describe('over HTTP', () => {
     expect(r.body.results.find(x => x.id === 'database')).toMatchObject({ status: 'pass', label: 'Database' });
   });
 
-  test('confirming the key is audited and turns the check green', async () => {
+  test('confirming the key is refused on Postgres, which has none', async () => {
+    if (!onPg) return;
+    const r = await admin.post('/api/system/health/dbkey-confirmed').send({});
+    expect(r.status).toBe(400);
+    expect(r.body.error).toBe('There is no database key on Postgres.');
+  });
+
+  sqliteOnly('confirming the key is audited and turns the check green', async () => {
     await db.setSetting('dbkey_backup_confirmed', '');
     const r = await admin.post('/api/system/health/dbkey-confirmed').send({});
     expect(r.status).toBe(200);

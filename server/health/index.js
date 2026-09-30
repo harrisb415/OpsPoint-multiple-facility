@@ -101,7 +101,7 @@ const CHECKS = [
       if (p.error) return { status: 'warn', says: `${where} answers in ${ms} ms, but its schema couldn't be compared with the code's: ${p.error}.` };
       if (p.errors.length) {
         return { status: 'fail', says: `${where} answers, but it lacks ${p.errors.length} thing(s) this version uses: ${listOf(p.errors.map((e) => e.replace(/^facility: /, '')))}.`,
-          fix: `Apply the migrations/pg/ files it is missing (the newest is ${ctx.newestMigration()}), then restart OpsPoint.` };
+          fix: `Run \`node server/cli/opspoint.js migrate\` (or restart with OPSPOINT_MIGRATE=start); the newest file is ${ctx.newestMigration()}. If they are all recorded, a file was changed after it was applied.` };
       }
       return { status: 'pass', says: `${where} answers in ${ms} ms; every table and column this version uses exists.` };
     },
@@ -110,13 +110,22 @@ const CHECKS = [
     id: 'migrations', label: 'Migrations',
     async run(ctx) {
       if (!ctx.conn.isPg) return { status: 'pass', says: 'None pending: SQLite schema changes apply themselves at every start.' };
-      const p = await ctx.parity();
-      if (p.error) return { status: 'warn', says: `Couldn't tell: ${p.error}.` };
-      if (p.errors.length) {
-        return { status: 'fail', says: `Pending: the database is missing ${p.errors.length} change(s) from migrations/pg/ (the newest file is ${ctx.newestMigration()}).`,
-          fix: 'Apply each missing file with psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f <file>, in order, then restart OpsPoint.' };
+      const runner = require('../db/runner');
+      const st = await runner.status({ pool: ctx.conn.getDb(), app: 'facility' });
+      const last = st.files.length ? st.files[st.files.length - 1].name : 'none';
+      if (st.unrecorded) {
+        return { status: 'warn', says: 'Nothing records which migrations this database has: it was migrated by hand.',
+          fix: 'Restart OpsPoint (OPSPOINT_MIGRATE=start notes what is there once its schema matches the code), or run `node server/cli/opspoint.js migrate`.' };
       }
-      return { status: 'pass', says: `None pending: the database has everything up to ${ctx.newestMigration()}.` };
+      if (st.pending.length) {
+        return { status: 'fail', says: `Pending: ${listOf(st.pending.map((f) => f.name))}.`,
+          fix: 'Restart OpsPoint (OPSPOINT_MIGRATE=start applies them), or run `node server/cli/opspoint.js migrate`.' };
+      }
+      if (st.changed.length) {
+        return { status: 'warn', says: `All applied, but ${listOf(st.changed.map((f) => f.name))} changed after being applied, and an applied file never runs again.`,
+          fix: 'Put the file back as it was, and make the change in a new migration file.' };
+      }
+      return { status: 'pass', says: `None pending: all ${st.files.length} are recorded, up to ${last}.` };
     },
   },
   {

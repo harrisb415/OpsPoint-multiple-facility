@@ -591,6 +591,9 @@ sessionReady.then(() => {
     console.log(`  OpsPoint Central listening on ${scheme}://localhost:${PORT}`);
   });
 }).catch((e) => {
+  // A missing or failed migration (server/db/runner.js) is a configuration
+  // problem, like a bad setting: exit 78, which bootstrap.js does not relaunch.
+  if (e && e.code === 'EX_CONFIG') { fs.writeSync(2, `\n  OpsPoint HQ can't start: ${e.message}\n\n`); process.exit(78); }
   console.error('  OpsPoint Central failed to start:', e && e.message ? e.message : e);
   process.exit(1);
 });

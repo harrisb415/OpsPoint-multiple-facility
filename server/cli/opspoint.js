@@ -16,6 +16,8 @@ Commands
   settings docs       Print docs/SETTINGS.md, generated from the settings schema
   doctor              Run the health check (the one Admin > System health shows):
                       exit 0 when nothing fails, 1 when something does (--json)
+  migrate             Apply the Postgres migrations the database is missing (the deploy
+                      step when OPSPOINT_MIGRATE=off). --status only lists them.
   keys                Print a new SESSION_SECRET and push key pair, as settings lines
                       (--json for JSON). Keep them secret; never commit them.
 
@@ -128,6 +130,57 @@ async function doctor() {
   return r.results.some((x) => x.status === 'fail') ? 1 : 0;
 }
 
+// `migrate`: bring the Postgres schema up to date (server/db/runner.js) — the
+// same thing OpsPoint does as it starts with OPSPOINT_MIGRATE=start.
+// Exit 0 = up to date, 1 = --status found some missing, 78 = settings or a
+// migration failed (rolled back; the reason is printed).
+async function migrateCmd(app) {
+  const settingsModule = require('../settings');
+  const s = settingsModule.useApp(app);
+  const bad = s.check().filter((p) => p.level === 'error');
+  if (bad.length) {
+    for (const p of bad) process.stdout.write(`ERROR    ${p.message}\n`);
+    return settingsModule.EX_CONFIG;
+  }
+  const conn = require('../db/connection');
+  if (!conn.isPg) {
+    process.stdout.write('SQLite: nothing to apply. OpsPoint builds its schema as it starts.\n');
+    return 0;
+  }
+  const runner = require('../db/runner');
+  conn.open(s.get(app === 'central' ? 'CENTRAL_DATABASE_URL' : 'DATABASE_URL'));
+  const pool = conn.getDb();
+  const who = app === 'central' ? 'HQ database' : 'facility database';
+  try {
+    if (flag('--status')) {
+      const st = await runner.status({ pool, app });
+      const lines = [`Migrations for the ${who}`];
+      const pending = new Set(st.pending.map((f) => f.name)), changed = new Set(st.changed.map((f) => f.name));
+      for (const f of st.files) {
+        const mark = st.unrecorded ? 'unrecorded' : pending.has(f.name) ? 'PENDING' : changed.has(f.name) ? 'CHANGED' : 'applied';
+        lines.push(`  ${pad(mark, 11)}${f.name}`);
+      }
+      if (st.fresh) lines.push('', 'A new, empty database: `migrate` applies every file.');
+      else if (st.unrecorded) lines.push('', 'Nothing is recorded yet (it was migrated by hand): `migrate` notes what is there, once its schema matches the code.');
+      else if (pending.size) lines.push('', `${pending.size} missing: run \`node server/cli/opspoint.js migrate${app === 'central' ? ' --app central' : ''}\`.`);
+      else lines.push('', 'Up to date.');
+      if (changed.size) lines.push(`Changed since they were applied: ${[...changed].join(', ')}. An applied file never runs again; add a new one instead.`);
+      process.stdout.write(lines.join('\n') + '\n');
+      return pending.size && !st.unrecorded ? 1 : 0;
+    }
+    const r = await runner.migrate({ pool, app, parity: runner.parityFor(app, pool), log: (m) => process.stdout.write(`  ${m}\n`) });
+    process.stdout.write(r.fresh ? `A new ${who}: applied ${r.applied.length} migrations.\n`
+      : r.applied.length ? `Applied ${r.applied.length} migration(s) to the ${who}.\n`
+      : `The ${who} is up to date.\n`);
+    return 0;
+  } catch (e) {
+    if (e && e.code === 'EX_CONFIG') { process.stdout.write(`ERROR    ${e.message}\n`); return settingsModule.EX_CONFIG; }
+    throw e;
+  } finally {
+    await conn.close().catch(() => {});
+  }
+}
+
 function main() {
   const [cmd, sub] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--app');
   const app = arg('--app') || 'facility';
@@ -158,6 +211,7 @@ function main() {
   }
 
   if (cmd === 'doctor') return doctor();
+  if (cmd === 'migrate') return migrateCmd(app);
 
   if (cmd === 'keys') {
     const crypto = require('crypto');

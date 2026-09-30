@@ -233,6 +233,13 @@ const SETTINGS = [
     summary: 'The most Postgres connections held open at once.',
   },
   {
+    name: 'OPSPOINT_MIGRATE', group: 'Database', scope: 'shared', type: 'enum', values: ['start', 'off'], default: 'start',
+    noun: 'when Postgres migrations run',
+    summary: 'When the Postgres schema changes in migrations/pg/ are applied: start (by OpsPoint as it starts, one ' +
+             'instance at a time) or off (a deploy step runs `node server/cli/opspoint.js migrate` first, and OpsPoint ' +
+             'refuses to start while one is missing). SQLite needs neither: the code builds its schema at every start.',
+  },
+  {
     name: 'PGTZ', group: 'Database', scope: 'shared', type: 'timezone',
     noun: 'the Postgres session time zone',
     summary: 'The Postgres session time zone. Leave it unset so it follows TZ; if set, it must equal TZ.',

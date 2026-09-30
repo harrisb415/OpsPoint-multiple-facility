@@ -73,7 +73,7 @@ DECLARE
   ];
 BEGIN
   FOREACH t IN ARRAY synced LOOP
-    IF to_regclass('public.' || t) IS NOT NULL THEN
+    IF to_regclass(format('%I.%I', current_schema(), t)) IS NOT NULL THEN   -- the schema being migrated, not always public
       EXECUTE format('DROP TRIGGER IF EXISTS trg_sync_%I ON %I', t, t);
       EXECUTE format(
         'CREATE TRIGGER trg_sync_%I AFTER INSERT OR UPDATE OR DELETE ON %I '

@@ -38,7 +38,9 @@ BEGIN
            pg_get_serial_sequence(
              quote_ident(n.nspname) || '.' || quote_ident(c.relname), 'id') AS seq
     FROM pg_class c
-    JOIN pg_namespace n  ON n.oid = c.relnamespace AND n.nspname = 'public'
+    -- current_schema(), not 'public': the MAX(id) below reads the tables
+    -- through the search_path, so both must mean the same schema.
+    JOIN pg_namespace n  ON n.oid = c.relnamespace AND n.nspname = current_schema()
     JOIN pg_attribute a  ON a.attrelid = c.oid
                         AND a.attname = 'id'
                         AND NOT a.attisdropped
@@ -52,7 +54,7 @@ BEGIN
     -- Only ever move forward. last_value can legitimately sit ahead of max(id)
     -- when rows have been deleted, and pulling it back would reissue live ids.
     IF next_id > (SELECT last_value FROM pg_sequences
-                  WHERE schemaname = 'public' AND sequencename = split_part(r.seq, '.', 2))
+                  WHERE schemaname = current_schema() AND sequencename = split_part(r.seq, '.', 2))
     THEN
       PERFORM setval(r.seq, next_id, false);
       fixed := fixed + 1;

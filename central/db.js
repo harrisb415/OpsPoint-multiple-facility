@@ -42,6 +42,8 @@ async function init(dbPath) {
     }
     _db = connection.open(settings.get('CENTRAL_DATABASE_URL'));
     console.log('  Central DB: Postgres');
+    // HQ's schema: its files in migrations/pg/, applied by server/db/runner.js.
+    await require('../server/db/runner').startup({ app: 'central', settings, log: (m) => console.log(`  Central DB: ${m}`) });
   } else {
     // Same trap as the facility's driver guard (db.js): SQLite would create an
     // empty HQ database on the spot and every facility, account and release

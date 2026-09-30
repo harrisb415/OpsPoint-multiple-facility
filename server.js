@@ -627,7 +627,13 @@ const ready = db.init(DB_PATH);
 module.exports = { app, db, ready };
 
 if (require.main === module) (async ()=>{
-  await ready;
+  // A migration that is missing (OPSPOINT_MIGRATE=off) or failed stops the
+  // start like a bad setting: one sentence, exit code 78, no relaunch.
+  try { await ready; }
+  catch (e) {
+    if (e && e.code === 'EX_CONFIG') { fs.writeSync(2, `\n  OpsPoint can't start: ${e.message}\n\n`); process.exit(78); }
+    throw e;
+  }
   // Clean up mojibake middle-dot in facility name (Â· = double-encoded ·)
   {
     const fn = await db.getSetting('facility_name','');

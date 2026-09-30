@@ -39,6 +39,8 @@ node server/cli/opspoint.js settings [--check] [--app central]
 node server/cli/opspoint.js settings docs > docs/SETTINGS.md
 # Health check (the same checks as Admin › System health): exit 1 when one fails
 node server/cli/opspoint.js doctor [--json]
+# Postgres: apply missing migrations/pg files (OpsPoint also does this as it starts)
+node server/cli/opspoint.js migrate [--app central] [--status]
 ```
 
 **Adding a setting?** Declare it in `server/settings/schema.js`, read it with
@@ -113,7 +115,8 @@ after every start (one `Health:` line in the log; after an update also an `updat
 row), and `node server/cli/opspoint.js doctor`. Each result: `status` pass | warn | fail | skip,
 `says` (what it found, in words), `fix`, `critical`. Checks: time zone (pg: `SHOW timezone`
 matches), database (reachable — the only CRITICAL one — and on pg schema parity), migrations
-(parity-based until phase 4's ledger), file storage (probe file in the photos folder), secrets,
+(pg: the `schema_migrations` ledger — pending, changed-after-applied, or unrecorded), file storage
+(a probe object through the storage port), secrets,
 encryption key (SQLite: `.dbkey` confirmed stored elsewhere, bound to its fingerprint in the
 `dbkey_backup_confirmed` setting), backups (a `backup.create` audit row < 26 h old and none failed
 since — the in-app SQLite backup and `scripts/opspoint-backup.sh` both write one; or
@@ -183,6 +186,22 @@ Public API: `query`, `query1`, `run`, `save`, `runAndSave`, `getSetting`, `setSe
 \* `chore` and `chore_time` added via `ALTER TABLE` migration.
 
 **Schema migrations** — use the try/catch `ALTER TABLE ADD COLUMN` pattern in `init()`. Never drop or rename columns.
+
+**Postgres migrations (`server/db/runner.js`)** — OpsPoint applies `migrations/pg/NNN_name.sql`
+itself: at start (`OPSPOINT_MIGRATE=start`, the default; a Postgres advisory lock serializes
+instances) or as a deploy step (`node server/cli/opspoint.js migrate [--app central] [--status]`
+with `OPSPOINT_MIGRATE=off`, when a missing file stops the start with exit 78). Each file runs
+once, in one transaction together with its ledger row in `schema_migrations` (version
+`pg/NNN_name` + sha256 of the LF-normalized text); a failure rolls back whole and names the file.
+A database with tables but no `pg/` rows (migrated by hand, as web-hestia was) is adopted —
+every file recorded without running — only when schema parity says it matches the code.
+Adding a Postgres change: the SQLite side in `server/db/migrate.js` as usual, plus a new
+`migrations/pg/NNN_name.sql` (next number; `central` in the name if it is HQ's; `IF NOT EXISTS`
+where possible; its own `BEGIN;`/`COMMIT;` lines are dropped, the runner wraps it). Never edit an
+applied file — the health check flags a changed checksum and it never runs again; add a new
+file. A new identity table goes in `IDENTITY_TABLES` in `server/db/drivers/pg.js` (a test scans
+the files). `scripts/pg-audit.sh` builds its scratch schema with this runner (the fresh-install
+path) before every test file.
 
 **Settings** — JSON strings in the `settings` key-value table. `getSetting(key, default)` handles parsing. Seed new keys in `_seedDefaults()`.
 
@@ -417,6 +436,7 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server/health/index.js` | The health checks (`createDoctor`: `run`, `healthz`) |
 | `server/health/instances.js` | This process's heartbeat row in `app_instances` |
 | `server/lib/jobs.js` | Background jobs report each run here (`register`, `beat`) |
+| `server/db/runner.js` | Postgres migration runner (`startup`, `migrate`, `status`) |
 | `server/storage/index.js` | The storage port (`storage()`, `put/get/remove/list/probe`) |
 | `server/storage/photos.js` | Photos through the port: `savePhoto`, `photoDataUri(s)`, `readPhoto` |
 | `server/storage/{local,s3,azureBlob,gcs}.js` | The four backends |

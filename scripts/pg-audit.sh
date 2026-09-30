@@ -5,9 +5,10 @@
 # The suite normally runs on SQLite, which is exactly why Postgres-only bugs
 # reached production: '' in a date column, a column one schema lacked, a
 # sequence resync on the wrong connection. This rebuilds a SCRATCH database
-# from migrations/pg before every test file (facility schema in `public`,
-# HQ schema in `central_test`), checks schema parity, then runs each file with
-# OPSPOINT_DB_DRIVER=pg. Nothing touches the app's data directory.
+# from migrations/pg before every test file, with OpsPoint's own migration
+# runner (facility schema in `public`, HQ schema in `central_test`), checks
+# schema parity, then runs each file with OPSPOINT_DB_DRIVER=pg. Nothing
+# touches the app's data directory.
 #
 # Run on a host that can reach the database (web-hestia), from the repo root:
 #   set -a; . ./.env; set +a          # DATABASE_URL etc.
@@ -36,19 +37,16 @@ export OPSPOINT_DATA="$(mktemp -d /tmp/opsaudit.XXXXXX)"
 unset OPSPOINT_BIND CENTRAL_BIND
 trap 'rm -rf "$OPSPOINT_DATA"' EXIT
 
-FACILITY_MIGRATIONS=$(ls migrations/pg/*.sql | grep -v central | sort)
-CENTRAL_MIGRATIONS=$(ls migrations/pg/*central*.sql | sort)
-
+# Empty schemas, then OpsPoint's own migration runner (server/db/runner.js)
+# applies migrations/pg — the fresh-install path, exercised before every file.
 reset_schemas() {
   psql "$SCRATCH" -q -v ON_ERROR_STOP=1 \
     -c 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS central_test CASCADE; CREATE SCHEMA central_test;' \
     2>&1 | grep -v -e NOTICE -e DETAIL -e 'drop cascades' || true
-  for m in $FACILITY_MIGRATIONS; do
-    psql "$SCRATCH" -q -v ON_ERROR_STOP=1 -f "$m" >/dev/null 2>/tmp/pg-audit-mig.err || { echo "!! $m failed:"; cat /tmp/pg-audit-mig.err; return 1; }
-  done
-  for m in $CENTRAL_MIGRATIONS; do
-    PGOPTIONS='-c search_path=central_test' psql "$SCRATCH" -q -v ON_ERROR_STOP=1 -f "$m" >/dev/null 2>/tmp/pg-audit-mig.err || { echo "!! $m failed:"; cat /tmp/pg-audit-mig.err; return 1; }
-  done
+  node server/cli/opspoint.js migrate >/tmp/pg-audit-mig.out 2>&1 \
+    || { echo "!! migrate (facility) failed:"; cat /tmp/pg-audit-mig.out; return 1; }
+  node server/cli/opspoint.js migrate --app central >/tmp/pg-audit-mig.out 2>&1 \
+    || { echo "!! migrate (HQ) failed:"; cat /tmp/pg-audit-mig.out; return 1; }
 }
 
 echo "== scratch database: $dbname   code: $(git log --oneline -1 2>/dev/null || echo 'working tree')"

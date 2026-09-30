@@ -2,6 +2,34 @@
 
 ---
 
+## Unreleased — Migrations: OpsPoint applies its own Postgres schema (2026-09-29)
+
+Roadmap phase 4 of the deployment plan: no more hand-applied Postgres SQL.
+
+- **The migration runner** (`server/db/runner.js`) applies the files in `migrations/pg/` itself,
+  in order, each once, each in one transaction together with its record in `schema_migrations`
+  (the file name and a checksum). A failing file rolls back whole and the start stops with one
+  sentence naming it (exit code 78). A Postgres advisory lock lets two instances start at once.
+- **When**: as OpsPoint starts (`OPSPOINT_MIGRATE=start`, the default), or as a deploy step with
+  `node server/cli/opspoint.js migrate [--app central]` and `OPSPOINT_MIGRATE=off`, in which case
+  OpsPoint refuses to start while a file is missing. `migrate --status` lists what is applied,
+  pending or changed.
+- **Existing databases** that were migrated by hand (no records yet) are adopted at their first
+  start on this version: when the schema matches the code (schema parity), every file is recorded
+  as applied without running. A fresh, empty database gets every file.
+- The facility's and HQ's files are told apart by name (`central` for HQ's), each recorded in
+  its own database.
+- The health check's Migrations row now reads the records: pending files fail, a file changed
+  after it was applied warns (it never runs again; the change belongs in a new file), and an
+  unrecorded database warns until its next start.
+- `scripts/pg-audit.sh` builds its scratch database with the runner (the fresh-install path)
+  before every test file, instead of psql.
+- **Updating**: nothing to apply by hand any more. SQLite installs are unchanged.
+- Tests: `tests/migrations.test.js` (on Postgres: fresh install, upgrade, a failing file rolled
+  back, a changed file, adoption, two instances at once, `OPSPOINT_MIGRATE=off`).
+
+---
+
 ## Unreleased — File storage: photos through one port, four backends (2026-09-29)
 
 Roadmap phase 3 of the deployment plan: photos no longer have to live on the server's own disk.

@@ -85,6 +85,7 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | `PGSSLMODE` | `verify-full` |  | Encryption for Postgres connections: verify-full (the default: encrypted, certificate checked), require (encrypted, certificate not checked) or disable (plain; only on one host or a private network). One of `disable`, `require`, `verify-ca`, `verify-full`. |
 | `PGSSLROOTCERT` | — |  | The CA certificate that signed the Postgres server's certificate, when it is not a public one (for example the Amazon RDS bundle). |
 | `PGPOOL_MAX` | `10` |  | The most Postgres connections held open at once. |
+| `OPSPOINT_MIGRATE` | `start` |  | When the Postgres schema changes in migrations/pg/ are applied: start (by OpsPoint as it starts, one instance at a time) or off (a deploy step runs `node server/cli/opspoint.js migrate` first, and OpsPoint refuses to start while one is missing). SQLite needs neither: the code builds its schema at every start. One of `start`, `off`. |
 | `PGTZ` | — |  | The Postgres session time zone. Leave it unset so it follows TZ; if set, it must equal TZ. |
 
 ### File storage

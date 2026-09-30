@@ -129,6 +129,11 @@ Photos are kept in `data/photos/` unless `OPSPOINT_STORAGE` says otherwise: `azu
 (or an S3-compatible service) or `gcs` store them in the provider's storage instead, which the
 managed cloud profiles require.
 
+On Postgres (`OPSPOINT_DB_DRIVER=pg`), OpsPoint applies its own schema changes from
+`migrations/pg/` as it starts. To run them as a separate deploy step instead, set
+`OPSPOINT_MIGRATE=off` and run `node server/cli/opspoint.js migrate` (and `--app central` for HQ)
+before starting.
+
 A missing or contradictory setting stops the server with one sentence saying what to fix. The
 facility's time zone is required: set `TZ` (for example `TZ=America/Chicago`) unless the machine's
 own clock is already in it; a server on UTC files evening entries under the next day.

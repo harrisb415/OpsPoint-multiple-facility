@@ -216,6 +216,8 @@ async function init(dbPath) {
     try { const u = new URL(settings.get('DATABASE_URL')); target = `${u.hostname}/${u.pathname.replace(/^\//, '')}`; } catch (e) { /* keep generic */ }
     console.log('  DB: Postgres', target);
     try { fs.mkdirSync(path.dirname(_pgMarker()), { recursive: true }); fs.writeFileSync(_pgMarker(), 'pg\n'); } catch (e) { /* best effort */ }
+    // The schema: migrations/pg/ applied by OpsPoint itself (server/db/runner.js).
+    await require('./server/db/runner').startup({ app: 'facility' });
   } else {
     console.log('  DB:', isNew ? 'Created' : 'Loaded', path.basename(dbPath));
   }

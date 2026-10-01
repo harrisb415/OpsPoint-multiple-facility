@@ -391,7 +391,12 @@ function Remove-Service {
 
 # ── Main ────────────────────────────────────────────────────────────────────
 if ($RemoveService) { Remove-Service; exit 0 }
-if ($Configure) { Banner; Do-Configure; exit 0 }
+if ($Configure) {
+  Banner; Do-Configure
+  # Setup's console closes with this script: keep the link and the code on screen until read.
+  if ($Interactive) { [void](Read-Host "   ${Dim}Press Enter to close this window$Off") }
+  exit 0
+}
 if ($Command) {
   if ($CliCommands -notcontains $Command) { Die "Unknown command $Command (see the top of this script)." }
   if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }

@@ -243,7 +243,8 @@ table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), 
   `RestartPreventExitStatus=78`), waits for `/healthz`, runs the doctor and prints the setup
   link + a fresh setup code (+ a QR with qrencode). Upgrade keeps `app.previous` and rolls back
   if the new version doesn't come up.
-- `packaging/windows/` — `opspoint.iss` (Inno Setup 6: Node + the app with its packages, door
+- `packaging/windows/` — `opspoint.iss` (Inno Setup 6.7.3 — compiles on Windows or under Wine
+  on Linux, `wine C:\InnoSetup\ISCC.exe /DAppVersion=x.y.z opspoint.iss`: Node + the app with its packages, door
   pictures from `scripts/gen-installer-art.cjs`, then runs `opspoint.ps1 -Configure`),
   `opspoint.ps1` (the same questions/menus in PowerShell 5.1; **saved as UTF-8 with a BOM** or
   5.1 misreads the glyphs; the service is a scheduled task at startup as NETWORK SERVICE),

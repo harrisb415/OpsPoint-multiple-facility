@@ -81,9 +81,14 @@ jobs:
       - name: Stage Node and the app
         run: node scripts/build-windows.mjs
       - name: Compile OpsPoint Setup
+        # Inno Setup 6.7.3 from its official release (the version the script is written and
+        # tested for; 7.x changed defaults). It also compiles under Wine on Linux.
         run: |
-          choco install innosetup --no-progress -y
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=${{ needs.bundle.outputs.version }} packaging\windows\opspoint.iss
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe -OutFile innosetup.exe
+          Start-Process .\innosetup.exe -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /DIR=C:\InnoSetup' -Wait
+          & C:\InnoSetup\ISCC.exe /DAppVersion=${{ needs.bundle.outputs.version }} packaging\windows\opspoint.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@v4
         with:
           name: windows

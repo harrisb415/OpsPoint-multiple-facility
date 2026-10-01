@@ -37,6 +37,9 @@ server/
   secrets/
     index.js + store.js  ← secret files (refused on a cloud profile) + Key Vault / Secrets
                            Manager / Secret Manager, read at start                           ✅ DONE
+  archive/
+    format.js + columns.js + index.js ← export / import: one encrypted file, every table and
+                           photo; SQLite <-> Postgres either way; CLI export|import|drill     ✅ DONE
   app.js                 ← express wiring / composition root (was the top of server.js)     ⬜
 ```
 
@@ -107,6 +110,7 @@ server/
    commented, until their own domain is extracted.
 5. ✅ **storage/** — the port + local, Azure Blob, S3 and Cloud Storage backends
    (deployment plan phase 3). **secrets/** — the secrets port (phase 5).
+   **archive/** — export/import between any two installs (phase 7).
 6. ⬜ **Frontend** — `client/src/api/*` client layer; consider TanStack Query to
    retire the manual DataContext + WebSocket merge.
 7. ⬜ **Monorepo workspaces** — dedupe the auth/csrf/session/WS/updater currently

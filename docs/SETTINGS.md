@@ -136,6 +136,7 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | Setting | Default | Required | What it is |
 | --- | --- | --- | --- |
 | `OPSPOINT_BACKUPS` | `recorded`; azure, aws, gcp: `provider` |  | How the health check knows backups happen: recorded (a backup.create entry in the audit log in the last 26 hours, written by the in-app SQLite backup or by an external job such as scripts/opspoint-backup.sh) or provider (the platform's point-in-time restore, which OpsPoint cannot see and takes on trust). One of `recorded`, `provider`. |
+| `OPSPOINT_EXPORT_PASSPHRASE` | — |  | **Secret.** The passphrase `opspoint export` encrypts its file with, and `opspoint import` and `opspoint drill` open it with: at least 12 characters. Unset: they ask for it, or read --passphrase-file. Keep a copy away from the exports — without it an export cannot be read by anyone. |
 
 ### Security
 
@@ -208,6 +209,7 @@ A store holds only these settings (not the cloud credentials that reach it). The
 | `OPSPOINT_DB_KEY` | `opspoint-db-key` |
 | `DATABASE_URL` | `database-url` |
 | `AZURE_STORAGE_CONNECTION_STRING` | `azure-storage-connection-string` |
+| `OPSPOINT_EXPORT_PASSPHRASE` | `opspoint-export-passphrase` |
 | `SESSION_SECRET` | `session-secret` |
 | `VAPID_PUBLIC_KEY` | `vapid-public-key` |
 | `VAPID_PRIVATE_KEY` | `vapid-private-key` |

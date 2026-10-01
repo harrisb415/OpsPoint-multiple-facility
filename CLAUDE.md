@@ -41,6 +41,10 @@ node server/cli/opspoint.js settings docs > docs/SETTINGS.md
 node server/cli/opspoint.js doctor [--json]
 # Postgres: apply missing migrations/pg files (OpsPoint also does this as it starts)
 node server/cli/opspoint.js migrate [--app central] [--status]
+# Export / import / restore drill (passphrase: OPSPOINT_EXPORT_PASSPHRASE, --passphrase-file, or typed)
+node server/cli/opspoint.js export [--out <file|folder>] [--include-hq]
+node server/cli/opspoint.js import <file> [--keep-hq]      # into a NEW, empty install only
+node server/cli/opspoint.js drill <file|folder>            # newest export -> scratch SQLite + health check
 ```
 
 **Adding a setting?** Declare it in `server/settings/schema.js`, read it with
@@ -186,6 +190,35 @@ that had accounts before this existed is marked done as `legacy` at start). Whil
   server's own localhost. QR codes come from `client/src/utils/qr.js` (no dependency; checked by
   `tests/qr.test.js`).
 - Updates: `update_auto_check` (chosen in setup) runs `updater.check()` daily — it never installs.
+
+### Export / import (`server/archive/`)
+
+One encrypted file per export (`format.js`: magic + plain header with the scrypt parameters, then
+AES-256-GCM frames over gzip; the last frame is flagged, so a cut, changed or extended file fails
+before anything is trusted). Inside: `header.json` (app, version, source driver/profile/zone, each
+table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), `photos/<name>`,
+`manifest.json` (rows per table, sha256 per entry, a checksum, problems). CLI: `export`, `import`,
+`drill` (import into a temporary SQLite install, run the doctor there, delete it; audited).
+
+- **Times** (`columns.js`): SQLite keeps instants as zone-less text in four forms, per column —
+  `utc` (default `datetime('now')`), `local` (`nowLocal()`), `input` (a datetime-local field) and
+  `iso` (`toISOString()`; zone-less leftovers read as UTC when the column defaults to
+  `datetime('now')`, else local). The archive holds ISO UTC; import writes each column's own form
+  back on SQLite, ISO on Postgres. **A new timestamptz or date column must be added to
+  `INSTANTS`/`DATES`** and **a new foreign key to `FK_EDGES`** — `tests/archive.test.js` fails
+  until it is.
+- **Not carried**: `EXCLUDED_TABLES` (sessions, app_instances, idempotency keys, migrations
+  ledger, outbox, phone PINs, push registrations, invites), `MACHINE_SETTINGS`, HQ status, the
+  setup code's fields, and the HQ link unless `--include-hq` (then `--keep-hq` on import, which
+  queues every row for HQ again).
+- **Import**: only into a new install (no records but the seeded settings/groups/audit lines; no
+  live `app_instances` row), refuses a newer `appVersion`; one transaction: settings upserted,
+  seeded groups replaced, the install's own audit lines re-added after the export's, rows inserted
+  with their ids (`OVERRIDING SYSTEM VALUE` + sequences reset on Postgres), a reference to a
+  missing row emptied when the column allows it (Postgres has 5 foreign keys SQLite lacks), the
+  outbox cleared, photos put through the storage port; the manifest is checked and every table
+  counted before COMMIT and again after. A refused row is named (table + id + the database's
+  reason, never the values).
 
 ### Server (`server.js`)
 
@@ -488,7 +521,7 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server.js` | All routes, WS logic, auth, CSRF, rate limiting |
 | `server/settings/schema.js` | Every setting and the six deployment profiles, declared once |
 | `server/settings/index.js` | Layered values (`get`), the startup check (`startupCheck`) |
-| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `migrate`, `keys` |
+| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `migrate`, `keys`, `setup-code`, `export`, `import`, `drill` |
 | `server/health/index.js` | The health checks (`createDoctor`: `run`, `healthz`) |
 | `server/health/instances.js` | This process's heartbeat row in `app_instances` |
 | `server/lib/jobs.js` | Background jobs report each run here (`register`, `beat`) |
@@ -499,6 +532,7 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server/secrets/index.js` | The only reader/writer of secret files; refuses on a cloud profile |
 | `server/secrets/store.js` | Key Vault, Secrets Manager, Secret Manager (run as a child by `settings.loadSecrets()`) |
 | `server/modules/setup/` | First-run setup: the code, the steps, the finish, the checklist |
+| `server/archive/` | Export / import: the file format, the column registry, `exportArchive`/`importArchive` |
 | `server/modules/users/invites.js` | One-time invite links (`user_invites`) |
 | `client/src/pages/Setup.jsx` + `pages/setup/` | The setup wizard (first admin, steps, review) |
 | `client/src/pages/Invite.jsx` | `/invite/:token`: set your own password |

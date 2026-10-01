@@ -22,10 +22,22 @@ Commands
                       (--json for JSON). Keep them secret; never commit them.
   setup-code          A new one-time code for /setup, while no account exists yet
                       (the one printed at first start expired or was lost)
+  export              Every record and photo of this install, in one encrypted file:
+                      --out <file or folder> (default: here), --include-hq keeps the link
+                      to HQ (only for a copy that will replace this install)
+  import <file>       Load an export into this new, empty install — SQLite or Postgres,
+                      either way round; --keep-hq keeps the export's link to HQ
+  drill <file|folder> Restore an export (the newest in a folder) into a scratch install,
+                      run the health check there, then remove the scratch install
 
 Options
   --app central       HQ's settings instead of the facility app's
+  --passphrase-file f export, import, drill: the passphrase, from a file (else the setting
+                      OPSPOINT_EXPORT_PASSPHRASE, else typed at the terminal)
 `;
+
+// Options followed by a value (which is then not a command word).
+const VALUE_OPTIONS = ['--app', '--out', '--passphrase-file'];
 
 function arg(name) {
   const i = process.argv.indexOf(name);
@@ -238,8 +250,294 @@ async function setupCode() {
   }
 }
 
+// ── export / import / drill (server/archive) ────────────────────────────────
+// Settings as the server reads them (with the secret store): null when they
+// are fine, else the exit code (printed).
+function settingsOrStop() {
+  const settings = require('../settings');
+  const stop = readStore(settings.useApp('facility'));
+  if (stop !== null) return stop;
+  const bad = settings.check().filter((p) => p.level === 'error');
+  if (!bad.length) return null;
+  for (const p of bad) process.stdout.write(`ERROR    ${p.message}\n`);
+  return settings.EX_CONFIG;
+}
+
+function readAllStdin() {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (c) => { data += c; });
+    process.stdin.on('end', () => resolve(data));
+    process.stdin.on('error', reject);
+  });
+}
+
+// Typed at the terminal, not echoed.
+function askHidden(question) {
+  return new Promise((resolve) => {
+    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    process.stdout.write(question);
+    rl._writeToOutput = () => {};
+    rl.question('', (answer) => { rl.close(); process.stdout.write('\n'); resolve(answer); });
+  });
+}
+
+// The passphrase: --passphrase-file, --passphrase-stdin (what the drill hands
+// its scratch import), the OPSPOINT_EXPORT_PASSPHRASE setting, or typed (twice
+// for a new export). Null when there is no way to get one.
+async function passphrase({ confirm = false } = {}) {
+  const file = arg('--passphrase-file');
+  if (file) {
+    return require('../secrets').readFile(require('path').resolve(file),
+      { what: `the passphrase file ${file}`, setting: 'OPSPOINT_EXPORT_PASSPHRASE' }).replace(/\r?\n$/, '');
+  }
+  if (flag('--passphrase-stdin')) return (await readAllStdin()).replace(/\r?\n$/, '');
+  const fromSetting = require('../settings').get('OPSPOINT_EXPORT_PASSPHRASE');
+  if (fromSetting) return fromSetting;
+  if (!process.stdin.isTTY) return null;
+  const p = await askHidden('Export passphrase: ');
+  if (confirm && p.length >= 12 && (await askHidden('The same again: ')) !== p) {
+    throw Object.assign(new Error("The two passphrases don't match."), { code: 'ARCHIVE' });
+  }
+  return p;
+}
+const NO_PASSPHRASE = 'No passphrase: set OPSPOINT_EXPORT_PASSPHRASE, pass --passphrase-file, or run this in a terminal and type it.\n';
+
+const n0 = (n) => Number(n || 0).toLocaleString('en-US');
+const mb = (b) => `${(b / 1048576).toFixed(b < 10485760 ? 1 : 0)} MB`;
+const when = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+const driverName = (d) => (d === 'pg' ? 'Postgres' : 'SQLite');
+
+// What could not be carried as it was, by column (no values: they may be records).
+function problemLines(p, what) {
+  if (!p || !p.count) return [];
+  const by = {};
+  for (const x of p.items) by[`${x.table}.${x.column}`] = (by[`${x.table}.${x.column}`] || 0) + 1;
+  const cols = Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k, v]) => `${k} ×${v}`).join(', ');
+  return [`  ${n0(p.count)} value${p.count === 1 ? '' : 's'} ${what} (${cols}${Object.keys(by).length > 6 ? ', …' : ''}).`];
+}
+
+function auditRow(conn, action, label, detail) {
+  const { nowLocal } = require('../lib/time');
+  return conn.run('INSERT INTO audit_log (ts, actor_id, actor_name, ip, action, target_type, target_id, target_label, detail) VALUES (?,?,?,?,?,?,?,?,?)',
+    [nowLocal(), null, 'command line', 'localhost', action, 'system', '', label, JSON.stringify(detail)]);
+}
+
+async function exportCmd() {
+  const fs = require('fs'), path = require('path');
+  const stop = settingsOrStop();
+  if (stop !== null) return stop;
+  const settings = require('../settings');
+  const config = require('../config');
+  const conn = require('../db/connection');
+  if (!conn.isPg && !fs.existsSync(config.DB_PATH)) {
+    process.stdout.write(`There is no database at ${config.DB_PATH}: nothing to export.\n`);
+    return 1;
+  }
+  const pass = await passphrase({ confirm: true });
+  if (!pass) { process.stdout.write(NO_PASSPHRASE); return 2; }
+  const d = new Date(), p2 = (x) => String(x).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
+  let out = path.resolve(arg('--out') || '.');
+  if (fs.existsSync(out) && fs.statSync(out).isDirectory()) out = path.join(out, `opspoint-export-${stamp}.opspoint`);
+
+  conn.open(conn.isPg ? undefined : config.DB_PATH);
+  const t0 = Date.now();
+  try {
+    const archive = require('../archive');
+    process.stdout.write(`Exporting to ${out}\n`);
+    const r = await archive.exportArchive({
+      conn, isPg: conn.isPg, file: out, passphrase: pass, storage: require('../storage').storage(),
+      zone: settings.timeZone().name, profile: settings.profile().name, includeHq: flag('--include-hq'),
+      log: (l) => process.stdout.write(`${l}\n`),
+    });
+    await auditRow(conn, 'archive.export', 'Export written', {
+      file: path.basename(out), rows: r.rows, photos: r.photos.count, includesHq: flag('--include-hq'), checksum: r.checksum,
+    });
+    const lines = ['',
+      `Exported ${r.header.source.facility || 'this install'}: ${Object.keys(r.counts).length} tables, ${n0(r.rows)} rows, ${n0(r.photos.count)} photos, in ${((Date.now() - t0) / 1000).toFixed(1)} s.`,
+      `  File      ${out} (${mb(r.bytes)}, encrypted)`,
+      `  Checksum  ${r.checksum}`,
+      ...problemLines(r.problems, "weren't what their column holds and are empty in the export"),
+    ];
+    if (r.photos.missing.length) lines.push(`  ${r.photos.missing.length} photo(s) named by a record are not in file storage (${r.photos.missing[0]}${r.photos.missing.length > 1 ? ', …' : ''}).`);
+    if (r.header.includesHq) lines.push('  It keeps the link to HQ: import it only into the install that replaces this one.');
+    lines.push('Keep the passphrase apart from the export: without it nobody can open the file.');
+    process.stdout.write(lines.join('\n') + '\n');
+    return 0;
+  } catch (e) {
+    if (e && e.code === 'ARCHIVE') { process.stdout.write(`ERROR    ${e.message}\n`); return 1; }
+    if (e && e.code === 'EEXIST') { process.stdout.write(`ERROR    There is a file at ${out} already: an export never replaces one.\n`); return 1; }
+    throw e;
+  } finally {
+    await conn.close().catch(() => {});
+  }
+}
+
+async function importCmd(file) {
+  const fs = require('fs'), path = require('path'), util = require('util');
+  if (!file) { process.stderr.write(USAGE); return 2; }
+  const json = flag('--json');
+  if (json) console.log = (...a) => process.stderr.write(util.format(...a) + '\n');   // stdout carries only the result
+  const say = (s) => { if (!json) process.stdout.write(s); };
+  const stop = settingsOrStop();
+  if (stop !== null) return stop;
+  const settings = require('../settings');
+  const archive = require('../archive');
+  file = path.resolve(file);
+  if (!fs.existsSync(file)) { process.stdout.write(`ERROR    There is no file at ${file}.\n`); return 1; }
+  const pass = await passphrase();
+  if (!pass) { process.stdout.write(NO_PASSPHRASE); return 2; }
+
+  let header;
+  try {
+    header = await archive.readHeader(file, pass);
+    if (header.app !== archive.APP) throw new archive.ArchiveError("This isn't an export of an OpsPoint facility.");
+    if (archive.compareVersions(header.appVersion, archive.APP_VERSION) > 0) {
+      throw new archive.ArchiveError(`This export came from OpsPoint ${header.appVersion}, newer than this install (${archive.APP_VERSION}): update this install first.`);
+    }
+  } catch (e) {
+    if (e && e.code === 'ARCHIVE') { process.stdout.write(`ERROR    ${e.message}\n`); return 1; }
+    throw e;
+  }
+  const src = header.source || {};
+  say(`Export of ${src.facility || 'a facility'}, written ${when(header.createdAt)} by OpsPoint ${header.appVersion} (${driverName(src.driver)}, ${src.profile || 'unknown profile'})\n`);
+
+  // The database, built the way OpsPoint builds it at its first start.
+  const config = require('../config');
+  const conn = require('../db/connection');
+  if (!conn.isPg) fs.mkdirSync(path.dirname(config.DB_PATH), { recursive: true });
+  const db = require('../../db');
+  try { await db.init(config.DB_PATH); }
+  catch (e) {
+    await conn.close().catch(() => {});
+    if (e && e.code === 'EX_CONFIG') { process.stdout.write(`ERROR    ${e.message}\n`); return settings.EX_CONFIG; }
+    throw e;
+  }
+  say(`Importing into this install (${driverName(conn.isPg ? 'pg' : 'sqlite')}, profile ${settings.profile().name})\n`);
+  const t0 = Date.now();
+  try {
+    const r = await archive.importArchive({
+      conn, isPg: conn.isPg, file, passphrase: pass, storage: require('../storage').storage(),
+      zone: settings.timeZone().name, contentType: require('../storage/photos').contentType,
+      keepHq: flag('--keep-hq'), syncTables: db.SYNC_TABLES, log: (l) => say(`${l}\n`),
+    });
+    await db.auditLog(null, 'command line', 'localhost', 'archive.import', 'system', '', `Imported an export of ${src.facility || 'a facility'}`, {
+      file: path.basename(file), written: header.createdAt, fromVersion: header.appVersion, fromDriver: src.driver,
+      rows: r.rows, photos: r.photos.count, emptied: r.problems.count, keptHq: flag('--keep-hq') && header.includesHq,
+    });
+    if (json) {
+      process.stdout.write(JSON.stringify({
+        ok: true, header, counts: r.counts, rows: r.rows, photos: r.photos, problems: r.problems.count,
+        exportProblems: r.exportProblems.count, ownAudit: r.ownAudit, queuedForHq: r.queuedForHq,
+      }) + '\n');
+      return 0;
+    }
+    const lines = ['',
+      `Imported ${n0(r.rows)} rows in ${Object.keys(r.counts).length} tables and ${n0(r.photos.count)} photos (${mb(r.photos.bytes)}) in ${((Date.now() - t0) / 1000).toFixed(1)} s: every count matches the export.`,
+      ...problemLines(r.problems, 'pointed at records the export no longer had and are left empty'),
+      ...problemLines(r.exportProblems, 'were already empty in the export (not what their column holds)'),
+    ];
+    if (r.ownAudit) lines.push(`  This install's own ${r.ownAudit} audit line(s) from before the import follow the export's.`);
+    if (r.queuedForHq) lines.push(`  Kept the link to HQ: ${n0(r.queuedForHq)} rows are queued to send again.`);
+    else if (header.includesHq && !flag('--keep-hq')) lines.push('  The export has a link to HQ, left out (pass --keep-hq when this install replaces that one).');
+    lines.push('Start OpsPoint: everyone signs in with the password they had. Phone PINs and push alerts are set up again on each phone.');
+    process.stdout.write(lines.join('\n') + '\n');
+    return 0;
+  } catch (e) {
+    if (e && e.code === 'ARCHIVE') {
+      process.stdout.write(json ? JSON.stringify({ ok: false, error: e.message }) + '\n' : `ERROR    ${e.message}\nNothing was imported.\n`);
+      return 1;
+    }
+    throw e;
+  } finally {
+    await conn.close().catch(() => {});
+  }
+}
+
+// The health checks that speak about the restored data; the rest describe the
+// scratch install's machine (no server running, no push keys made…).
+const DRILL_CHECKS = ['database', 'migrations', 'storage', 'timezone'];
+
+async function drillCmd(target) {
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const { spawnSync } = require('child_process');
+  if (!target) { process.stderr.write(USAGE); return 2; }
+  const stop = settingsOrStop();
+  if (stop !== null) return stop;
+  const settings = require('../settings');
+  let file = path.resolve(target);
+  if (!fs.existsSync(file)) { process.stdout.write(`ERROR    There is no file or folder at ${file}.\n`); return 1; }
+  if (fs.statSync(file).isDirectory()) {
+    const newest = fs.readdirSync(file).filter((f) => f.endsWith('.opspoint'))
+      .map((f) => ({ f: path.join(file, f), t: fs.statSync(path.join(file, f)).mtimeMs })).sort((a, b) => b.t - a.t)[0];
+    if (!newest) { process.stdout.write(`ERROR    There is no export (*.opspoint) in ${file}.\n`); return 1; }
+    file = newest.f;
+  }
+  const pass = await passphrase();
+  if (!pass) { process.stdout.write(NO_PASSPHRASE); return 2; }
+
+  // A scratch install: SQLite in a temporary folder, none of this install's settings.
+  const { BY_NAME } = require('../settings/schema');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'opspoint-drill-'));
+  const env = {};
+  for (const [k, v] of Object.entries(process.env)) if (!BY_NAME[k] && !BY_NAME[k.replace(/_FILE$/, '')]) env[k] = v;
+  Object.assign(env, {
+    OPSPOINT_CONFIG: 'none', OPSPOINT_PROFILE: process.platform === 'win32' ? 'windows-local' : 'linux-local',
+    OPSPOINT_DB_DRIVER: 'sqlite', OPSPOINT_DATA: tmp, OPSPOINT_DB: path.join(tmp, 'drill.db'),
+    OPSPOINT_STORAGE: 'local', OPSPOINT_STORAGE_DIR: tmp, TZ: settings.timeZone().name,
+    OPSPOINT_UPDATES: 'platform',            // a scratch install never updates (and its check stays off the network)
+  });
+  const run = (args, input) => spawnSync(process.execPath, [__filename, ...args], { env, input, encoding: 'utf8', maxBuffer: 64 << 20 });
+  let passed = false, summary = '';
+  process.stdout.write(`Drill: ${file}\n`);
+  try {
+    const imp = run(['import', file, '--passphrase-stdin', '--json'], `${pass}\n`);
+    let r = null;
+    try { r = JSON.parse(String(imp.stdout).trim().split('\n').pop()); } catch (e) { /* see below */ }
+    if (imp.status !== 0 || !r || !r.ok) {
+      summary = (r && r.error) || String(imp.stdout || imp.stderr || '').trim().split('\n').pop() || `exit ${imp.status}`;
+      process.stdout.write(`FAILED   The export did not restore: ${summary}\n`);
+      return 1;
+    }
+    const src = r.header.source || {};
+    process.stdout.write(`  Export of ${src.facility || 'a facility'}, written ${when(r.header.createdAt)} by OpsPoint ${r.header.appVersion} (${driverName(src.driver)})\n` +
+      `  Restored into a scratch install: ${Object.keys(r.counts).length} tables, ${n0(r.rows)} rows, ${n0(r.photos.count)} photos; every count matches.\n`);
+
+    const doc = run(['doctor', '--json']);
+    let h = null;
+    try { h = JSON.parse(doc.stdout); } catch (e) { /* see below */ }
+    if (!h) { process.stdout.write(`FAILED   The health check did not run on it: ${String(doc.stderr || doc.stdout).trim().split('\n').pop()}\n`); return 1; }
+    const mark = { pass: 'pass', warn: 'WARN', fail: 'FAIL', skip: 'skip' };
+    const w = Math.max(...h.results.map((x) => x.label.length)) + 2;
+    const block = (xs) => xs.map((x) => `  ${mark[x.status].padEnd(6)}${pad(x.label, w)}${x.says}`).join('\n');
+    const data = h.results.filter((x) => DRILL_CHECKS.includes(x.id)), other = h.results.filter((x) => !DRILL_CHECKS.includes(x.id));
+    process.stdout.write(`Health check of the restored data:\n${block(data)}\n` +
+      `  Not part of the drill (they describe the scratch install, where no server ran): ${other.map((x) => x.label).join(', ')}.\n`);
+    passed = !data.some((x) => x.status === 'fail');
+    summary = `${n0(r.rows)} rows, ${n0(r.photos.count)} photos`;
+    process.stdout.write(passed ? 'The drill passed: the export restores, every count matches and its data checks pass.\n'
+      : 'The drill FAILED: the restored data does not pass its health checks (above).\n');
+    return passed ? 0 : 1;
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    process.stdout.write('Scratch install removed.\n');
+    // On record in this install's audit log, as a contingency-plan test.
+    try {
+      const config = require('../config');
+      const conn = require('../db/connection');
+      if (conn.isPg || fs.existsSync(config.DB_PATH)) {
+        conn.open(conn.isPg ? undefined : config.DB_PATH);
+        await auditRow(conn, 'archive.drill', passed ? 'Restore drill passed' : 'Restore drill failed', { file: path.basename(file), passed, result: summary });
+        await conn.close();
+      }
+    } catch (e) { /* the drill's own result stands */ }
+  }
+}
+
 function main() {
-  const [cmd, sub] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && all[i - 1] !== '--app');
+  const [cmd, sub] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !VALUE_OPTIONS.includes(all[i - 1]));
   const app = arg('--app') || 'facility';
   if (app !== 'facility' && app !== 'central') { process.stderr.write('--app must be facility or central\n'); return 2; }
 
@@ -274,6 +572,9 @@ function main() {
   if (cmd === 'doctor') return doctor();
   if (cmd === 'migrate') return migrateCmd(app);
   if (cmd === 'setup-code') return setupCode();
+  if (cmd === 'export') return exportCmd();
+  if (cmd === 'import') return importCmd(sub);
+  if (cmd === 'drill') return drillCmd(sub);
 
   if (cmd === 'keys') {
     const crypto = require('crypto');

@@ -429,6 +429,13 @@ const SETTINGS = [
              'scripts/opspoint-backup.sh) or provider (the platform\'s point-in-time restore, which OpsPoint cannot ' +
              'see and takes on trust).',
   },
+  {
+    name: 'OPSPOINT_EXPORT_PASSPHRASE', group: 'Backups', scope: 'facility', type: 'string', minLength: 12, secret: true,
+    noun: 'the passphrase exports are encrypted with',
+    summary: 'The passphrase `opspoint export` encrypts its file with, and `opspoint import` and `opspoint drill` open ' +
+             'it with: at least 12 characters. Unset: they ask for it, or read --passphrase-file. Keep a copy away ' +
+             'from the exports — without it an export cannot be read by anyone.',
+  },
 
   // ── Security ──────────────────────────────────────────────────────────────
   {

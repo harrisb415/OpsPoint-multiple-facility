@@ -162,6 +162,23 @@ of running servers, each with what it found and how to fix it. `GET /healthz` gi
 checks as pass/fail only, for a load balancer or monitoring (503 only when the database is
 unreachable).
 
+### Export, import and the restore drill
+
+An export is one encrypted file with every record and photo of an install. Any new install —
+Windows or Linux, SQLite or Postgres, on premises or in a cloud — can import it, so it is how a
+facility moves, and nightly exports are an off-site copy that does not depend on the database kind.
+
+```bash
+node server/cli/opspoint.js export --out D:\Exports     # passphrase: OPSPOINT_EXPORT_PASSPHRASE, a file, or typed
+node server/cli/opspoint.js import <file>               # into a new, empty install (OpsPoint stopped)
+node server/cli/opspoint.js drill D:\Exports            # restore the newest into a scratch install + health check
+```
+
+Import refuses an export from a newer version and an install that already has records, loads
+everything in one transaction and counts every table afterwards. Everyone keeps their password;
+phone PINs and push alerts are set up again on each phone. The link to HQ travels only with
+`--include-hq` / `--keep-hq`. See "Exports" in [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+
 ---
 
 ## Development

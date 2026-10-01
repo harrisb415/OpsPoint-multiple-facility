@@ -348,6 +348,46 @@ Place the entire OpsPoint folder inside a OneDrive or Dropbox folder. Cloud sync
 3. Replace `data/photos/` with your backup photos folder.
 4. Start the server.
 
+### Exports: moving to another server, and the restore drill
+
+A backup restores the same kind of install. An **export** is one encrypted file holding every
+record and every photo, which any new install can load — Windows or Linux, SQLite or Postgres, on
+premises or in a cloud:
+
+```bash
+node server/cli/opspoint.js export --out D:\Exports              # a passphrase of 12+ characters
+node server/cli/opspoint.js import D:\Exports\opspoint-export-20261001-0230.opspoint
+node server/cli/opspoint.js drill D:\Exports                     # the newest export in the folder
+```
+
+- **The passphrase** comes from the setting `OPSPOINT_EXPORT_PASSPHRASE` (the environment, a
+  Docker secret, the secret store), from `--passphrase-file`, or is typed. Without it nobody can
+  open the export: keep it apart from the exports.
+- **Import** only into a new install (it refuses one with any records), with OpsPoint stopped
+  there. It refuses an export from a newer version: update the new install first. Everything
+  loads in one transaction; the manifest and every table's count are checked before it commits
+  and again after. Photos go into the new install's file storage.
+- **What does not travel**: sessions (everyone signs in again, with their own password), phone
+  PINs and push registrations (set up again on each phone), unused invite links, and the old
+  machine's own settings (its backup folder, the key-stored-elsewhere confirmation). The link to
+  HQ is left out unless the export is made with `--include-hq` and imported with `--keep-hq` —
+  only for a new install that replaces the old one (otherwise both would report as one facility).
+- **Moving from SQLite to Postgres** (or back) is the same two commands. Times are carried as
+  instants, so a resident's 9 PM log line is still 9 PM after the move. A reference SQLite kept to
+  a row deleted long ago is left empty on Postgres, which does not allow one; the import says how
+  many.
+- **Nightly export and the drill.** Schedule the export (Task Scheduler or cron, with
+  `OPSPOINT_EXPORT_PASSPHRASE` set for that task only) to a drive or share away from the server,
+  and run `drill` on that folder now and then: it restores the newest export into a temporary
+  SQLite install, runs the health check there, removes it, and records the result in the audit
+  log. Each export is a full copy: delete old ones yourself.
+
+```bash
+# cron: an export every night at 02:30, the drill on Sundays at 04:00
+30 2 * * * cd /opt/opspoint && node server/cli/opspoint.js export --out /srv/opspoint-exports
+0 4 * * 0  cd /opt/opspoint && node server/cli/opspoint.js drill /srv/opspoint-exports
+```
+
 ---
 
 ## 9. Updating OpsPoint

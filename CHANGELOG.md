@@ -2,6 +2,39 @@
 
 ---
 
+## Unreleased — Export and import between any two installs (2026-09-30)
+
+Roadmap phase 7 of the deployment plan: one encrypted file moves a facility from any install to any
+other, and the same pair is the disaster-recovery drill.
+
+- **`opspoint export`** writes every record and every photo into one file: encrypted with a
+  passphrase (scrypt, AES-256-GCM), versioned, with a manifest of row counts, a checksum of every
+  entry, and anything that could not be carried as it was. A file that was cut short, changed or
+  extended fails as it is read. The export reads one consistent snapshot while OpsPoint keeps
+  running, and is recorded in the audit log.
+- **`opspoint import <file>`** loads it into a new, empty install of any profile — SQLite to
+  Postgres or the reverse — and puts the photos into that install's file storage. It refuses an
+  export from a newer version and an install that already has records or a running server. One
+  transaction; every table is counted before it commits and again after; a row the database
+  refuses is named with the database's reason. Times move as instants: each SQLite column's own
+  form (UTC, local, a date-and-time field, ISO) is read and written as the app writes it.
+- **`opspoint drill <file|folder>`** restores the newest export into a temporary SQLite install,
+  runs the health check there, removes it, and writes the result to the audit log.
+- Not carried: sessions, phone PINs, push registrations, unused invite links, the migrations
+  ledger, the HQ outbox, the old machine's own settings and the one-time setup code. The link to
+  HQ travels only with `export --include-hq` and `import --keep-hq` (a replacement install), which
+  then sends HQ every row again.
+- New setting `OPSPOINT_EXPORT_PASSPHRASE` (a secret: the environment, a Docker secret or the
+  secret store); otherwise `--passphrase-file` or typed at the terminal.
+- **Updating**: nothing to apply; no migration.
+- Tests: `tests/archive.test.js` — the file (round trip, wrong passphrase, tampering, truncation,
+  a newer format), the registry against the Postgres schema (every time, date and foreign key),
+  times across a change of clocks, and the round trip of a seeded install through a new SQLite
+  install (and on Postgres runs a new Postgres schema), exported again and compared table by table;
+  the refusals, the HQ link and the drill.
+
+---
+
 ## Unreleased — First-run setup: a setup code, the wizard, invites (2026-09-30)
 
 Roadmap phase 6 of the deployment plan: a new install goes from a setup link to a working facility

@@ -215,7 +215,8 @@ table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), 
   live `app_instances` row), refuses a newer `appVersion`; one transaction: settings upserted,
   seeded groups replaced, the install's own audit lines re-added after the export's, rows inserted
   with their ids (`OVERRIDING SYSTEM VALUE` + sequences reset on Postgres), a reference to a
-  missing row emptied when the column allows it (Postgres has 5 foreign keys SQLite lacks), the
+  missing row emptied when the column allows it (Postgres has 5 foreign keys SQLite lacks), an
+  empty value in a column this database requires given the column's default (both noted), the
   outbox cleared, photos put through the storage port; the manifest is checked and every table
   counted before COMMIT and again after. A refused row is named (table + id + the database's
   reason, never the values).

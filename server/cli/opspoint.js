@@ -429,14 +429,16 @@ async function importCmd(file) {
     });
     if (json) {
       process.stdout.write(JSON.stringify({
-        ok: true, header, counts: r.counts, rows: r.rows, photos: r.photos, problems: r.problems.count,
+        ok: true, header, counts: r.counts, rows: r.rows, photos: r.photos, problems: r.problems.count, problemsByKind: r.problems.byKind,
         exportProblems: r.exportProblems.count, ownAudit: r.ownAudit, queuedForHq: r.queuedForHq,
       }) + '\n');
       return 0;
     }
+    const ofKind = (kind) => ({ count: (r.problems.byKind || {})[kind] || 0, items: r.problems.items.filter((x) => x.kind === kind) });
     const lines = ['',
       `Imported ${n0(r.rows)} rows in ${Object.keys(r.counts).length} tables and ${n0(r.photos.count)} photos (${mb(r.photos.bytes)}) in ${((Date.now() - t0) / 1000).toFixed(1)} s: every count matches the export.`,
-      ...problemLines(r.problems, 'pointed at records the export no longer had and are left empty'),
+      ...problemLines(ofKind('dangling'), 'pointed at records the export no longer had and are left empty'),
+      ...problemLines(ofKind('default'), "were empty where this database requires a value, and got the column's default"),
       ...problemLines(r.exportProblems, 'were already empty in the export (not what their column holds)'),
     ];
     if (r.ownAudit) lines.push(`  This install's own ${r.ownAudit} audit line(s) from before the import follow the export's.`);

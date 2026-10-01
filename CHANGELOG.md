@@ -17,7 +17,9 @@ other, and the same pair is the disaster-recovery drill.
   export from a newer version and an install that already has records or a running server. One
   transaction; every table is counted before it commits and again after; a row the database
   refuses is named with the database's reason. Times move as instants: each SQLite column's own
-  form (UTC, local, a date-and-time field, ISO) is read and written as the app writes it.
+  form (UTC, local, a date-and-time field, ISO) is read and written as the app writes it. Where
+  Postgres is stricter than SQLite, a reference to a long-deleted row is left empty and an empty
+  value in a required column gets the column's default — each counted in the import's report.
 - **`opspoint drill <file|folder>`** restores the newest export into a temporary SQLite install,
   runs the health check there, removes it, and writes the result to the audit log.
 - Not carried: sessions, phone PINs, push registrations, unused invite links, the migrations

@@ -374,8 +374,8 @@ node server/cli/opspoint.js drill D:\Exports                     # the newest ex
   only for a new install that replaces the old one (otherwise both would report as one facility).
 - **Moving from SQLite to Postgres** (or back) is the same two commands. Times are carried as
   instants, so a resident's 9 PM log line is still 9 PM after the move. A reference SQLite kept to
-  a row deleted long ago is left empty on Postgres, which does not allow one; the import says how
-  many.
+  a row deleted long ago is left empty on Postgres, which does not allow one, and a value SQLite
+  left empty where Postgres requires one gets the column's default; the import says how many.
 - **Nightly export and the drill.** Schedule the export (Task Scheduler or cron, with
   `OPSPOINT_EXPORT_PASSPHRASE` set for that task only) to a drive or share away from the server,
   and run `drill` on that folder now and then: it restores the newest export into a temporary

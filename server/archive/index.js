@@ -40,6 +40,7 @@ const APP_VERSION = require('../../package.json').version;
 const PAGE = 1000;          // rows per read
 const BATCH = 250;          // rows per INSERT (29 columns at most: far below either database's limit)
 const SEEDED = ['settings', 'groups', 'audit_log'];   // what a new install writes before anyone signs in
+const DEFAULT = Symbol('the column default');         // a VALUES cell spelled DEFAULT (Postgres)
 const SETUP_CODE_FIELDS = ['code_hash', 'code_salt', 'code_created', 'code_expires'];
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -499,7 +500,8 @@ async function importArchive({ conn, isPg, file, passphrase, storage, zone, cont
     const counts = {}, loaded = {}, problems = [], done = new Set();
     let problemCount = 0, ownAudit = [], manifest = null, queuedForHq = 0, settingKeys = [];
     const photoTotals = { count: 0, bytes: 0 };
-    const note = (p) => { problemCount++; if (problems.length < 1000) problems.push(p); };
+    const byKind = {};
+    const note = (p) => { problemCount++; byKind[p.kind] = (byKind[p.kind] || 0) + 1; if (problems.length < 1000) problems.push(p); };
 
     await conn.transaction(async (tx) => {
       // A new install's own start wrote a few audit lines: they stay, after the export's.
@@ -533,12 +535,26 @@ async function importArchive({ conn, isPg, file, passphrase, storage, zone, cont
         const isSettings = t.name === 'settings';
         const keyIdx = isSettings ? names.indexOf('key') : -1;
         const head = `INSERT INTO ${q(t.name)} (${names.map(q).join(', ')}) ${identity ? 'OVERRIDING SYSTEM VALUE ' : ''}VALUES `;
-        const one = `(${names.map(() => '?').join(', ')})`;
+        // A column this install requires that the export left empty (SQLite
+        // allowed it; Postgres doesn't) gets the column's own default — on
+        // Postgres the DEFAULT keyword, on SQLite its value — and a note.
+        const defaults = new Map();
+        for (const [k, nm] of names.entries()) {
+          const c = tcol.get(nm);
+          if (!c.notNull || c.dflt === null || c.dflt === undefined || k === pkIdx) continue;
+          if (isPg) defaults.set(k, DEFAULT);
+          else {
+            const r = await tx.query1(`SELECT ${c.dflt} AS v`);       // the schema's own expression
+            defaults.set(k, r ? r.v : null);
+          }
+        }
         let batch = [], n = 0;
         const insert = (rows) => {
-          let sql = head + rows.map(() => one).join(', ');
+          const params = [];
+          const tuples = rows.map((row) => `(${row.map((v) => { if (v === DEFAULT) return 'DEFAULT'; params.push(v); return '?'; }).join(', ')})`);
+          let sql = head + tuples.join(', ');
           if (isSettings) sql += ' ON CONFLICT (key) DO UPDATE SET value = excluded.value';
-          return tx.run(sql, rows.flat());
+          return tx.run(sql, params);
         };
         // One statement per batch, inside a savepoint: when the database
         // refuses one, the batch goes again row by row to name the record (and
@@ -576,8 +592,13 @@ async function importArchive({ conn, isPg, file, passphrase, storage, zone, cont
             if (have && have.has(v)) continue;
             const id = pkIdx >= 0 ? vals[pkIdx] : '';
             if (!fk.nullable) throw new ArchiveError(`${t.name} ${id}: its ${fk.col} points at ${fk.parent} ${v}, which the export doesn't have.`);
-            note({ table: t.name, id, column: fk.col, says: `pointed at ${fk.parent} ${v}, which no longer exists: left empty` });
+            note({ kind: 'dangling', table: t.name, id, column: fk.col, says: `pointed at ${fk.parent} ${v}, which no longer exists: left empty` });
             vals[fk.idx] = null;
+          }
+          for (const [k, d] of defaults) {
+            if (vals[k] !== null && vals[k] !== undefined) continue;
+            vals[k] = d;
+            note({ kind: 'default', table: t.name, id: pkIdx >= 0 ? vals[pkIdx] : '', column: names[k], says: "was empty, which this install's database doesn't allow: given the column's default" });
           }
           if (track) track.add(vals[pkIdx]);
           if (isSettings) settingKeys.push(vals[keyIdx]);
@@ -674,7 +695,7 @@ async function importArchive({ conn, isPg, file, passphrase, storage, zone, cont
 
     const rows = Object.values(counts).reduce((a, b) => a + b, 0);
     return {
-      header, counts, rows, photos: photoTotals, problems: { count: problemCount, items: problems },
+      header, counts, rows, photos: photoTotals, problems: { count: problemCount, byKind, items: problems },
       exportProblems: manifest.problems || { count: 0, items: [] }, missingPhotos: (manifest.photos && manifest.photos.missing) || [],
       ownAudit: ownAudit.length, queuedForHq,
     };

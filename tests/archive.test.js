@@ -363,13 +363,27 @@ describe('export, import into a new install, export again', () => {
       const envC = installEnv(path.join(TMP, 'c'), {
         OPSPOINT_DB_DRIVER: 'pg', DATABASE_URL: u.toString(), PGSSLMODE: settings.get('PGSSLMODE'),
       });
-      const imp = cli(['import', fileB, '--passphrase-stdin', '--json'], envC);
+      // SQLite allows an empty created_at where Postgres requires one: it
+      // arrives with the column's default, and the import says so.
+      const blank = spawnSync(process.execPath, ['-e', [
+        `const c = require(${JSON.stringify(path.join(ROOT, 'server', 'db', 'connection'))});`,
+        `c.open(require(${JSON.stringify(path.join(ROOT, 'server', 'config'))}).DB_PATH);`,
+        "c.run('UPDATE consent_records SET created_at = NULL WHERE id = (SELECT MIN(id) FROM consent_records)');",
+        'c.close();',
+      ].join(' ')], { env: installEnv(dirB), encoding: 'utf8' });
+      expect(blank.status).toBe(0);
+      const fileB2 = path.join(TMP, 'b2.opspoint');
+      expect(cli(['export', '--out', fileB2, '--passphrase-stdin'], installEnv(dirB)).status).toBe(0);
+
+      const imp = cli(['import', fileB2, '--passphrase-stdin', '--json'], envC);
       expect(imp.status).toBe(0);
-      expect(lastJson(imp.stdout).ok).toBe(true);
+      const r = lastJson(imp.stdout);
+      expect(r.ok).toBe(true);
+      expect(r.problemsByKind).toEqual({ default: 1 });
       const fileC = path.join(TMP, 'c.opspoint');
       const exp = cli(['export', '--out', fileC, '--passphrase-stdin'], envC);
       expect(exp.status).toBe(0);
-      compareArchives(await contents(fileB), await contents(fileC));
+      compareArchives(await contents(fileB2), await contents(fileC), ['consent_records.created_at']);
     } finally {
       await conn.run(`DROP SCHEMA ${schema} CASCADE`);
     }
@@ -379,7 +393,7 @@ describe('export, import into a new install, export again', () => {
   // lines first (the second adds its own: the import); settings the same keys.
   // Rows as name -> value, times cut to what SQLite's text keeps in that
   // column (seconds; minutes for a date-and-time field): Postgres keeps more.
-  function normalRows(all, t) {
+  function normalRows(all, t, ignore = []) {
     const cols = JSON.parse(all['header.json']).tables.find((u) => u.name === t).columns;
     const kinds = C.INSTANTS[t] || {};
     return rowsOf(all, t).map((row) => {
@@ -387,17 +401,17 @@ describe('export, import into a new install, export again', () => {
       cols.forEach((c, i) => {
         let v = row[i];
         if (kinds[c] && typeof v === 'string' && kinds[c] !== 'iso') v = v.slice(0, kinds[c] === 'input' ? 16 : 19);
-        o[c] = v;
+        if (!ignore.includes(`${t}.${c}`)) o[c] = v;
       });
       return JSON.stringify(Object.keys(o).sort().reduce((a, k) => { a[k] = o[k]; return a; }, {}));
     });
   }
-  function compareArchives(X, Y) {
+  function compareArchives(X, Y, ignore = []) {
     const hx = JSON.parse(X['header.json']), hy = JSON.parse(Y['header.json']);
     expect(hy.tables.map((t) => t.name)).toEqual(hx.tables.map((t) => t.name));
     for (const t of hx.tables) {
       expect([...hy.tables.find((u) => u.name === t.name).columns].sort()).toEqual([...t.columns].sort());
-      const x = normalRows(X, t.name), y = normalRows(Y, t.name);
+      const x = normalRows(X, t.name, ignore), y = normalRows(Y, t.name, ignore);
       if (t.name === 'audit_log') { expect(y.slice(0, x.length)).toEqual(x); continue; }
       if (t.name === 'settings') { for (const l of x) expect(y).toContain(l); continue; }
       expect([t.name, y]).toEqual([t.name, x]);

@@ -98,6 +98,7 @@ setup link and its one-time code:
 
 The installers live in `packaging/`; `bash packaging/linux/install.sh --dry-run --yes` shows what an
 install would do without changing anything. From a checkout, the Quick start below still works.
+What is tested and supported, and the minimum versions: [`docs/SUPPORT.md`](./docs/SUPPORT.md).
 
 ## Quick start
 

@@ -487,9 +487,14 @@ export function SecurityStep({ ctx, done, skip }) {
             {dirNote === 'ok' && <Alert color="success">Backups go there from the next one on.</Alert>}
           </>
         )}
-        {sec.backups.kind === 'provider' && <p className="text-sm text-gray-700 dark:text-gray-300">Your provider keeps point-in-time backups of the database (usually 7 to 35 days: check the database's backup settings in its console). Keep a long-term copy with an export as well.</p>}
+        {sec.backups.kind === 'provider' && <p className="text-sm text-gray-700 dark:text-gray-300">Your provider keeps point-in-time backups of the database (usually 7 to 35 days: check the database's backup settings in its console).</p>}
         {sec.backups.kind === 'volume' && <p className="text-sm text-gray-700 dark:text-gray-300">Back up the Postgres volume, or point a scheduled pg_dump at a volume or bucket that leaves this host.</p>}
         {sec.backups.kind === 'external' && <p className="text-sm text-gray-700 dark:text-gray-300">The database is Postgres: schedule a pg_dump (scripts/opspoint-backup.sh records each one for the health check) to a disk or bucket that leaves the building.</p>}
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          For a copy that outlasts {sec.backups.kind === 'provider' ? 'that window' : 'these backups'} and opens in any OpsPoint (another server, another database), schedule an export:{' '}
+          <code className="font-mono text-xs">node server/cli/opspoint.js export --out &lt;folder&gt;</code> writes one encrypted file with every record and photo, and{' '}
+          <code className="font-mono text-xs">drill &lt;folder&gt;</code> proves the newest one restores.
+        </p>
       </Part>
       <Part title="HTTPS and address">
         {sec.https === 'certificate' && <p className="text-sm text-gray-700 dark:text-gray-300">{sec.tls ? 'OpsPoint serves HTTPS with its own certificate (data/cert.pem).' : 'OpsPoint serves plain HTTP here. Put a proxy with a certificate in front of it (nginx, Caddy, IIS), or add data/cert.pem and data/key.pem, before staff use it over the network.'}</p>}

@@ -42,8 +42,9 @@ MCowBQYDK2VwAyEAT+OjqALSKqG9ZCLj8kON/A1VpxDd3tBDWkWlNn91jY4=
 const RUNTIME_FILES = ['server.js', 'updater.js', 'db.js', 'package.json', 'package-lock.json'];
 // 'server' = the modular-monolith tree that server.js/db.js require at runtime
 // (added in v2.4.0). MUST stay in sync with scripts/release.mjs DIRS, else an
-// applied update swaps server.js without its modules and the install won't boot.
-const RUNTIME_DIRS = ['migrations', path.join('client', 'dist'), 'server'];
+// applied update swaps server.js without its modules and the install won't boot
+// (tests/packaging.test.js holds the two lists together). 'static' = the icons.
+const RUNTIME_DIRS = ['migrations', path.join('client', 'dist'), 'server', 'static'];
 
 // ── semver compare (numeric core only; ignores pre-release tags) ──────
 function cmpSemver(a, b) {

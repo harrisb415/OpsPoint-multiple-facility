@@ -85,6 +85,20 @@ breach-notification procedures, and a contingency plan. Those remain the operato
 
 ---
 
+## Installers
+
+From the first release that carries them, each target has a one-step install that ends with the
+setup link and its one-time code:
+
+| Target | How |
+|--------|-----|
+| Windows | `OpsPoint-Setup-<version>.exe` (Node included); maintenance from Start › OpsPoint Setup |
+| Linux | `sudo bash install.sh` (menus), or `sudo bash install.sh --config answers.env --yes`; afterwards `sudo opspoint` |
+| Docker | `packaging/docker/docker-compose.yml`: OpsPoint and Postgres, `.env` with `TZ` and `POSTGRES_PASSWORD` |
+
+The installers live in `packaging/`; `bash packaging/linux/install.sh --dry-run --yes` shows what an
+install would do without changing anything. From a checkout, the Quick start below still works.
+
 ## Quick start
 
 ```bash

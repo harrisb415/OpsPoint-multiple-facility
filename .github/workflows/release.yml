@@ -1,0 +1,137 @@
+# One release, every package (deployment plan phase 8): from one commit and one
+# version number —
+#   the signed bundle + update-manifest.json   the in-app updater (and install.sh)
+#   OpsPoint-Setup-<ver>.exe                   Windows (Inno Setup)
+#   install.sh                                 Linux
+#   ghcr.io/harrisb415/opspoint:<ver>          Docker
+# all published together to harrisb415/opspoint-releases. Nobody builds a
+# release by hand.
+#
+# Needs two repository secrets:
+#   OPSPOINT_RELEASE_KEY   the Ed25519 release signing key (PEM) the updater pins
+#   RELEASES_TOKEN         a token that may create releases in harrisb415/opspoint-releases
+# Run by hand for now (Actions › Release › Run workflow, with the version);
+# later a pushed tag can start it:  on: { push: { tags: ["v*"] } }
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release: must equal package.json's (for example 2.8.0)"
+        required: true
+      publish:
+        description: "Publish the release and the image (unticked: build only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: Signed bundle
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - id: v
+        name: Version matches package.json
+        run: |
+          pkg=$(node -p "require('./package.json').version")
+          [ "$pkg" = "${{ inputs.version }}" ] || { echo "package.json says $pkg, not ${{ inputs.version }}"; exit 1; }
+          echo "version=$pkg" >> "$GITHUB_OUTPUT"
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: client
+      - name: Build and sign the bundle
+        run: node scripts/release.mjs
+        env:
+          OPSPOINT_RELEASE_KEY: ${{ secrets.OPSPOINT_RELEASE_KEY }}
+      - name: The manifest verifies against the pinned key
+        run: node -e "const u=require('./updater');const m=require('./update-manifest.json');if(!u.verifyManifestSignature(m))process.exit(1);console.log('signature ok', m.version)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundle
+          path: |
+            release/opspoint-${{ steps.v.outputs.version }}.tar.gz
+            release/opspoint-${{ steps.v.outputs.version }}/
+            release/central-*.tar.gz
+            update-manifest.json
+            central-manifest.json
+          if-no-files-found: error
+
+  windows:
+    name: Windows installer
+    needs: bundle
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundle
+      - name: Stage Node and the app
+        run: node scripts/build-windows.mjs
+      - name: Compile OpsPoint Setup
+        run: |
+          choco install innosetup --no-progress -y
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=${{ needs.bundle.outputs.version }} packaging\windows\opspoint.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/OpsPoint-Setup-${{ needs.bundle.outputs.version }}.exe
+          if-no-files-found: error
+
+  docker:
+    name: Docker image
+    needs: bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - if: ${{ inputs.publish }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packaging/docker/Dockerfile
+          push: ${{ inputs.publish }}
+          tags: |
+            ghcr.io/harrisb415/opspoint:${{ needs.bundle.outputs.version }}
+            ghcr.io/harrisb415/opspoint:latest
+
+  publish:
+    name: Publish
+    if: ${{ inputs.publish }}
+    needs: [bundle, windows, docker]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Create the release in opspoint-releases
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          V: ${{ needs.bundle.outputs.version }}
+        run: |
+          cp packaging/linux/install.sh out/install.sh
+          gh release create "v$V" -R harrisb415/opspoint-releases --title "v$V" --notes-file CHANGELOG.md \
+            "out/bundle/release/opspoint-$V.tar.gz" out/bundle/update-manifest.json \
+            out/bundle/release/central-*.tar.gz out/bundle/central-manifest.json \
+            "out/windows/OpsPoint-Setup-$V.exe" out/install.sh

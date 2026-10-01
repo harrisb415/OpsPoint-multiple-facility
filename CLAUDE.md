@@ -45,6 +45,11 @@ node server/cli/opspoint.js migrate [--app central] [--status]
 node server/cli/opspoint.js export [--out <file|folder>] [--include-hq]
 node server/cli/opspoint.js import <file> [--keep-hq]      # into a NEW, empty install only
 node server/cli/opspoint.js drill <file|folder>            # newest export -> scratch SQLite + health check
+# Installers: regenerate the shared look / the Windows pictures after changing brand.json or the icon
+node scripts/gen-brand.cjs [--check]
+node scripts/gen-installer-art.cjs [--check]
+# Plan a Linux install without changing anything
+bash packaging/linux/install.sh --dry-run --yes --config answers.env
 ```
 
 **Adding a setting?** Declare it in `server/settings/schema.js`, read it with
@@ -220,6 +225,39 @@ table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), 
   outbox cleared, photos put through the storage port; the manifest is checked and every table
   counted before COMMIT and again after. A refused row is named (table + id + the database's
   reason, never the values).
+
+### Packages and installers (`packaging/`, deployment plan phase 8)
+
+- `packaging/brand.json` — the installers' look, once: the icon's palette (navy, gold, warm
+  white, silver; pass/fail stay green/red), the door banner, the menu and the words.
+  `node scripts/gen-brand.cjs` writes it into the generated block of `linux/install.sh` and
+  `windows/opspoint.ps1` (both must stand alone); `tests/packaging.test.js` fails on drift.
+- `packaging/linux/install.sh` — installer and, copied to `/usr/local/bin/opspoint`, the
+  maintenance tool: whiptail menus recoloured with `NEWT_COLORS`, else arrow/number-key menus in
+  24-bit/256/16 colour, else plain text (`NO_COLOR`, `--no-color`, no terminal). `--config
+  answers.env --yes` is unattended (answers are read as data, never sourced); `--dry-run` changes
+  nothing and needs no root. Installs Node `NODE_VERSION` when the machine has no Node 20+
+  (checked against nodejs.org's SHASUMS256), downloads the release manifest + bundle and checks
+  the manifest's Ed25519 signature against the key `updater.js` pins, writes
+  `/etc/opspoint/opspoint.config.json` (0640) and a systemd unit (`OPSPOINT_CONFIG`,
+  `RestartPreventExitStatus=78`), waits for `/healthz`, runs the doctor and prints the setup
+  link + a fresh setup code (+ a QR with qrencode). Upgrade keeps `app.previous` and rolls back
+  if the new version doesn't come up.
+- `packaging/windows/` — `opspoint.iss` (Inno Setup 6: Node + the app with its packages, door
+  pictures from `scripts/gen-installer-art.cjs`, then runs `opspoint.ps1 -Configure`),
+  `opspoint.ps1` (the same questions/menus in PowerShell 5.1; **saved as UTF-8 with a BOM** or
+  5.1 misreads the glyphs; the service is a scheduled task at startup as NETWORK SERVICE),
+  `opspoint.cmd` (the Start menu entry). `scripts/build-windows.mjs` stages
+  `release/windows/{node,app}` after `scripts/release.mjs`.
+- `packaging/docker/` — `Dockerfile` (profile docker, user node, `/data` volume, HEALTHCHECK on
+  `/healthz`) built from the repo root with an allowlist `.dockerignore`; `docker-compose.yml`
+  (OpsPoint + Postgres 16).
+- `.github/workflows/ci.yml` (Windows/Linux SQLite, Linux Postgres via pg-audit.sh, the storage
+  emulators) and `release.yml` (bundle → Windows installer → image → publish to
+  opspoint-releases; secrets `OPSPOINT_RELEASE_KEY`, `RELEASES_TOKEN`) — both **manual only**
+  (`workflow_dispatch`) until push/tag triggers are approved (Actions minutes, publishing).
+- The bundle (`scripts/release.mjs` FILES/DIRS) must carry every `RUNTIME_FILES`/`RUNTIME_DIRS`
+  entry of `updater.js`, plus `static/` (icons); a test holds them together.
 
 ### Server (`server.js`)
 

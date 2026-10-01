@@ -1,0 +1,37 @@
+{
+  "_about": "The installers' look, defined once (deployment plan: 'Installer look and feel'). scripts/gen-brand.cjs writes it into packaging/linux/install.sh and packaging/windows/opspoint.ps1; tests/packaging.test.js fails when they drift. Colours come from the OpsPoint icon: a navy disc, a silver ring, an open door lit gold.",
+  "product": "OpsPoint",
+  "setupTitle": "OpsPoint Setup",
+  "tagline": "Residential operations",
+  "door": "◖▌░░◗",
+  "palette": {
+    "navy":   { "hex": "#1E3A70", "ansi256": 24,  "ansi16": "blue",         "role": "Background, panels (the disc and the door)" },
+    "gold":   { "hex": "#F5B82E", "ansi256": 214, "ansi16": "yellow",       "role": "Titles, the selected item, progress fill (the doorway light)" },
+    "warm":   { "hex": "#FFE8A3", "ansi256": 229, "ansi16": "brightwhite",  "role": "Highlights, links, the setup code (the glow on the floor)" },
+    "silver": { "hex": "#C5CBD3", "ansi256": 251, "ansi16": "white",        "role": "Borders, menu text (the ring)" },
+    "pass":   { "hex": "#16A34A", "ansi256": 34,  "ansi16": "green",        "role": "A check that passed (never a brand colour)" },
+    "fail":   { "hex": "#DC2626", "ansi256": 160, "ansi16": "red",          "role": "A check that failed (never a brand colour)" }
+  },
+  "menu": {
+    "question": "What would you like to do?",
+    "items": [
+      { "key": "1", "id": "install",   "label": "Install OpsPoint" },
+      { "key": "2", "id": "upgrade",   "label": "Upgrade or repair" },
+      { "key": "3", "id": "doctor",    "label": "Health check" },
+      { "key": "4", "id": "backup",    "label": "Back up or restore" },
+      { "key": "5", "id": "export",    "label": "Export or import" },
+      { "key": "6", "id": "uninstall", "label": "Uninstall" },
+      { "key": "q", "id": "quit",      "label": "Quit" }
+    ],
+    "hints": "↑↓ move · Enter select · Q quit"
+  },
+  "words": {
+    "checking": "Checking this machine",
+    "installing": "Installing",
+    "done": "OpsPoint is installed",
+    "openSetup": "Open this link to finish setup",
+    "setupCode": "Setup code",
+    "codeNote": "works once, for 24 hours",
+    "phoneNote": "Scan it with a phone to finish setup there"
+  }
+}

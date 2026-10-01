@@ -1,0 +1,20 @@
+# Only what the image needs (packaging/docker/Dockerfile). Everything else —
+# data/, keys, settings files, .env, release/, node_modules — never reaches a
+# build, so it can never end up in an image.
+*
+!package.json
+!package-lock.json
+!server.js
+!db.js
+!updater.js
+!bootstrap.js
+!generate_cert.js
+!server/
+!migrations/
+!static/
+!client/
+client/node_modules
+client/dist
+**/*.pem
+**/.env*
+**/opspoint.config.json

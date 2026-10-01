@@ -1,0 +1,43 @@
+# OpsPoint and its Postgres on one Docker host.
+#
+#   1. Beside this file, make .env with:
+#        TZ=America/Chicago                 the facility's time zone (required)
+#        POSTGRES_PASSWORD=<a long random password>
+#   2. docker compose up -d
+#   3. docker compose logs opspoint        the setup link and its one-time code
+#
+# Back up the Postgres volume (or point a scheduled pg_dump at storage off this
+# host), and export now and then: docker compose exec opspoint node server/cli/opspoint.js export --out /data/exports
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: opspoint
+      POSTGRES_USER: opspoint
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opspoint -d opspoint"]
+      interval: 10s
+      retries: 12
+    restart: unless-stopped
+
+  opspoint:
+    image: ghcr.io/harrisb415/opspoint:${OPSPOINT_VERSION:-latest}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      TZ: ${TZ:?set TZ in .env, for example America/Chicago}
+      DATABASE_URL: postgresql://opspoint:${POSTGRES_PASSWORD}@db:5432/opspoint
+      PGSSLMODE: disable          # the database is on this host's private network
+    volumes:
+      - opspoint-data:/data       # photos, the session key, push keys, exports
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}
+  opspoint-data: {}

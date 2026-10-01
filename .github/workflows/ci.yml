@@ -1,0 +1,97 @@
+# The tested combinations (deployment plan: "Testing and support"): Windows +
+# SQLite, Linux + SQLite, Linux + Postgres (schema parity + the whole suite,
+# scripts/pg-audit.sh), and the object-storage backends against their emulators.
+#
+# Run by hand for now (Actions minutes on a private repository can cost money):
+# Actions › CI › Run workflow. To run on every push, add under `on:`
+#   push: { branches: [master] }
+#   pull_request: {}
+name: CI
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  sqlite:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "Windows + SQLite", os: windows-latest }
+          - { name: "Linux + SQLite", os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    env:
+      TZ: America/Los_Angeles
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: client
+      - run: npm run build
+        working-directory: client
+      - run: npx jest --runInBand
+
+  postgres:
+    name: Linux + Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: opspoint
+          POSTGRES_PASSWORD: opspoint-ci
+          POSTGRES_DB: opspoint_verify
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U opspoint -d opspoint_verify"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TZ: America/Los_Angeles
+      # pg-audit.sh builds its scratch schemas in <server>/opspoint_verify.
+      DATABASE_URL: postgresql://opspoint:opspoint-ci@localhost:5432/opspoint_verify
+      PGSSLMODE: disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+        working-directory: client
+      - run: npm run build
+        working-directory: client
+      - run: bash scripts/pg-audit.sh
+
+  storage:
+    name: Object storage (MinIO, Azurite, fake-gcs-server)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Start the emulators
+        run: |
+          docker run -d --name minio -p 9000:9000 minio/minio server /data
+          docker run -d --name azurite -p 10000:10000 mcr.microsoft.com/azure-storage/azurite azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+          docker run -d --name gcs -p 4443:4443 fsouza/fake-gcs-server -scheme http -public-host 127.0.0.1:4443
+          for port in 9000 10000 4443; do timeout 60 bash -c "until (echo > /dev/tcp/127.0.0.1/$port) 2>/dev/null; do sleep 1; done"; done
+      - run: npx jest --runInBand tests/storage.emulators.test.js
+        env:
+          OPSPOINT_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+          OPSPOINT_TEST_AZURITE: http://127.0.0.1:10000/devstoreaccount1
+          OPSPOINT_TEST_GCS_ENDPOINT: http://127.0.0.1:4443

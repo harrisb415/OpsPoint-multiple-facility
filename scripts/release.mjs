@@ -30,11 +30,15 @@ const VER = pkg.version;
 const REPO = 'harrisb415/opspoint-releases'; // PUBLIC releases repo (source repo is private)
 
 // Runtime payload — must match RUNTIME_FILES / RUNTIME_DIRS in updater.js.
-const FILES = ['server.js', 'updater.js', 'db.js', 'bootstrap.js', 'package.json', 'package-lock.json', 'generate_cert.js'];
+// packaging/linux/install.sh rides in the signed bundle: the Linux installer
+// takes its maintenance tool (`opspoint`) from here, never from an unsigned download.
+const FILES = ['server.js', 'updater.js', 'db.js', 'bootstrap.js', 'package.json', 'package-lock.json', 'generate_cert.js', 'packaging/linux/install.sh'];
 // 'server' = the modular-monolith tree (config/lib/db/middleware/realtime/modules)
 // that server.js + db.js now require at runtime; MUST stay in sync with
 // updater.js RUNTIME_DIRS or an updated install boots without its modules.
-const DIRS = ['migrations', path.join('client', 'dist'), 'server'];
+// 'static' = the icons (favicon, phone app): a new install made from this
+// bundle (install.sh, OpsPoint Setup, the image) has no git checkout to get them from.
+const DIRS = ['migrations', path.join('client', 'dist'), 'server', 'static'];
 
 const REL = path.join(ROOT, 'release');
 const STAGE = path.join(REL, `opspoint-${VER}`);
@@ -62,11 +66,16 @@ fs.rmSync(STAGE, { recursive: true, force: true });
 fs.mkdirSync(STAGE, { recursive: true });
 for (const f of FILES) {
   const src = path.join(ROOT, f);
-  if (fs.existsSync(src)) fs.copyFileSync(src, path.join(STAGE, f));
+  if (!fs.existsSync(src)) continue;
+  fs.mkdirSync(path.dirname(path.join(STAGE, f)), { recursive: true });
+  fs.copyFileSync(src, path.join(STAGE, f));
 }
+// icon-1024.png is only the source of the installers' pictures (scripts/gen-installer-art.cjs):
+// nothing serves it, so updates don't download it.
+const shipped = (p) => !p.endsWith('icon-1024.png');
 for (const d of DIRS) {
   const src = path.join(ROOT, d);
-  if (fs.existsSync(src)) fs.cpSync(src, path.join(STAGE, d), { recursive: true });
+  if (fs.existsSync(src)) fs.cpSync(src, path.join(STAGE, d), { recursive: true, filter: shipped });
 }
 
 // 3. Archive (contents at root) as cross-platform .tar.gz

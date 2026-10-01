@@ -2,6 +2,35 @@
 
 ---
 
+## Unreleased — Packages: installers, a Docker image and one release pipeline (in progress, 2026-09-30)
+
+Roadmap phase 8 of the deployment plan, first part: everything built and tested on this side;
+installing on clean machines, the Windows installer's compile and publishing wait for go-aheads.
+
+- **Linux installer** (`packaging/linux/install.sh`): full-screen menus (whiptail, in the icon's
+  navy and gold) or arrow/number-key menus in colour, plain text for logs and pipes. Checks the
+  machine, asks the time zone, port, data folder and database, installs Node 24 if needed,
+  downloads the release and refuses one whose manifest isn't signed with OpsPoint's release key,
+  sets up a systemd service (or PM2), waits for the health check and ends with the setup link and
+  a one-time code. `--config answers.env --yes` runs it unattended; `--dry-run` shows the plan.
+  It stays on the machine as `opspoint`: upgrade (rolls back if the new version doesn't start),
+  health check, export, restore drill, uninstall.
+- **Windows installer** (`packaging/windows/opspoint.iss`, Inno Setup): Node and the app in one
+  setup program with the door artwork, then the same questions, colours and summary in a console
+  (`opspoint.ps1`), a service that starts with Windows, and a Start menu "OpsPoint Setup" for
+  maintenance.
+- **Docker image** (`packaging/docker/`): profile docker, runs as a normal user, data in a volume,
+  a health check; `docker-compose.yml` brings OpsPoint and Postgres up together.
+- **One pipeline** (`.github/workflows/release.yml`): one version builds the signed bundle, the
+  Windows installer and the image, and publishes them together; `ci.yml` runs the tested
+  combinations. Both run only by hand for now.
+- The release bundle now carries the app's icons (`static/`), which installs made from it lacked.
+- Tests: `tests/packaging.test.js` (the shared look in sync, the installer's unattended plan, its
+  answers file read as data, the Windows tool on PowerShell 5.1, the image allowlist, the
+  workflows, the bundle and updater lists in step).
+
+---
+
 ## Unreleased — Export and import between any two installs (2026-09-30)
 
 Roadmap phase 7 of the deployment plan: one encrypted file moves a facility from any install to any

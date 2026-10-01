@@ -76,9 +76,13 @@ function pgColumns() {
         out[t][c[1].toLowerCase()] = c[2].toLowerCase();
       }
     }
-    for (const m of sql.matchAll(/ALTER TABLE\s+([a-z_]+)\s+ADD COLUMN(?: IF NOT EXISTS)?\s+([a-z_]+)\s+([a-z]+)/gi)) {
-      const t = m[1].toLowerCase(); out[t] = out[t] || {};
-      out[t][m[2].toLowerCase()] = m[3].toLowerCase();
+    // One ALTER may add several columns (005 adds three).
+    for (const m of sql.matchAll(/ALTER TABLE\s+([a-z_]+)\s+([^;]*);/gi)) {
+      const t = m[1].toLowerCase();
+      for (const a of m[2].matchAll(/ADD COLUMN(?: IF NOT EXISTS)?\s+([a-z_]+)\s+([a-z]+)/gi)) {
+        out[t] = out[t] || {};
+        out[t][a[1].toLowerCase()] = a[2].toLowerCase();
+      }
     }
   }
   return out;
@@ -91,7 +95,9 @@ function pgForeignKeys() {
     for (const m of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)?\s+([a-z_]+)\s*\(([\s\S]*?)\n\);/gi)) {
       for (const r of m[2].matchAll(/^\s*([a-z_]+)\s+[a-z ]+?REFERENCES\s+([a-z_]+)/gim)) out[`${m[1]}.${r[1]}`] = r[2];
     }
-    for (const m of sql.matchAll(/ALTER TABLE\s+([a-z_]+)\s+ADD COLUMN(?: IF NOT EXISTS)?\s+([a-z_]+)[^;]*?REFERENCES\s+([a-z_]+)/gi)) out[`${m[1]}.${m[2]}`] = m[3];
+    for (const m of sql.matchAll(/ALTER TABLE\s+([a-z_]+)\s+([^;]*);/gi)) {
+      for (const a of m[2].matchAll(/ADD COLUMN(?: IF NOT EXISTS)?\s+([a-z_]+)[^,]*?REFERENCES\s+([a-z_]+)/gi)) out[`${m[1]}.${a[1]}`] = a[2];
+    }
   }
   return out;
 }

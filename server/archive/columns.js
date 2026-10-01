@@ -55,7 +55,7 @@ const INSTANTS = {
   log_entries: { created_at: 'utc', voided_at: 'iso' },
   mail_log: { logged_at: 'local', approved_at: 'local', delivered_at: 'local', created_at: 'utc' },
   milestones: { signed_off_at: 'local', locked_at: 'local', unlocked_at: 'local', created_at: 'utc' },
-  passes: { departure: 'input', return_date: 'input', created_at: 'utc', extended_at: 'iso' },
+  passes: { departure: 'input', return_date: 'input', created_at: 'utc', extended_at: 'iso', extended_from: 'input' },   // extended_from: the return_date it replaced
   reports: { created_at: 'iso', updated_at: 'iso' },
   staff: { created_at: 'utc' },
   treatment_plans: { signed_at: 'local', created_at: 'local', updated_at: 'local' },

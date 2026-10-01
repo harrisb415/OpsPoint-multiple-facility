@@ -29,8 +29,8 @@ combination gets it.
 
 ## May work, not tested
 
-- Alpine Linux or other musl distributions (the encrypted SQLite driver ships glibc builds;
-  Postgres installs are more likely to work).
+- Alpine Linux or other musl distributions: the encrypted SQLite driver includes musl builds,
+  but the installer and the service set-up are tested only on glibc distributions with systemd.
 - 32-bit systems, ARM Windows.
 - Postgres-compatible databases other than PostgreSQL itself.
 - S3-compatible storage other than Amazon S3 and MinIO (Cloudflare R2, Backblaze B2, Wasabi):

@@ -111,6 +111,7 @@ describe('the Windows installer', () => {
     expect(r.stdout).toMatch(/Checking this machine/);
     expect(r.stdout).toMatch(/"TZ":\s+"America\/Denver"/);
     expect(r.stdout).toMatch(/"DATABASE_URL":\s+"postgresql:\/\/ops:•••@db\.internal:5432\/opspoint"/);
+    expect(r.stdout).toMatch(/"PGSSLMODE":\s+"verify-full"/);                 // another machine: verified TLS
     expect(r.stdout).not.toMatch(/Sup3r-secret/);
     expect(r.stdout).toMatch(/would register the scheduled task OpsPoint/);
     expect(r.stdout).toMatch(/http:\/\/ops\.example\.org:3080\/setup/);
@@ -173,6 +174,7 @@ describe('the Linux installer', () => {
     expect(out).toMatch(/"PORT": 8080/);
     expect(out).toMatch(/"OPSPOINT_DATA": "\/srv\/ops-data"/);
     expect(out).toMatch(/"DATABASE_URL": "postgresql:\/\/ops:•••@db\.internal:5432\/opspoint"/);
+    expect(out).toMatch(/"PGSSLMODE": "verify-full"/);                       // another machine: verified TLS
     expect(out).not.toMatch(/Sup3r-secret/);
     expect(out).toMatch(/WorkingDirectory=\/opt\/opspoint-test\/app/);
     expect(out).toMatch(/RestartPreventExitStatus=78/);
@@ -219,5 +221,10 @@ describe('the Linux installer', () => {
     expect(sh(['--dry-run', '--yes', '--config', a, 'install']).stderr).toMatch(/must be a full path/);
     fs.writeFileSync(a, 'TZ=UTC\nOPSPOINT_DB_DRIVER=pg\nDATABASE_URL=mysql://x\n');
     expect(sh(['--dry-run', '--yes', '--config', a, 'install']).stderr).toMatch(/DATABASE_URL must be a postgresql:\/\/ connection string/);
+    // A database on this machine needs no TLS; anything else may not be named.
+    fs.writeFileSync(a, 'TZ=UTC\nSERVICE=systemd\nOPSPOINT_DB_DRIVER=pg\nDATABASE_URL=postgresql://ops:pw@127.0.0.1:5432/opspoint\n');
+    expect(sh(['--dry-run', '--yes', '--config', a, 'install']).stdout).toMatch(/"PGSSLMODE": "disable"/);
+    fs.writeFileSync(a, 'TZ=UTC\nOPSPOINT_DB_DRIVER=pg\nDATABASE_URL=postgresql://ops:pw@db/opspoint\nPGSSLMODE=maybe\n');
+    expect(sh(['--dry-run', '--yes', '--config', a, 'install']).stderr).toMatch(/PGSSLMODE must be verify-full, verify-ca, require or disable/);
   });
 });

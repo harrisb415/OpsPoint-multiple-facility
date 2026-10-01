@@ -450,7 +450,7 @@ function createUpdater(ctx) {
   function _npmInstall() {
     return new Promise((resolve, reject) => {
       const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-      const child = spawn(npmCmd, ['install', '--omit=dev', '--no-audit', '--no-fund'], { cwd: baseDir, stdio: 'ignore', shell: process.platform === 'win32' });
+      const child = spawn(npmCmd, ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: baseDir, stdio: 'ignore', shell: process.platform === 'win32' });
       const killer = setTimeout(() => { try { child.kill(); } catch (e) {} reject(new Error('npm install timed out')); }, 5 * 60 * 1000);
       child.on('error', e => { clearTimeout(killer); reject(e); });
       child.on('exit', code => { clearTimeout(killer); code === 0 ? resolve() : reject(new Error('npm install exited ' + code)); });

@@ -25,6 +25,23 @@ installing on clean machines, the Windows installer's compile and publishing wai
   Windows installer and the image, and publishes them together; `ci.yml` runs the tested
   combinations. Both run only by hand for now.
 - The release bundle now carries the app's icons (`static/`), which installs made from it lacked.
+- **Tested on a clean Debian 13 machine** (SQLite and PostgreSQL 17): unattended install in about 15
+  seconds, maintenance tool, export and restore drill, upgrade, rollback of a version that won't
+  start, refusal of a bundle signed with any other key, uninstall, and all three menu styles. What it
+  found, fixed:
+  - Packages install with `--ignore-scripts` (installer, Windows build, in-app updater): the
+    encrypted SQLite driver ships prebuilt binaries, but npm tried to compile it and failed on a
+    machine without build tools. The plain `better-sqlite3`, used only by tests, is a dev dependency.
+  - Bundles built on Windows unpack in unprivileged containers (`--no-same-owner`).
+  - Postgres connections ask for TLS (`PGSSLMODE`: none for a database on the same machine,
+    verified otherwise) instead of leaving the verify-full default to fail on a local database.
+  - On an installed machine, Enter alone in the menu runs the health check, and "upgrade or
+    repair instead?" defaults to No: three Enters can no longer reinstall from the internet.
+  - A brand-new install's health check reports the key confirmation and the first backup as
+    pending (warnings) while first-run setup is open, instead of failures.
+  - `export --out` makes the folder it names; an import creates the photos folder as a first
+    start would; `uninstall --yes` proceeds (keeping the data); the banner lines up whatever the
+    locale variables claim.
 - Tests: `tests/packaging.test.js` (the shared look in sync, the installer's unattended plan, its
   answers file read as data, the Windows tool on PowerShell 5.1, the image allowlist, the
   workflows, the bundle and updater lists in step).

@@ -52,6 +52,15 @@ function every(ms) {
 }
 function gb(bytes) { return `${(bytes / 1073741824).toFixed(bytes < 10737418240 ? 1 : 0)} GB`; }
 function oneLine(s) { return String(s || '').replace(/\s+/g, ' ').trim().slice(0, 300); }
+
+// First-run setup still open (its `setup` setting, without finished_at): on an
+// install this new, what setup itself asks for, or what simply hasn't happened
+// yet, is pending — not a failure. An install from before setup existed has
+// the setting marked finished (legacy) at its first start.
+async function inSetup(ctx) {
+  const st = await ctx.readSetting('setup', null);
+  return !!(st && typeof st === 'object' && !st.finished_at);
+}
 function listOf(items, max = 4) {
   const shown = items.slice(0, max);
   const rest = items.length - shown.length;
@@ -203,6 +212,11 @@ const CHECKS = [
       if (c && c.fp === key.fingerprint) {
         return { status: 'pass', says: `Stored somewhere else: confirmed by ${c.by || 'an admin'} on ${c.at || 'an earlier date'}.` };
       }
+      if (!(c && c.fp) && await inSetup(ctx)) {
+        return { status: 'warn', says: "Not confirmed yet: first-run setup's Security step asks for it.",
+          fix: `Keep ${key.fromSetting ? 'a copy of OPSPOINT_DB_KEY' : ctx.dbKeyPath()} somewhere off this machine, then confirm it in setup (or press "Key stored elsewhere").`,
+          action: 'dbkey-confirm' };
+      }
       const why = c && c.fp ? `The key changed after it was confirmed on ${c.at}` : 'Nobody has confirmed the key is stored somewhere else';
       const what = key.fromSetting ? 'a copy of OPSPOINT_DB_KEY' : ctx.dbKeyPath();
       return { status: 'fail', says: `${why}; without it the database and every backup of it are unreadable.`,
@@ -227,6 +241,11 @@ const CHECKS = [
         try { const d = JSON.parse(bad.detail || '{}'); detail = d.error || ''; } catch (e) { detail = bad.detail || ''; }
         return { status: 'fail', says: `The last backup failed${Number.isFinite(when) ? ' ' + ago(ctx.now - when) : ''}${detail ? ': ' + oneLine(detail) : ''}.`,
           fix: 'Check the backup destination is reachable and has space, then watch the next run.' };
+      }
+      if (!good && await inSetup(ctx)) {
+        return { status: 'warn', says: ctx.conn.isPg ? 'No backup yet: this install is new.' : 'No backup yet: this install is new (the first one runs 90 seconds after the server starts).',
+          fix: ctx.conn.isPg ? 'Schedule a pg_dump job that records each run in the audit log (scripts/opspoint-backup.sh does), or set OPSPOINT_BACKUPS=provider on a managed platform.'
+            : 'Nothing to do yet; choose the backup folder in setup.' };
       }
       if (!good) {
         return { status: 'fail', says: 'No backup has been recorded yet.',

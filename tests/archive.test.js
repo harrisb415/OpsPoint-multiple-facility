@@ -347,6 +347,26 @@ describe('export, import into a new install, export again', () => {
     expect(kept.queuedForHq).toBeGreaterThan(0);
   });
 
+  test('an install with no photos yet exports into a new folder, and its drill passes', () => {
+    const dirN = path.join(TMP, 'nophotos');
+    const envN = installEnv(dirN);
+    const init = spawnSync(process.execPath, ['-e', [
+      `const db = require(${JSON.stringify(path.join(ROOT, 'db'))});`,
+      `db.init(require(${JSON.stringify(path.join(ROOT, 'server', 'config'))}).DB_PATH).then(() => process.exit(0), (e) => { console.error(e); process.exit(1); });`,
+    ].join(' ')], { env: envN, encoding: 'utf8' });
+    expect(init.status).toBe(0);
+    const folder = path.join(dirN, 'exports', 'nightly');            // doesn't exist yet
+    const exp = cli(['export', '--out', folder, '--passphrase-stdin'], envN);
+    expect(exp.status).toBe(0);
+    const made = fs.readdirSync(folder);
+    expect(made).toHaveLength(1);
+    expect(made[0]).toMatch(/^opspoint-export-\d{8}-\d{4}\.opspoint$/);
+    const drill = cli(['drill', folder, '--passphrase-stdin'], installEnv(path.join(TMP, 'nophotos-home')));
+    expect(drill.stdout).toMatch(/pass\s+File storage/);
+    expect(drill.stdout).toMatch(/The drill passed/);
+    expect(drill.status).toBe(0);
+  });
+
   test('the drill restores an export into a scratch install, runs the health check there and removes it', () => {
     const dirD = path.join(TMP, 'drill-home');
     const before = fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('opspoint-drill-')).length;

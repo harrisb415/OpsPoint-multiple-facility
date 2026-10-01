@@ -40,7 +40,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 console.log('• the bundle and its packages…');
 fs.cpSync(BUNDLE, path.join(OUT, 'app'), { recursive: true });
-execSync('npm ci --omit=dev --no-audit --no-fund', { cwd: path.join(OUT, 'app'), stdio: 'inherit' });
+execSync('npm ci --omit=dev --ignore-scripts --no-audit --no-fund', { cwd: path.join(OUT, 'app'), stdio: 'inherit' });
 // The encrypted SQLite driver ships prebuilt binaries: it must load here, as the service will.
 execFileSync(process.execPath, ['-e', "new (require('better-sqlite3-multiple-ciphers'))(':memory:').prepare('select 1').get()"], { cwd: path.join(OUT, 'app'), stdio: 'inherit' });
 

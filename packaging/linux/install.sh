@@ -24,6 +24,8 @@
 #   TZ=America/Chicago            the facility's time zone (asked when this machine is on UTC)
 #   PORT=3000                     OPSPOINT_DATA=/var/lib/opspoint
 #   OPSPOINT_DB_DRIVER=sqlite     or pg, with DATABASE_URL=postgresql://user:pass@host:5432/db
+#   PGSSLMODE=verify-full         TLS to Postgres: verify-full, verify-ca, require or disable
+#                                 (default disable for a database on this machine)
 #   SERVICE=systemd               or pm2 (when the machine has no systemd)
 #   ADDRESS=ops.example.org       the name or address the setup link uses (default: this
 #                                 machine's first network address)
@@ -91,13 +93,14 @@ done
 APP="$PREFIX/app"
 NODE_HOME="$PREFIX/node"
 
-# Character counts (${#var}, for lining text up) need a UTF-8 locale.
-case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
-  *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) ;;
-  *) for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
-       if locale -a 2>/dev/null | grep -qix "$l"; then export LC_ALL="$l"; break; fi
-     done ;;
-esac
+# Character counts (${#var}, for lining text up) need a working UTF-8 locale:
+# test what bash actually does — LANG can name a locale the machine lacks.
+_glyph='░'
+if [ "${#_glyph}" != 1 ]; then
+  for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+    if locale -a 2>/dev/null | grep -qix "$l"; then export LC_ALL="$l"; break; fi
+  done
+fi
 padr() { local s=$1 w=$2 n; n=$(( w - ${#s} )); [ "$n" -lt 0 ] && n=0; printf '%s%*s' "$s" "$n" ''; }
 
 # ── Colour: 24-bit, then 256, then 16, else none ───────────────────────────
@@ -132,7 +135,8 @@ OFF=""; BOLD=""; DIM=""
 if [ "$DEPTH" != 0 ]; then OFF=$'\033[0m'; BOLD=$'\033[1m'; DIM=$'\033[2m'; fi
 GOLD=$(fg GOLD); SILVER=$(fg SILVER); WARM=$(fg WARM); PASS=$(fg PASS); FAIL=$(fg FAIL); NAVYBG=$(bg NAVY)
 TTY=0; { [ -t 0 ] && [ -t 1 ]; } && TTY=1
-WHIP=0; if [ "$TTY" = 1 ] && [ "$DEPTH" != 0 ] && command -v whiptail >/dev/null 2>&1; then WHIP=1; fi
+# (-x as well: `command -v` falls back to a whiptail that can't run)
+WHIP=0; if [ "$TTY" = 1 ] && [ "$DEPTH" != 0 ] && [ -x "$(command -v whiptail 2>/dev/null)" ]; then WHIP=1; fi
 export NEWT_COLORS="$NEWT_THEME"
 
 # ── Saying things ───────────────────────────────────────────────────────────
@@ -168,20 +172,25 @@ progress_end() { [ "$TTY" = 1 ] && printf '\n'; return 0; }
 
 # ── Asking things ───────────────────────────────────────────────────────────
 # menu TITLE QUESTION "key|id|label"... -> prints the chosen id
+# MENU_DEFAULT (an id) is where the highlight starts: Enter alone must never
+# start something heavy (on an installed machine, the health check).
+MENU_DEFAULT=""
 menu() {
   local title=$1 question=$2; shift 2
-  local items=("$@") i key id label
+  local items=("$@") i key id label start=0 n=$#
+  for ((i = 0; i < n; i++)); do IFS='|' read -r key id label <<<"${items[$i]}"; [ "$id" = "$MENU_DEFAULT" ] && start=$i; done
   if [ "$WHIP" = 1 ]; then
-    local args=()
+    local args=() def
     for i in "${items[@]}"; do IFS='|' read -r key id label <<<"$i"; args+=("$key" "$label"); done
+    IFS='|' read -r def id label <<<"${items[$start]}"
     local pick
-    pick=$(whiptail --title " $title " --menu "\n$question" 18 64 "${#items[@]}" "${args[@]}" 3>&1 1>&2 2>&3) || { echo quit; return 0; }
+    pick=$(whiptail --title " $title " --default-item "$def" --menu "\n$question" 18 64 "${#items[@]}" "${args[@]}" 3>&1 1>&2 2>&3) || { echo quit; return 0; }
     for i in "${items[@]}"; do IFS='|' read -r key id label <<<"$i"; [ "$key" = "$pick" ] && { echo "$id"; return 0; }; done
     echo quit; return 0
   fi
   if [ "$TTY" = 1 ] && [ "$DEPTH" != 0 ]; then
     # Arrow keys and number keys, redrawn in place.
-    local sel=0 n=${#items[@]} k rest
+    local sel=$start k rest
     printf '   %s\n\n' "$question" >&2
     while :; do
       for ((i = 0; i < n; i++)); do
@@ -242,6 +251,7 @@ yesno() {
 
 # ── Doing things (or, with --dry-run, saying so) ───────────────────────────
 run() { if [ "$DRY" = 1 ]; then say "   would run: $*"; else "$@"; fi; }
+runq() { if [ "$DRY" = 1 ]; then say "   would run: $*"; else "$@" >/dev/null 2>&1; fi; }   # its own output would break the progress line
 write_file() {  # write_file PATH MODE OWNER CONTENT_SHOWN_IN_DRY_RUN < content
   local path=$1 mode=$2 owner=$3 shown=${4:-}
   if [ "$DRY" = 1 ]; then
@@ -282,7 +292,7 @@ install_node() {
   dir=$(mktemp -d) || return 1
   fetch "$url/$tarball" "$dir/$tarball" && fetch "$url/SHASUMS256.txt" "$dir/SHASUMS256.txt" || { rm -rf "$dir"; die "Couldn't download Node.js from nodejs.org."; }
   ( cd "$dir" && grep " $tarball\$" SHASUMS256.txt | sha256sum -c --status ) || { rm -rf "$dir"; die "The Node.js download doesn't match nodejs.org's checksum: not installed."; }
-  rm -rf "$NODE_HOME" && mkdir -p "$NODE_HOME" && tar -xJf "$dir/$tarball" -C "$NODE_HOME" --strip-components=1 || { rm -rf "$dir"; die "Couldn't unpack Node.js."; }
+  rm -rf "$NODE_HOME" && mkdir -p "$NODE_HOME" && tar -xJf "$dir/$tarball" -C "$NODE_HOME" --strip-components=1 --no-same-owner || { rm -rf "$dir"; die "Couldn't unpack Node.js."; }
   rm -rf "$dir"
   NODE="$NODE_HOME/bin/node"
 }
@@ -363,7 +373,7 @@ service_start() {
     ensure_pm2
     if [ "$DRY" = 0 ] && pm2u describe opspoint >/dev/null 2>&1; then pm2u restart opspoint >/dev/null; else pm2u start "$APP/bootstrap.js" --name opspoint >/dev/null; fi
     pm2u save >/dev/null 2>&1
-  else run systemctl enable --now opspoint; fi
+  else runq systemctl enable --now opspoint; fi
 }
 service_stop()    { if [ "$SERVICE" = pm2 ]; then ensure_pm2; pm2u stop opspoint >/dev/null 2>&1; else run systemctl stop opspoint; fi; }
 service_restart() { if [ "$SERVICE" = pm2 ]; then service_start; else run systemctl restart opspoint; fi; }
@@ -377,6 +387,13 @@ install_tool() {
   if [ -n "$src" ] && [ "$src" != "$PREFIX/install.sh" ]; then cp -f "$src" "$PREFIX/install.sh"; fi
   [ -f "$PREFIX/install.sh" ] || { note "The maintenance tool isn't in this release: run this installer again for it."; return 0; }
   chmod 0755 "$PREFIX/install.sh" && ln -sf "$PREFIX/install.sh" "$BIN"
+}
+
+# The encrypted SQLite driver loads from the binaries it ships (no compiler
+# needed; npm runs with --ignore-scripts). Postgres installs never load it.
+sqlite_loads() {
+  [ "${OPSPOINT_DB_DRIVER:-sqlite}" = sqlite ] || return 0
+  (cd "$APP" && "$NODE" -e "new (require('better-sqlite3-multiple-ciphers'))(':memory:').prepare('select 1').get()" >/dev/null 2>&1)
 }
 
 probe_url() {  # probe_url URL -> 0 when it answers 2xx
@@ -405,7 +422,7 @@ load_answers() {
     [[ "$line" =~ ^[[:space:]]*([A-Z_][A-Z0-9_]*)=(.*)$ ]] || die "Not a KEY=value line in $ANSWERS: $line"
     k="${BASH_REMATCH[1]}"; v="${BASH_REMATCH[2]}"
     v="${v#\"}"; v="${v%\"}"; v="${v#\'}"; v="${v%\'}"
-    case "$k" in TZ|PORT|OPSPOINT_DATA|OPSPOINT_DB_DRIVER|DATABASE_URL|SERVICE|ADDRESS) printf -v "$k" '%s' "$v" ;;
+    case "$k" in TZ|PORT|OPSPOINT_DATA|OPSPOINT_DB_DRIVER|DATABASE_URL|PGSSLMODE|SERVICE|ADDRESS) printf -v "$k" '%s' "$v" ;;
       *) die "$ANSWERS: $k isn't an answer this installer takes (see --help)." ;; esac
   done <"$ANSWERS"
 }
@@ -431,6 +448,12 @@ questions() {
   if [ "$OPSPOINT_DB_DRIVER" = pg ]; then
     ask DATABASE_URL "Postgres connection string (postgresql://user:password@host:5432/database):" ""
     [[ "${DATABASE_URL:-}" =~ ^postgres(ql)?:// ]] || die "DATABASE_URL must be a postgresql:// connection string."
+    # TLS to the database: verified by default; a database on this machine needs none.
+    local dbhost ssl_default=verify-full
+    dbhost=$(printf '%s' "$DATABASE_URL" | sed -E 's|^[a-z]+://([^@]*@)?(\[[^]]*\]\|[^/:?]*).*|\2|')
+    case "$dbhost" in localhost|127.0.0.1|'[::1]') ssl_default=disable ;; esac
+    ask PGSSLMODE "TLS to the database (verify-full, verify-ca, require or disable):" "$ssl_default"
+    case "$PGSSLMODE" in disable|require|verify-ca|verify-full) ;; *) die "PGSSLMODE must be verify-full, verify-ca, require or disable." ;; esac
   fi
   if [ -z "${SERVICE:-}" ]; then
     if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then SERVICE=systemd; else SERVICE=pm2; fi
@@ -445,7 +468,7 @@ questions() {
 settings_json() {  # the settings file: written by Node, so every value is quoted correctly
   "${NODE:-node}" -e '
     const e = process.env, s = { OPSPOINT_PROFILE: "linux-local", TZ: e.A_TZ, PORT: Number(e.A_PORT), OPSPOINT_DATA: e.A_DATA, OPSPOINT_DB_DRIVER: e.A_DRIVER };
-    if (e.A_DRIVER === "pg") s.DATABASE_URL = e.A_URL;
+    if (e.A_DRIVER === "pg") { s.DATABASE_URL = e.A_URL; s.PGSSLMODE = e.A_SSL; }
     process.stdout.write(JSON.stringify(s, null, 2) + "\n");
   ' 2>/dev/null || printf '{\n  "OPSPOINT_PROFILE": "linux-local",\n  "TZ": "%s",\n  "PORT": %s,\n  "OPSPOINT_DATA": "%s",\n  "OPSPOINT_DB_DRIVER": "%s"\n}\n' "$A_TZ" "$A_PORT" "$A_DATA" "$A_DRIVER"
 }
@@ -489,7 +512,7 @@ do_install() {
   fi
   if installed && [ "$DRY" = 0 ]; then
     note "OpsPoint $(installed_version) is already installed in $PREFIX."
-    yesno "Upgrade or repair it instead?" y && { do_upgrade; return; }
+    yesno "Upgrade or repair it instead?" n && { do_upgrade; return; }
     exit 0
   fi
   load_answers
@@ -516,16 +539,19 @@ do_install() {
   if [ "$DRY" = 1 ]; then say "   would unpack the bundle into $APP"
   else
     id "$SERVICE_USER" >/dev/null 2>&1 || useradd --system --home-dir "$OPSPOINT_DATA" --shell /usr/sbin/nologin "$SERVICE_USER" || die "Couldn't create the $SERVICE_USER account."
-    mkdir -p "$APP" "$OPSPOINT_DATA" "$ETC" && tar -xzf "$REL_BUNDLE" -C "$APP" || die "Couldn't unpack the bundle."
+    # --no-same-owner: a bundle built on Windows names owners that root in an
+    # unprivileged container can't assign; everything is chowned below anyway.
+    mkdir -p "$APP" "$OPSPOINT_DATA" "$ETC" && tar -xzf "$REL_BUNDLE" -C "$APP" --no-same-owner || die "Couldn't unpack the bundle."
   fi
   progress 55 "Installing packages…"
-  if [ "$DRY" = 1 ]; then say "   would run: npm ci --omit=dev (in $APP)"
+  if [ "$DRY" = 1 ]; then say "   would run: npm ci --omit=dev --ignore-scripts (in $APP)"
   else
     local npm="$(dirname "$NODE")/npm"; [ -x "$npm" ] || npm=$(command -v npm)
-    (cd "$APP" && PATH="$(dirname "$NODE"):$PATH" "$npm" ci --omit=dev --no-audit --no-fund >"$WORK/npm.log" 2>&1) || { progress_end; tail -20 "$WORK/npm.log" >&2; die "npm ci failed (above)."; }
+    (cd "$APP" && PATH="$(dirname "$NODE"):$PATH" "$npm" ci --omit=dev --ignore-scripts --no-audit --no-fund >"$WORK/npm.log" 2>&1) || { progress_end; tail -20 "$WORK/npm.log" >&2; die "npm ci failed (above)."; }
+    sqlite_loads || { progress_end; die "The SQLite driver has no build for this machine ($(uname -m)): use Postgres (OPSPOINT_DB_DRIVER=pg), or see docs/SUPPORT.md."; }
   fi
   progress 75 "Writing the settings…"
-  A_TZ="$TZ" A_PORT="$PORT" A_DATA="$OPSPOINT_DATA" A_DRIVER="$OPSPOINT_DB_DRIVER" A_URL="${DATABASE_URL:-}" export A_TZ A_PORT A_DATA A_DRIVER A_URL
+  A_TZ="$TZ" A_PORT="$PORT" A_DATA="$OPSPOINT_DATA" A_DRIVER="$OPSPOINT_DB_DRIVER" A_URL="${DATABASE_URL:-}" A_SSL="${PGSSLMODE:-verify-full}" export A_TZ A_PORT A_DATA A_DRIVER A_URL A_SSL
   local shown; shown=$(settings_json | sed -E 's|("DATABASE_URL": "[a-z]+://[^:/@]*:)[^@]*@|\1•••@|')
   settings_json | write_file "$CONFIG" 0640 "root:$SERVICE_USER" "$shown" || die "Couldn't write $CONFIG."
   run chown -R "$SERVICE_USER:$SERVICE_USER" "$APP" "$OPSPOINT_DATA"
@@ -568,6 +594,7 @@ read_config() {  # SERVICE / PORT / OPSPOINT_DATA from what is installed
   [ -f "$CONFIG" ] || return 0
   PORT=$(sed -n 's/^ *"PORT": *\([0-9]*\).*/\1/p' "$CONFIG" | head -1); PORT=${PORT:-3000}
   OPSPOINT_DATA=$(sed -n 's/^ *"OPSPOINT_DATA": *"\([^"]*\)".*/\1/p' "$CONFIG" | head -1); OPSPOINT_DATA=${OPSPOINT_DATA:-/var/lib/opspoint}
+  OPSPOINT_DB_DRIVER=$(sed -n 's/^ *"OPSPOINT_DB_DRIVER": *"\([^"]*\)".*/\1/p' "$CONFIG" | head -1); OPSPOINT_DB_DRIVER=${OPSPOINT_DB_DRIVER:-sqlite}
   if [ -f "$UNIT" ]; then SERVICE=systemd; else SERVICE=pm2; fi
 }
 
@@ -584,11 +611,12 @@ do_upgrade() {
   progress 25 "Keeping v$from beside it…"
   run rm -rf "$PREFIX/app.previous"; run cp -a "$APP" "$PREFIX/app.previous"
   progress 40 "Unpacking v$REL_VERSION…"
-  if [ "$DRY" = 0 ]; then tar -xzf "$REL_BUNDLE" -C "$APP" || die "Couldn't unpack the bundle (v$from is in $PREFIX/app.previous)."; fi
+  if [ "$DRY" = 0 ]; then tar -xzf "$REL_BUNDLE" -C "$APP" --no-same-owner || die "Couldn't unpack the bundle (v$from is in $PREFIX/app.previous)."; fi
   progress 60 "Installing packages…"
   if [ "$DRY" = 0 ]; then
     local npm="$(dirname "$NODE")/npm"; [ -x "$npm" ] || npm=$(command -v npm)
-    (cd "$APP" && PATH="$(dirname "$NODE"):$PATH" "$npm" ci --omit=dev --no-audit --no-fund >"$WORK/npm.log" 2>&1) || { progress_end; tail -20 "$WORK/npm.log" >&2; rollback "$from"; }
+    (cd "$APP" && PATH="$(dirname "$NODE"):$PATH" "$npm" ci --omit=dev --ignore-scripts --no-audit --no-fund >"$WORK/npm.log" 2>&1) || { progress_end; tail -20 "$WORK/npm.log" >&2; rollback "$from"; }
+    sqlite_loads || { progress_end; rollback "$from"; }
     chown -R "$SERVICE_USER:$SERVICE_USER" "$APP"
   fi
   install_tool
@@ -612,11 +640,13 @@ do_uninstall() {
   [ "$DRY" = 1 ] || [ "$(id -u)" = 0 ] || die "Run this with sudo."
   read_config
   head1 "Uninstall"
-  yesno "Remove OpsPoint from this machine? The data in $OPSPOINT_DATA stays unless you choose otherwise next." n || return 0
+  # Asked, defaulting to no; `uninstall --yes` names the action, so it goes ahead (the data still stays).
+  if [ "$YES" = 0 ]; then yesno "Remove OpsPoint from this machine? The data in $OPSPOINT_DATA stays unless you choose otherwise next." n || return 0; fi
   service_stop
   if [ "$SERVICE" = systemd ]; then run systemctl disable opspoint >/dev/null 2>&1; run rm -f "$UNIT"; run systemctl daemon-reload
   else pm2u delete opspoint >/dev/null 2>&1; pm2u save >/dev/null 2>&1; fi
   run rm -rf "$APP" "$PREFIX/app.previous" "$NODE_HOME" "$PREFIX/install.sh"; run rm -f "$BIN"
+  [ "$DRY" = 1 ] || rmdir "$PREFIX" 2>/dev/null || true
   if yesno "Also delete the settings file ($CONFIG)? It holds this install's settings and any database password." y; then run rm -rf "$ETC"; fi
   local typed=""
   if [ "$YES" = 0 ] && [ "$TTY" = 1 ]; then
@@ -658,7 +688,9 @@ do_export() {
 main_menu() {
   while :; do
     banner "$(installed && installed_version)"
+    if installed; then MENU_DEFAULT=doctor; else MENU_DEFAULT=install; fi
     local pick; pick=$(menu "$BRAND_TITLE" "$MENU_QUESTION" "${MENU_ITEMS[@]}")
+    MENU_DEFAULT=""
     case "$pick" in
       install) do_install ;;
       upgrade) do_upgrade ;;

@@ -340,6 +340,8 @@ async function exportCmd() {
   const d = new Date(), p2 = (x) => String(x).padStart(2, '0');
   const stamp = `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
   let out = path.resolve(arg('--out') || '.');
+  // A folder (made if need be) gets a dated file in it; a name ending .opspoint is the file itself.
+  if (!/\.opspoint$/i.test(out) && !fs.existsSync(out)) fs.mkdirSync(out, { recursive: true });
   if (fs.existsSync(out) && fs.statSync(out).isDirectory()) out = path.join(out, `opspoint-export-${stamp}.opspoint`);
 
   conn.open(conn.isPg ? undefined : config.DB_PATH);
@@ -415,6 +417,8 @@ async function importCmd(file) {
     if (e && e.code === 'EX_CONFIG') { process.stdout.write(`ERROR    ${e.message}\n`); return settings.EX_CONFIG; }
     throw e;
   }
+  // The photos folder, as a first start makes it (the health check looks for it).
+  if (settings.get('OPSPOINT_STORAGE') === 'local') fs.mkdirSync(path.join(settings.get('OPSPOINT_STORAGE_DIR'), 'photos'), { recursive: true });
   say(`Importing into this install (${driverName(conn.isPg ? 'pg' : 'sqlite')}, profile ${settings.profile().name})\n`);
   const t0 = Date.now();
   try {

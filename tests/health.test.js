@@ -157,6 +157,21 @@ describe('encryption key', () => {
     await db.setSetting('dbkey_backup_confirmed', { fp: '0000000000000000', at: '2026-01-01 09:00:00', by: 'Pat' });
     expect((await check('dbkey')).says).toMatch(/^The key changed after it was confirmed on 2026-01-01 09:00:00/);
   });
+
+  sqliteOnly('on a new install still in first-run setup it is pending, not failed; a changed key still fails', async () => {
+    await db.setSetting('setup', { code_hash: 'h', code_expires: '2099-01-01T00:00:00.000Z' });
+    try {
+      await db.setSetting('dbkey_backup_confirmed', '');
+      expect(await check('dbkey')).toMatchObject({ status: 'warn', says: "Not confirmed yet: first-run setup's Security step asks for it.", action: 'dbkey-confirm' });
+      await db.setSetting('dbkey_backup_confirmed', { fp: '0000000000000000', at: '2026-01-01 09:00:00', by: 'Pat' });
+      expect(await check('dbkey')).toMatchObject({ status: 'fail' });
+      await db.setSetting('setup', { finished_at: '2026-09-30T00:00:00.000Z', legacy: true });
+      await db.setSetting('dbkey_backup_confirmed', '');
+      expect(await check('dbkey')).toMatchObject({ status: 'fail' });
+    } finally {
+      await db.setSetting('setup', '');
+    }
+  });
 });
 
 describe('backups', () => {
@@ -171,6 +186,19 @@ describe('backups', () => {
 
   test('none recorded fails', async () => {
     expect(await check('backups')).toMatchObject({ status: 'fail', says: 'No backup has been recorded yet.' });
+  });
+
+  test('none recorded on a new install still in first-run setup is pending (the first one has not had its turn)', async () => {
+    await db.setSetting('setup', { code_hash: 'h', code_expires: '2099-01-01T00:00:00.000Z' });
+    try {
+      const r = await check('backups');
+      expect(r.status).toBe('warn');
+      expect(r.says).toMatch(/^No backup yet: this install is new/);
+      await record('backup.failed', 1, JSON.stringify({ error: 'disk full' }));   // a failure is a failure, new or not
+      expect(await check('backups')).toMatchObject({ status: 'fail' });
+    } finally {
+      await db.setSetting('setup', '');
+    }
   });
 
   test('recent passes (on SQLite a warning while it sits on the database\'s drive); old or failed since fails', async () => {

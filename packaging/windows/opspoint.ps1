@@ -127,7 +127,7 @@ function Progress([int]$pct, [string]$what) {
 function ProgressEnd { if ($Interactive) { Write-Host '' } }
 
 # Arrow keys and number keys; a numbered prompt when there is no console to draw on.
-function Menu([string]$question, [object[]]$items) {
+function Menu([string]$question, [object[]]$items, [string]$defaultId = '') {
   if (-not $Interactive) {
     Write-Host "   $question"
     foreach ($i in $items) { Write-Host "     $($i.Key)) $($i.Label)" }
@@ -136,7 +136,9 @@ function Menu([string]$question, [object[]]$items) {
       foreach ($i in $items) { if ($i.Key -eq $a.ToLower()) { return $i.Id } }
     }
   }
+  # Where the highlight starts: Enter alone must never start something heavy.
   $sel = 0; $n = $items.Count
+  for ($k = 0; $k -lt $n; $k++) { if ($items[$k].Id -eq $defaultId) { $sel = $k } }
   Write-Host "   $question"; Write-Host ''
   $top = [Console]::CursorTop
   while ($true) {
@@ -179,7 +181,7 @@ function Run([scriptblock]$block, [string]$what) {
 }
 
 # ── Answers: KEY=value lines, read as data ─────────────────────────────────
-$AllowedAnswers = @('TZ', 'PORT', 'OPSPOINT_DATA', 'OPSPOINT_DB_DRIVER', 'DATABASE_URL', 'ADDRESS')
+$AllowedAnswers = @('TZ', 'PORT', 'OPSPOINT_DATA', 'OPSPOINT_DB_DRIVER', 'DATABASE_URL', 'PGSSLMODE', 'ADDRESS')
 if ($Config) {
   if (-not (Test-Path -LiteralPath $Config)) { Die "Can't read the answers file $Config." }
   foreach ($raw in Get-Content -LiteralPath $Config -Encoding UTF8) {
@@ -272,10 +274,15 @@ function Do-Configure {
     else { $driver = 'sqlite' }
   }
   if ($driver -ne 'sqlite' -and $driver -ne 'pg') { Die 'OPSPOINT_DB_DRIVER must be sqlite or pg.' }
-  $url = ''
+  $url = ''; $ssl = ''
   if ($driver -eq 'pg') {
     $url = Ask 'DATABASE_URL' 'Postgres connection string (postgresql://user:password@host:5432/database)' ''
     if ($url -notmatch '^postgres(ql)?://') { Die 'DATABASE_URL must be a postgresql:// connection string.' }
+    # TLS to the database: verified by default; a database on this PC needs none.
+    $dbhost = $url -replace '^[a-z]+://([^@]*@)?(\[[^\]]*\]|[^/:?]*).*$', '$2'
+    $sslDefault = 'verify-full'; if (@('localhost', '127.0.0.1', '[::1]') -contains $dbhost) { $sslDefault = 'disable' }
+    $ssl = Ask 'PGSSLMODE' 'TLS to the database (verify-full, verify-ca, require or disable)' $sslDefault
+    if (@('disable', 'require', 'verify-ca', 'verify-full') -notcontains $ssl) { Die 'PGSSLMODE must be verify-full, verify-ca, require or disable.' }
   }
   $busy = $null
   try { $busy = Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction Stop } catch { }
@@ -289,7 +296,7 @@ function Do-Configure {
 
   Progress 20 'Writing the settings…'
   $s = [ordered]@{ OPSPOINT_PROFILE = 'windows-local'; TZ = $tz; PORT = [int]$port; OPSPOINT_DATA = $data; OPSPOINT_DB_DRIVER = $driver }
-  if ($driver -eq 'pg') { $s.DATABASE_URL = $url }
+  if ($driver -eq 'pg') { $s.DATABASE_URL = $url; $s.PGSSLMODE = $ssl }
   $json = $s | ConvertTo-Json
   if ($DryRun) {
     ProgressEnd; Say "   would write $Settings"
@@ -393,7 +400,8 @@ if ($Command) {
 while ($true) {
   $ver = ''; if (Installed) { $ver = InstalledVersion }
   Banner $ver
-  switch (Menu $MenuQuestion $MenuItems) {
+  $start = 'install'; if (Installed) { $start = 'doctor' }
+  switch (Menu $MenuQuestion $MenuItems $start) {
     'install'   { if (Installed) { Note "OpsPoint $ver is installed. Choose Upgrade or repair." } else { Note 'Run OpsPoint Setup (the installer) to install OpsPoint.' } }
     'upgrade'   { Do-Upgrade }
     'doctor'    { if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }; [void](Cli @('doctor')) }

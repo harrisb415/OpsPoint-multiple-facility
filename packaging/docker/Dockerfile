@@ -11,7 +11,10 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /src
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund
+# --ignore-scripts: the SQLite driver ships prebuilt binaries, but npm would run an implicit
+# node-gyp rebuild that needs build tools (as in the installers). Check the binary loads.
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+ && node -e "new (require('better-sqlite3-multiple-ciphers'))(':memory:').close()"
 COPY client/package.json client/package-lock.json client/
 RUN cd client && npm ci --no-audit --no-fund
 COPY client client

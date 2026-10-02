@@ -181,6 +181,8 @@ describe('the Docker image and the pipeline', () => {
     expect(df).toMatch(/OPSPOINT_PROFILE=docker/);
     expect(df).toMatch(/HEALTHCHECK[\s\S]*\/healthz/);
     expect(df).not.toMatch(/COPY \. /);
+    // The SQLite driver's prebuilt binary, as in the installers: npm's implicit node-gyp rebuild needs build tools.
+    expect(df).toMatch(/npm ci --omit=dev --ignore-scripts/);
   });
 
   test('the workflows run only by hand, and publish only when asked, with the key from a secret', () => {

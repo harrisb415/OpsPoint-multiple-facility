@@ -30,6 +30,11 @@ wait for go-aheads. See `docs/CLOUD.md`.
 - **Postgres: a socket connection string with no host** (`postgresql://user@/db?host=/cloudsql/…`,
   Cloud SQL's form) **silently lost the facility's time zone**: the session zone was added by
   parsing it as a URL, which it isn't. It is kept now.
+- **The Docker image didn't build**: `npm ci` ran the SQLite driver's implicit `node-gyp rebuild`,
+  which needs build tools the image doesn't have. It installs with `--ignore-scripts` now and uses
+  the driver's prebuilt binary, as the installers do; the build checks the binary loads. First
+  real build: 279 MB, starts on PostgreSQL 16 both as docker-compose runs it and with secrets from
+  the environment, as the clouds do.
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.

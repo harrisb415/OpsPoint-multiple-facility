@@ -138,7 +138,8 @@ describe('secrets from NAME_FILE and the settings file', () => {
   test("a secret's NAME_FILE is not mistaken for a typo; anything else still is", () => {
     const w = warnings(make({ env: { CENTRAL_ADMIN_PW_FILE: '/run/secrets/hq', OPSPOINT_BOGUS_FILE: '/x' } }));
     expect(w.join(' ')).not.toContain('CENTRAL_ADMIN_PW_FILE');
-    expect(w).toContain("OPSPOINT_BOGUS_FILE isn't a setting OpsPoint knows, so it is ignored.");
+    // (It may also suggest the nearest real setting's name.)
+    expect(w.some((m) => m.startsWith("OPSPOINT_BOGUS_FILE isn't a setting OpsPoint knows, so it is ignored"))).toBe(true);
   });
 });
 

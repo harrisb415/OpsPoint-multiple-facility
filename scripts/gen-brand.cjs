@@ -64,6 +64,7 @@ function psBlock() {
     `$BrandTitle   = ${pq(brand.setupTitle)}`,
     `$BrandTagline = ${pq(brand.tagline)}`,
     `$BrandDoor    = ${pq(brand.door)}`,
+    `$BrandDoorConsole = ${pq(brand.doorConsole)}`,
     '$Palette = @{',
   ];
   for (const name of ['navy', 'gold', 'warm', 'silver', 'pass', 'fail']) {

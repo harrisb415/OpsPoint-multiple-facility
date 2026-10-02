@@ -10,7 +10,11 @@
 ; questions, colours and summary as the Linux installer (time zone, port, data
 ; folder, database), registers the service (a scheduled task at startup, as
 ; NETWORK SERVICE), waits for the health check and opens the setup link.
-; Unattended: OpsPoint-Setup-x.y.z.exe /VERYSILENT /CONFIG=C:\path\answers.env
+; Run again over an install (a repair, a newer version) it stops OpsPoint first and
+; keeps that install's settings.
+; Unattended: OpsPoint-Setup-x.y.z.exe /VERYSILENT /CONFIG=C:\path\answers.env /LOG=C:\path\setup.log
+;   (the console's output goes into that log). Exit code 0: installed and running;
+;   10: the files are installed but OpsPoint isn't running (the log says why).
 
 #ifndef AppVersion
   #error Pass the version: ISCC /DAppVersion=x.y.z packaging\windows\opspoint.iss
@@ -38,6 +42,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 PrivilegesRequired=admin
 WizardStyle=modern
+; The welcome page carries the door picture (Inno Setup 6 hides it unless asked).
+DisableWelcomePage=no
 WizardImageFile=art\wizard.bmp,art\wizard-200.bmp
 WizardSmallImageFile=art\header.bmp,art\header-200.bmp
 SetupIconFile=art\opspoint.ico
@@ -60,10 +66,11 @@ Name: "{app}\app"; Permissions: networkservice-modify
 [Icons]
 Name: "{group}\OpsPoint Setup"; Filename: "{app}\opspoint.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\opspoint.ico"; Comment: "Upgrade, health check, backup and export"
 
-[Run]
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\opspoint.ps1"" -Configure {code:ConfigureArgs}"; \
-  WorkingDir: "{app}"; StatusMsg: "Setting up OpsPoint…"; Flags: waituntilterminated
+; opspoint.ps1 -Configure runs from [Code] (CurStepChanged), not [Run]: Setup has to know
+; whether it worked.
+
+[Messages]
+ConfirmUninstall=Remove %1 from this PC?%n%nThe data folder (the database, photos and backups) is kept: delete it yourself once you no longer need it.
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
@@ -81,8 +88,18 @@ const
   GOLD   = $002EB8F5;   { #F5B82E }
   SILVER = $00D3CBC5;   { #C5CBD3 }
 
+var
+  StoppedForSetup: Boolean;   { an install was running when Setup started over it }
+  FilesInstalled: Boolean;    { the files are in }
+  ConfigureFailed: Boolean;   { ...but opspoint.ps1 -Configure didn't get OpsPoint running }
+
+function PowerShell: String;
+begin
+  Result := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+end;
+
 { /CONFIG=answers.env, and /SILENT or /VERYSILENT: the questions answer themselves. }
-function ConfigureArgs(Param: String): String;
+function ConfigureArgs: String;
 var
   Answers: String;
 begin
@@ -92,6 +109,73 @@ begin
     Result := '-Config "' + Answers + '"';
   if WizardSilent then
     Result := Result + ' -Yes';
+end;
+
+{ Setup run again over an install (a repair, a newer version): OpsPoint is stopped first,
+  or Windows won't let its node.exe be replaced. The task stays registered. }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  RC: Integer;
+begin
+  Result := '';
+  if FileExists(ExpandConstant('{app}\node\node.exe')) then
+  begin
+    ExtractTemporaryFile('opspoint.ps1');
+    StoppedForSetup := Exec(PowerShell, '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\opspoint.ps1') +
+      '" -StopService -InstallDir "' + ExpandConstant('{app}') + '"', '', SW_HIDE, ewWaitUntilTerminated, RC);
+    Log(Format('Stopped the running OpsPoint (exit code %d)', [RC]));
+  end;
+end;
+
+{ After the files: the questions, the service, the health check and the setup link
+  (opspoint.ps1 -Configure). Its console is the one the person answers in; a silent
+  install shows none, and what it prints goes into Setup's log (/LOG). }
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Params: String;
+  RC: Integer;
+  Ran: Boolean;
+begin
+  if CurStep <> ssPostInstall then
+    Exit;
+  FilesInstalled := True;
+  Params := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\opspoint.ps1') + '" -Configure ' + ConfigureArgs;
+  WizardForm.StatusLabel.Caption := 'Setting up OpsPoint...';
+  WizardForm.FilenameLabel.Caption := '';
+  if WizardSilent then
+    Ran := ExecAndLogOutput(PowerShell, Params, ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, RC, nil)
+  else
+    Ran := Exec(PowerShell, Params, ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, RC);
+  ConfigureFailed := (not Ran) or (RC <> 0);
+  if ConfigureFailed then
+    Log(Format('opspoint.ps1 -Configure did not finish (exit code %d): OpsPoint is installed but not running', [RC]));
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and ConfigureFailed then
+  begin
+    WizardForm.FinishedHeadingLabel.Caption := 'OpsPoint isn''t running yet';
+    WizardForm.FinishedLabel.Caption := 'Its files are installed, but setting it up stopped; the console showed why. ' +
+      'Fix that, then run OpsPoint Setup again: it keeps what was already set.';
+  end;
+end;
+
+{ 10: the files are installed, but OpsPoint isn't running. }
+function GetCustomSetupExitCode: Integer;
+begin
+  Result := 0;
+  if ConfigureFailed then
+    Result := 10;
+end;
+
+{ Setup stopped OpsPoint to replace it, then never got as far as the files: start it again. }
+procedure DeinitializeSetup;
+var
+  RC: Integer;
+begin
+  if StoppedForSetup and not FilesInstalled then
+    Exec(ExpandConstant('{sys}\schtasks.exe'), '/Run /TN OpsPoint', '', SW_HIDE, ewWaitUntilTerminated, RC);
 end;
 
 { The outer pages and the header in the icon's navy and gold; inner pages keep

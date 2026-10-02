@@ -49,6 +49,17 @@ describe('the installers look the same', () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
+  test('both maintenance tools pass on the same commands the command line has', () => {
+    const js = fs.readFileSync(path.join(ROOT, 'server', 'cli', 'opspoint.js'), 'utf8');
+    const handled = [...js.matchAll(/if \(cmd === '([\w-]+)'\)/g)].map((m) => m[1]).sort();
+    const linux = /^CLI_COMMANDS=" ([^"]+) "$/m.exec(fs.readFileSync(INSTALL_SH, 'utf8'))[1].split(' ').sort();
+    const windows = /^\$CliCommands = @\(([^)]*)\)/m.exec(fs.readFileSync(path.join(ROOT, 'packaging', 'windows', 'opspoint.ps1'), 'utf8'))[1]
+      .split(',').map((s) => s.trim().replace(/'/g, '')).sort();
+    expect(handled).toContain('backups');
+    expect(linux).toEqual(handled);
+    expect(windows).toEqual(handled);
+  });
+
   test('the installer pins the release key the updater pins', () => {
     const sh = fs.readFileSync(INSTALL_SH, 'utf8');
     const updater = fs.readFileSync(path.join(ROOT, 'updater.js'), 'utf8');
@@ -87,10 +98,46 @@ describe('the Windows installer', () => {
     for (const f of ['art\\wizard.bmp', 'art\\header.bmp', 'art\\opspoint.ico', 'opspoint.ps1', 'opspoint.cmd']) {
       expect(fs.existsSync(path.join(ROOT, 'packaging', 'windows', f.replace('\\', path.sep)))).toBe(true);
     }
-    expect(iss).toMatch(/-Configure \{code:ConfigureArgs\}/);
     expect(iss).toMatch(/\[UninstallRun\][\s\S]*-RemoveService/);
     expect(iss).toMatch(/networkservice-modify/);
     expect(iss).not.toMatch(/commonappdata\}\\OpsPoint"; Type: filesandordirs/);     // the data folder stays
+    expect(iss).toMatch(/\[UninstallDelete\][\s\S]*opspoint\.config\.json/);       // ...the settings (and any password) don't
+  });
+
+  test('Setup knows whether the questions got OpsPoint running, and stops it before replacing it', () => {
+    const iss = fs.readFileSync(ISS, 'utf8');
+    // -Configure runs from [Code], where its exit code is read (a [Run] entry's is ignored).
+    expect(iss).not.toMatch(/^\[Run\]/m);
+    expect(iss).toMatch(/procedure CurStepChanged[\s\S]*ssPostInstall[\s\S]*-Configure ' \+ ConfigureArgs/);
+    expect(iss).toMatch(/function GetCustomSetupExitCode[\s\S]*Result := 10/);
+    // Run again over an install: its node.exe is in use until OpsPoint stops.
+    expect(iss).toMatch(/function PrepareToInstall[\s\S]*-StopService/);
+  });
+
+  test('no function in the maintenance tool has the name of a built-in alias (an alias wins)', () => {
+    // Get-Alias on Windows 11's Windows PowerShell 5.1 (a clean VM, 2026-10-01). `cli` is
+    // Clear-Item: a function named Cli never ran, and doctor, export and import with it.
+    const ALIASES = ('% ? ac asnp cat cd CFS chdir clc clear clhy cli clp cls clv cnsn compare copy cp cpi cpp curl cvpa dbp ' +
+      'del diff dir dnsn ebp echo epal epcsv epsn erase etsn exsn fc fhx fl foreach ft fw gal gbp gc gci gcm gcs gdr ghy gi ' +
+      'gjb gl gm gmo gp gps gpv group gsn gsnp gsv gu gv gwmi h history icm iex ihy ii ipal ipcsv ipmo ipsn irm ise iwmi iwr ' +
+      'kill lp ls man md measure mi mount move mp mv nal ndr ni nmo npssc nsn nv ogv oh popd ps pushd pwd r rbp rcjb rcsn rd ' +
+      'rdr ren ri rjb rm rmdir rmo rni rnp rp rsn rsnp rujb rv rvpa rwmi sajb sal saps sasv sbp sc select set shcm si sl ' +
+      'sleep sls sort sp spjb spps spsv start sujb sv swmi tee trcm type wget where wjb write').toLowerCase().split(' ');
+    const ps1 = fs.readFileSync(PS1, 'utf8');
+    const names = [...ps1.matchAll(/^\s*function\s+([\w-]+)/gim)].map((m) => m[1].toLowerCase());
+    expect(names.length).toBeGreaterThan(20);
+    expect(names.filter((n) => ALIASES.includes(n))).toEqual([]);
+  });
+
+  test('a Start menu click (not an administrator) gets the menu as one; nothing opens the data folder in Explorer', () => {
+    const ps1 = fs.readFileSync(PS1, 'utf8');
+    expect(ps1).toMatch(/if \(-not \(IsAdmin\) -and -not \$DryRun\) \{[\s\S]*?-Verb RunAs/);
+    // Explorer runs without administrator rights, and the data folder is closed to everyone else.
+    expect(ps1).not.toMatch(/explorer\.exe[^\r\n]*\$data/i);
+    // The door's glyphs follow the console's own window (conhost or a pseudo-console): a console
+    // Setup starts from Windows Terminal inherits WT_SESSION and still can't draw ◖ ◗.
+    expect(ps1).toMatch(/\$FullGlyphs = \$cls\.ToString\(\) -eq 'PseudoConsoleWindow'/);
+    expect(ps1).not.toMatch(/if \([^)]*\$env:WT_SESSION/);
   });
 
   test('the maintenance tool is UTF-8 with a BOM, so Windows PowerShell 5.1 reads its glyphs', () => {
@@ -186,6 +233,17 @@ describe('the Linux installer', () => {
     expect(out).toMatch(/would wait for http:\/\/127\.0\.0\.1:8080\/healthz/);
     // Plain text: no escape codes when NO_COLOR is set or nobody is watching.
     expect(out).not.toMatch(/\u001b\[/);
+  });
+
+  test("unpacks a bundle with permissions of its own, never the archive's, into a folder of its own", () => {
+    const sh = fs.readFileSync(INSTALL_SH, 'utf8');
+    // A bundle packed on Windows (bsdtar) records every folder as 777 and every file as 666, and
+    // tar run as root keeps what the archive says: the app it runs would be writable by anyone.
+    // (Root-only behaviour, so this reads the rule rather than running it.)
+    expect(sh).toMatch(/\(umask 022 && mkdir -p "\$1" && tar -xzf "\$REL_BUNDLE" -C "\$1" --no-same-owner --no-same-permissions\)/);
+    expect(sh.match(/tar -xzf "\$REL_BUNDLE"/g)).toHaveLength(1);                  // every unpack goes through it
+    // An upgrade or repair unpacks into an empty folder: no file of the version before stays behind.
+    expect(sh).toMatch(/run mv "\$APP" "\$PREFIX\/app\.previous"[\s\S]{0,200}unpack "\$APP"/);
   });
 
   withBash('reads the answers file as data: anything but known KEY=value lines is refused', () => {

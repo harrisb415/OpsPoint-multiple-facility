@@ -159,6 +159,7 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 | --- | --- | --- | --- |
 | `OPSPOINT_HEALTH_PATH` | `/api/health` |  | The path bootstrap.js polls to decide that an updated server came up healthy. Also read by `bootstrap.js`. |
 | `OPSPOINT_VERIFY_TIMEOUT` | `90000` |  | Milliseconds bootstrap.js waits for an updated server to answer before rolling the update back. Also read by `bootstrap.js`. |
+| `OPSPOINT_LOG_FILE` | — |  | A file bootstrap.js writes its own and the server's output to, each line with its time, for a service no console or journal collects (the Windows installer sets it). At 10 MB it becomes <file>.1, and three older files are kept. Unset: the output goes to the console. Also read by `bootstrap.js`. |
 
 ### HQ
 
@@ -220,6 +221,6 @@ On a cloud profile (`azure`, `aws`, `gcp`) no secret is read from disk: a secret
 
 ## Not settings
 
-These environment variables are how OpsPoint's own pieces talk to each other, or release tooling. They are not settings, and the check doesn't mistake them for typos: `OPSPOINT_BOOTSTRAP`, `OPSPOINT_BOOTSTRAP_BASE`, `OPSPOINT_BOOTSTRAP_ENTRY`, `OPSPOINT_BOOTSTRAP_DATA`, `OPSPOINT_RELEASE_KEY`, `OPSPOINT_RELEASE_KEY_FILE`.
+These environment variables are how OpsPoint's own pieces talk to each other, or release tooling. They are not settings, and the check doesn't mistake them for typos: `OPSPOINT_BOOTSTRAP`, `OPSPOINT_BOOTSTRAP_BASE`, `OPSPOINT_BOOTSTRAP_ENTRY`, `OPSPOINT_BOOTSTRAP_DATA`, `OPSPOINT_BOOTSTRAP_LOG_MAX`, `OPSPOINT_RELEASE_KEY`, `OPSPOINT_RELEASE_KEY_FILE`.
 
 These are set by the platform itself, so that the app can reach its storage and secret store without a key (an ECS task role, an Azure managed identity), and are read where they are used: `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`, `AWS_CONTAINER_CREDENTIALS_FULL_URI`, `AWS_CONTAINER_AUTHORIZATION_TOKEN`, `IDENTITY_ENDPOINT`, `IDENTITY_HEADER`.

@@ -29,6 +29,7 @@ Commands
                       either way round; --keep-hq keeps the export's link to HQ
   drill <file|folder> Restore an export (the newest in a folder) into a scratch install,
                       run the health check there, then remove the scratch install
+  backups             Where the scheduled database backups go, and the newest of them
 
 Options
   --app central       HQ's settings instead of the facility app's
@@ -273,12 +274,15 @@ function readAllStdin() {
   });
 }
 
-// Typed at the terminal, not echoed.
+// Typed at the terminal, not echoed. readline draws its line on its output, and starts by
+// clearing that line, which would wipe the question off the screen: its output here shows
+// nothing, and the question goes to the terminal itself. Ctrl+C stops the command.
 function askHidden(question) {
   return new Promise((resolve) => {
-    const rl = require('readline').createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    const quiet = new (require('stream').Writable)({ write(chunk, enc, done) { done(); } });
+    const rl = require('readline').createInterface({ input: process.stdin, output: quiet, terminal: true });
+    rl.on('SIGINT', () => { rl.close(); process.stdout.write('\n'); process.exit(130); });
     process.stdout.write(question);
-    rl._writeToOutput = () => {};
     rl.question('', (answer) => { rl.close(); process.stdout.write('\n'); resolve(answer); });
   });
 }
@@ -542,6 +546,46 @@ async function drillCmd(target) {
   }
 }
 
+// `backups`: where the scheduled database backups go (the backup_dir setting, else
+// backups/scheduled beside the database) and the newest of them, as the installers' menus
+// show them. On Postgres, or with OPSPOINT_BACKUPS=provider, OpsPoint makes none of its own.
+async function backupsCmd() {
+  const fs = require('fs'), path = require('path');
+  const stop = settingsOrStop();
+  if (stop !== null) return stop;
+  const settings = require('../settings');
+  const config = require('../config');
+  const conn = require('../db/connection');
+  if (conn.isPg) { process.stdout.write('On Postgres the database server keeps the backups: OpsPoint makes none of its own.\n'); return 0; }
+  if (settings.get('OPSPOINT_BACKUPS') === 'provider') {
+    process.stdout.write("Backups are left to the platform's point-in-time restore (OPSPOINT_BACKUPS=provider).\n");
+    return 0;
+  }
+  if (!fs.existsSync(config.DB_PATH)) { process.stdout.write(`There is no database at ${config.DB_PATH} yet, so no backups either.\n`); return 1; }
+  conn.open(config.DB_PATH);
+  let dir = null;
+  try {
+    const row = await conn.query1('SELECT value FROM settings WHERE key=?', ['backup_dir']);
+    if (row) { try { dir = JSON.parse(row.value); } catch (e) { dir = row.value; } }
+  } finally {
+    await conn.close().catch(() => {});
+  }
+  dir = dir || path.join(path.dirname(config.DB_PATH), 'backups', 'scheduled');
+  let files = [];
+  try {
+    files = fs.readdirSync(dir).filter((f) => /^opspoint-.*\.db$/.test(f))
+      .map((f) => ({ f, st: fs.statSync(path.join(dir, f)) })).sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
+  } catch (e) {
+    if (e.code !== 'ENOENT') { process.stdout.write(`ERROR    The backup folder ${dir} can't be read (${e.code || e.message}).\n`); return 1; }
+  }
+  if (!files.length) { process.stdout.write(`No database backups in ${dir} yet.\n`); return 0; }
+  const shown = files.slice(0, 10), w = Math.max(...shown.map((x) => x.f.length)) + 2;
+  process.stdout.write(`Database backups in ${dir}, newest first:\n` +
+    shown.map((x) => `  ${pad(x.f, w)}${pad(mb(x.st.size), 9)}${when(x.st.mtime)}\n`).join('') +
+    (files.length > shown.length ? `  and ${files.length - shown.length} older\n` : ''));
+  return 0;
+}
+
 function main() {
   const [cmd, sub] = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !VALUE_OPTIONS.includes(all[i - 1]));
   const app = arg('--app') || 'facility';
@@ -581,6 +625,7 @@ function main() {
   if (cmd === 'export') return exportCmd();
   if (cmd === 'import') return importCmd(sub);
   if (cmd === 'drill') return drillCmd(sub);
+  if (cmd === 'backups') return backupsCmd();
 
   if (cmd === 'keys') {
     const crypto = require('crypto');

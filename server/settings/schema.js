@@ -489,6 +489,13 @@ const SETTINGS = [
     noun: 'how long the supervisor waits for an update',
     summary: 'Milliseconds bootstrap.js waits for an updated server to answer before rolling the update back.',
   },
+  {
+    name: 'OPSPOINT_LOG_FILE', group: 'Supervisor', scope: 'facility', type: 'path', readBy: 'bootstrap.js',
+    noun: 'the log file',
+    summary: "A file bootstrap.js writes its own and the server's output to, each line with its time, for a " +
+             'service no console or journal collects (the Windows installer sets it). At 10 MB it becomes ' +
+             '<file>.1, and three older files are kept. Unset: the output goes to the console.',
+  },
 
   // ── HQ (central) ──────────────────────────────────────────────────────────
   {
@@ -524,6 +531,7 @@ const INTERNAL_ENV = [
   'OPSPOINT_BOOTSTRAP_BASE',     // test hooks for bootstrap.js
   'OPSPOINT_BOOTSTRAP_ENTRY',
   'OPSPOINT_BOOTSTRAP_DATA',
+  'OPSPOINT_BOOTSTRAP_LOG_MAX',
   'OPSPOINT_RELEASE_KEY',        // scripts/release.mjs (build machine only)
   'OPSPOINT_RELEASE_KEY_FILE',
   // and any OPSPOINT_TEST_* (tests/storage.emulators.test.js: where the emulators are)

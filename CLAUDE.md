@@ -45,6 +45,8 @@ node server/cli/opspoint.js migrate [--app central] [--status]
 node server/cli/opspoint.js export [--out <file|folder>] [--include-hq]
 node server/cli/opspoint.js import <file> [--keep-hq]      # into a NEW, empty install only
 node server/cli/opspoint.js drill <file|folder>            # newest export -> scratch SQLite + health check
+# Where the scheduled database backups go (backup_dir, else beside the database) and the newest ones
+node server/cli/opspoint.js backups
 # Installers: regenerate the shared look / the Windows pictures after changing brand.json or the icon
 node scripts/gen-brand.cjs [--check]
 node scripts/gen-installer-art.cjs [--check]
@@ -241,15 +243,32 @@ table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), 
   the manifest's Ed25519 signature against the key `updater.js` pins, writes
   `/etc/opspoint/opspoint.config.json` (0640) and a systemd unit (`OPSPOINT_CONFIG`,
   `RestartPreventExitStatus=78`), waits for `/healthz`, runs the doctor and prints the setup
-  link + a fresh setup code (+ a QR with qrencode). Upgrade keeps `app.previous` and rolls back
-  if the new version doesn't come up.
+  link + a fresh setup code (+ a QR with qrencode). Upgrade moves the old app to `app.previous`,
+  unpacks the new one into an empty folder, and rolls back if it doesn't come up. Every unpack goes
+  through `unpack()` (`umask 022` + `--no-same-permissions`): a bundle packed on Windows (bsdtar)
+  records 777/666, and tar as root would keep that — a world-writable app.
 - `packaging/windows/` — `opspoint.iss` (Inno Setup 6.7.3 — compiles on Windows or under Wine
   on Linux, `wine C:\InnoSetup\ISCC.exe /DAppVersion=x.y.z opspoint.iss`: Node + the app with its packages, door
   pictures from `scripts/gen-installer-art.cjs`, then runs `opspoint.ps1 -Configure`),
   `opspoint.ps1` (the same questions/menus in PowerShell 5.1; **saved as UTF-8 with a BOM** or
   5.1 misreads the glyphs; the service is a scheduled task at startup as NETWORK SERVICE),
   `opspoint.cmd` (the Start menu entry). `scripts/build-windows.mjs` stages
-  `release/windows/{node,app}` after `scripts/release.mjs`.
+  `release/windows/{node,app}` after `scripts/release.mjs`. Tested on Windows 11 (VM 103):
+  - `-Configure` runs from `[Code]` (`CurStepChanged`), so Setup reads its exit code: not 0 → the
+    Finished page says so and a silent Setup exits **10** (files in, not running); `/LOG` gets the
+    console's lines. `PrepareToInstall` runs `-StopService` first (a running node.exe can't be
+    replaced); run again over an install, `-Configure` asks nothing and keeps every key in the file.
+  - The data folder is closed to all but SYSTEM, Administrators and NETWORK SERVICE (`icacls
+    /inheritance:r`; under ProgramData it would inherit Users:read) and must be a folder of its own.
+    The service logs to `OPSPOINT_LOG_FILE` (`<data>\logs\opspoint.log`, written by bootstrap.js,
+    10 MB × 4) — a scheduled task has no console or journal.
+  - So the menu needs administrator rights: started without them (a Start menu click) it opens
+    again through UAC; the command line says to use an administrator prompt. Nothing opens the data
+    folder in Explorer (it runs unelevated): backups are listed by `opspoint backups`.
+  - The door and pointer glyphs follow the console's window: `PseudoConsoleWindow` (Windows
+    Terminal) draws ◖ ◗ ▸; conhost (Setup's console, Lucida Console) gets `doorConsole` and ►.
+    `WT_SESSION` can't tell: consoles started from Windows Terminal inherit it.
+  - No function may share a name with a built-in alias (`cli` is Clear-Item; an alias wins).
 - `packaging/docker/` — `Dockerfile` (profile docker, user node, `/data` volume, HEALTHCHECK on
   `/healthz`) built from the repo root with an allowlist `.dockerignore`; `docker-compose.yml`
   (OpsPoint + Postgres 16).
@@ -561,7 +580,7 @@ Light/dark is orthogonal: a class on the same element, a different storage key
 | `server.js` | All routes, WS logic, auth, CSRF, rate limiting |
 | `server/settings/schema.js` | Every setting and the six deployment profiles, declared once |
 | `server/settings/index.js` | Layered values (`get`), the startup check (`startupCheck`) |
-| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `migrate`, `keys`, `setup-code`, `export`, `import`, `drill` |
+| `server/cli/opspoint.js` | Command line: `settings`, `settings --check`, `settings docs`, `doctor`, `migrate`, `keys`, `setup-code`, `export`, `import`, `drill`, `backups` |
 | `server/health/index.js` | The health checks (`createDoctor`: `run`, `healthz`) |
 | `server/health/instances.js` | This process's heartbeat row in `app_instances` |
 | `server/lib/jobs.js` | Background jobs report each run here (`register`, `beat`) |

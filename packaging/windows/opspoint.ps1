@@ -4,20 +4,26 @@
 
     opspoint.ps1                        the menu (arrow keys or number keys)
     opspoint.ps1 -Configure             the install questions, the service, the setup link
-    opspoint.ps1 doctor | export | import FILE | drill FOLDER | settings | migrate | setup-code
+    opspoint.ps1 -StopService           stop OpsPoint (Setup does, before it replaces the files)
+    opspoint.ps1 doctor | export | import FILE | drill FOLDER | backups | settings | migrate | setup-code
                                         the command line
     -Config answers.env -Yes            unattended (no questions)    -NoColor   plain text
     -DryRun                             say what would happen; change nothing
 
   Answers (KEY=value lines, all optional): TZ, PORT, OPSPOINT_DATA, OPSPOINT_DB_DRIVER
-  (sqlite or pg), DATABASE_URL, ADDRESS.
-  Windows PowerShell 5.1 or later; run as administrator for -Configure, upgrades and uninstall.
+  (sqlite or pg), DATABASE_URL, ADDRESS. Run again over an install (a repair, a newer
+  Setup), -Configure keeps that install's settings and asks nothing.
+  Windows PowerShell 5.1 or later. Only administrators can open the settings and the data
+  folder: the menu asks Windows for that when it starts without it (a Start menu click), and
+  the command line needs an administrator prompt.
+  No function here may share a name with a built-in alias (cli is Clear-Item, and an alias
+  wins over a function): tests/packaging.test.js checks.
 #>
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)] [string] $Command = '',
   [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]] $Rest = @(),
-  [switch] $Configure, [switch] $RemoveService,
+  [switch] $Configure, [switch] $RemoveService, [switch] $StopService,
   [string] $Config = '', [switch] $Yes, [switch] $NoColor, [switch] $DryRun,
   [string] $InstallDir = ''
 )
@@ -29,6 +35,7 @@ $BrandProduct = 'OpsPoint'
 $BrandTitle   = 'OpsPoint Setup'
 $BrandTagline = 'Residential operations'
 $BrandDoor    = '◖▌░░◗'
+$BrandDoorConsole = '▐▌░░▌'
 $Palette = @{
   navy   = @{ Hex = '#1E3A70'; A256 = 24; A16 = 34 }
   gold   = @{ Hex = '#F5B82E'; A256 = 214; A16 = 33 }
@@ -61,7 +68,7 @@ $Words = @{
 
 $Releases  = 'https://github.com/harrisb415/opspoint-releases/releases'
 $TaskName  = 'OpsPoint'
-$CliCommands = @('settings', 'doctor', 'migrate', 'keys', 'setup-code', 'export', 'import', 'drill')
+$CliCommands = @('settings', 'doctor', 'migrate', 'keys', 'setup-code', 'export', 'import', 'drill', 'backups')
 if (-not $InstallDir) { $InstallDir = $PSScriptRoot }
 $App      = Join-Path $InstallDir 'app'
 $NodeExe  = Join-Path $InstallDir 'node\node.exe'
@@ -76,6 +83,8 @@ if ($UseColor) {
 [DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int h);
 [DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr h, out uint m);
 [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr h, uint m);
+[DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
+[DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
 '@ -ErrorAction Stop
     $h = [OpsPoint.Vt]::GetStdHandle(-11); $m = 0
     if ([OpsPoint.Vt]::GetConsoleMode($h, [ref]$m)) { [void][OpsPoint.Vt]::SetConsoleMode($h, $m -bor 0x4) } else { $UseColor = $false }
@@ -97,13 +106,33 @@ $Off = ''; $Bold = ''; $Dim = ''
 if ($UseColor) { $Off = "$E[0m"; $Bold = "$E[1m"; $Dim = "$E[2m" }
 $Gold = Fg 'gold'; $Silver = Fg 'silver'; $Warm = Fg 'warm'; $Pass = Fg 'pass'; $Fail = Fg 'fail'; $NavyBg = Bg 'navy'
 $Interactive = (-not $Yes) -and (-not [Console]::IsInputRedirected) -and (-not [Console]::IsOutputRedirected)
+# Windows Terminal (any terminal behind a pseudo-console) draws every glyph. A console that
+# draws its own window (conhost: the one Setup opens) has Consolas or Lucida Console, where
+# ◖ ◗ beside the door's blocks come out as empty boxes: there the door and the menu pointer
+# use characters it has. WT_SESSION can't tell them apart: a console started from Windows
+# Terminal inherits it.
+$Pointer = '►'; $FullGlyphs = $false
+if ($UseColor) {
+  try {
+    $cls = New-Object Text.StringBuilder 64
+    [void][OpsPoint.Vt]::GetClassName([OpsPoint.Vt]::GetConsoleWindow(), $cls, $cls.Capacity)
+    $FullGlyphs = $cls.ToString() -eq 'PseudoConsoleWindow'
+  } catch { }
+}
+if ($FullGlyphs) { $Pointer = '▸' } else { $BrandDoor = $BrandDoorConsole }
 
 function Say([string]$t) { Write-Host $t }
 function Head1([string]$t) { Write-Host ''; Write-Host "   $Gold$Bold$t$Off" }
 function Ok([string]$t) { Write-Host "   $Pass✔$Off $t" }
 function Bad([string]$t) { Write-Host "   $Fail✖$Off $t" }
 function Note([string]$t) { Write-Host "   $Gold!$Off $t" }
-function Die([string]$t) { Write-Host ''; Write-Host "   $Fail✖ $t$Off"; Write-Host ''; exit 1 }
+# Setup's own console closes when this script ends: under -Configure a failure waits to be read.
+$PauseOnExit = $false
+function Die([string]$t) {
+  Write-Host ''; Write-Host "   $Fail✖ $t$Off"; Write-Host ''
+  if ($PauseOnExit) { [void](Read-Host "   ${Dim}Press Enter to close this window$Off") }
+  exit 1
+}
 
 function Banner([string]$ver = '') {
   $w = 48
@@ -144,7 +173,7 @@ function Menu([string]$question, [object[]]$items, [string]$defaultId = '') {
   while ($true) {
     [Console]::SetCursorPosition(0, $top)
     for ($k = 0; $k -lt $n; $k++) {
-      if ($k -eq $sel) { Write-Host ("   $Gold$Bold▸ " + $items[$k].Label + "$Off").PadRight(60) }
+      if ($k -eq $sel) { Write-Host ("   $Gold$Bold$Pointer " + $items[$k].Label + "$Off").PadRight(60) }
       else { Write-Host ("     $Silver" + $items[$k].Label + "$Off").PadRight(60) }
     }
     Write-Host ''; Write-Host "   $Dim$MenuHints$Off"
@@ -195,6 +224,9 @@ if ($Config) {
 }
 
 function Installed { return (Test-Path -LiteralPath (Join-Path $App 'package.json')) }
+function IsAdmin {
+  return ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
 function InstalledVersion {
   try { return (Get-Content -LiteralPath (Join-Path $App 'package.json') -Raw | ConvertFrom-Json).version } catch { return '' }
 }
@@ -204,10 +236,33 @@ function ReadSettings {
 }
 
 # The OpsPoint command line, with this install's settings.
-function Cli([string[]]$cliArgs) {
+#   Invoke-OpsPoint  on this console (it may ask for a passphrase), its exit code back
+#   Read-OpsPoint    its output as text, for this script to read
+# (Never "Cli": Windows PowerShell's built-in alias cli is Clear-Item, and an alias wins.)
+function QuoteArg([string]$a) {
+  # As Windows splits a command line again (CommandLineToArgvW): quotes, and the backslashes before them.
+  if ($a -and $a -notmatch '[\s"]') { return $a }
+  return '"' + (($a -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
+function Invoke-OpsPoint([string[]]$cliArgs) {
   if (-not (Test-Path -LiteralPath $NodeExe)) { Die "Node.js isn't in $InstallDir\node: run OpsPoint Setup again." }
+  $js = Join-Path $App 'server\cli\opspoint.js'
+  if ($Interactive) {
+    # Straight onto this console: a captured pipe would hide a passphrase prompt.
+    $line = (@($js) + $cliArgs | ForEach-Object { QuoteArg $_ }) -join ' '
+    return (Start-Process -FilePath $NodeExe -ArgumentList $line -WorkingDirectory $App -NoNewWindow -Wait -PassThru).ExitCode
+  }
+  # No console to type on (a silent Setup, a pipe): its lines pass through this script's output.
+  # Windows PowerShell 5.1 makes each stderr line an error record, which 'Stop' would end the script on.
+  $ErrorActionPreference = 'Continue'
   Push-Location $App
-  try { & $NodeExe (Join-Path $App 'server\cli\opspoint.js') @cliArgs; return $LASTEXITCODE } finally { Pop-Location }
+  try { & $NodeExe $js @cliArgs 2>&1 | ForEach-Object { Write-Host "$_" }; return $LASTEXITCODE } finally { Pop-Location }
+}
+function Read-OpsPoint([string[]]$cliArgs) {
+  if (-not (Test-Path -LiteralPath $NodeExe)) { Die "Node.js isn't in $InstallDir\node: run OpsPoint Setup again." }
+  $ErrorActionPreference = 'Continue'
+  Push-Location $App
+  try { return ((& $NodeExe (Join-Path $App 'server\cli\opspoint.js') @cliArgs 2>$null) -join "`n") } finally { Pop-Location }
 }
 
 function WaitHealthy([int]$port) {
@@ -245,9 +300,13 @@ function StartService { Run { Start-ScheduledTask -TaskName $TaskName } "start t
 function StopService {
   Run {
     try { Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop } catch { }
-    # The task's node process outlives Stop-ScheduledTask: end the one running from this folder.
+    # The task's node process outlives Stop-ScheduledTask: end the ones running from this folder,
+    # and wait until they have gone (Setup replaces node.exe next).
     Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.ExecutablePath -eq $NodeExe } |
-      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+      ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        Wait-Process -Id $_.ProcessId -Timeout 15 -ErrorAction SilentlyContinue
+      }
   } "stop the $TaskName task"
 }
 
@@ -255,19 +314,33 @@ function StopService {
 function Do-Configure {
   $t0 = Get-Date
   Head1 $Words.checking
-  if (-not $DryRun) {
-    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if (-not $admin) { Die 'Run OpsPoint Setup as an administrator.' }
-  }
+  if (-not $DryRun -and -not (IsAdmin)) { Die 'Run OpsPoint Setup as an administrator.' }
   $os = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue)
   if ($os) { Ok "$($os.Caption) ($($os.Version))" }
   if (Test-Path -LiteralPath $NodeExe) { Ok "Node $(& $NodeExe -p 'process.versions.node') (bundled)" } elseif (-not $DryRun) { Die "Node.js is missing from $InstallDir\node: run OpsPoint Setup again." }
+  # Setup run again over an install (a repair, a newer version): its settings are the answers,
+  # so nothing is asked, and keys set by hand stay in the file.
+  $prev = $null
+  try { $prev = ReadSettings } catch { Die "$Settings isn't readable JSON: fix it, or delete it to answer the questions again." }
+  if ($prev) {
+    foreach ($k in $AllowedAnswers) {
+      $p = $prev.PSObject.Properties[$k]
+      if ($p -and "$($p.Value)" -and -not (Get-Variable -Name "A_$k" -ValueOnly -ErrorAction SilentlyContinue)) { Set-Variable -Name "A_$k" -Value "$($p.Value)" -Scope Script }
+    }
+    Ok "Keeping this install's settings ($Settings)"
+  }
   $zone = 'UTC'
   if (Test-Path -LiteralPath $NodeExe) { $zone = (& $NodeExe -p 'Intl.DateTimeFormat().resolvedOptions().timeZone') }
   $tz = Ask 'TZ' "The facility's time zone" $zone
   $port = Ask 'PORT' 'Port OpsPoint answers on' '3000'
   if ($port -notmatch '^\d+$' -or [int]$port -lt 1 -or [int]$port -gt 65535) { Die 'PORT must be a number from 1 to 65535.' }
   $data = Ask 'OPSPOINT_DATA' 'Folder for the database, photos and backups' (Join-Path $env:ProgramData 'OpsPoint')
+  # The data folder gets permissions of its own below: never a whole drive or a folder Windows owns.
+  if ($data -notmatch '^[A-Za-z]:\\') { Die "OPSPOINT_DATA must be a full path on this PC, like D:\OpsPoint (not $data)." }
+  $data = [IO.Path]::GetFullPath($data).TrimEnd('\')
+  $owned = @($env:windir, $env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramData, $env:USERPROFILE, (Split-Path -Parent $env:USERPROFILE)) |
+    Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\') }
+  if ($data -match '^[A-Za-z]:$' -or $owned -contains $data) { Die "The data folder must be a folder of its own, not $data." }
   $driver = Get-Variable -Name 'A_OPSPOINT_DB_DRIVER' -ValueOnly -ErrorAction SilentlyContinue
   if (-not $driver) {
     if ($Interactive) { $driver = Menu 'Where does the database live?' @(@{ Key = '1'; Id = 'sqlite'; Label = 'SQLite on this PC (encrypted; simplest)' }, @{ Key = '2'; Id = 'pg'; Label = 'Postgres on another server' }) }
@@ -284,9 +357,14 @@ function Do-Configure {
     $ssl = Ask 'PGSSLMODE' 'TLS to the database (verify-full, verify-ca, require or disable)' $sslDefault
     if (@('disable', 'require', 'verify-ca', 'verify-full') -notcontains $ssl) { Die 'PGSSLMODE must be verify-full, verify-ca, require or disable.' }
   }
-  $busy = $null
-  try { $busy = Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction Stop } catch { }
-  if ($busy -and -not (Installed)) { Bad "Port $port is in use"; if (-not $DryRun) { Die "Something else answers on port ${port}: choose another." } } else { Ok "Port $port is free" }
+  # The files are in place before these questions, so "installed" says nothing about the port:
+  # what matters is whose process listens on it.
+  $busy = $null; $ours = $false
+  try { $busy = Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction Stop | Select-Object -First 1 } catch { }
+  if ($busy) { try { $ours = (Get-Process -Id $busy.OwningProcess -ErrorAction Stop).Path -eq $NodeExe } catch { } }
+  if (-not $busy) { Ok "Port $port is free" }
+  elseif ($ours) { Ok "Port ${port}: this OpsPoint (it restarts below)" }
+  else { Bad "Port $port is in use"; if (-not $DryRun) { Die "Something else answers on port ${port}: choose another." } }
   $drive = (Split-Path -Qualifier $data)
   $free = (Get-PSDrive -Name $drive.TrimEnd(':') -ErrorAction SilentlyContinue)
   if ($free) { $gb = [int]($free.Free / 1GB); if ($gb -ge 2) { Ok "$gb GB free disk space" } else { Bad "Only $gb GB free on $drive"; if (-not $DryRun) { Die 'OpsPoint needs at least 2 GB free.' } } }
@@ -294,18 +372,32 @@ function Do-Configure {
   if ($driver -eq 'pg') { Ok ("Database: Postgres at " + ($url -replace '^[a-z]+://([^@]*@)?([^/?]*).*$', '$2')) } else { Ok "Database: SQLite in $data" }
   Write-Host ''
 
+  # A running OpsPoint would keep its old settings: it starts again once they are written.
+  if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) { Progress 10 'Stopping OpsPoint…'; StopService }
   Progress 20 'Writing the settings…'
-  $s = [ordered]@{ OPSPOINT_PROFILE = 'windows-local'; TZ = $tz; PORT = [int]$port; OPSPOINT_DATA = $data; OPSPOINT_DB_DRIVER = $driver }
-  if ($driver -eq 'pg') { $s.DATABASE_URL = $url; $s.PGSSLMODE = $ssl }
-  $json = $s | ConvertTo-Json
+  # The installer's own keys; anything else already in the file stays as it was.
+  $s = [ordered]@{}
+  if ($prev) { foreach ($p in $prev.PSObject.Properties) { $s[$p.Name] = $p.Value } }
+  if (-not $s.Contains('OPSPOINT_PROFILE')) { $s.OPSPOINT_PROFILE = 'windows-local' }
+  $s.TZ = $tz; $s.PORT = [int]$port; $s.OPSPOINT_DATA = $data; $s.OPSPOINT_DB_DRIVER = $driver
+  # The service has no console: its output goes to a file in the data folder, kept to size.
+  if (-not $s.Contains('OPSPOINT_LOG_FILE')) { $s.OPSPOINT_LOG_FILE = Join-Path $data 'logs\opspoint.log' }
+  if ($driver -eq 'pg') { $s.DATABASE_URL = $url; $s.PGSSLMODE = $ssl } else { $s.Remove('DATABASE_URL'); $s.Remove('PGSSLMODE') }
+  $json = $s | ConvertTo-Json -Depth 10
   if ($DryRun) {
     ProgressEnd; Say "   would write $Settings"
     ($json -replace '("DATABASE_URL":\s*"[a-z]+://[^:/@]*:)[^@]*@', '$1•••@') -split "`n" | ForEach-Object { Say "     | $($_.TrimEnd())" }
+    Say "   would let only SYSTEM, the administrators and the service into $data"
   } else {
     New-Item -ItemType Directory -Force -Path $data | Out-Null
     [IO.File]::WriteAllText($Settings, $json + "`r`n", (New-Object Text.UTF8Encoding($false)))
-    # The service account reads the settings, writes the data folder, and updates the app in place.
-    & icacls $data /grant "${NetworkService}:(OI)(CI)M" /T /Q | Out-Null
+    # The data folder holds the database, its key, the session key and the backups: only SYSTEM,
+    # the administrators and the service may open it (under ProgramData it would inherit read
+    # access for every user of this PC). What is in it already follows the folder.
+    & icacls $data /inheritance:r /grant:r "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "${NetworkService}:(OI)(CI)M" /Q | Out-Null
+    if ($LASTEXITCODE -ne 0) { Die "Couldn't set the permissions of $data." }
+    if (Get-ChildItem -LiteralPath $data -Force | Select-Object -First 1) { & icacls "$data\*" /reset /T /C /Q | Out-Null }
+    # The service account reads the settings and updates the app in place (the in-app updater).
     & icacls $App /grant "${NetworkService}:(OI)(CI)M" /T /Q | Out-Null
     & icacls $Settings /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" "${NetworkService}:R" /Q | Out-Null
   }
@@ -313,7 +405,7 @@ function Do-Configure {
   Run { RegisterService } "register the scheduled task $TaskName (at startup, as NETWORK SERVICE, restarted on failure)"
   Progress 80 'Starting OpsPoint…'
   StartService
-  if (-not (WaitHealthy ([int]$port))) { ProgressEnd; Die "OpsPoint didn't start. See $data\logs, or run: opspoint doctor" }
+  if (-not (WaitHealthy ([int]$port))) { ProgressEnd; Die "OpsPoint didn't start: its log is $($s.OPSPOINT_LOG_FILE)" }
   Progress 100 'Started.'
   ProgressEnd
   Finish-Card $t0 ([int]$port) $data
@@ -321,24 +413,33 @@ function Do-Configure {
 
 function Finish-Card([datetime]$t0, [int]$port, [string]$data) {
   Head1 'Health check'
-  if ($DryRun) { Say '   would run: opspoint doctor' } else { [void](Cli @('doctor')) }
+  if ($DryRun) { Say '   would run: opspoint doctor' } else { [void](Invoke-OpsPoint @('doctor')) }
   $addr = Get-Variable -Name 'A_ADDRESS' -ValueOnly -ErrorAction SilentlyContinue
   if (-not $addr) { $addr = FirstAddress }
   $scheme = 'http'; if (Test-Path -LiteralPath (Join-Path $data 'cert.pem')) { $scheme = 'https' }
-  $link = "${scheme}://${addr}:$port/setup"
-  $code = ''
+  $root = "${scheme}://${addr}:$port"
+  $code = ''; $state = 'code'
   if (-not $DryRun) {
-    $out = (Cli @('setup-code') 6>&1 2>$null | Out-String)
+    $out = Read-OpsPoint @('setup-code')
     if ($out -match 'Setup code: ([A-Z0-9-]+)') { $code = $Matches[1] }
+    elseif ($out -match 'Setup is finished') { $state = 'done' }
+    elseif ($out -match 'admin account exists') { $state = 'wizard' }
   }
   Write-Host ''
   Write-Host ("   $Gold$Bold{0}$Off  ({1}s)" -f $Words.done, [int]((Get-Date) - $t0).TotalSeconds)
   Write-Host ''
-  Write-Host "   $($Words.openSetup):"
-  Write-Host "   $Warm$Bold$link$Off"
-  if ($code) { Write-Host "   $($Words.setupCode): $Warm$Bold$code$Off ($($Words.codeNote))" }
-  elseif (-not $DryRun) { Write-Host '   Setup is already finished here: sign in as usual.' }
-  if ($Interactive -and -not $DryRun) { Start-Process "http://localhost:$port/setup" }
+  switch ($state) {
+    'done'   { Write-Host '   Setup is finished here: sign in at'; Write-Host "   $Warm$Bold$root/$Off" }
+    'wizard' { Write-Host '   Sign in to finish setup at'; Write-Host "   $Warm$Bold$root/setup$Off" }
+    default {
+      Write-Host "   $($Words.openSetup):"
+      Write-Host "   $Warm$Bold$root/setup$Off"
+      if ($code) { Write-Host "   $($Words.setupCode): $Warm$Bold$code$Off ($($Words.codeNote))" }
+      elseif (-not $DryRun) { Write-Host "   $($Words.setupCode): run  & '$InstallDir\opspoint.cmd' setup-code  as an administrator" }
+    }
+  }
+  # Explorer opens it as the person signed in: a browser started from here would run as administrator.
+  if ($Interactive -and -not $DryRun) { Start-Process explorer.exe ("http://localhost:$port/" + $(if ($state -eq 'done') { '' } else { 'setup' })) }
   Write-Host ''
   Write-Host "   ${Dim}Later: Start menu > OpsPoint Setup (upgrade, health check, backup, export)$Off"
   Write-Host ''
@@ -348,22 +449,24 @@ function Finish-Card([datetime]$t0, [int]$port, [string]$data) {
 function Do-Backup {
   if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }
   $data = (ReadSettings).OPSPOINT_DATA
-  switch (Menu 'Back up or restore' @(@{ Key = '1'; Id = 'export'; Label = 'Export now (one encrypted file with everything)' }, @{ Key = '2'; Id = 'drill'; Label = 'Restore drill: the newest export into a scratch install' }, @{ Key = '3'; Id = 'list'; Label = 'Open the backups folder' }, @{ Key = 'b'; Id = 'back'; Label = 'Back' })) {
-    'export' { [void](Cli @('export', '--out', (Join-Path $data 'exports'))) }
-    'drill'  { [void](Cli @('drill', (Join-Path $data 'exports'))) }
-    'list'   { Start-Process explorer.exe (Join-Path $data 'backups') }
+  switch (Menu 'Back up or restore' @(@{ Key = '1'; Id = 'export'; Label = 'Export now (one encrypted file with everything)' }, @{ Key = '2'; Id = 'drill'; Label = 'Restore drill: the newest export into a scratch install' }, @{ Key = '3'; Id = 'list'; Label = 'Show the database backups' }, @{ Key = 'b'; Id = 'back'; Label = 'Back' })) {
+    'export' { [void](Invoke-OpsPoint @('export', '--out', (Join-Path $data 'exports'))) }
+    'drill'  { [void](Invoke-OpsPoint @('drill', (Join-Path $data 'exports'))) }
+    # Listed here, not opened in Explorer: Explorer runs without administrator rights, and
+    # the backups may be in a folder chosen in setup (the backup_dir setting).
+    'list'   { [void](Invoke-OpsPoint @('backups')) }
   }
 }
 function Do-Export {
   if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }
   $st = ReadSettings
   switch (Menu 'Export or import' @(@{ Key = '1'; Id = 'export'; Label = 'Export to a file' }, @{ Key = '2'; Id = 'import'; Label = 'Import an export (into this new, empty install)' }, @{ Key = 'b'; Id = 'back'; Label = 'Back' })) {
-    'export' { $to = Ask 'EXPORT_TO' 'Folder or file for the export' (Join-Path $st.OPSPOINT_DATA 'exports'); [void](Cli @('export', '--out', $to)) }
+    'export' { $to = Ask 'EXPORT_TO' 'Folder or file for the export' (Join-Path $st.OPSPOINT_DATA 'exports'); [void](Invoke-OpsPoint @('export', '--out', $to)) }
     'import' {
       $file = Ask 'IMPORT_FILE' 'The export file to import' ''
       if (-not (Test-Path -LiteralPath $file)) { Die "There is no file at $file." }
       StopService
-      $rc = Cli @('import', $file)
+      $rc = Invoke-OpsPoint @('import', $file)
       StartService
       if ($rc -eq 0) { Finish-Card (Get-Date) ([int]$st.PORT) $st.OPSPOINT_DATA }
     }
@@ -376,7 +479,8 @@ function Do-Upgrade {
   Say '   the release signature and installs, keeping the previous version to roll back to.'
   Say "   To repair, or to move to a new major version, run the newest OpsPoint Setup from:"
   Say "   $Warm$Releases/latest$Off"
-  if (YesNo 'Open that page now?' $true) { Start-Process "$Releases/latest" }
+  # Explorer opens it as the person signed in: a browser started from here would run as administrator.
+  if (YesNo 'Open that page now?' $true) { Start-Process explorer.exe "$Releases/latest" }
 }
 function Do-Uninstall {
   $un = Get-ChildItem -LiteralPath $InstallDir -Filter 'unins*.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -391,16 +495,34 @@ function Remove-Service {
 
 # ── Main ────────────────────────────────────────────────────────────────────
 if ($RemoveService) { Remove-Service; exit 0 }
+if ($StopService) { StopService; exit 0 }
 if ($Configure) {
-  Banner; Do-Configure
-  # Setup's console closes with this script: keep the link and the code on screen until read.
+  # Setup's console closes with this script: the link and the code, or what went wrong, stay
+  # on screen until read. Setup reads the exit code (not 0: the files are in, OpsPoint isn't up).
+  $PauseOnExit = $Interactive
+  if ($Interactive) { try { $Host.UI.RawUI.WindowTitle = $BrandTitle } catch { } }
+  try { Banner; Do-Configure }
+  catch { Die "Setup stopped: $($_.Exception.Message) (opspoint.ps1 line $($_.InvocationInfo.ScriptLineNumber))" }
   if ($Interactive) { [void](Read-Host "   ${Dim}Press Enter to close this window$Off") }
   exit 0
 }
 if ($Command) {
   if ($CliCommands -notcontains $Command) { Die "Unknown command $Command (see the top of this script)." }
   if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }
-  exit (Cli (@($Command) + $Rest))
+  if (-not (IsAdmin)) { Die 'Run this from an administrator prompt: only administrators can open the settings and the data folder.' }
+  exit (Invoke-OpsPoint (@($Command) + $Rest))
+}
+# The menu has a window of its own (the Start menu's): what stops it waits to be read.
+$PauseOnExit = $Interactive
+# A Start menu click doesn't run as administrator: the menu opens again as one (Windows asks).
+if (-not (IsAdmin) -and -not $DryRun) {
+  if (-not $Interactive) { Die 'Run this as an administrator: only administrators can open the settings and the data folder.' }
+  $again = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+  if ($NoColor) { $again += '-NoColor' }
+  if ($InstallDir -ne $PSScriptRoot) { $again += @('-InstallDir', $InstallDir) }
+  try { Start-Process -FilePath (Get-Process -Id $PID).Path -Verb RunAs -ArgumentList (($again | ForEach-Object { QuoteArg $_ }) -join ' ') }
+  catch { Die 'The menu needs administrator rights: open OpsPoint Setup again and answer Yes when Windows asks.' }
+  exit 0
 }
 while ($true) {
   $ver = ''; if (Installed) { $ver = InstalledVersion }
@@ -409,7 +531,7 @@ while ($true) {
   switch (Menu $MenuQuestion $MenuItems $start) {
     'install'   { if (Installed) { Note "OpsPoint $ver is installed. Choose Upgrade or repair." } else { Note 'Run OpsPoint Setup (the installer) to install OpsPoint.' } }
     'upgrade'   { Do-Upgrade }
-    'doctor'    { if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }; [void](Cli @('doctor')) }
+    'doctor'    { if (-not (Installed)) { Die "OpsPoint isn't installed in $InstallDir." }; [void](Invoke-OpsPoint @('doctor')) }
     'backup'    { Do-Backup }
     'export'    { Do-Export }
     'uninstall' { Do-Uninstall }

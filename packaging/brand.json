@@ -1,9 +1,10 @@
 {
-  "_about": "The installers' look, defined once (deployment plan: 'Installer look and feel'). scripts/gen-brand.cjs writes it into packaging/linux/install.sh and packaging/windows/opspoint.ps1; tests/packaging.test.js fails when they drift. Colours come from the OpsPoint icon: a navy disc, a silver ring, an open door lit gold.",
+  "_about": "The installers' look, defined once (deployment plan: 'Installer look and feel'). scripts/gen-brand.cjs writes it into packaging/linux/install.sh and packaging/windows/opspoint.ps1; tests/packaging.test.js fails when they drift. Colours come from the OpsPoint icon: a navy disc, a silver ring, an open door lit gold. doorConsole is the same door in characters the Windows console's own fonts have (Consolas has no ◖ or ◗).",
   "product": "OpsPoint",
   "setupTitle": "OpsPoint Setup",
   "tagline": "Residential operations",
   "door": "◖▌░░◗",
+  "doorConsole": "▐▌░░▌",
   "palette": {
     "navy":   { "hex": "#1E3A70", "ansi256": 24,  "ansi16": "blue",         "role": "Background, panels (the disc and the door)" },
     "gold":   { "hex": "#F5B82E", "ansi256": 214, "ansi16": "yellow",       "role": "Titles, the selected item, progress fill (the doorway light)" },

@@ -92,7 +92,7 @@ setup link and its one-time code:
 
 | Target | How |
 |--------|-----|
-| Windows | `OpsPoint-Setup-<version>.exe` (Node included); maintenance from Start › OpsPoint Setup |
+| Windows | `OpsPoint-Setup-<version>.exe` (Node included), or unattended `/VERYSILENT /CONFIG=answers.env /LOG=setup.log` (exit code 10: installed but not running, the log says why); maintenance from Start › OpsPoint Setup (asks for administrator rights); the service logs to `<data folder>\logs\opspoint.log` |
 | Linux | `sudo bash install.sh` (menus), or `sudo bash install.sh --config answers.env --yes`; afterwards `sudo opspoint` |
 | Docker | `packaging/docker/docker-compose.yml`: OpsPoint and Postgres, `.env` with `TZ` and `POSTGRES_PASSWORD` |
 

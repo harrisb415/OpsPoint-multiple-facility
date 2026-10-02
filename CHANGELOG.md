@@ -4,8 +4,8 @@
 
 ## Unreleased — Packages: installers, a Docker image and one release pipeline (in progress, 2026-09-30)
 
-Roadmap phase 8 of the deployment plan, first part: everything built and tested on this side;
-installing on clean machines, the Windows installer's compile and publishing wait for go-aheads.
+Roadmap phase 8 of the deployment plan, first part: built, and tested on clean Linux and Windows
+machines; the release pipeline's first run and publishing wait for go-aheads.
 
 - **Linux installer** (`packaging/linux/install.sh`): full-screen menus (whiptail, in the icon's
   navy and gold) or arrow/number-key menus in colour, plain text for logs and pipes. Checks the
@@ -42,6 +42,35 @@ installing on clean machines, the Windows installer's compile and publishing wai
   - `export --out` makes the folder it names; an import creates the photos folder as a first
     start would; `uninstall --yes` proceeds (keeping the data); the banner lines up whatever the
     locale variables claim.
+- **Tested on Windows 11** (a clean VM: the wizard and its console, a repair over a running
+  install, the Start menu tool, export and restore drill, uninstall, unattended installs that work
+  and that fail). What it found, fixed:
+  - Setup ignored whether its questions worked, and their console closed before a failure could be
+    read: they now run where Setup reads the result (the last page says so, a silent Setup exits
+    10 with the reason in its `/LOG`), and the console waits for Enter.
+  - Run again over a running install, Setup couldn't replace `node.exe`: it stops OpsPoint first,
+    keeps that install's settings (asking nothing, leaving hand-set keys alone) and knows the port
+    in use is OpsPoint's own.
+  - **The data folder — database, its key, the session key, backups — was readable by every user
+    of the PC** (inherited from ProgramData): now only SYSTEM, the administrators and the service.
+    It must be a folder of its own, never a drive root or a Windows folder.
+  - The service had nowhere to write: `bootstrap.js` now writes its own and the server's lines,
+    each with its time, to `OPSPOINT_LOG_FILE` (the installer sets `<data>\logs\opspoint.log`;
+    10 MB, then .1 to .3).
+  - The Start menu tool ran without administrator rights, so it could read nothing: it now asks
+    Windows for them, and the command line says to use an administrator prompt. "Open the backups
+    folder" (Explorer can't open it) is now "Show the database backups": `opspoint backups`, on
+    Linux too, which also finds a backup folder chosen in setup.
+  - The tool's health check, export and import never ran: a function named `Cli` loses to
+    PowerShell's built-in alias `cli` (Clear-Item).
+  - The door came out as empty boxes in Setup's console: the glyphs now follow the console's own
+    window, not `WT_SESSION`, which consoles started from Windows Terminal inherit. The browser
+    opens as the signed-in person, not as administrator.
+- `export`, `import`, `drill`: the passphrase question was wiped off the screen as it appeared,
+  on every platform; Ctrl+C now stops the command instead of answering with nothing.
+- **Linux installer: a release packed on Windows records every file as writable by anyone, and
+  unpacking as root kept that.** The installer now sets the permissions itself, and an upgrade
+  unpacks into an empty folder, so no file of the version before stays among the new one's.
 - Tests: `tests/packaging.test.js` (the shared look in sync, the installer's unattended plan, its
   answers file read as data, the Windows tool on PowerShell 5.1, the image allowlist, the
   workflows, the bundle and updater lists in step).

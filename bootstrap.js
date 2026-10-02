@@ -21,6 +21,8 @@
  *   PORT, OPSPOINT_HEALTH_PATH, OPSPOINT_VERIFY_TIMEOUT
  * OPSPOINT_DATA, PORT and the last two may also come from opspoint.config.json
  * (see docs/SETTINGS.md); the environment wins, as it does for the server.
+ * So may OPSPOINT_LOG_FILE: its own and the server's output go to that file instead
+ * of the console (the Windows service has neither a console nor a journal).
  *
  * A server that exits with code 78 refused to start over a setting: that is
  * printed, and the supervisor stops rather than relaunching into it forever.
@@ -28,6 +30,8 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const util = require('util');
+const { StringDecoder } = require('string_decoder');
 
 const BASE = process.env.OPSPOINT_BOOTSTRAP_BASE || __dirname;
 
@@ -62,7 +66,73 @@ const EX_CONFIG = 78;
 const UP_DIR = path.join(DATA, 'updates');
 const PENDING = path.join(UP_DIR, 'pending-verify.json');
 
-function log(...a) { console.log('[bootstrap]', ...a); }
+// OPSPOINT_LOG_FILE: every line, the server's and the supervisor's, with the time it was
+// written. At LOG_MAX the file becomes <file>.1 (.1 becomes .2, .2 becomes .3) and a new one
+// starts, so it never fills a disk. On Windows a file another program holds open (a viewer
+// following it) can't be renamed: then nothing moves, the older files stay as they are, and
+// the next try comes after another tenth of LOG_MAX. A file that can't be written leaves the
+// console in charge.
+const LOG_MAX = parseInt(process.env.OPSPOINT_BOOTSTRAP_LOG_MAX || '', 10) || 10 * 1024 * 1024;
+const LOG_KEEP = 3;
+function stamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  const off = -d.getTimezoneOffset(), a = Math.abs(off);
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` +
+    `${off < 0 ? '-' : '+'}${p(Math.floor(a / 60))}:${p(a % 60)}`;
+}
+function openLog(file) {
+  let fd = null, size = 0, limit = LOG_MAX;
+  const open = () => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fd = fs.openSync(file, 'a');
+    size = fs.fstatSync(fd).size;
+  };
+  try { open(); } catch (e) {
+    console.error(`[bootstrap] can't write the log file ${file} (${e.message}): the output stays on the console`);
+    return null;
+  }
+  function rotate() {
+    try { fs.closeSync(fd); } catch (e) { /* already closed */ }
+    // The full file moves aside first; only then do the older ones move up (.0 becomes .1).
+    let moved = true;
+    try { fs.renameSync(file, `${file}.0`); } catch (e) { moved = false; }
+    if (moved) for (let i = LOG_KEEP; i >= 1; i--) { try { fs.renameSync(`${file}.${i - 1}`, `${file}.${i}`); } catch (e) { /* not there yet */ } }
+    open();
+    limit = moved ? LOG_MAX : size + Math.ceil(LOG_MAX / 10);
+  }
+  return {
+    write(text) {
+      try {
+        if (size >= limit) rotate();
+        const b = Buffer.from(text, 'utf8');
+        fs.writeSync(fd, b);
+        size += b.length;
+      } catch (e) { /* a full disk must not take OpsPoint down with it */ }
+      if (process.stdout.isTTY) process.stdout.write(text);
+    },
+  };
+}
+const LOG = setting('OPSPOINT_LOG_FILE') ? openLog(setting('OPSPOINT_LOG_FILE')) : null;
+
+// One of the server's streams into the log, whole lines only (stdout and stderr never share
+// one), each stamped when it is complete; what is left when the stream ends is a line too.
+function logStream(stream) {
+  const dec = new StringDecoder('utf8');
+  let partial = '';
+  const line = (l) => LOG.write(`${stamp()} ${l}\n`);
+  stream.on('data', (chunk) => {
+    const lines = (partial + dec.write(chunk)).split('\n');
+    partial = lines.pop();
+    for (const l of lines) line(l);
+    if (partial.length > 65536) { line(partial); partial = ''; }
+  });
+  stream.on('end', () => { partial += dec.end(); if (partial) line(partial); partial = ''; });
+}
+
+function log(...a) {
+  const line = util.format('[bootstrap]', ...a);
+  if (LOG) LOG.write(`${stamp()} ${line}\n`); else console.log(line);
+}
 
 // One health probe → cb(true|false). HTTPS (self-signed ok) if certs are present.
 function healthOnce(cb) {
@@ -110,7 +180,22 @@ function whenExited(child) {
 }
 function readPending() { try { return JSON.parse(fs.readFileSync(PENDING, 'utf8')); } catch (e) { return null; } }
 function clearPending() { try { fs.rmSync(PENDING, { force: true }); } catch (e) {} }
-function launch() { return spawn(process.execPath, [ENTRY], { cwd: BASE, stdio: 'inherit', env: Object.assign({}, process.env, { OPSPOINT_BOOTSTRAP: '1' }) }); }
+function launch() {
+  const child = spawn(process.execPath, [ENTRY], {
+    cwd: BASE, stdio: LOG ? ['ignore', 'pipe', 'pipe'] : 'inherit',
+    env: Object.assign({}, process.env, { OPSPOINT_BOOTSTRAP: '1' }),
+  });
+  if (LOG) { logStream(child.stdout); logStream(child.stderr); }
+  return child;
+}
+// With a log file, the child's last lines (why it stopped) are written before its exit is
+// acted on: 'exit' can come before its output has all been read.
+function drained(child) {
+  const streams = [child.stdout, child.stderr].filter(Boolean);
+  if (!streams.length) return Promise.resolve();
+  const closed = (s) => new Promise((r) => { if (s.readableEnded || s.destroyed) r(); else s.once('close', r); });
+  return Promise.race([Promise.all(streams.map(closed)), new Promise((r) => setTimeout(r, 2000))]);
+}
 
 async function supervise() {
   let crashes = [];
@@ -141,6 +226,7 @@ async function supervise() {
 
     // Supervise until the child exits (normal restart, update-exit, or crash).
     const code = await new Promise((r) => child.once('exit', (c) => r(c)));
+    await drained(child);
     if (readPending()) { continue; } // an update just applied → relaunch + verify
     if (code === EX_CONFIG) {
       log('server refused to start: a setting needs fixing (the reason is printed above). Not relaunching.');

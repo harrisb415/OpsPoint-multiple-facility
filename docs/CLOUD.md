@@ -164,13 +164,16 @@ or with Terraform yourself (1.5 or newer) from `packaging/cloud/gcp`: `terraform
 
 ## Known limits
 
-- **A minute of two copies on Azure and Google Cloud.** Both start a new revision before stopping
+- **Two copies for a moment on Azure and Google Cloud.** Both start a new revision before stopping
   the old one, so during an update both may run their background jobs (a reminder could be sent
-  twice). AWS stops the old one first.
+  twice): about 20 seconds on Cloud Run when measured, up to a minute on Azure. AWS stops the old
+  one first.
 - One facility per deployment, one region, no standby database (each size can be raised; the
   database can be made zone-redundant in the portal or console).
-- Real-account deployments of these templates haven't been run yet: they are checked offline
-  (below) and against the app's own startup check.
+- Deployed to a real account so far: **Google Cloud** (2026-10-02: small, with Terraform; setup to
+  the end, a photo in the bucket, then an update to a new image that kept everyone signed in and
+  the push keys). Azure and AWS are checked offline (below) and against the app's own startup
+  check only, as is Google's Infrastructure Manager route.
 
 ## Checking the templates
 

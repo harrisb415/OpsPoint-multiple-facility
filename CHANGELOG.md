@@ -48,6 +48,11 @@ wait for go-aheads. See `docs/CLOUD.md`.
     the app for a new code (nobody has a shell in that container).
   - Cloud Run keeps `/healthz` for itself outside the service (Google's own 404 there); its probes
     reach the app directly, so health works. docs/CLOUD.md says so.
+  - Then, on the same deployment: setup through to the end (the BAA confirmation; health 9 pass,
+    0 warnings), a fresh sign-in behind Google's proxy, a UA photo into the Cloud Storage bucket
+    and back, and an update to a new image (only the image changed): the old session still
+    signed in, the push key the same, the photo there. The old copy stopped 19 seconds after
+    the new one started.
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.

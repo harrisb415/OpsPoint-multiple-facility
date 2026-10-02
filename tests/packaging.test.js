@@ -24,12 +24,17 @@ const withBash = BASH ? test : test.skip;
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'opspoint_pkg_'));
 afterAll(() => { try { fs.rmSync(TMP, { recursive: true, force: true }); } catch (e) { /* temp */ } });
 
-// Run the installer with a clean environment: no colour, not a terminal.
+// Run the installer with a clean environment: no colour, not a terminal, and none of its answers
+// (TZ, DATABASE_URL, PGSSLMODE…): it takes one already set in the environment as given, and the
+// Postgres audit runs the tests with several set.
+const ANSWER_KEYS = /case "\$k" in ([A-Z_|]+)\)/.exec(fs.readFileSync(INSTALL_SH, 'utf8'))[1].split('|');
 function sh(args, extraEnv = {}) {
+  const env = { ...process.env };
+  for (const k of ANSWER_KEYS) delete env[k];
   return spawnSync(BASH, [INSTALL_SH, ...args], {
     encoding: 'utf8', timeout: 60000,
     // Git Bash would rewrite /paths in the environment into C:/Program Files/Git/...
-    env: { ...process.env, NO_COLOR: '1', MSYS2_ENV_CONV_EXCL: '*', MSYS_NO_PATHCONV: '1', ...extraEnv },
+    env: { ...env, NO_COLOR: '1', MSYS2_ENV_CONV_EXCL: '*', MSYS_NO_PATHCONV: '1', ...extraEnv },
   });
 }
 

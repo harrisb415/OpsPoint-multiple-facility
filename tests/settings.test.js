@@ -220,7 +220,7 @@ describe('each problem is one plain sentence', () => {
       "OPSPOINT_DB_DRIVER=pg needs DATABASE_URL, the facility's Postgres connection string: set it in the ECS task definition.",
       'OPSPOINT_STORAGE=s3 needs S3_BUCKET, the S3 bucket: set it in the ECS task definition.',
       'Profile aws needs SESSION_SECRET, the key that signs sign-in cookies (at least 32 random characters): set it in the ECS task definition.',
-      'Profile aws needs VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, the push alert keys (make a pair with `node server/cli/opspoint.js keys`): set them in the ECS task definition, since keys made on the fly change at every restart and cut off every phone.',
+      'Profile aws needs VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY, the push alert keys (make a pair with `node server/cli/opspoint.js keys`): set them in the ECS task definition, or set VAPID_SEED to derive them from, since keys made on the fly change at every restart and cut off every phone.',
       "Profile aws needs TZ, the facility's time zone (for example America/Chicago): set it in the ECS task definition.",
     ]);
   });
@@ -233,6 +233,24 @@ describe('each problem is one plain sentence', () => {
     expect(errors(s)).toEqual([]);
     expect(warnings(s)).toEqual([]);
     expect(s.get('OPSPOINT_STORAGE')).toBe('s3');
+  });
+
+  test('VAPID_SEED stands in for the push key pair, as the cloud templates set it', () => {
+    const base = { OPSPOINT_PROFILE: 'aws', TZ: 'America/Chicago', DATABASE_URL: 'postgresql://app:pw@db.cluster.rds.amazonaws.com:5432/opspoint',
+      SESSION_SECRET: 'x'.repeat(64), S3_BUCKET: 'sunrise-opspoint' };
+    const seeded = make({ zone: 'America/Chicago', env: { ...base, VAPID_SEED: 's'.repeat(40) } });
+    expect(errors(seeded)).toEqual([]);
+    expect(warnings(seeded)).toEqual([]);
+    // Too short, and never echoed: it is a secret.
+    const short = errors(make({ zone: 'America/Chicago', env: { ...base, VAPID_SEED: 'not-long-enough' } }));
+    expect(short).toContain('VAPID_SEED must be at least 32 characters.');
+    expect(short.join(' ')).not.toMatch(/not-long-enough/);
+    // Half a pair is still a mistake with a seed beside it; a whole pair wins over the seed, which is said.
+    const k = pairEnv();
+    expect(errors(make({ zone: 'America/Chicago', env: { ...base, VAPID_SEED: 's'.repeat(40), VAPID_PUBLIC_KEY: k.VAPID_PUBLIC_KEY } })))
+      .toEqual(['VAPID_PUBLIC_KEY is set without VAPID_PRIVATE_KEY: set both push alert keys, or neither to use the pair derived from VAPID_SEED.']);
+    expect(warnings(make({ zone: 'America/Chicago', env: { ...base, VAPID_SEED: 's'.repeat(40), ...k } })))
+      .toEqual(['VAPID_SEED is set, and so are VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY: those keys are used, and the seed is ignored.']);
   });
 
   test('every message is a single sentence ending in a full stop', () => {

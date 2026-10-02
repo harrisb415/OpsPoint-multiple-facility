@@ -12,7 +12,7 @@ is not tested.
 | Linux + Postgres | The full suite against a real Postgres, plus schema parity (`scripts/pg-audit.sh`) | Every change, on the Postgres server production uses (and the CI Postgres job) |
 | Object storage: Azure Blob, Amazon S3, Google Cloud Storage | The storage adapters against Azurite, MinIO and fake-gcs-server | The CI storage job; no cloud account needed |
 | Fresh installs | OpsPoint Setup for Windows and `install.sh` end to end on clean machines, then the health check | Lab machines, before each release |
-| Cloud templates | Each template deployed to a throwaway account, health-checked, torn down | Before each release that changes a template |
+| Cloud templates | Offline: each template's settings through the startup check, and the clouds' own validators (`tests/cloud.test.js`); then each deployed to a throwaway account, health-checked, torn down | Every change; the deployments before each release that changes a template |
 
 The permission audit (`node scripts/perm-audit.cjs`) runs inside the test suite, so every
 combination gets it.

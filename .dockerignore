@@ -16,5 +16,7 @@
 client/node_modules
 client/dist
 **/*.pem
+# Amazon's public CA bundle (not a key): the aws template checks the RDS certificate with it.
+!packaging/cloud/aws/rds-global-bundle.pem
 **/.env*
 **/opspoint.config.json

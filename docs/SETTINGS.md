@@ -149,8 +149,9 @@ A profile only sets defaults; any setting can still be set on its own. Unset, `O
 
 | Setting | Default | Required | What it is |
 | --- | --- | --- | --- |
-| `VAPID_PUBLIC_KEY` | — | on azure, aws, gcp | Push alert public key. Set it with VAPID_PRIVATE_KEY, or leave both unset to generate a pair into the data folder. Changing it cuts off every subscribed phone. Make a pair with `node server/cli/opspoint.js keys`. |
-| `VAPID_PRIVATE_KEY` | — | on azure, aws, gcp | **Secret.** Push alert private key, the other half of VAPID_PUBLIC_KEY. |
+| `VAPID_PUBLIC_KEY` | — | on azure, aws, gcp (or VAPID_SEED) | Push alert public key. Set it with VAPID_PRIVATE_KEY, or leave both unset to generate a pair into the data folder. Changing it cuts off every subscribed phone. Make a pair with `node server/cli/opspoint.js keys`. |
+| `VAPID_PRIVATE_KEY` | — | on azure, aws, gcp (or VAPID_SEED) | **Secret.** Push alert private key, the other half of VAPID_PUBLIC_KEY. |
+| `VAPID_SEED` | — |  | **Secret.** A random value, at least 32 characters, that OpsPoint derives its push key pair from when VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are unset: what the cloud templates set, since none of their languages can make a key pair. The same value always gives the same pair; changing it cuts off every subscribed phone. |
 | `VAPID_SUBJECT` | `mailto:opspoint@localhost` |  | The contact push services are given, as mailto: or https:. A real address is better: some push services reject localhost. |
 
 ### Supervisor
@@ -214,6 +215,7 @@ A store holds only these settings (not the cloud credentials that reach it). The
 | `SESSION_SECRET` | `session-secret` |
 | `VAPID_PUBLIC_KEY` | `vapid-public-key` |
 | `VAPID_PRIVATE_KEY` | `vapid-private-key` |
+| `VAPID_SEED` | `vapid-seed` |
 | `CENTRAL_DATABASE_URL` (HQ) | `central-database-url` |
 | `CENTRAL_ADMIN_PW` (HQ) | `central-admin-pw` |
 

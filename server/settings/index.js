@@ -419,11 +419,11 @@ function createSettings(opts = {}) {
     for (const def of defs) {
       if (!missing(def.name)) continue;
       if (store && store.failed && inStore(def.name)) continue;
-      if (def.requiredIn && def.requiredIn.includes(p)) {
+      if (def.requiredIn && def.requiredIn.includes(p) && (!def.orInstead || missing(def.orInstead))) {
         if (def.pairWith && missing(def.pairWith)) {
           if (ALL_NAMES.indexOf(def.name) < ALL_NAMES.indexOf(def.pairWith)) {   // one sentence for the pair
             const other = BY_NAME[def.pairWith];
-            error(def.name, `Profile ${p} needs ${def.name} and ${other.name}, the push alert keys (make a pair with \`node server/cli/opspoint.js keys\`): set them in ${where}${orStore([def.name, other.name])}, since keys made on the fly change at every restart and cut off every phone.`);
+            error(def.name, `Profile ${p} needs ${def.name} and ${other.name}, the push alert keys (make a pair with \`node server/cli/opspoint.js keys\`): set them in ${where}${orStore([def.name, other.name])}${def.orInstead ? `, or set ${def.orInstead} to derive them from` : ''}, since keys made on the fly change at every restart and cut off every phone.`);
           }
         } else {
           error(def.name, `Profile ${p} needs ${def.name}, ${def.noun}: set it in ${where}${orStore([def.name])}.`);
@@ -471,11 +471,15 @@ function createSettings(opts = {}) {
       const pub = val.VAPID_PUBLIC_KEY, priv = val.VAPID_PRIVATE_KEY;
       if (!!pub !== !!priv && !(bad.VAPID_PUBLIC_KEY || bad.VAPID_PRIVATE_KEY)) {
         const [set, unset] = pub ? ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'] : ['VAPID_PRIVATE_KEY', 'VAPID_PUBLIC_KEY'];
-        if (!(BY_NAME[unset].requiredIn || []).includes(p)) {
-          error(unset, `${set} is set without ${unset}: set both push alert keys, or neither to use the pair in the data folder.`);
+        // Where the profile needs the pair, the missing half was reported with it above, unless VAPID_SEED stood in.
+        if (!(BY_NAME[unset].requiredIn || []).includes(p) || !missing('VAPID_SEED')) {
+          error(unset, `${set} is set without ${unset}: set both push alert keys, or neither to use ${missing('VAPID_SEED') ? 'the pair in the data folder' : 'the pair derived from VAPID_SEED'}.`);
         }
       } else if (pub && priv && !vapidPairMatches(pub, priv)) {
         error('VAPID_PRIVATE_KEY', 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are not one key pair: make a new pair with `node server/cli/opspoint.js keys`.');
+      }
+      if (pub && priv && !missing('VAPID_SEED')) {
+        warning('VAPID_SEED', 'VAPID_SEED is set, and so are VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY: those keys are used, and the seed is ignored.');
       }
     }
 

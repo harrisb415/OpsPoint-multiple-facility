@@ -1,0 +1,404 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  OpsPoint (profile aws): one facility on ECS Fargate behind an Application Load Balancer, with
+  RDS for PostgreSQL in private subnets, S3 for photos and Secrets Manager for the secrets.
+  See docs/CLOUD.md. Updating the stack (a new image, a new size) keeps the database, the photos
+  and every secret.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: Facility }
+        Parameters: [FacilityName, TimeZone, Size, ContactEmail]
+      - Label: { default: Address }
+        Parameters: [DomainName, HostedZoneId]
+      - Label: { default: Software }
+        Parameters: [Image]
+
+Parameters:
+  FacilityName:
+    Type: String
+    Description: 'A short name for this facility''s resources: lowercase letters, digits and dashes, 2 to 12 characters (for example sunrise).'
+    AllowedPattern: '^[a-z][a-z0-9-]{1,11}$'
+    ConstraintDescription: lowercase letters, digits and dashes, 2 to 12 characters, starting with a letter
+  TimeZone:
+    Type: String
+    Description: The facility's time zone, as an IANA name such as America/Los_Angeles or America/Chicago. Dates are filed by it.
+    AllowedPattern: '^[A-Za-z]+(/[A-Za-z0-9_+-]+)+$|^UTC$'
+    ConstraintDescription: an IANA time zone name such as America/Los_Angeles
+  Size:
+    Type: String
+    Description: 'small: one facility up to about 50 residents. medium: a busy facility. multi-facility: several facilities'' worth of staff on one app.'
+    AllowedValues: [small, medium, multi-facility]
+    Default: small
+  ContactEmail:
+    Type: String
+    Description: 'Optional: an address push services can reach you at about this install''s alerts. Blank: the app''s own address.'
+    Default: ''
+  DomainName:
+    Type: String
+    Description: >-
+      The address OpsPoint answers at, such as opspoint.sunrise-house.org: a load balancer needs a
+      certificate, and a certificate needs a domain you control.
+    AllowedPattern: '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$'
+    ConstraintDescription: a lowercase domain name such as opspoint.example.org
+  HostedZoneId:
+    Type: String
+    Description: >-
+      Optional: the Route 53 hosted zone of that domain. Given, the stack proves the domain and points
+      it at OpsPoint by itself. Blank: add the two DNS records the stack's Events and Outputs show.
+    Default: ''
+  Image:
+    Type: String
+    Description: The OpsPoint image. Each release's Launch Stack link pins its own version.
+    Default: ghcr.io/harrisb415/opspoint:latest
+
+Mappings:
+  Sizes:
+    small: { Cpu: '512', Memory: '1024', DbClass: db.t4g.small, DbGB: 20, BackupDays: 7 }
+    medium: { Cpu: '1024', Memory: '2048', DbClass: db.t4g.medium, DbGB: 50, BackupDays: 14 }
+    multi-facility: { Cpu: '2048', Memory: '4096', DbClass: db.m7g.large, DbGB: 100, BackupDays: 35 }
+
+Conditions:
+  HasZone: !Not [!Equals [!Ref HostedZoneId, '']]
+  HasEmail: !Not [!Equals [!Ref ContactEmail, '']]
+
+Resources:
+  # ── Network: two public subnets (load balancer, app) and two private ones (database) ─────────
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.41.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: !Sub 'opspoint-${FacilityName}' }]
+  Gateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Gateway }
+  PublicA:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.41.0.0/24, AvailabilityZone: !Select [0, !GetAZs ''] }
+  PublicB:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.41.1.0/24, AvailabilityZone: !Select [1, !GetAZs ''] }
+  PrivateA:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.41.10.0/24, AvailabilityZone: !Select [0, !GetAZs ''] }
+  PrivateB:
+    Type: AWS::EC2::Subnet
+    Properties: { VpcId: !Ref Vpc, CidrBlock: 10.41.11.0/24, AvailabilityZone: !Select [1, !GetAZs ''] }
+  PublicRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  PublicDefault:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties: { RouteTableId: !Ref PublicRoutes, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Gateway }
+  PublicARoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicA, RouteTableId: !Ref PublicRoutes }
+  PublicBRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicB, RouteTableId: !Ref PublicRoutes }
+
+  LoadBalancerGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: OpsPoint load balancer
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: redirected to HTTPS }
+  AppGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: OpsPoint app (only the load balancer reaches it)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 3000, ToPort: 3000, SourceSecurityGroupId: !Ref LoadBalancerGroup, Description: the load balancer }
+  DatabaseGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: OpsPoint database (only the app reaches it)
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 5432, ToPort: 5432, SourceSecurityGroupId: !Ref AppGroup, Description: the app }
+
+  # ── Secrets: made once, at the stack's creation, and kept through every update ───────────────
+  DatabaseSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'opspoint/${FacilityName}/database'
+      Description: OpsPoint's database login
+      GenerateSecretString:
+        SecretStringTemplate: '{"username":"opspoint"}'
+        GenerateStringKey: password
+        PasswordLength: 40
+        ExcludePunctuation: true
+  SessionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'opspoint/${FacilityName}/session-secret'
+      Description: The key that signs OpsPoint's sign-in cookies (SESSION_SECRET)
+      GenerateSecretString: { PasswordLength: 64, ExcludePunctuation: true }
+  VapidSeed:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub 'opspoint/${FacilityName}/vapid-seed'
+      Description: What OpsPoint derives its push key pair from (VAPID_SEED)
+      GenerateSecretString: { PasswordLength: 64, ExcludePunctuation: true }
+
+  # ── Database ─────────────────────────────────────────────────────────────────────────────────
+  DatabaseSubnets:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: OpsPoint database subnets (private)
+      SubnetIds: [!Ref PrivateA, !Ref PrivateB]
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Metadata:
+      cfn-lint: { config: { ignore_checks: [W3691] } }   # reads a bare major version as a deprecated one
+    Properties:
+      Engine: postgres
+      # The major version alone: RDS picks its newest minor and keeps it updated. A pinned minor
+      # would have the next stack update try to take the database back to it, and fail.
+      EngineVersion: '16'
+      DBInstanceClass: !FindInMap [Sizes, !Ref Size, DbClass]
+      AllocatedStorage: !FindInMap [Sizes, !Ref Size, DbGB]
+      MaxAllocatedStorage: 1000
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: opspoint
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabaseSecret}:SecretString:password}}'
+      DBSubnetGroupName: !Ref DatabaseSubnets
+      VPCSecurityGroups: [!Ref DatabaseGroup]
+      PubliclyAccessible: false
+      BackupRetentionPeriod: !FindInMap [Sizes, !Ref Size, BackupDays]
+      CopyTagsToSnapshot: true
+      AutoMinorVersionUpgrade: true
+      DeletionProtection: true
+
+  # ── Photos ───────────────────────────────────────────────────────────────────────────────────
+  Photos:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      PublicAccessBlockConfiguration:
+        { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+      VersioningConfiguration: { Status: Enabled }
+      LifecycleConfiguration:
+        Rules: [{ Id: old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 } }]
+  PhotosOnlyOverTls:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref Photos
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt Photos.Arn, !Sub '${Photos.Arn}/*']
+            Condition: { Bool: { 'aws:SecureTransport': 'false' } }
+
+  # ── Address: certificate, load balancer, DNS ─────────────────────────────────────────────────
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        !If
+          - HasZone
+          - [{ DomainName: !Ref DomainName, HostedZoneId: !Ref HostedZoneId }]
+          - !Ref AWS::NoValue
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    DependsOn: GatewayAttachment
+    Properties:
+      Scheme: internet-facing
+      Subnets: [!Ref PublicA, !Ref PublicB]
+      SecurityGroups: [!Ref LoadBalancerGroup]
+      LoadBalancerAttributes:
+        - { Key: routing.http.drop_invalid_header_fields.enabled, Value: 'true' }
+        # Long enough for the app's live connection between its pings.
+        - { Key: idle_timeout.timeout_seconds, Value: '120' }
+  AppTargets:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !Ref Vpc
+      TargetType: ip
+      Protocol: HTTP
+      Port: 3000
+      # /healthz fails only when the database can't be reached.
+      HealthCheckPath: /healthz
+      HealthCheckIntervalSeconds: 30
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: '15' }
+  Https:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTPS
+      Port: 443
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      Certificates: [{ CertificateArn: !Ref Certificate }]
+      DefaultActions: [{ Type: forward, TargetGroupArn: !Ref AppTargets }]
+  HttpToHttps:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig: { Protocol: HTTPS, Port: '443', StatusCode: HTTP_301 }
+  Address:
+    Type: AWS::Route53::RecordSet
+    Condition: HasZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+
+  # ── The app ──────────────────────────────────────────────────────────────────────────────────
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/opspoint/${FacilityName}'
+      RetentionInDays: 90
+  # What ECS needs to start the app: pull the image, write its log, read its secrets.
+  StartRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: 'sts:AssumeRole' }]
+      ManagedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']
+      Policies:
+        - PolicyName: read-secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: [!Ref DatabaseSecret, !Ref SessionSecret, !Ref VapidSeed]
+  # What the app itself may do: its photos, nothing else.
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement: [{ Effect: Allow, Principal: { Service: ecs-tasks.amazonaws.com }, Action: 'sts:AssumeRole' }]
+      Policies:
+        - PolicyName: photos
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub '${Photos.Arn}/*'
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt Photos.Arn
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub 'opspoint-${FacilityName}'
+  Task:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub 'opspoint-${FacilityName}'
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      RuntimePlatform: { OperatingSystemFamily: LINUX, CpuArchitecture: X86_64 }
+      Cpu: !FindInMap [Sizes, !Ref Size, Cpu]
+      Memory: !FindInMap [Sizes, !Ref Size, Memory]
+      ExecutionRoleArn: !GetAtt StartRole.Arn
+      TaskRoleArn: !GetAtt AppRole.Arn
+      ContainerDefinitions:
+        - Name: opspoint
+          Image: !Ref Image
+          Essential: true
+          PortMappings: [{ ContainerPort: 3000, Protocol: tcp }]
+          Environment:
+            - { Name: OPSPOINT_PROFILE, Value: aws }
+            - { Name: TZ, Value: !Ref TimeZone }
+            - { Name: OPSPOINT_SECRETS, Value: local }
+            # No password in the URL: node-postgres takes it from PGPASSWORD.
+            - { Name: DATABASE_URL, Value: !Sub 'postgresql://opspoint@${Database.Endpoint.Address}:${Database.Endpoint.Port}/opspoint' }
+            # RDS's certificate is checked against Amazon's CA bundle, which the image carries.
+            - { Name: PGSSLMODE, Value: verify-full }
+            - { Name: PGSSLROOTCERT, Value: /app/certs/rds-global-bundle.pem }
+            - { Name: S3_BUCKET, Value: !Ref Photos }
+            - { Name: S3_REGION, Value: !Ref AWS::Region }
+            - { Name: AWS_REGION, Value: !Ref AWS::Region }
+            - Name: VAPID_SUBJECT
+              Value: !If [HasEmail, !Sub 'mailto:${ContactEmail}', !Sub 'https://${DomainName}']
+          # ECS reads these from Secrets Manager and hands them to the app as environment variables.
+          Secrets:
+            - { Name: PGPASSWORD, ValueFrom: !Sub '${DatabaseSecret}:password::' }
+            - { Name: SESSION_SECRET, ValueFrom: !Ref SessionSecret }
+            - { Name: VAPID_SEED, ValueFrom: !Ref VapidSeed }
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref Logs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: opspoint
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: Https
+    Properties:
+      Cluster: !Ref Cluster
+      ServiceName: opspoint
+      LaunchType: FARGATE
+      TaskDefinition: !Ref Task
+      # One copy, always running: alerts and reminders run inside the app, so an update stops
+      # the old copy before the new one starts rather than running two.
+      DesiredCount: 1
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 0
+        MaximumPercent: 100
+        DeploymentCircuitBreaker: { Enable: true, Rollback: true }
+      # The first start applies the database schema.
+      HealthCheckGracePeriodSeconds: 300
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          # A public address for the way out (the image, push services); nothing comes in but
+          # the load balancer.
+          AssignPublicIp: ENABLED
+          Subnets: [!Ref PublicA, !Ref PublicB]
+          SecurityGroups: [!Ref AppGroup]
+      LoadBalancers: [{ ContainerName: opspoint, ContainerPort: 3000, TargetGroupArn: !Ref AppTargets }]
+
+Outputs:
+  AppUrl:
+    Description: OpsPoint's address
+    Value: !Sub 'https://${DomainName}'
+  SetupUrl:
+    Description: Where the first admin account is made
+    Value: !Sub 'https://${DomainName}/setup'
+  SetupCode:
+    Description: Where the one-time setup code is
+    Value: !Sub 'In the app''s log a minute after it first starts ("code XXXX-XXXX"): CloudWatch > Log groups > /opspoint/${FacilityName}, or aws logs tail /opspoint/${FacilityName} --since 1h'
+  DnsRecord:
+    Description: Without a hosted zone, point the domain here (a CNAME record)
+    Value: !Sub '${DomainName} CNAME ${LoadBalancer.DNSName}'
+  Baa:
+    Description: Before real resident data goes in
+    Value: 'Accept the AWS Business Associate Addendum in AWS Artifact (Agreements): https://console.aws.amazon.com/artifact/'

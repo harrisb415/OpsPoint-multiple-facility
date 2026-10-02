@@ -34,7 +34,7 @@ function defaultText(def) {
 function requiredText(def) {
   const parts = [];
   if (def.name === 'TZ') parts.push('everywhere (see the check below)');
-  if (def.requiredIn) parts.push(`on ${def.requiredIn.join(', ')}`);
+  if (def.requiredIn) parts.push(`on ${def.requiredIn.join(', ')}${def.orInstead ? ` (or ${def.orInstead})` : ''}`);
   if (def.requiredWhen) parts.push(`when ${def.requiredWhen[0]}=${def.requiredWhen[1]}`);
   return parts.join('; ');
 }

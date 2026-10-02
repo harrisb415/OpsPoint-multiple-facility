@@ -36,6 +36,7 @@
  *   requiredIn            profiles that refuse to start without it
  *   requiredWhen          [setting, value]: needed whenever that setting has that value
  *   pairWith  the other half of a pair set together (the push keys)
+ *   orInstead a setting that, when set, stands in for this one where it is required
  *   onlyIn    { profiles, values, because }: those profiles accept only these values
  *   readBy    code outside server/ that reads it itself (docs only)
  *   ask       { question, example }: how an installer or the wizard asks for it
@@ -456,7 +457,7 @@ const SETTINGS = [
   // ── Push alerts ───────────────────────────────────────────────────────────
   {
     name: 'VAPID_PUBLIC_KEY', group: 'Push alerts', scope: 'facility', type: 'string', pairWith: 'VAPID_PRIVATE_KEY',
-    requiredIn: MANAGED,
+    requiredIn: MANAGED, orInstead: 'VAPID_SEED',
     noun: 'the push alert public key',
     summary: 'Push alert public key. Set it with VAPID_PRIVATE_KEY, or leave both unset to generate a pair into ' +
              'the data folder. Changing it cuts off every subscribed phone. Make a pair with ' +
@@ -464,9 +465,17 @@ const SETTINGS = [
   },
   {
     name: 'VAPID_PRIVATE_KEY', group: 'Push alerts', scope: 'facility', type: 'string', secret: true,
-    pairWith: 'VAPID_PUBLIC_KEY', requiredIn: MANAGED,
+    pairWith: 'VAPID_PUBLIC_KEY', requiredIn: MANAGED, orInstead: 'VAPID_SEED',
     noun: 'the push alert private key',
     summary: 'Push alert private key, the other half of VAPID_PUBLIC_KEY.',
+  },
+  {
+    name: 'VAPID_SEED', group: 'Push alerts', scope: 'facility', type: 'string', secret: true, minLength: 32,
+    noun: 'the value the push keys are derived from',
+    summary: 'A random value, at least 32 characters, that OpsPoint derives its push key pair from when ' +
+             'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY are unset: what the cloud templates set, since none of their ' +
+             'languages can make a key pair. The same value always gives the same pair; changing it cuts off every ' +
+             'subscribed phone.',
   },
   {
     name: 'VAPID_SUBJECT', group: 'Push alerts', scope: 'facility', type: 'string', default: 'mailto:opspoint@localhost',

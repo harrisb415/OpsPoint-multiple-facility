@@ -45,9 +45,11 @@ function keys() {
     _keys = webpush.loadKeys(config.DATA_DIR, {
       VAPID_PUBLIC_KEY: settings.get('VAPID_PUBLIC_KEY') || undefined,
       VAPID_PRIVATE_KEY: settings.get('VAPID_PRIVATE_KEY') || undefined,
+      VAPID_SEED: settings.get('VAPID_SEED') || undefined,
     });
     // Set keys: say where they were set (the environment, a NAME_FILE, the secret store).
     if (_keys.source === 'environment') _keys.source = settings.source('VAPID_PRIVATE_KEY');
+    if (_keys.source === 'seed') _keys.source = 'VAPID_SEED';
   }
   catch (e) { _keys = null; _keyError = e.message; }
   return _keys;

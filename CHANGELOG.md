@@ -2,6 +2,43 @@
 
 ---
 
+## Unreleased — Cloud templates: Azure, AWS and Google Cloud (2026-10-01)
+
+Roadmap phase 9 of the deployment plan: one template per cloud that puts a facility on that
+cloud's own services. Checked offline; deploying them to real accounts and publishing the image
+wait for go-aheads. See `docs/CLOUD.md`.
+
+- **Azure** (`packaging/cloud/azure/main.bicep`, a Deploy to Azure button): Container Apps on a
+  private network, Database for PostgreSQL flexible server with no public access, Blob Storage
+  and Key Vault reached with the app's own identity.
+- **AWS** (`packaging/cloud/aws/opspoint.yaml`, CloudFormation): ECS Fargate behind a load
+  balancer with an AWS certificate for the facility's domain, RDS for PostgreSQL in private
+  subnets (deletion-protected, certificate verified), S3 and Secrets Manager.
+- **Google Cloud** (`packaging/cloud/gcp/`, Terraform for Infrastructure Manager): Cloud Run,
+  Cloud SQL for PostgreSQL through the Cloud SQL connection, Cloud Storage and Secret Manager; the
+  image comes through an Artifact Registry remote repository, since Cloud Run can't pull from
+  ghcr.io.
+- Each: three sizes (small, medium, multi-facility), one copy always running, secrets made once
+  and kept at every later deployment, the provider's backups with point-in-time restore, health
+  probes on `/healthz`, and outputs for the setup link, where the setup code is, your own domain
+  and the provider's BAA.
+- **Push keys from a seed**: `VAPID_SEED` (a template can't make a key pair) — the app derives its
+  push keys from it. An install with a key pair keeps it; with both, the pair wins (a warning says
+  so). The managed profiles need the pair or the seed.
+- The image carries Amazon RDS's CA bundle (`/app/certs/rds-global-bundle.pem`) so the AWS
+  database is verified (`PGSSLMODE=verify-full`).
+- **Postgres: a socket connection string with no host** (`postgresql://user@/db?host=/cloudsql/…`,
+  Cloud SQL's form) **silently lost the facility's time zone**: the session zone was added by
+  parsing it as a URL, which it isn't. It is kept now.
+- The release pipeline builds the three templates pinned to the release's image, attaches them to
+  the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
+  button and Infrastructure Manager read them there). It still runs only by hand.
+- Tests: `tests/cloud.test.js` — each template's settings pass the app's own startup check for its
+  profile; secrets only from the platform's store; one copy; health probes; one image, pinned by a
+  release; the RDS bundle is certificates only and the one `.pem` the image takes; the Azure
+  secrets script against a stand-in `az` (makes each once, keeps it, stops on any other error);
+  and `bicep`, `cfn-lint` and `terraform` where they are installed.
+
 ## Unreleased — Packages: installers, a Docker image and one release pipeline (in progress, 2026-09-30)
 
 Roadmap phase 8 of the deployment plan, first part: built, and tested on clean Linux and Windows

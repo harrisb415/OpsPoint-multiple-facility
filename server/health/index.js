@@ -328,6 +328,12 @@ const CHECKS = [
       let pub = ctx.settings.get('VAPID_PUBLIC_KEY'), priv = ctx.settings.get('VAPID_PRIVATE_KEY');
       const src = priv ? ctx.settings.source('VAPID_PRIVATE_KEY') : 'the settings';
       let from = src === 'environment' ? 'the environment' : /_FILE$/.test(src) ? `the file ${src} names` : src;
+      const seed = ctx.settings.get('VAPID_SEED');
+      if (!pub && !priv && seed) {
+        ({ publicKey: pub, privateKey: priv } = webpush.deriveKeys(seed));
+        const s = ctx.settings.source('VAPID_SEED');
+        from = `VAPID_SEED, set in ${s === 'environment' ? 'the environment' : /_FILE$/.test(s) ? `the file ${s} names` : s}`;
+      }
       if (!pub && !priv) {
         const file = path.join(ctx.config.DATA_DIR, 'vapid.json');
         try {

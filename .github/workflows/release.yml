@@ -4,6 +4,8 @@
 #   OpsPoint-Setup-<ver>.exe                   Windows (Inno Setup)
 #   install.sh                                 Linux
 #   ghcr.io/harrisb415/opspoint:<ver>          Docker
+#   opspoint-azure.json, opspoint-aws.yaml,    the cloud templates (packaging/cloud),
+#   opspoint-gcp.tar.gz                        pinned to that image
 # all published together to harrisb415/opspoint-releases. Nobody builds a
 # release by hand.
 #
@@ -120,10 +122,38 @@ jobs:
             ghcr.io/harrisb415/opspoint:${{ needs.bundle.outputs.version }}
             ghcr.io/harrisb415/opspoint:latest
 
+  cloud:
+    name: Cloud templates
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build them, pinned to this release's image
+        env:
+          V: ${{ needs.bundle.outputs.version }}
+        run: |
+          curl -fsSLo bicep https://github.com/Azure/bicep/releases/download/v0.47.16/bicep-linux-x64
+          echo "64c345a58e0c3e48b1bc98a4e62d6b3adb1d238281297de3400aeafb2697aa5a  bicep" | sha256sum -c -
+          chmod +x bicep
+          mkdir -p cloud/azure cloud/aws cloud/gcp
+          ./bicep build packaging/cloud/azure/main.bicep --outfile cloud/azure/azuredeploy.json
+          cp packaging/cloud/aws/opspoint.yaml cloud/aws/
+          cp packaging/cloud/gcp/*.tf packaging/cloud/gcp/.terraform.lock.hcl cloud/gcp/
+          img=ghcr.io/harrisb415/opspoint
+          [ "$(grep -rl "$img:latest" cloud | wc -l)" = 3 ] || { echo "Each template should name $img:latest once."; exit 1; }
+          grep -rl "$img:latest" cloud | xargs sed -i "s|$img:latest|$img:$V|"
+          ! grep -r "$img:latest" cloud
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cloud
+          path: cloud/
+          include-hidden-files: true
+          if-no-files-found: error
+
   publish:
     name: Publish
     if: ${{ inputs.publish }}
-    needs: [bundle, windows, docker]
+    needs: [bundle, windows, docker, cloud]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -136,7 +166,23 @@ jobs:
           V: ${{ needs.bundle.outputs.version }}
         run: |
           cp packaging/linux/install.sh out/install.sh
+          cp out/cloud/azure/azuredeploy.json out/opspoint-azure.json
+          cp out/cloud/aws/opspoint.yaml out/opspoint-aws.yaml
+          tar -czf out/opspoint-gcp.tar.gz -C out/cloud gcp
+          # The templates also go in the repository itself, under cloud/: the Deploy to Azure
+          # button and Infrastructure Manager read them from there (the Azure portal can't fetch
+          # a release asset, which has no CORS headers). The tag is that commit.
+          gh auth setup-git
+          git clone --depth 1 https://github.com/harrisb415/opspoint-releases.git releases
+          rm -rf releases/cloud && cp -r out/cloud releases/cloud
+          git -C releases add -A cloud
+          git -C releases diff --cached --quiet || git -C releases \
+            -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Cloud templates for v$V"
+          git -C releases push -q origin HEAD:main
           gh release create "v$V" -R harrisb415/opspoint-releases --title "v$V" --notes-file CHANGELOG.md \
+            --target "$(git -C releases rev-parse HEAD)" \
             "out/bundle/release/opspoint-$V.tar.gz" out/bundle/update-manifest.json \
             out/bundle/release/central-*.tar.gz out/bundle/central-manifest.json \
-            "out/windows/OpsPoint-Setup-$V.exe" out/install.sh
+            "out/windows/OpsPoint-Setup-$V.exe" out/install.sh \
+            out/opspoint-azure.json out/opspoint-aws.yaml out/opspoint-gcp.tar.gz

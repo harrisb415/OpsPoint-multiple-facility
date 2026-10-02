@@ -6,9 +6,11 @@
  *
  * Keys are the base64url pair every push library uses: a 65-byte uncompressed
  * P-256 public key and its 32-byte private scalar. They come from
- * VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY, else from DATA_DIR/vapid.json, which is
- * generated once (mode 0600). Changing the pair orphans every subscription a
- * phone has made, so once issued it has to stay put.
+ * VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY, else are derived from VAPID_SEED (what
+ * the cloud templates set: their languages can make a random string, not a key
+ * pair), else from DATA_DIR/vapid.json, which is generated once (mode 0600).
+ * Changing the pair orphans every subscription a phone has made, so once issued
+ * it has to stay put.
  */
 const crypto = require('crypto');
 const path = require('path');
@@ -56,6 +58,22 @@ function pairMatches(publicKey, privateKey) {
   } catch (e) { return false; }
 }
 
+// The pair a seed gives: the private scalar is HKDF-SHA256 of the seed, the public key
+// its point. The same seed always gives the same pair. A scalar of 0 or past the group
+// order (odds about 2^-32) moves on to the next counter.
+const P256_ORDER = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+function deriveKeys(seed) {
+  for (let i = 0; i < 8; i++) {
+    const d = Buffer.from(crypto.hkdfSync('sha256', Buffer.from(String(seed)), Buffer.from('OpsPoint VAPID'), Buffer.from(`P-256 private key ${i}`), 32));
+    const k = BigInt('0x' + d.toString('hex'));
+    if (k === 0n || k >= P256_ORDER) continue;
+    const ecdh = crypto.createECDH('prime256v1');
+    ecdh.setPrivateKey(d);
+    return { publicKey: b64u.enc(ecdh.getPublicKey()), privateKey: b64u.enc(d) };
+  }
+  throw new Error('VAPID_SEED gave no usable key');
+}
+
 function privateKeyObject(keys) {
   const pub = b64u.dec(keys.publicKey);
   const d = b64u.dec(keys.privateKey);
@@ -67,17 +85,19 @@ function privateKeyObject(keys) {
 }
 
 // { publicKey, privateKey, source } — or throws when a configured pair is
-// unusable. Generates and saves a pair on first use when none is configured
-// (on premises: server/secrets refuses the file on a cloud profile, which must
-// set both keys).
+// unusable. Derives the pair from VAPID_SEED when that is set instead; else
+// generates and saves a pair on first use (on premises: server/secrets refuses
+// the file on a cloud profile, which must set the keys or the seed).
 function loadKeys(dataDir, env = process.env) {
   let keys;
   if (env.VAPID_PUBLIC_KEY || env.VAPID_PRIVATE_KEY) {
     keys = { publicKey: String(env.VAPID_PUBLIC_KEY || '').trim(), privateKey: String(env.VAPID_PRIVATE_KEY || '').trim(), source: 'environment' };
+  } else if (env.VAPID_SEED) {
+    keys = { ...deriveKeys(env.VAPID_SEED), source: 'seed' };
   } else {
     const secrets = require('../secrets');
     const file = path.join(dataDir, 'vapid.json');
-    const about = { what: `the push keys file ${file}`, setting: 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY' };
+    const about = { what: `the push keys file ${file}`, setting: 'VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY (or VAPID_SEED)' };
     let saved = null;
     if (secrets.exists(file, about)) {
       try { saved = JSON.parse(secrets.readFile(file, about)); } catch (e) { saved = null; }
@@ -161,4 +181,4 @@ async function send(sub, message, { keys, subject, ttl = 3600, urgency = 'high',
   return { ok: res.status >= 200 && res.status < 300, status: res.status };
 }
 
-module.exports = { loadKeys, generateKeys, pairMatches, encrypt, vapidAuthorization, send, isAllowedEndpoint, _b64u: b64u };
+module.exports = { loadKeys, generateKeys, deriveKeys, pairMatches, encrypt, vapidAuthorization, send, isAllowedEndpoint, _b64u: b64u };

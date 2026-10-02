@@ -60,3 +60,8 @@ opspoint.config.json
 .env
 .env.*
 !.env.example
+
+# Terraform working files (packaging/cloud/gcp); the lock file is kept.
+.terraform/
+*.tfstate
+*.tfstate.*

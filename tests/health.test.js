@@ -298,6 +298,10 @@ describe('certificate, push keys, update source', () => {
     expect((await check('push')).status).toBe('fail');
     fs.writeFileSync(path.join(scratch, 'vapid.json'), JSON.stringify(a));
     expect(await check('push')).toMatchObject({ status: 'pass', says: 'Keys valid (from the data folder); 0 phones subscribed.' });
+    // A seed (the cloud templates') stands in for the pair, wherever the data folder is.
+    const seeded = { ...noEnvKeys, get: (n) => (n === 'VAPID_SEED' ? 's'.repeat(40) : noEnvKeys.get(n)), source: (n) => (n === 'VAPID_SEED' ? 'environment' : settings.source(n)) };
+    const r = (await doctor({ settings: seeded }).run({ only: ['push'] })).results[0];
+    expect(r).toMatchObject({ status: 'pass', says: 'Keys valid (from VAPID_SEED, set in the environment); 0 phones subscribed.' });
   });
 
   test('update source: reachable and signed passes; unsigned or unreachable fails', async () => {

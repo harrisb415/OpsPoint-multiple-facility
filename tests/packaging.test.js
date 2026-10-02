@@ -190,7 +190,8 @@ describe('the Docker image and the pipeline', () => {
     expect(Object.keys(ci.on)).toEqual(['workflow_dispatch']);
     expect(Object.keys(rel.on)).toEqual(['workflow_dispatch']);
     expect(Object.keys(ci.jobs).sort()).toEqual(['postgres', 'sqlite', 'storage']);
-    expect(Object.keys(rel.jobs).sort()).toEqual(['bundle', 'docker', 'publish', 'windows']);
+    expect(Object.keys(rel.jobs).sort()).toEqual(['bundle', 'cloud', 'docker', 'publish', 'windows']);
+    expect(rel.jobs.publish.needs.sort()).toEqual(['bundle', 'cloud', 'docker', 'windows']);
     expect(rel.jobs.publish.if).toMatch(/inputs\.publish/);
     const text = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'release.yml'), 'utf8');
     expect(text).toMatch(/OPSPOINT_RELEASE_KEY: \$\{\{ secrets\.OPSPOINT_RELEASE_KEY \}\}/);

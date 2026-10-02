@@ -73,12 +73,17 @@ function sessionTimeZone() {
 // pool's 'connect' event raced the first real query onto the same client,
 // which node-postgres deprecates and will reject in pg@9.) Merged into the
 // URL's own `options` rather than passed as a config field, because values
-// parsed from the connection string override config fields.
+// parsed from the connection string override config fields. A socket URL
+// with no host (postgresql://user@/db?host=/cloudsql/…) is no URL to new URL(),
+// so it goes through with a stand-in host, as pg's own parser does, rather than
+// losing its zone.
+const NO_HOST = '@opspoint-no-host/';
 function withSessionTimeZone(dsn) {
   try {
-    const u = new URL(dsn);
+    const hostless = typeof dsn === 'string' && dsn.includes('@/');
+    const u = new URL(hostless ? dsn.replace('@/', NO_HOST) : dsn);
     u.searchParams.set('options', [u.searchParams.get('options'), `-c TimeZone=${sessionTimeZone()}`].filter(Boolean).join(' '));
-    return u.toString();
+    return hostless ? u.toString().replace(NO_HOST, '@/') : u.toString();
   } catch (e) { return dsn; }
 }
 

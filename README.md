@@ -95,6 +95,7 @@ setup link and its one-time code:
 | Windows | `OpsPoint-Setup-<version>.exe` (Node included), or unattended `/VERYSILENT /CONFIG=answers.env /LOG=setup.log` (exit code 10: installed but not running, the log says why); maintenance from Start › OpsPoint Setup (asks for administrator rights); the service logs to `<data folder>\logs\opspoint.log` |
 | Linux | `sudo bash install.sh` (menus), or `sudo bash install.sh --config answers.env --yes`; afterwards `sudo opspoint` |
 | Docker | `packaging/docker/docker-compose.yml`: OpsPoint and Postgres, `.env` with `TZ` and `POSTGRES_PASSWORD` |
+| Azure, AWS, Google Cloud | A template per cloud (Deploy to Azure, CloudFormation, Terraform / Infrastructure Manager): the app, a managed Postgres, storage for photos, the secrets and the provider's backups — [`docs/CLOUD.md`](./docs/CLOUD.md) |
 
 The installers live in `packaging/`; `bash packaging/linux/install.sh --dry-run --yes` shows what an
 install would do without changing anything. From a checkout, the Quick start below still works.
@@ -261,6 +262,11 @@ permissions can be customised per user or permission profile in Admin → Permis
 Run `run.bat` (Windows) or `node server.js` directly on facility hardware. Staff access via LAN.
 Generate a self-signed certificate with `node generate_cert.js` — browsers will show a cert warning;
 add a permanent exception once per device.
+
+### Cloud (managed)
+Templates for Azure Container Apps, AWS ECS Fargate and Google Cloud Run put one facility on the
+cloud's own services: a managed Postgres, object storage, the secret store and the provider's
+backups. See [`docs/CLOUD.md`](./docs/CLOUD.md).
 
 ### Cloud (self-hosted)
 Deploy to a Linux VPS or cloud instance (e.g. Google Cloud). Run the server as plain HTTP on a local

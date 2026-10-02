@@ -168,7 +168,7 @@ describe('the secret store as the top layer', () => {
     expect(need({ ...without(AZURE_OK, 'SESSION_SECRET', 'AZURE_STORAGE_ACCOUNT'), OPSPOINT_PROFILE: 'gcp', GCS_BUCKET: 'photos', OPSPOINT_SECRETS: 'gcp-secret-manager' }))
       .toMatch(/: set it in the Cloud Run service settings, or as the secret session-secret in Secret Manager\.$/);
     const pair = errors(make({ env: { ...without(AZURE_OK, 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY'), ...VAULT } })).find((m) => m.includes('push alert keys'));
-    expect(pair).toMatch(/set them in the App Service or Container App settings, or as the secrets vapid-public-key and vapid-private-key in Azure Key Vault, since/);
+    expect(pair).toMatch(/set them in the App Service or Container App settings, or as the secrets vapid-public-key and vapid-private-key in Azure Key Vault, or set VAPID_SEED to derive them from, since/);
   });
 
   test('while the store could not be read, its secrets are not reported missing on top of that', () => {

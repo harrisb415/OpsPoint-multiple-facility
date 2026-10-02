@@ -36,6 +36,8 @@ COPY --from=build /src/server server
 COPY --from=build /src/migrations migrations
 COPY --from=build /src/static static
 COPY --from=build /src/client/dist client/dist
+# Amazon RDS's CA bundle, so the aws template can verify the database (PGSSLMODE=verify-full).
+COPY packaging/cloud/aws/rds-global-bundle.pem certs/rds-global-bundle.pem
 RUN mkdir -p /data && chown node:node /data
 USER node
 EXPOSE 3000

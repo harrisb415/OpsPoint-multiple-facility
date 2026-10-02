@@ -273,11 +273,32 @@ table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), 
   `/healthz`) built from the repo root with an allowlist `.dockerignore`; `docker-compose.yml`
   (OpsPoint + Postgres 16).
 - `.github/workflows/ci.yml` (Windows/Linux SQLite, Linux Postgres via pg-audit.sh, the storage
-  emulators) and `release.yml` (bundle → Windows installer → image → publish to
+  emulators) and `release.yml` (bundle → Windows installer → image → cloud templates → publish to
   opspoint-releases; secrets `OPSPOINT_RELEASE_KEY`, `RELEASES_TOKEN`) — both **manual only**
   (`workflow_dispatch`) until push/tag triggers are approved (Actions minutes, publishing).
 - The bundle (`scripts/release.mjs` FILES/DIRS) must carry every `RUNTIME_FILES`/`RUNTIME_DIRS`
   entry of `updater.js`, plus `static/` (icons); a test holds them together.
+
+### Cloud templates (`packaging/cloud/`, deployment plan phase 9; `docs/CLOUD.md`)
+
+- `azure/main.bicep` (+ `postgres.bicep`; `secrets.sh` is the deployment script that makes the
+  Key Vault secrets once), `aws/opspoint.yaml` (+ `rds-global-bundle.pem`, copied into the image
+  at `/app/certs/` — the one `.pem` `.dockerignore` lets in), `gcp/*.tf` (Terraform 1.5, what
+  Infrastructure Manager runs; `.terraform.lock.hcl` committed, `.terraform/` and state ignored).
+- Every template sets `OPSPOINT_PROFILE`, `TZ`, `OPSPOINT_SECRETS=local`, and the platform injects
+  `PGPASSWORD`, `SESSION_SECRET`, `VAPID_SEED` from its secret store (`DATABASE_URL` carries no
+  password; node-postgres reads `PGPASSWORD`). `VAPID_SEED` exists because a template can't make
+  an EC pair: `webpush.deriveKeys` (HKDF) turns it into one; a set pair wins over it.
+- One copy only (min = max = 1; ECS `MaximumPercent: 100`): there is no leader lock for the
+  background jobs yet, and Azure/Cloud Run overlap revisions for a minute on an update.
+- **Changing a template**: `tests/cloud.test.js` runs its env through `createSettings().check()`
+  for the profile (a setting it needs must pass there), checks secrets/probes/the single image
+  reference, runs `secrets.sh` against a stub `az`, and runs bicep / cfn-lint / terraform when
+  installed (dev-daedalus: `~/.local/bin`). Each template must name
+  `ghcr.io/harrisb415/opspoint:latest` exactly once: release.yml's `cloud` job swaps in the
+  version, then pushes the templates to opspoint-releases' `cloud/` (the Azure portal fetches the
+  Deploy to Azure template from the browser: raw.githubusercontent.com has CORS, release assets
+  don't).
 
 ### Server (`server.js`)
 

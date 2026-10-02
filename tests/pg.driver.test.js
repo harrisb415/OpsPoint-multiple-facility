@@ -228,6 +228,10 @@ describe('type parsers', () => {
       expect(a.password).toBe('p@ss');
       const b = parse(_withSessionTimeZone('postgresql://u:p@db:5432/x?options=-c%20search_path%3Dcentral_test'));
       expect(b.options).toBe('-c search_path=central_test -c TimeZone=America/Los_Angeles');
+      // A socket URL with no host (Cloud SQL's) keeps its zone and its socket.
+      const s = _withSessionTimeZone('postgresql://opspoint@/opspoint?host=/cloudsql/p:us-west1:db');
+      expect(s.startsWith('postgresql://opspoint@/opspoint?')).toBe(true);
+      expect(parse(s)).toMatchObject({ host: '/cloudsql/p:us-west1:db', database: 'opspoint', options: '-c TimeZone=America/Los_Angeles' });
     } finally {
       if (saved === undefined) delete process.env.PGTZ; else process.env.PGTZ = saved;
     }

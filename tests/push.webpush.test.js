@@ -141,4 +141,25 @@ describe('keys', () => {
     expect(webpush.loadKeys(dir, { VAPID_PUBLIC_KEY: k.publicKey, VAPID_PRIVATE_KEY: k.privateKey })).toMatchObject({ ...k, source: 'environment' });
     expect(() => webpush.loadKeys(dir, { VAPID_PUBLIC_KEY: k.publicKey, VAPID_PRIVATE_KEY: 'short' })).toThrow(/malformed/);
   });
+
+  test('VAPID_SEED gives one fixed pair: derived, never stored', () => {
+    // Pinned: a different derivation would give every cloud install new keys and cut off its phones.
+    // (The private half is HKDF-SHA256 of the seed, salt "OpsPoint VAPID", info "P-256 private key 0".)
+    const seed = 'opspoint-test-seed-0123456789abcdefghij';
+    const k = webpush.deriveKeys(seed);
+    expect(k).toEqual({
+      publicKey: 'BI5uva2Du2no4eywSY9IOPQJj6yh9S3kpVVEOOLS5j-unWE5p2LSrtzhjuIC_KpTPLAlHY0_JNqazlTGK_EtoyE',
+      privateKey: 'JsBzckLW_JIRYBWJig2n9vqOVkykGqPT1XMPseNzdOM',
+    });
+    expect(webpush.pairMatches(k.publicKey, k.privateKey)).toBe(true);
+    expect(webpush.deriveKeys('another-seed-0123456789abcdefghijklmnop').publicKey).not.toBe(k.publicKey);
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'opsvapid-seed-'));
+    try {
+      expect(webpush.loadKeys(fresh, { VAPID_SEED: seed })).toEqual({ ...k, source: 'seed' });
+      expect(fs.readdirSync(fresh)).toEqual([]);                                   // nothing written
+      // Set keys still win over a seed.
+      const set = webpush.generateKeys();
+      expect(webpush.loadKeys(fresh, { VAPID_PUBLIC_KEY: set.publicKey, VAPID_PRIVATE_KEY: set.privateKey, VAPID_SEED: seed }).publicKey).toBe(set.publicKey);
+    } finally { fs.rmSync(fresh, { recursive: true, force: true }); }
+  });
 });

@@ -213,7 +213,9 @@ async function init(dbPath) {
     // Says where it actually connected — it used to print "Created opspoint.db"
     // under Postgres, naming a SQLite file it never touched.
     let target = 'DATABASE_URL';
-    try { const u = new URL(settings.get('DATABASE_URL')); target = `${u.hostname}/${u.pathname.replace(/^\//, '')}`; } catch (e) { /* keep generic */ }
+    // pg's own parser: a socket DSN (Cloud SQL's postgresql://user@/db?host=/cloudsql/…) has no URL host.
+    const c = settings.parseDsn(settings.get('DATABASE_URL'));
+    if (c) target = `${c.host || 'localhost'}/${c.database || ''}`;
     console.log('  DB: Postgres', target);
     try { fs.mkdirSync(path.dirname(_pgMarker()), { recursive: true }); fs.writeFileSync(_pgMarker(), 'pg\n'); } catch (e) { /* best effort */ }
     // The schema: migrations/pg/ applied by OpsPoint itself (server/db/runner.js).

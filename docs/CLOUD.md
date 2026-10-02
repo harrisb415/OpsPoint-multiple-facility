@@ -140,6 +140,9 @@ or with Terraform yourself (1.5 or newer) from `packaging/cloud/gcp`: `terraform
 
 - Cloud Run can't pull from ghcr.io, so the image comes through an Artifact Registry remote
   repository (`ghcr`) the template makes.
+- `/healthz` answers Google's own 404 from outside: Cloud Run keeps paths ending in `z` for itself.
+  Its probes reach the app directly, so health and restarts work; an outside uptime check can
+  watch the sign-in page instead.
 - **The database has deletion protection** (in Cloud SQL and in Terraform): destroying stops there
   until both are turned off, on purpose.
 - Your own domain: Cloud Run › Manage custom domains where the region offers it, or a load balancer

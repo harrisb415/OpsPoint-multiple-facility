@@ -27,6 +27,7 @@
 const fs   = require('fs');
 const path = require('path');
 const connection = require('../db/connection');
+const settings = require('../settings');
 const jobs = require('./jobs');
 
 let _timer   = null;
@@ -119,6 +120,10 @@ async function start(db) {
   // §164.308(a)(7)(ii)(A) is satisfied by pg_dump on the database host, outside
   // this process. Say that plainly at boot — a silent absence of backups is the
   // failure mode this module exists to prevent.
+  if (connection.isPg && settings.get('OPSPOINT_BACKUPS') === 'provider') {
+    console.log("  [backup] Left to the platform's point-in-time restore (OPSPOINT_BACKUPS=provider).");
+    return;
+  }
   if (connection.isPg) {
     console.warn('  [backup] NOT scheduled: the Postgres driver cannot back itself up.');
     console.warn('  [backup] HIPAA §164.308(a)(7)(ii)(A) still applies — schedule pg_dump on');

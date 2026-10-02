@@ -727,18 +727,27 @@ if (require.main === module) (async ()=>{
     console.log('\n══════════════════════════════════════════════');
     console.log('  OpsPoint v2.7.0');
     console.log('══════════════════════════════════════════════');
-    console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
-    console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);
-    console.log(`  Admin:    ${proto}://localhost:${PORT}/admin`);
+    // A cloud template's app (azure/aws/gcp) is reached only at the platform's address, which it
+    // doesn't know: point at the deployment's outputs instead of a localhost nobody can open.
+    const managed=require('./server/settings/schema').PROFILES[settings.profile().name].kind==='managed';
+    if (managed) {
+      console.log("  Address:  the platform's (the deployment's app URL output)");
+    } else {
+      console.log(`  Desktop:  ${proto}://localhost:${PORT}`);
+      console.log(`  Mobile:   ${proto}://${ip}:${PORT}`);
+      console.log(`  Admin:    ${proto}://localhost:${PORT}/admin`);
+    }
+    const setupAt=managed?"/setup at that address (the setup URL output)":`${proto}://${setupHost}:${PORT}/setup`;
     if (setupCode && setupCode.code) {
       console.log('──────────────────────────────────────────────');
-      console.log(`  Setup:    open ${proto}://${setupHost}:${PORT}/setup`);
+      console.log(`  Setup:    open ${setupAt}`);
       console.log(`            code ${setupCode.code} (works once, for 24 hours)`);
     } else if (setupCode && setupCode.existing) {
       console.log('──────────────────────────────────────────────');
-      console.log(`  Setup:    open ${proto}://${setupHost}:${PORT}/setup with the code shown`);
+      console.log(`  Setup:    open ${setupAt} with the code shown`);
       console.log('            when OpsPoint first started, or make a new one:');
-      console.log('            node server/cli/opspoint.js setup-code');
+      // Nobody has a shell in a cloud template's container; a start makes a new code once the old one expires.
+      console.log(managed?'            restart the app after the code expires (24 hours)':'            node server/cli/opspoint.js setup-code');
     }
     console.log('══════════════════════════════════════════════');
     console.log('══════════════════════════════════════════════\n');

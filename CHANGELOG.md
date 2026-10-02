@@ -35,6 +35,19 @@ wait for go-aheads. See `docs/CLOUD.md`.
   the driver's prebuilt binary, as the installers do; the build checks the binary loads. First
   real build: 279 MB, starts on PostgreSQL 16 both as docker-compose runs it and with secrets from
   the environment, as the clouds do.
+- **First real deployment, Google Cloud** (2026-10-02, small, Terraform run from
+  dev-daedalus): 29 resources made without a change to the template; the app started on Cloud SQL
+  through the Cloud SQL connection, applied every migration, derived its push keys from
+  `VAPID_SEED` and printed its setup code. What it showed, fixed:
+  - The boot log said `DB: Postgres localhost/opspoint` for Cloud SQL's socket connection string;
+    it names the socket now (`/cloudsql/…/opspoint`).
+  - With `OPSPOINT_BACKUPS=provider` the boot log still asked for a pg_dump job; it says the
+    platform's point-in-time restore has them.
+  - The start banner pointed a cloud install at `http://localhost:3000/setup`; on the azure, aws
+    and gcp profiles it points at the deployment's app and setup URL outputs, and says to restart
+    the app for a new code (nobody has a shell in that container).
+  - Cloud Run keeps `/healthz` for itself outside the service (Google's own 404 there); its probes
+    reach the app directly, so health works. docs/CLOUD.md says so.
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.

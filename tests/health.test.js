@@ -113,6 +113,41 @@ describe('each check says what it found', () => {
     expect(r.fix).toMatch(/bucket exists in that region/);
   });
 
+  test('a probe that passed is reused for an hour (a load balancer polls /healthz); a failure is probed again', async () => {
+    const objects = new Map();
+    let puts = 0, refuse = false, shift = 0;
+    const store = wrap({ kind: 's3', describe: () => 'the S3 bucket photos-b in us-west-2',
+      put: async (k, b) => { puts++; if (refuse) throw new Error('S3 refused it (HTTP 503 SlowDown)'); objects.set(k, Buffer.from(b)); },
+      get: async (k) => objects.get(k) || null, remove: async (k) => { objects.delete(k); }, list: async () => [] });
+    const realNow = Date.now;
+    const clock = jest.spyOn(Date, 'now').mockImplementation(() => realNow() + shift);
+    try {
+      const d = doctor({ storage: store });
+      const storage = async (opts) => (await d.run({ only: ['storage'], ...opts })).results[0];
+      expect((await storage()).says).toMatch(/\(\d+ ms\)\.$/);
+      shift = 10 * 60 * 1000;
+      expect((await storage()).says).toMatch(/\(\d+ ms, 10 minutes ago\)\.$/);
+      await d.healthz();
+      expect(puts).toBe(1);
+      expect((await storage({ fresh: true })).says).toMatch(/\(\d+ ms\)\.$/);   // Run checks now, the doctor
+      expect(puts).toBe(2);
+      shift += 61 * 60 * 1000;
+      await storage();
+      expect(puts).toBe(3);
+      expect(objects.size).toBe(0);
+
+      refuse = true;
+      const broken = doctor({ storage: store });
+      expect((await broken.run({ only: ['storage'] })).results[0].status).toBe('fail');
+      expect((await broken.run({ only: ['storage'] })).results[0].status).toBe('fail');
+      expect(puts).toBe(5);
+      refuse = false;
+      expect((await broken.run({ only: ['storage'] })).results[0].status).toBe('pass');
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test('no session key at all fails', async () => {
     const r = await check('secrets', { config: { ...CONFIG, SECRET_FILE: path.join(scratch, 'missing.key') } });
     expect(r).toMatchObject({ status: 'fail' });

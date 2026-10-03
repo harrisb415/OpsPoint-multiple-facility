@@ -5,8 +5,9 @@
 ## Unreleased — Cloud templates: Azure, AWS and Google Cloud (2026-10-01)
 
 Roadmap phase 9 of the deployment plan: one template per cloud that puts a facility on that
-cloud's own services. Checked offline; deploying them to real accounts and publishing the image
-wait for go-aheads. See `docs/CLOUD.md`.
+cloud's own services. Checked offline, then deployed to a real account on each cloud with a test
+image and taken down again (below); the release image waits for the pipeline's go-ahead. See
+`docs/CLOUD.md`.
 
 - **Azure** (`packaging/cloud/azure/main.bicep`, a Deploy to Azure button): Container Apps on a
   private network, Database for PostgreSQL flexible server with no public access, Blob Storage
@@ -84,6 +85,24 @@ wait for go-aheads. See `docs/CLOUD.md`.
     lock removed it came down in 25 minutes; the vault purged. docs/CLOUD.md has the steps. A
     first try of that deployment failed on an outage of Microsoft's registry (the secrets
     script's container); deploying again worked.
+- **First real deployment, AWS** (2026-10-02, small, CloudFormation from dev-daedalus, the domain
+  at Cloudflare): made on the first try without a change to the template — the stack waited for
+  the certificate's check record, as documented. The app started on RDS (certificate verified),
+  applied every migration, health 9 pass; setup through to the end, a UA photo into S3 and back,
+  then an update to a new image (only the image changed): the session still signed in, the push
+  key the same, the photo there. **Offline for 115 seconds** during the update (ECS stops the old
+  copy first; docs/CLOUD.md said about a minute). Taking it down: with the database's protection
+  on, deleting the stack stopped at the database after removing the app, load balancer and
+  certificate; with it off, the rest went in 5 minutes, leaving the final snapshot and the photos
+  bucket as documented (both deleted). docs/CLOUD.md has the steps, and that AWS's newer sign-up
+  makes accounts limited to one region whose AWS Artifact can't accept the BAA until the
+  account's advanced features are on.
+  - **The storage health check wrote a test file on every `/healthz`**: the load balancer asks
+    every 30 seconds from each zone, and the bucket (versioned) held 247 old versions and delete
+    markers after about 40 minutes, for one photo. A passing probe is now reused for an hour, as
+    the schema comparison is; a failure is probed again every run, and "Run checks now" and the
+    doctor always probe. The AWS bucket also lets a delete marker go once its last old version
+    has (`ExpiredObjectDeleteMarker`; S3 keeps them for good otherwise).
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.
@@ -92,7 +111,9 @@ wait for go-aheads. See `docs/CLOUD.md`.
   release; the RDS bundle is certificates only and the one `.pem` the image takes; the Azure
   secrets script against a stand-in `az` (makes each once, keeps it, stops on any other error,
   hands back the vault's name); the database password read from the vault only once the script
-  has filled it; and `bicep`, `cfn-lint` and `terraform` where they are installed.
+  has filled it; the AWS bucket's delete markers; and `bicep`, `cfn-lint` and `terraform` where
+  they are installed. `tests/health.test.js`: a passing storage probe reused for an hour, a
+  failing one probed every run.
 
 ## Unreleased — Packages: installers, a Docker image and one release pipeline (in progress, 2026-09-30)
 

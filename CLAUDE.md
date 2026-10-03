@@ -162,8 +162,9 @@ since — the in-app SQLite backup and `scripts/opspoint-backup.sh` both write o
 reachable + signed, in-app updates only), instance count.
 
 - `/healthz` answers pass/fail per check and nothing else, 503 only on a critical failure (never
-  for a stale backup, which a load balancer can't fix). Cached 15 s; schema parity and the update
-  manifest are cached for an hour (fresh on "Run checks now" and in `doctor`).
+  for a stale backup, which a load balancer can't fix). Cached 15 s; schema parity, the update
+  manifest and a passing storage probe (a test object; a versioned bucket keeps every one) are
+  cached for an hour (fresh on "Run checks now" and in `doctor`).
 - **Heartbeats**: background jobs call `jobs.register(name, everyMs, label)` when their timer
   starts and `jobs.beat(name)` after each run (`server/lib/jobs.js`); a new timer must do the same.
   `server/health/instances.js` writes this process's row in `app_instances` every minute (removed

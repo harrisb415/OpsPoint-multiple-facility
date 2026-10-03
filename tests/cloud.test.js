@@ -190,6 +190,11 @@ describe('the platform pieces the app counts on', () => {
       expect(GCP).toMatch(new RegExp(`resource "${r}" "opspoint" \\{[^}]*deletion_policy\\s+= "ABANDON"`));
     }
   });
+
+  test('AWS\'s photos bucket lets old versions go, and then their delete markers', () => {
+    // S3 keeps a delete marker for good unless told; the real deployment's had hundreds in an hour.
+    expect(AWS).toMatch(/Rules: \[\{ Id: old-versions, Status: Enabled, NoncurrentVersionExpiration: \{ NoncurrentDays: 30 \}, ExpiredObjectDeleteMarker: true \}\]/);
+  });
 });
 
 // secrets.sh against a stand-in `az` that keeps its vault in a folder.

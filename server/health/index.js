@@ -30,7 +30,7 @@ const HOUR = 3600 * 1000;
 const BACKUP_MAX_AGE_MS = 26 * HOUR;        // a daily job gets two hours' slack
 const DISK_MIN_FREE = 0.20;
 const CERT_MIN_DAYS = 14;
-const EXPENSIVE_TTL_MS = HOUR;              // schema comparison, update manifest
+const EXPENSIVE_TTL_MS = HOUR;              // schema comparison, update manifest, a storage probe that passed
 const HEALTHZ_TTL_MS = 15 * 1000;           // a load balancer polls far more often
 
 // ── Words ───────────────────────────────────────────────────────────────────
@@ -146,8 +146,8 @@ const CHECKS = [
       if (st.kind === 'local' && !st.backend.hasFolder('photos/x')) {
         return { status: 'fail', says: `The photos folder in ${where} doesn't exist.`, fix: 'Start OpsPoint (it creates the folder), or check OPSPOINT_STORAGE_DIR.' };
       }
-      let ms;
-      try { ms = await st.probe(); }
+      let ms, at;
+      try { ({ ms, at } = await ctx.probeStorage(st)); }
       catch (e) {
         const fix = {
           local: 'Make sure the folder exists and the account OpsPoint runs as can write to it.',
@@ -157,7 +157,8 @@ const CHECKS = [
         }[st.kind];
         return { status: 'fail', says: `Photos can't be saved in ${where}: ${oneLine(e.code === 'EACCES' || e.code === 'EPERM' ? e.code : e.message)}.`, fix };
       }
-      return { status: 'pass', says: `A test file wrote, read back and deleted in ${where} (${ms} ms).` };
+      const when = ctx.now - at > 60 * 1000 ? `, ${ago(ctx.now - at)}` : '';
+      return { status: 'pass', says: `A test file wrote, read back and deleted in ${where} (${ms} ms${when}).` };
     },
   },
   {
@@ -428,6 +429,16 @@ function createDoctor(opts) {
         try { return parity.compare('facility', parity.codeSchema('facility'), await parity.pgSchemaVia(conn)); }
         catch (e) { return { error: oneLine(e.message), errors: [], warnings: [] }; }
       })),
+      // A load balancer asks for /healthz every few seconds, and each probe leaves an old version
+      // and a delete marker in a versioned bucket (each cloud's), so a pass is reused like the
+      // expensive parts. A failure isn't kept: the next run probes again.
+      probeStorage: async (st) => {
+        const hit = cache.storage;
+        if (!fresh && hit && Date.now() - hit.at < EXPENSIVE_TTL_MS) return hit.value;
+        const value = { ms: await st.probe(), at: Date.now() };
+        cache.storage = { at: value.at, value };
+        return value;
+      },
       probeUpdates: () => cached('updates', fresh, async () => {
         if (!opts.updater || !opts.updater.probe) return { error: 'the updater is not loaded in this process' };
         try { return await opts.updater.probe(); } catch (e) { return { error: oneLine(e.message) }; }

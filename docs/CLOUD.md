@@ -118,14 +118,29 @@ aws cloudformation deploy --stack-name opspoint-sunrise --capabilities CAPABILIT
 ```
 
 - **The database has deletion protection** and leaves a final snapshot; the photos bucket is
-  kept. Deleting the stack stops at the database until its protection is turned off (RDS ›
-  Modify), on purpose.
+  kept. Deleting the stack with the protection on stops at the database (`DELETE_FAILED`), on
+  purpose — after removing the app, the load balancer and the certificate; the database, its
+  network and its password stay. Taking it all down:
+  1. Turn the protection off: RDS › the database › Modify, or
+     `aws rds modify-db-instance --db-instance-identifier <the database> --no-deletion-protection --apply-immediately`.
+  2. Delete the stack (again): `aws cloudformation delete-stack --stack-name opspoint-sunrise`,
+     about 5 minutes. It leaves the final snapshot (`opspoint-sunrise-snapshot-database-…`);
+     delete that when the records are no longer wanted (`aws rds delete-db-snapshot`).
+  3. The photos bucket keeps old versions, so empty it of every version and delete marker (S3 ›
+     the bucket › Empty does both; `aws s3 rb --force` leaves them), then delete it.
+  4. A domain outside Route 53: remove its two records (the certificate's check and the address).
+- **AWS's newer sign-up** (an account inside a project AWS manages) may use only the region AWS
+  chose for it — us-east-2 for the test account; a stack anywhere else is refused by the
+  organization's policy — and its AWS Artifact can't accept the BAA until the account turns on
+  AWS's advanced features. A facility's account must be able to accept the BAA before resident
+  records go in.
 - The app runs in public subnets with a public address (no NAT gateway to pay for), but only the
   load balancer may reach it; the database sits in private subnets.
 - Updating: update the stack with the new release's template, or only the image (`aws
   cloudformation deploy` as above with `--parameter-overrides Image=ghcr.io/harrisb415/opspoint:<version>`;
   parameters left out keep their values). ECS stops the old copy before starting the new one:
-  about a minute offline.
+  about two minutes offline (115 seconds when measured; the load balancer answers 503 until the
+  new copy passes its health check).
 - Logs: CloudWatch › Log groups › `/opspoint/<name>` (90 days), or `aws logs tail /opspoint/sunrise --follow`.
 
 ## Google Cloud
@@ -191,15 +206,17 @@ or with Terraform yourself (1.5 or newer) from `packaging/cloud/gcp`: `terraform
 - **Two copies for a moment on Azure and Google Cloud.** Both start a new revision before stopping
   the old one, so during an update both may run their background jobs (a reminder could be sent
   twice): about 20 seconds on Cloud Run and 40 to 70 on Azure when measured (the new copy's health
-  check reports two servers meanwhile). AWS stops the old one first.
+  check reports two servers meanwhile). AWS stops the old one first, so it is offline for about
+  two minutes instead.
 - One facility per deployment, one region, no standby database (each size can be raised; the
   database can be made zone-redundant in the portal or console).
 - Deployed to a real account so far: **Google Cloud** (2026-10-02: small, with Terraform; setup to
   the end, a photo in the bucket, then an update to a new image that kept everyone signed in and
-  the push keys) and **Azure** (2026-10-02: small, from the command line; the same, plus the
-  template deployed again over a running install, which kept every secret). AWS is checked
-  offline (below) and against the app's own startup check only, as are Google's Infrastructure
-  Manager route and Azure's Deploy to Azure button.
+  the push keys), **Azure** (2026-10-02: small, from the command line; the same, plus the
+  template deployed again over a running install, which kept every secret) and **AWS**
+  (2026-10-02: small, from the command line, the domain at Cloudflare with both records DNS only;
+  the same as Google Cloud). Google's Infrastructure Manager route and Azure's Deploy to Azure
+  button are checked offline (below) only.
 
 ## Checking the templates
 

@@ -196,7 +196,8 @@ Resources:
       OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
       VersioningConfiguration: { Status: Enabled }
       LifecycleConfiguration:
-        Rules: [{ Id: old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 } }]
+        # A deleted photo's delete marker goes too once its last old version has.
+        Rules: [{ Id: old-versions, Status: Enabled, NoncurrentVersionExpiration: { NoncurrentDays: 30 }, ExpiredObjectDeleteMarker: true }]
   PhotosOnlyOverTls:
     Type: AWS::S3::BucketPolicy
     Properties:

@@ -161,6 +161,18 @@ describe('the platform pieces the app counts on', () => {
     expect(valueOf('PGSSLMODE', ENVS.aws.PGSSLMODE, 'aws')).toBe('verify-full');
     expect(ENVS.azure.PGSSLMODE).toBeUndefined();                  // verify-full, the default
   });
+
+  test('Google Cloud comes down when asked: only the database is protected, by one variable', () => {
+    expect(GCP).toMatch(/\n\s+deletion_protection\s+= var\.deletion_protection\n/);
+    expect(GCP).toMatch(/\n\s+deletion_protection_enabled\s+= var\.deletion_protection\n/);
+    expect(read(CLOUD, 'gcp', 'variables.tf')).toMatch(/variable "deletion_protection" \{[^}]*default\s+= true/);
+    // The provider protects a Cloud Run service by default, which stopped a real destroy at the app.
+    expect(GCP).toMatch(/resource "google_cloud_run_v2_service" "app" \{[^{]*deletion_protection\s+= false/);
+    // Left to the instance's deletion: Cloud SQL refused both while connections and owned tables remained.
+    for (const r of ['google_sql_database', 'google_sql_user']) {
+      expect(GCP).toMatch(new RegExp(`resource "${r}" "opspoint" \\{[^}]*deletion_policy\\s+= "ABANDON"`));
+    }
+  });
 });
 
 // secrets.sh against a stand-in `az` that keeps its vault in a folder.

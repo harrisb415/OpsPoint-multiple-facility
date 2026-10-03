@@ -143,8 +143,18 @@ or with Terraform yourself (1.5 or newer) from `packaging/cloud/gcp`: `terraform
 - `/healthz` answers Google's own 404 from outside: Cloud Run keeps paths ending in `z` for itself.
   Its probes reach the app directly, so health and restarts work; an outside uptime check can
   watch the sign-in page instead.
-- **The database has deletion protection** (in Cloud SQL and in Terraform): destroying stops there
-  until both are turned off, on purpose.
+- **The database has deletion protection** (in Cloud SQL and in Terraform), on purpose. Taking it
+  all down:
+  1. Apply again with `deletion_protection=false` (Infrastructure Manager: add it to
+     `--input-values`; Terraform: `-var deletion_protection=false`).
+  2. Empty the photos bucket, which is never destroyed with photos in it (it keeps every deleted
+     version too): `gcloud storage rm -r --all-versions 'gs://PROJECT-NAME-photos/**'`.
+  3. `gcloud infra-manager deployments delete …` or `terraform destroy` with the same values, then
+     delete the project if it was only for this.
+
+  Destroying with the protection still on stops at the database, but only after it has removed
+  the app and its secrets: applying again makes new ones, which signs everyone out and stops
+  every phone's alerts until it subscribes again.
 - Your own domain: Cloud Run › Manage custom domains where the region offers it, or a load balancer
   with a Google-managed certificate.
 - Updating: apply again with the new release (`--git-source-ref`) or only `image`.

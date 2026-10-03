@@ -48,3 +48,9 @@ variable "image" {
   type        = string
   default     = "ghcr.io/harrisb415/opspoint:latest"
 }
+
+variable "deletion_protection" {
+  description = "Keeps the database from being deleted, in Cloud SQL and in Terraform. Apply with false before destroying."
+  type        = bool
+  default     = true
+}

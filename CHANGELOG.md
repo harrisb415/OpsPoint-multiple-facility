@@ -53,6 +53,13 @@ wait for go-aheads. See `docs/CLOUD.md`.
     and back, and an update to a new image (only the image changed): the old session still
     signed in, the push key the same, the photo there. The old copy stopped 19 seconds after
     the new one started.
+  - **Taking it down didn't work as documented**, fixed in the template: the provider also
+    protects the Cloud Run service by default (destroy stopped at the app; it holds no data, so
+    it's unprotected now); Cloud SQL refused to drop the database while the app's connections
+    lingered after Cloud Run was gone, and the user that owns the tables (both are now left to
+    the instance's own deletion); the database's protection is one variable,
+    `deletion_protection`, instead of an edit to `main.tf`. docs/CLOUD.md has the steps, and the
+    photos bucket is kept until emptied, on purpose. The test project is deleted.
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.

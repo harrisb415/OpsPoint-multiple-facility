@@ -81,7 +81,7 @@ resource "google_sql_database_instance" "db" {
   name                = "${var.name}-db-${random_id.db.hex}"
   database_version    = "POSTGRES_16"
   region              = var.region
-  deletion_protection = true
+  deletion_protection = var.deletion_protection
   settings {
     edition                     = "ENTERPRISE"
     tier                        = local.s.db_tier
@@ -89,7 +89,7 @@ resource "google_sql_database_instance" "db" {
     disk_type                   = "PD_SSD"
     disk_size                   = local.s.db_gb
     disk_autoresize             = true
-    deletion_protection_enabled = true
+    deletion_protection_enabled = var.deletion_protection
     user_labels                 = local.labels
     backup_configuration {
       enabled                        = true
@@ -109,15 +109,20 @@ resource "google_sql_database_instance" "db" {
   depends_on = [google_project_service.apis]
 }
 
+# On destroy both are left for the instance's own deletion to remove: Cloud SQL refuses to drop a
+# database the app's connections still hold for a few seconds after Cloud Run is gone, and a user
+# that owns the app's tables.
 resource "google_sql_database" "opspoint" {
-  name     = "opspoint"
-  instance = google_sql_database_instance.db.name
+  name            = "opspoint"
+  instance        = google_sql_database_instance.db.name
+  deletion_policy = "ABANDON"
 }
 
 resource "google_sql_user" "opspoint" {
-  name     = "opspoint"
-  instance = google_sql_database_instance.db.name
-  password = random_password.secret["postgres-password"].result
+  name            = "opspoint"
+  instance        = google_sql_database_instance.db.name
+  password        = random_password.secret["postgres-password"].result
+  deletion_policy = "ABANDON"
 }
 
 # ── Photos ──────────────────────────────────────────────────────────────────────────────────────
@@ -172,7 +177,9 @@ resource "google_cloud_run_v2_service" "app" {
   name     = local.service
   location = var.region
   ingress  = "INGRESS_TRAFFIC_ALL"
-  labels   = local.labels
+  # The provider protects a service by default; it holds no data (the database is what's protected).
+  deletion_protection = false
+  labels              = local.labels
 
   template {
     service_account = google_service_account.app.email

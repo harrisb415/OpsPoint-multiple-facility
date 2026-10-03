@@ -281,8 +281,9 @@ table's columns in load order), `tables/<name>.jsonl` (one JSON array per row), 
 
 ### Cloud templates (`packaging/cloud/`, deployment plan phase 9; `docs/CLOUD.md`)
 
-- `azure/main.bicep` (+ `postgres.bicep`; `secrets.sh` is the deployment script that makes the
-  Key Vault secrets once), `aws/opspoint.yaml` (+ `rds-global-bundle.pem`, copied into the image
+- `azure/main.bicep` (+ `database.bicep` → `postgres.bicep`; `secrets.sh` is the deployment
+  script that makes the Key Vault secrets once and outputs the vault's name — the database's
+  password reference must take it from there, or Azure checks it before the vault exists), `aws/opspoint.yaml` (+ `rds-global-bundle.pem`, copied into the image
   at `/app/certs/` — the one `.pem` `.dockerignore` lets in), `gcp/*.tf` (Terraform 1.5, what
   Infrastructure Manager runs; `.terraform.lock.hcl` committed, `.terraform/` and state ignored).
 - Every template sets `OPSPOINT_PROFILE`, `TZ`, `OPSPOINT_SECRETS=local`, and the platform injects

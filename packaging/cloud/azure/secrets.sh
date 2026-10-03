@@ -39,3 +39,8 @@ for name in session-secret vapid-seed postgres-password; do
     echo "$name: made"
   fi
 done
+
+# The vault's name as the script's output: main.bicep hands it to database.bicep (see there).
+if [ -n "${AZ_SCRIPTS_OUTPUT_PATH:-}" ]; then
+  printf '{"vault":"%s"}' "$VAULT" > "$AZ_SCRIPTS_OUTPUT_PATH"
+fi

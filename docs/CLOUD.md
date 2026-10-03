@@ -13,7 +13,8 @@ store. Each lives in `packaging/cloud/`; every release carries them pinned to it
 | Google Cloud | Terraform (`gcp/`), for Infrastructure Manager | Cloud Run | Cloud SQL for PostgreSQL, through the Cloud SQL connection | Cloud Storage | Secret Manager |
 
 Deploying makes resources that cost money from the first hour; delete the resource group, stack
-or deployment to stop them (the database is protected from that, see each cloud).
+or deployment to stop them (on AWS and Google Cloud the database is protected from that; on Azure
+nothing stops it, see each cloud).
 
 ## What you choose
 
@@ -73,7 +74,9 @@ az deployment group create --resource-group opspoint-sunrise \
 ```
 
 - A deployment script (a short-lived container Azure runs and then removes) makes the secrets in
-  Key Vault the first time and leaves them alone afterwards.
+  Key Vault the first time and leaves them alone afterwards; its log (Deployment script ›
+  `<name>-secrets` › Logs) says `made` or `kept` for each.
+- **Nothing protects the database**: deleting the resource group deletes it with everything else.
 - **Deploying again into a deleted and re-created resource group of the same name** meets the
   old Key Vault, which Azure keeps for 7 days: `az keyvault purge --name kv-<name>-…` first (the
   name is in the error), or use another resource group name.
@@ -176,14 +179,16 @@ or with Terraform yourself (1.5 or newer) from `packaging/cloud/gcp`: `terraform
 
 - **Two copies for a moment on Azure and Google Cloud.** Both start a new revision before stopping
   the old one, so during an update both may run their background jobs (a reminder could be sent
-  twice): about 20 seconds on Cloud Run when measured, up to a minute on Azure. AWS stops the old
-  one first.
+  twice): about 20 seconds on Cloud Run and 40 to 70 on Azure when measured (the new copy's health
+  check reports two servers meanwhile). AWS stops the old one first.
 - One facility per deployment, one region, no standby database (each size can be raised; the
   database can be made zone-redundant in the portal or console).
 - Deployed to a real account so far: **Google Cloud** (2026-10-02: small, with Terraform; setup to
   the end, a photo in the bucket, then an update to a new image that kept everyone signed in and
-  the push keys). Azure and AWS are checked offline (below) and against the app's own startup
-  check only, as is Google's Infrastructure Manager route.
+  the push keys) and **Azure** (2026-10-02: small, from the command line; the same, plus the
+  template deployed again over a running install, which kept every secret). AWS is checked
+  offline (below) and against the app's own startup check only, as are Google's Infrastructure
+  Manager route and Azure's Deploy to Azure button.
 
 ## Checking the templates
 

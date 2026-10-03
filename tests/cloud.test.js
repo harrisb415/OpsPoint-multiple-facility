@@ -130,7 +130,7 @@ describe('the platform pieces the app counts on', () => {
     expect(AWS).toContain(`Default: ${IMAGE}\n`);
     expect(read(CLOUD, 'gcp', 'variables.tf')).toContain(`default     = "${IMAGE}"`);
     // release.yml's cloud job swaps :latest for the version in exactly these three places.
-    const files = ['azure/main.bicep', 'azure/postgres.bicep', 'azure/secrets.sh', 'aws/opspoint.yaml',
+    const files = ['azure/main.bicep', 'azure/database.bicep', 'azure/postgres.bicep', 'azure/secrets.sh', 'aws/opspoint.yaml',
       ...fs.readdirSync(path.join(CLOUD, 'gcp')).filter((f) => f.endsWith('.tf')).map((f) => `gcp/${f}`)];
     const uses = files.flatMap((f) => (read(CLOUD, f).includes(IMAGE) ? [f] : []));
     expect(uses).toEqual(['azure/main.bicep', 'aws/opspoint.yaml', 'gcp/variables.tf']);
@@ -160,6 +160,17 @@ describe('the platform pieces the app counts on', () => {
     expect(GCP).toMatch(/mount_path = "\/cloudsql"/);
     expect(valueOf('PGSSLMODE', ENVS.aws.PGSSLMODE, 'aws')).toBe('verify-full');
     expect(ENVS.azure.PGSSLMODE).toBeUndefined();                  // verify-full, the default
+  });
+
+  test('Azure reads the database password from the vault only once the script has filled it', () => {
+    // A reference Azure can resolve before the deployment starts stopped the first real one: the
+    // vault didn't exist yet (KeyVaultParameterReferenceNotFound).
+    expect(AZURE).not.toMatch(/getSecret\(/);
+    expect(AZURE).toMatch(/\n\s+enabledForTemplateDeployment: true\n/);   // else Forbidden to ARM
+    expect(AZURE).toMatch(/module db 'database\.bicep' = \{\n\s+name: .+\n\s+params: \{\n\s+vaultName: secrets\.properties\.outputs\.vault\n/);
+    const wrapper = read(CLOUD, 'azure', 'database.bicep');
+    expect(wrapper).toMatch(/resource vault 'Microsoft\.KeyVault\/vaults@[\d-]+' existing = \{\n\s+name: vaultName\n/);
+    expect(wrapper).toContain("adminPassword: vault.getSecret('postgres-password')");
   });
 
   test('Google Cloud comes down when asked: only the database is protected, by one variable', () => {
@@ -222,6 +233,12 @@ esac
     expect(vault()).toEqual(made);
   });
 
+  test('hands main.bicep the vault\'s name as its output', () => {
+    const out = path.join(dir, 'outputs.json');
+    expect(run({ AZ_SCRIPTS_OUTPUT_PATH: out }).status).toBe(0);
+    expect(JSON.parse(read(out))).toEqual({ vault: 'kv-sunrise-1a2b3c' });
+  });
+
   test('stops, writing nothing, when it can\'t tell whether a secret is there', () => {
     const r = run({ AZ_FAIL: '1' });
     expect(r.status).not.toBe(0);
@@ -248,7 +265,7 @@ const runTool = (cmd, args, cwd) => spawnSync(cmd, args, { cwd, encoding: 'utf8'
   const script = Object.values(arm.resources).find((x) => x.type === 'Microsoft.Resources/deploymentScripts');
   const ref = /^\[variables\('(.+)'\)\]$/.exec(script.properties.scriptContent);   // loadTextContent() lands in a variable
   expect(ref ? arm.variables[ref[1]] : script.properties.scriptContent).toBe(read(CLOUD, 'azure', 'secrets.sh'));
-  for (const f of ['main.bicep', 'postgres.bicep']) expect(runTool(BICEP, ['lint', f], path.join(CLOUD, 'azure')).stderr).toBe('');
+  for (const f of ['main.bicep', 'database.bicep', 'postgres.bicep']) expect(runTool(BICEP, ['lint', f], path.join(CLOUD, 'azure')).stderr).toBe('');
 }, 120000);
 
 (CFN_LINT ? test : test.skip)('cfn-lint: no errors or warnings', () => {

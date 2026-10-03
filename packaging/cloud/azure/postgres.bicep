@@ -1,5 +1,5 @@
-// OpsPoint on Azure: the PostgreSQL Flexible Server (a module of main.bicep, so its password can
-// come from Key Vault: main.bicep's deployment script makes it once).
+// OpsPoint on Azure: the PostgreSQL Flexible Server (a module of database.bicep, so its password
+// can come from Key Vault: main.bicep's deployment script makes it once).
 
 param name string
 param location string

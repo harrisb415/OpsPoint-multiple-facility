@@ -115,6 +115,8 @@ resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     tenantId: subscription().tenantId
     sku: { family: 'A', name: 'standard' }
     enableRbacAuthorization: true
+    // Lets Azure Resource Manager hand the database its password (database.bicep).
+    enabledForTemplateDeployment: true
     enableSoftDelete: true
     softDeleteRetentionInDays: 7
   }
@@ -161,9 +163,11 @@ resource secrets 'Microsoft.Resources/deploymentScripts@2023-08-01' = {
 }
 
 // ── Database ─────────────────────────────────────────────────────────────────────────────────
-module db 'postgres.bicep' = {
+// Its password comes from the vault; the vault's name from the secrets script, see database.bicep.
+module db 'database.bicep' = {
   name: '${name}-postgres'
   params: {
+    vaultName: secrets.properties.outputs.vault
     name: dbServerName
     location: location
     skuName: s.dbSku
@@ -171,13 +175,12 @@ module db 'postgres.bicep' = {
     storageGB: s.dbGB
     backupDays: s.backupDays
     adminLogin: dbUser
-    adminPassword: vault.getSecret('postgres-password')
     databaseName: dbName
     subnetId: resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'db')
     privateDnsZoneId: dbDns.id
     tags: tags
   }
-  dependsOn: [secrets, dbDnsLink]
+  dependsOn: [dbDnsLink]
 }
 
 // ── Photos ───────────────────────────────────────────────────────────────────────────────────
@@ -298,7 +301,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
       scale: { minReplicas: 1, maxReplicas: 1 }
     }
   }
-  dependsOn: [appReadsSecrets, appWritesPhotos, photos, secrets]
+  dependsOn: [appReadsSecrets, appWritesPhotos, photos]
 }
 
 output appUrl string = appUrl

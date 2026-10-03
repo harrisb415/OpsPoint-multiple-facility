@@ -60,14 +60,32 @@ wait for go-aheads. See `docs/CLOUD.md`.
     the instance's own deletion); the database's protection is one variable,
     `deletion_protection`, instead of an edit to `main.tf`. docs/CLOUD.md has the steps, and the
     photos bucket is kept until emptied, on purpose. The test project is deleted.
+- **First real deployment, Azure** (2026-10-02, small, `az deployment group create` from
+  dev-daedalus). The template didn't deploy at first; fixed:
+  - Azure refused it before making anything (`KeyVaultParameterReferenceNotFound`): it checks a
+    Key Vault reference before the deployment starts whenever it can work out the vault's name,
+    and on a first deployment the vault doesn't exist yet. The database now gets its password
+    through a small module (`database.bicep`) handed the vault's name by the secrets script's
+    output, so the reference is checked when the database is made, after the script has filled
+    the vault.
+  - Then the database's password was Forbidden to Azure Resource Manager: the vault now allows
+    template deployments (`enabledForTemplateDeployment`).
+  - Then, on the same deployment: the app started on the private-network database (certificate
+    verified), applied every migration, health 9 pass; setup through to the end, a UA photo into
+    Blob Storage and back, an image update (`az containerapp update`) that kept the session, the
+    push key and the photo (read from Blob by the new copy), and the template deployed again over
+    it: the secrets script said `kept` for all three and nobody was signed out. The two copies ran
+    together for 40 to 70 seconds during the update; the new copy's health check reported two
+    servers meanwhile and one after.
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.
 - Tests: `tests/cloud.test.js` — each template's settings pass the app's own startup check for its
   profile; secrets only from the platform's store; one copy; health probes; one image, pinned by a
   release; the RDS bundle is certificates only and the one `.pem` the image takes; the Azure
-  secrets script against a stand-in `az` (makes each once, keeps it, stops on any other error);
-  and `bicep`, `cfn-lint` and `terraform` where they are installed.
+  secrets script against a stand-in `az` (makes each once, keeps it, stops on any other error,
+  hands back the vault's name); the database password read from the vault only once the script
+  has filled it; and `bicep`, `cfn-lint` and `terraform` where they are installed.
 
 ## Unreleased — Packages: installers, a Docker image and one release pipeline (in progress, 2026-09-30)
 

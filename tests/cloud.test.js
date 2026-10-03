@@ -173,6 +173,12 @@ describe('the platform pieces the app counts on', () => {
     expect(wrapper).toContain("adminPassword: vault.getSecret('postgres-password')");
   });
 
+  test('Azure\'s database has a delete lock, as AWS\'s and Google\'s have their protection', () => {
+    const pg = read(CLOUD, 'azure', 'postgres.bicep');
+    expect(pg).toMatch(/resource keep 'Microsoft\.Authorization\/locks@[\d-]+' = \{\n\s+scope: server\n\s+name: 'opspoint-keep-database'\n/);
+    expect(pg).toMatch(/level: 'CanNotDelete'\n/);                // changes still deploy; only deleting stops
+  });
+
   test('Google Cloud comes down when asked: only the database is protected, by one variable', () => {
     expect(GCP).toMatch(/\n\s+deletion_protection\s+= var\.deletion_protection\n/);
     expect(GCP).toMatch(/\n\s+deletion_protection_enabled\s+= var\.deletion_protection\n/);

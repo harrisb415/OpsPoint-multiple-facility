@@ -13,8 +13,7 @@ store. Each lives in `packaging/cloud/`; every release carries them pinned to it
 | Google Cloud | Terraform (`gcp/`), for Infrastructure Manager | Cloud Run | Cloud SQL for PostgreSQL, through the Cloud SQL connection | Cloud Storage | Secret Manager |
 
 Deploying makes resources that cost money from the first hour; delete the resource group, stack
-or deployment to stop them (on AWS and Google Cloud the database is protected from that; on Azure
-nothing stops it, see each cloud).
+or deployment to stop them (the database is protected from that, see each cloud).
 
 ## What you choose
 
@@ -76,10 +75,22 @@ az deployment group create --resource-group opspoint-sunrise \
 - A deployment script (a short-lived container Azure runs and then removes) makes the secrets in
   Key Vault the first time and leaves them alone afterwards; its log (Deployment script ›
   `<name>-secrets` › Logs) says `made` or `kept` for each.
-- **Nothing protects the database**: deleting the resource group deletes it with everything else.
-- **Deploying again into a deleted and re-created resource group of the same name** meets the
-  old Key Vault, which Azure keeps for 7 days: `az keyvault purge --name kv-<name>-…` first (the
-  name is in the error), or use another resource group name.
+- **The database has a delete lock** (`opspoint-keep-database`), on purpose: deleting the
+  resource group is refused whole while it's there, before anything is removed. Taking it all
+  down:
+  1. Remove the lock: the database server › Locks, or
+     `az lock delete --name opspoint-keep-database --resource-group opspoint-sunrise --resource <name>-db-… --resource-type Microsoft.DBforPostgreSQL/flexibleServers`.
+  2. `az group delete --name opspoint-sunrise`.
+  3. Azure keeps the Key Vault for 7 days after that; `az keyvault purge --name kv-<name>-…`
+     removes it for good (`az keyvault list-deleted` shows it).
+
+  Deleting the group takes about 25 minutes. Azure also made a `NetworkWatcherRG` group (free)
+  with the network; delete it too if the subscription was only for this.
+- **Deploying again into a deleted and re-created resource group of the same name** within those
+  7 days meets the old Key Vault: purge it first (above; the name is in the error), or use
+  another resource group name.
+- A deployment can fail on a passing outage of Microsoft's own registry (`ServiceUnavailable`
+  from mcr.microsoft.com, where the secrets script's container comes from): deploy again.
 - Your own domain: Container App › Custom domains (Azure's free managed certificate); the output
   `customDomain` has the verification ID for the `asuid.` TXT record.
 - Updating: deploy again with the new release's template, or only the image:

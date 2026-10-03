@@ -77,6 +77,13 @@ wait for go-aheads. See `docs/CLOUD.md`.
     it: the secrets script said `kept` for all three and nobody was signed out. The two copies ran
     together for 40 to 70 seconds during the update; the new copy's health check reported two
     servers meanwhile and one after.
+  - **The database has a delete lock now** (`opspoint-keep-database`, CanNotDelete), as AWS's
+    and Google's databases have their protection: Azure had nothing stopping a deleted resource
+    group from taking the facility's records with it. Deployed onto the running install, then
+    tried: deleting the group was refused whole (`ScopeLocked`) with nothing removed. With the
+    lock removed it came down in 25 minutes; the vault purged. docs/CLOUD.md has the steps. A
+    first try of that deployment failed on an outage of Microsoft's registry (the secrets
+    script's container); deploying again worked.
 - The release pipeline builds the three templates pinned to the release's image, attaches them to
   the release and puts them in the releases repository's `cloud/` folder (the Deploy to Azure
   button and Infrastructure Manager read them there). It still runs only by hand.

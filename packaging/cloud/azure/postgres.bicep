@@ -39,4 +39,15 @@ resource database 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-0
   properties: { charset: 'UTF8', collation: 'en_US.utf8' }
 }
 
+// The facility's records: deleting the resource group stops at the database until this lock is
+// removed, on purpose (docs/CLOUD.md says how to take it all down).
+resource keep 'Microsoft.Authorization/locks@2020-05-01' = {
+  scope: server
+  name: 'opspoint-keep-database'
+  properties: {
+    level: 'CanNotDelete'
+    notes: 'OpsPoint\'s records. Remove this lock to delete the database (docs/CLOUD.md, Azure).'
+  }
+}
+
 output fqdn string = server.properties.fullyQualifiedDomainName
